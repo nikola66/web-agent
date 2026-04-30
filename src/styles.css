@@ -1,0 +1,292 @@
+@import "tailwindcss";
+@import "@xterm/xterm/css/xterm.css";
+
+@theme {
+  /* aratech color system */
+  --color-bg-primary: #000000;
+  --color-bg-surface: #0a0a0a;
+  --color-bg-elevated: #111111;
+
+  --color-text-primary: #ffffff;
+  --color-text-secondary: #bcbcbc;
+  --color-text-muted: #666666;
+
+  --color-brand-violet: #4b1cdd;
+  --color-brand-purple: #6823e5;
+  --color-brand-magenta-dark: #8a38f5;
+  --color-brand-magenta: #c633f7;
+  --color-brand-magenta-light: #fb75fc;
+
+  --color-cta: #be32d6;
+  --color-glow: rgba(251, 117, 252, 0.5);
+  --color-glow-subtle: rgba(251, 117, 252, 0.14);
+
+  --color-border: rgba(255, 255, 255, 0.12);
+  --color-border-subtle: rgba(255, 255, 255, 0.08);
+  --color-border-strong: rgba(255, 255, 255, 0.18);
+
+  /* aratech radius system */
+  --radius-sm: 8px;
+  --radius-button: 13px;
+  --radius-card: 34px;
+  --radius-panel: 54px;
+  --radius-plate: 64px;
+  --radius-pill: 124px;
+
+  /* aratech typography */
+  --font-family-primary: "Poppins", sans-serif;
+
+  /* aratech motion */
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --duration-fast: 150ms;
+  --duration-normal: 200ms;
+  --duration-slow: 250ms;
+}
+
+@keyframes api-key-ring-spin {
+  from {
+    transform: translate(-50%, -50%) rotate(0deg);
+  }
+  to {
+    transform: translate(-50%, -50%) rotate(360deg);
+  }
+}
+
+/* Profile Start row: star does one quick turn, pauses, repeats (hover) */
+@keyframes profile-start-star-burst {
+  0% {
+    transform: rotate(0deg);
+  }
+  22% {
+    transform: rotate(360deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
+}
+
+/* Chat panel: TTFT/stream wait (terminal spinner fights xterm.typewriter throughput) */
+@keyframes webagent-thinking-dot-pulse {
+  0%,
+  75%,
+  100% {
+    opacity: 0.35;
+    transform: scale(1);
+  }
+  37.5% {
+    opacity: 1;
+    transform: scale(1.08);
+  }
+}
+
+.webagent-thinking-dots > span {
+  display: inline-block;
+  width: 4px;
+  height: 4px;
+  border-radius: 9999px;
+  background: var(--color-brand-magenta-light);
+  animation: webagent-thinking-dot-pulse 1s ease-in-out infinite;
+}
+
+.webagent-thinking-dots > span:nth-child(1) {
+  animation-delay: 0ms;
+}
+
+.webagent-thinking-dots > span:nth-child(2) {
+  animation-delay: 160ms;
+}
+
+.webagent-thinking-dots > span:nth-child(3) {
+  animation-delay: 320ms;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  width: 100%;
+  background: var(--color-bg-primary);
+  color: var(--color-text-primary);
+  font-family: var(--font-family-primary);
+  overflow: hidden;
+}
+
+/* xterm.js overrides for aratech theme */
+.xterm {
+  /* keep side breathing room, remove top/bottom gap */
+  padding: 0 16px;
+  /* fit() sizes rows × line-height which can be shorter than the container;
+     stretch .xterm itself so the rendered surface fills the panel. */
+  height: 100% !important;
+  width: 100% !important;
+}
+
+.xterm .xterm-viewport {
+  height: 100% !important;
+  width: 100% !important;
+}
+
+/* Let xterm DomRenderer control .xterm-screen height (inline px). height:100% overrides that and
+ * desyncs Viewport.scrollTop math from the glyph grid, leaving a fractional “stuck above bottom”. */
+
+/* Keep the IME/input textarea above the canvas for hit-testing after flex reflow (default z-index:-5 can sit behind siblings). */
+.xterm .xterm-helper-textarea {
+  z-index: -1 !important;
+  opacity: 0 !important;
+  color: transparent !important;
+  caret-color: transparent !important;
+  background: transparent !important;
+  pointer-events: none !important;
+}
+
+/* Terminal is now output-first; hide xterm caret to avoid a misleading blink cursor. */
+.xterm .xterm-cursor-layer {
+  display: none !important;
+}
+
+.xterm .xterm-cursor {
+  display: none !important;
+}
+
+/* Keep terminal hyperlinks clickable but without underline. */
+.xterm .xterm-link,
+.xterm a {
+  text-decoration: none !important;
+}
+
+/* xterm applies underline via utility classes on spans; keep color, remove underline. */
+.xterm [class*="xterm-underline-"] {
+  text-decoration: none !important;
+}
+
+/* Shared aratech scroll thumb (magenta / violet) */
+.xterm-viewport::-webkit-scrollbar,
+.terminal-hscroll::-webkit-scrollbar,
+.fancy-scroll::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.xterm-viewport::-webkit-scrollbar-track,
+.terminal-hscroll::-webkit-scrollbar-track,
+.fancy-scroll::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 100px;
+}
+
+.xterm-viewport::-webkit-scrollbar-thumb {
+  background: linear-gradient(
+    180deg,
+    var(--color-brand-violet),
+    var(--color-brand-magenta),
+    var(--color-brand-magenta-light)
+  );
+  border-radius: 100px;
+  border: 2px solid rgba(0, 0, 0, 0.2);
+  background-clip: padding-box;
+  opacity: 0.2;
+  transition: opacity var(--duration-fast) var(--ease-out);
+}
+
+.terminal-hscroll::-webkit-scrollbar-thumb {
+  background: linear-gradient(
+    90deg,
+    var(--color-brand-violet),
+    var(--color-brand-magenta),
+    var(--color-brand-magenta-light)
+  );
+  border-radius: 100px;
+  border: 2px solid rgba(0, 0, 0, 0.2);
+  background-clip: padding-box;
+  opacity: 0.2;
+  transition: opacity var(--duration-fast) var(--ease-out);
+}
+
+.fancy-scroll::-webkit-scrollbar-thumb {
+  background: linear-gradient(
+    180deg,
+    var(--color-brand-violet),
+    var(--color-brand-magenta),
+    var(--color-brand-magenta-light)
+  );
+  border-radius: 100px;
+  border: 2px solid rgba(0, 0, 0, 0.2);
+  background-clip: padding-box;
+  opacity: 0.2;
+  transition: opacity var(--duration-fast) var(--ease-out);
+}
+
+.xterm-viewport::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(
+    180deg,
+    var(--color-brand-magenta-dark),
+    var(--color-brand-magenta),
+    var(--color-brand-magenta-light)
+  );
+  box-shadow: 0 0 12px var(--color-glow-subtle);
+  opacity: 0.35;
+}
+
+.terminal-hscroll::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(
+    90deg,
+    var(--color-brand-magenta-dark),
+    var(--color-brand-magenta),
+    var(--color-brand-magenta-light)
+  );
+  box-shadow: 0 0 12px var(--color-glow-subtle);
+  opacity: 0.35;
+}
+
+.fancy-scroll::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(
+    180deg,
+    var(--color-brand-magenta-dark),
+    var(--color-brand-magenta),
+    var(--color-brand-magenta-light)
+  );
+  box-shadow: 0 0 12px var(--color-glow-subtle);
+  opacity: 0.35;
+}
+
+.xterm-viewport,
+.terminal-hscroll,
+.fancy-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(198, 51, 247, 0.2) rgba(0, 0, 0, 0.2);
+}
+
+/* Rotating brand-gradient ring — draws attention when an agent has no API key set */
+.api-key-alert-ring {
+  box-shadow:
+    0 0 6px var(--color-glow-subtle),
+    0 0 14px color-mix(in srgb, var(--color-glow) 55%, transparent);
+}
+
+.api-key-alert-spin {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 170%;
+  height: 170%;
+  min-width: 36px;
+  min-height: 36px;
+  transform: translate(-50%, -50%);
+  background: conic-gradient(
+    from 0deg,
+    var(--color-brand-violet),
+    var(--color-brand-purple),
+    var(--color-brand-magenta-dark),
+    var(--color-brand-magenta),
+    var(--color-brand-magenta-light),
+    var(--color-cta),
+    var(--color-brand-violet)
+  );
+  animation: api-key-ring-spin 2.8s linear infinite;
+}

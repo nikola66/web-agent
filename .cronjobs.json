@@ -1,0 +1,671 @@
+{
+  "jobs": [
+    {
+      "id": "coverage-cron-1778625005638",
+      "enabled": true,
+      "everyMinutes": 45,
+      "delivery": "silent",
+      "tool": "system_info",
+      "arguments": {},
+      "notifyChannel": "",
+      "retryCount": 0,
+      "retryDelayMinutes": 5,
+      "lastRunAt": 0,
+      "retryAttempts": 0,
+      "nextRetryAt": 0
+    },
+    {
+      "id": "coverage-cron-1778625017010",
+      "enabled": true,
+      "everyMinutes": 45,
+      "delivery": "silent",
+      "tool": "system_info",
+      "arguments": {},
+      "notifyChannel": "",
+      "retryCount": 0,
+      "retryDelayMinutes": 5,
+      "lastRunAt": 0,
+      "retryAttempts": 0,
+      "nextRetryAt": 0
+    },
+    {
+      "id": "coverage-cron-1778625021566",
+      "enabled": true,
+      "everyMinutes": 45,
+      "delivery": "silent",
+      "tool": "system_info",
+      "arguments": {},
+      "notifyChannel": "",
+      "retryCount": 0,
+      "retryDelayMinutes": 5,
+      "lastRunAt": 0,
+      "retryAttempts": 0,
+      "nextRetryAt": 0
+    },
+    {
+      "id": "coverage-cron-1778625036621",
+      "enabled": true,
+      "everyMinutes": 45,
+      "delivery": "silent",
+      "tool": "system_info",
+      "arguments": {},
+      "notifyChannel": "",
+      "retryCount": 0,
+      "retryDelayMinutes": 5,
+      "lastRunAt": 0,
+      "retryAttempts": 0,
+      "nextRetryAt": 0
+    },
+    {
+      "id": "coverage-cron-1778625039257",
+      "enabled": true,
+      "everyMinutes": 45,
+      "delivery": "silent",
+      "tool": "system_info",
+      "arguments": {},
+      "notifyChannel": "",
+      "retryCount": 0,
+      "retryDelayMinutes": 5,
+      "lastRunAt": 0,
+      "retryAttempts": 0,
+      "nextRetryAt": 0
+    },
+    {
+      "id": "coverage-cron-1778625075492",
+      "enabled": true,
+      "everyMinutes": 45,
+      "delivery": "silent",
+      "tool": "system_info",
+      "arguments": {},
+      "notifyChannel": "",
+      "retryCount": 0,
+      "retryDelayMinutes": 5,
+      "lastRunAt": 0,
+      "retryAttempts": 0,
+      "nextRetryAt": 0
+    },
+    {
+      "id": "coverage-cron-1778625155754",
+      "enabled": true,
+      "everyMinutes": 45,
+      "delivery": "silent",
+      "tool": "system_info",
+      "arguments": {},
+      "notifyChannel": "",
+      "retryCount": 0,
+      "retryDelayMinutes": 5,
+      "lastRunAt": 0,
+      "retryAttempts": 0,
+      "nextRetryAt": 0
+    },
+    {
+      "id": "coverage-cron-1778625531442",
+      "enabled": true,
+      "everyMinutes": 45,
+      "delivery": "silent",
+      "tool": "system_info",
+      "arguments": {},
+      "notifyChannel": "",
+      "retryCount": 0,
+      "retryDelayMinutes": 5,
+      "lastRunAt": 0,
+      "retryAttempts": 0,
+      "nextRetryAt": 0
+    },
+    {
+      "id": "coverage-cron-1778625566437",
+      "enabled": true,
+      "everyMinutes": 45,
+      "delivery": "silent",
+      "tool": "system_info",
+      "arguments": {},
+      "notifyChannel": "",
+      "retryCount": 0,
+      "retryDelayMinutes": 5,
+      "lastRunAt": 0,
+      "retryAttempts": 0,
+      "nextRetryAt": 0
+    },
+    {
+      "id": "coverage-cron-1778625678583",
+      "enabled": true,
+      "everyMinutes": 45,
+      "delivery": "silent",
+      "tool": "system_info",
+      "arguments": {},
+      "notifyChannel": "",
+      "retryCount": 0,
+      "retryDelayMinutes": 5,
+      "lastRunAt": 0,
+      "retryAttempts": 0,
+      "nextRetryAt": 0
+    },
+    {
+      "id": "coverage-cron-1778625742420",
+      "enabled": true,
+      "everyMinutes": 45,
+      "delivery": "silent",
+      "tool": "system_info",
+      "arguments": {},
+      "notifyChannel": "",
+      "retryCount": 0,
+      "retryDelayMinutes": 5,
+      "lastRunAt": 0,
+      "retryAttempts": 0,
+      "nextRetryAt": 0
+    },
+    {
+      "id": "test_tool",
+      "enabled": true,
+      "everyMinutes": 60,
+      "delivery": "terminal",
+      "steps": [
+        {
+          "tool": "system_info"
+        }
+      ],
+      "notifyChannel": "",
+      "retryCount": 0,
+      "retryDelayMinutes": 5,
+      "lastRunAt": 0,
+      "retryAttempts": 0,
+      "nextRetryAt": 0
+    },
+    {
+      "id": "coverage-cron-1778626318528",
+      "enabled": true,
+      "everyMinutes": 45,
+      "delivery": "silent",
+      "tool": "system_info",
+      "arguments": {},
+      "notifyChannel": "",
+      "retryCount": 0,
+      "retryDelayMinutes": 5,
+      "lastRunAt": 0,
+      "retryAttempts": 0,
+      "nextRetryAt": 0
+    },
+    {
+      "id": "coverage-cron-action-1778626318588",
+      "enabled": true,
+      "everyMinutes": 45,
+      "delivery": "silent",
+      "steps": [
+        {
+          "tool": "system_info",
+          "arguments": {}
+        }
+      ],
+      "notifyChannel": "",
+      "retryCount": 0,
+      "retryDelayMinutes": 5,
+      "lastRunAt": 0,
+      "retryAttempts": 0,
+      "nextRetryAt": 0
+    },
+    {
+      "id": "test_action_verify",
+      "enabled": true,
+      "everyMinutes": 60,
+      "delivery": "terminal",
+      "steps": [
+        {
+          "tool": "system_info",
+          "arguments": {}
+        }
+      ],
+      "notifyChannel": "",
+      "retryCount": 0,
+      "retryDelayMinutes": 5,
+      "lastRunAt": 0,
+      "retryAttempts": 0,
+      "nextRetryAt": 0
+    },
+    {
+      "id": "coverage-cron-1778658163399",
+      "enabled": true,
+      "everyMinutes": 45,
+      "delivery": "silent",
+      "tool": "system_info",
+      "arguments": {},
+      "notifyChannel": "",
+      "retryCount": 0,
+      "retryDelayMinutes": 5,
+      "lastRunAt": 0,
+      "retryAttempts": 0,
+      "nextRetryAt": 0
+    },
+    {
+      "id": "coverage-cron-action-1778658163410",
+      "enabled": true,
+      "everyMinutes": 45,
+      "delivery": "silent",
+      "steps": [
+        {
+          "tool": "system_info",
+          "arguments": {}
+        }
+      ],
+      "notifyChannel": "",
+      "retryCount": 0,
+      "retryDelayMinutes": 5,
+      "lastRunAt": 0,
+      "retryAttempts": 0,
+      "nextRetryAt": 0
+    },
+    {
+      "id": "coverage-cron-1778663620988",
+      "enabled": true,
+      "everyMinutes": 45,
+      "delivery": "silent",
+      "tool": "system_info",
+      "arguments": {},
+      "notifyChannel": "",
+      "retryCount": 0,
+      "retryDelayMinutes": 5,
+      "lastRunAt": 0,
+      "retryAttempts": 0,
+      "nextRetryAt": 0
+    },
+    {
+      "id": "coverage-cron-action-1778663621002",
+      "enabled": true,
+      "everyMinutes": 45,
+      "delivery": "silent",
+      "steps": [
+        {
+          "tool": "system_info",
+          "arguments": {}
+        }
+      ],
+      "notifyChannel": "",
+      "retryCount": 0,
+      "retryDelayMinutes": 5,
+      "lastRunAt": 0,
+      "retryAttempts": 0,
+      "nextRetryAt": 0
+    },
+    {
+      "id": "coverage-cron-1778666247675",
+      "enabled": true,
+      "everyMinutes": 45,
+      "delivery": "silent",
+      "tool": "system_info",
+      "arguments": {},
+      "notifyChannel": "",
+      "retryCount": 0,
+      "retryDelayMinutes": 5,
+      "lastRunAt": 0,
+      "retryAttempts": 0,
+      "nextRetryAt": 0
+    },
+    {
+      "id": "coverage-cron-weekly-1778666247751",
+      "enabled": true,
+      "everyMinutes": 10080,
+      "delivery": "silent",
+      "tool": "system_info",
+      "arguments": {},
+      "notifyChannel": "",
+      "retryCount": 0,
+      "retryDelayMinutes": 5,
+      "lastRunAt": 0,
+      "retryAttempts": 0,
+      "nextRetryAt": 0
+    },
+    {
+      "id": "coverage-cron-action-1778666247767",
+      "enabled": true,
+      "everyMinutes": 45,
+      "delivery": "silent",
+      "steps": [
+        {
+          "tool": "system_info",
+          "arguments": {}
+        }
+      ],
+      "notifyChannel": "",
+      "retryCount": 0,
+      "retryDelayMinutes": 5,
+      "lastRunAt": 0,
+      "retryAttempts": 0,
+      "nextRetryAt": 0
+    },
+    {
+      "id": "coverage-cron-1778666675269",
+      "enabled": true,
+      "everyMinutes": 45,
+      "delivery": "silent",
+      "tool": "system_info",
+      "arguments": {},
+      "notifyChannel": "",
+      "retryCount": 0,
+      "retryDelayMinutes": 5,
+      "lastRunAt": 0,
+      "retryAttempts": 0,
+      "nextRetryAt": 0
+    },
+    {
+      "id": "coverage-cron-weekly-1778666675358",
+      "enabled": true,
+      "everyMinutes": 10080,
+      "delivery": "silent",
+      "tool": "system_info",
+      "arguments": {},
+      "notifyChannel": "",
+      "retryCount": 0,
+      "retryDelayMinutes": 5,
+      "lastRunAt": 0,
+      "retryAttempts": 0,
+      "nextRetryAt": 0
+    },
+    {
+      "id": "coverage-cron-action-1778666675374",
+      "enabled": true,
+      "everyMinutes": 45,
+      "delivery": "silent",
+      "steps": [
+        {
+          "tool": "system_info",
+          "arguments": {}
+        }
+      ],
+      "notifyChannel": "",
+      "retryCount": 0,
+      "retryDelayMinutes": 5,
+      "lastRunAt": 0,
+      "retryAttempts": 0,
+      "nextRetryAt": 0
+    },
+    {
+      "id": "coverage-cron-1778668097751",
+      "enabled": true,
+      "everyMinutes": 45,
+      "delivery": "silent",
+      "tool": "system_info",
+      "arguments": {},
+      "notifyChannel": "",
+      "retryCount": 0,
+      "retryDelayMinutes": 5,
+      "lastRunAt": 0,
+      "retryAttempts": 0,
+      "nextRetryAt": 0
+    },
+    {
+      "id": "coverage-cron-weekly-1778668097838",
+      "enabled": true,
+      "everyMinutes": 10080,
+      "delivery": "silent",
+      "tool": "system_info",
+      "arguments": {},
+      "notifyChannel": "",
+      "retryCount": 0,
+      "retryDelayMinutes": 5,
+      "lastRunAt": 0,
+      "retryAttempts": 0,
+      "nextRetryAt": 0
+    },
+    {
+      "id": "coverage-cron-action-1778668097851",
+      "enabled": true,
+      "everyMinutes": 45,
+      "delivery": "silent",
+      "steps": [
+        {
+          "tool": "system_info",
+          "arguments": {}
+        }
+      ],
+      "notifyChannel": "",
+      "retryCount": 0,
+      "retryDelayMinutes": 5,
+      "lastRunAt": 0,
+      "retryAttempts": 0,
+      "nextRetryAt": 0
+    },
+    {
+      "id": "coverage-cron-1778668217582",
+      "enabled": true,
+      "everyMinutes": 45,
+      "delivery": "silent",
+      "tool": "system_info",
+      "arguments": {},
+      "notifyChannel": "",
+      "retryCount": 0,
+      "retryDelayMinutes": 5,
+      "lastRunAt": 0,
+      "retryAttempts": 0,
+      "nextRetryAt": 0
+    },
+    {
+      "id": "coverage-cron-weekly-1778668217689",
+      "enabled": true,
+      "everyMinutes": 10080,
+      "delivery": "silent",
+      "tool": "system_info",
+      "arguments": {},
+      "notifyChannel": "",
+      "retryCount": 0,
+      "retryDelayMinutes": 5,
+      "lastRunAt": 0,
+      "retryAttempts": 0,
+      "nextRetryAt": 0
+    },
+    {
+      "id": "coverage-cron-action-1778668217707",
+      "enabled": true,
+      "everyMinutes": 45,
+      "delivery": "silent",
+      "steps": [
+        {
+          "tool": "system_info",
+          "arguments": {}
+        }
+      ],
+      "notifyChannel": "",
+      "retryCount": 0,
+      "retryDelayMinutes": 5,
+      "lastRunAt": 0,
+      "retryAttempts": 0,
+      "nextRetryAt": 0
+    },
+    {
+      "id": "coverage-cron-1778669416092",
+      "enabled": true,
+      "everyMinutes": 45,
+      "delivery": "silent",
+      "tool": "system_info",
+      "arguments": {},
+      "notifyChannel": "",
+      "retryCount": 0,
+      "retryDelayMinutes": 5,
+      "lastRunAt": 0,
+      "retryAttempts": 0,
+      "nextRetryAt": 0
+    },
+    {
+      "id": "coverage-cron-weekly-1778669416178",
+      "enabled": true,
+      "everyMinutes": 10080,
+      "delivery": "silent",
+      "tool": "system_info",
+      "arguments": {},
+      "notifyChannel": "",
+      "retryCount": 0,
+      "retryDelayMinutes": 5,
+      "lastRunAt": 0,
+      "retryAttempts": 0,
+      "nextRetryAt": 0
+    },
+    {
+      "id": "coverage-cron-action-1778669416194",
+      "enabled": true,
+      "everyMinutes": 45,
+      "delivery": "silent",
+      "steps": [
+        {
+          "tool": "system_info",
+          "arguments": {}
+        }
+      ],
+      "notifyChannel": "",
+      "retryCount": 0,
+      "retryDelayMinutes": 5,
+      "lastRunAt": 0,
+      "retryAttempts": 0,
+      "nextRetryAt": 0
+    },
+    {
+      "id": "coverage-cron-1778669732308",
+      "enabled": true,
+      "everyMinutes": 45,
+      "delivery": "silent",
+      "tool": "system_info",
+      "arguments": {},
+      "notifyChannel": "",
+      "retryCount": 0,
+      "retryDelayMinutes": 5,
+      "lastRunAt": 0,
+      "retryAttempts": 0,
+      "nextRetryAt": 0
+    },
+    {
+      "id": "coverage-cron-weekly-1778669732425",
+      "enabled": true,
+      "everyMinutes": 10080,
+      "delivery": "silent",
+      "tool": "system_info",
+      "arguments": {},
+      "notifyChannel": "",
+      "retryCount": 0,
+      "retryDelayMinutes": 5,
+      "lastRunAt": 0,
+      "retryAttempts": 0,
+      "nextRetryAt": 0
+    },
+    {
+      "id": "coverage-cron-action-1778669732448",
+      "enabled": true,
+      "everyMinutes": 45,
+      "delivery": "silent",
+      "steps": [
+        {
+          "tool": "system_info",
+          "arguments": {}
+        }
+      ],
+      "notifyChannel": "",
+      "retryCount": 0,
+      "retryDelayMinutes": 5,
+      "lastRunAt": 0,
+      "retryAttempts": 0,
+      "nextRetryAt": 0
+    },
+    {
+      "id": "coverage-cron-1778669981682",
+      "enabled": true,
+      "everyMinutes": 45,
+      "delivery": "silent",
+      "tool": "system_info",
+      "arguments": {},
+      "notifyChannel": "",
+      "retryCount": 0,
+      "retryDelayMinutes": 5,
+      "lastRunAt": 0,
+      "retryAttempts": 0,
+      "nextRetryAt": 0
+    },
+    {
+      "id": "coverage-cron-weekly-1778669981752",
+      "enabled": true,
+      "everyMinutes": 10080,
+      "delivery": "silent",
+      "tool": "system_info",
+      "arguments": {},
+      "notifyChannel": "",
+      "retryCount": 0,
+      "retryDelayMinutes": 5,
+      "lastRunAt": 0,
+      "retryAttempts": 0,
+      "nextRetryAt": 0
+    },
+    {
+      "id": "coverage-cron-action-1778669981766",
+      "enabled": true,
+      "everyMinutes": 45,
+      "delivery": "silent",
+      "steps": [
+        {
+          "tool": "system_info",
+          "arguments": {}
+        }
+      ],
+      "notifyChannel": "",
+      "retryCount": 0,
+      "retryDelayMinutes": 5,
+      "lastRunAt": 0,
+      "retryAttempts": 0,
+      "nextRetryAt": 0
+    },
+    {
+      "id": "y",
+      "enabled": true,
+      "everyMinutes": 60,
+      "delivery": "silent",
+      "steps": [
+        {
+          "tool": "web_search",
+          "arguments": {
+            "query": "q"
+          }
+        }
+      ],
+      "notifyChannel": "",
+      "retryCount": 0,
+      "retryDelayMinutes": 5,
+      "lastRunAt": 0,
+      "retryAttempts": 0,
+      "nextRetryAt": 0
+    },
+    {
+      "id": "z",
+      "enabled": true,
+      "everyMinutes": 60,
+      "delivery": "silent",
+      "steps": [
+        {
+          "tool": "web_search",
+          "arguments": {
+            "query": "q"
+          }
+        }
+      ],
+      "notifyChannel": "",
+      "retryCount": 0,
+      "retryDelayMinutes": 5,
+      "lastRunAt": 0,
+      "retryAttempts": 0,
+      "nextRetryAt": 0
+    },
+    {
+      "id": "tool_null",
+      "enabled": true,
+      "everyMinutes": 1,
+      "delivery": "silent",
+      "steps": [
+        {
+          "tool": "web_search",
+          "arguments": {
+            "query": "x"
+          }
+        }
+      ],
+      "notifyChannel": "",
+      "retryCount": 0,
+      "retryDelayMinutes": 5,
+      "lastRunAt": 0,
+      "retryAttempts": 0,
+      "nextRetryAt": 0
+    }
+  ]
+}

@@ -1,0 +1,16 @@
+{
+  "id": "capability_list",
+  "emoji": "🧩",
+  "description": "List modular capability folders discovered at runtime. Useful for checking installed tool, channel, provider, and bundled skill capabilities.",
+  "order": 900,
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "type": {
+        "type": "string",
+        "description": "Optional capability type filter: tools, channels, providers, or skills."
+      }
+    },
+    "additionalProperties": false
+  }
+}

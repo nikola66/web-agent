@@ -1,0 +1,18 @@
+{
+  "id": "ollama",
+  "name": "Ollama (cloud)",
+  "order": 2,
+  "kind": "openai",
+  "requiresUserApiKey": true,
+  "model": "gemma4:31b-cloud",
+  "apiKey": {
+    "settingKey": "ollama",
+    "envVar": "OLLAMA_API_KEY",
+    "placeholder": "Ollama API key",
+    "getKeyUrl": "https://ollama.com/settings/keys"
+  },
+  "runtime": {
+    "basePath": "ollama",
+    "fallbackBaseUrl": "https://ollama.com/v1"
+  }
+}

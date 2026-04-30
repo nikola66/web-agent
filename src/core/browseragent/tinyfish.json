@@ -1,0 +1,20 @@
+{
+  "id": "tinyfish",
+  "name": "TinyFish",
+  "isDefault": true,
+  "order": 1,
+  "docsUrl": "https://agent.tinyfish.ai/sign-up",
+  "search": {
+    "endpoint": "https://api.search.tinyfish.ai"
+  },
+  "fetch": {
+    "endpoint": "https://api.fetch.tinyfish.ai",
+    "timeoutMs": 150000
+  },
+  "auth": {
+    "settingKey": "tinyfish_api_key",
+    "envVar": "TINYFISH_API_KEY",
+    "headerName": "X-API-Key",
+    "placeholder": "tf_..."
+  }
+}

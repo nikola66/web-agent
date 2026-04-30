@@ -1,0 +1,12 @@
+{
+  "id": "telegram",
+  "name": "Telegram Bot API",
+  "isDefault": true,
+  "order": 1,
+  "docsUrl": "https://core.telegram.org/bots/tutorial",
+  "auth": {
+    "settingKey": "telegram_bot_token",
+    "envVar": "WEBAGENT_TELEGRAM_BOT_TOKEN"
+  },
+  "defaultPollTimeoutS": 25
+}

@@ -1,0 +1,8 @@
+{
+  "id": "pink",
+  "name": "Pink",
+  "accentColor": "#fb75fc",
+  "iconPath": "/mascot/Webby-pink.svg",
+  "isDefault": true,
+  "order": 1
+}

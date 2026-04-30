@@ -1,0 +1,14 @@
+{
+  "extraKnownMarketplaces": {
+    "caveman": {
+      "source": {
+        "source": "github",
+        "repo": "JuliusBrussee/caveman",
+        "path": ".claude-plugin/marketplace.json"
+      }
+    }
+  },
+  "enabledPlugins": {
+    "caveman@caveman": true
+  }
+}

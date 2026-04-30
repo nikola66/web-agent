@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <defs>
+    <linearGradient id="spinnerGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#fb75fc" />
+      <stop offset="100%" stop-color="#4b1cdd" />
+    </linearGradient>
+  </defs>
+  <circle cx="32" cy="32" r="22" fill="none" stroke="rgba(116, 121, 140, 0.25)" stroke-width="8" />
+  <path d="M32 10a22 22 0 0 1 22 22" fill="none" stroke="url(#spinnerGradient)" stroke-linecap="round" stroke-width="8">
+    <animateTransform
+      attributeName="transform"
+      attributeType="XML"
+      type="rotate"
+      from="0 32 32"
+      to="360 32 32"
+      dur="1s"
+      repeatCount="indefinite"
+    />
+  </path>
+</svg>

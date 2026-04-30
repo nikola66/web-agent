@@ -1,0 +1,16 @@
+{
+  "id": "custom",
+  "name": "Custom (OpenAI-compatible)",
+  "kind": "openai",
+  "requiresUserApiKey": true,
+  "model": "gpt-4o-mini",
+  "apiKey": {
+    "settingKey": "custom",
+    "envVar": "CUSTOM_API_KEY",
+    "placeholder": "https://api.example.com/v1"
+  },
+  "runtime": {
+    "customBaseUrlEnvVar": "CUSTOM_BASE_URL",
+    "ensureV1Suffix": true
+  }
+}

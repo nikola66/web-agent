@@ -1,0 +1,49 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+
+# npm cache
+.npm-cache/
+
+# Docs
+docs/
+
+# TypeScript build info
+*.tsbuildinfo
+
+# Environment & secrets
+.env
+.env.*
+!.env.example
+AGENTS.md
+
+# Vite
+.vite/
+
+# Editor
+.vscode/
+.agent/
+.claude/
+.cursor/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
+debug-logs/
+
+# Test artifacts
+test-results/
+
+# Runtime workspace state (agent saves, tests, dynamic capability fixtures)
+.webagent/skills/local/
+.webagent/skills/qa/
+.webagent/capabilities/tools/dynamic_fixture_*/

@@ -1,0 +1,46 @@
+{
+  "name": "web-agent",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "build:embed-runtime": "node scripts/build-embed-runtime.mjs",
+    "watch:embed-runtime": "node scripts/build-embed-runtime.mjs --watch",
+    "dev": "npm run build:embed-runtime && concurrently -k \"npm:watch:embed-runtime\" \"vite\"",
+    "build": "npm run build:embed-runtime && tsc -b && vite build",
+    "preview": "vite preview",
+    "test": "npm run build:embed-runtime && tsx --test tests/*.test.ts",
+    "test:tools": "node scripts/run-tool-smoke.mjs",
+    "test:tools:network": "node scripts/run-tool-smoke.mjs --network",
+    "test:browser": "PLAYWRIGHT_BROWSERS_PATH=0 playwright test",
+    "test:browser:headed": "PLAYWRIGHT_BROWSERS_PATH=0 playwright test --headed"
+  },
+  "dependencies": {
+    "@codesandbox/nodebox": "^0.1.9",
+    "@xterm/addon-fit": "^0.10.0",
+    "@xterm/addon-unicode11": "^0.9.0",
+    "@xterm/xterm": "^5.5.0",
+    "idb-keyval": "^6.2.1",
+    "lucide-react": "^0.474.0",
+    "markdown-it": "^14.1.1",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0",
+    "sql.js": "^1.12.0",
+    "zustand": "^5.0.3"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.59.1",
+    "@tailwindcss/vite": "^4.1.7",
+    "@types/markdown-it": "^14.1.2",
+    "@types/node": "^25.6.0",
+    "@types/react": "^19.1.2",
+    "@types/react-dom": "^19.1.2",
+    "@vitejs/plugin-react": "^4.4.1",
+    "concurrently": "^9.2.1",
+    "dotenv": "^17.4.2",
+    "tailwindcss": "^4.1.7",
+    "tsx": "^4.21.0",
+    "typescript": "^5.8.3",
+    "vite": "^6.3.4"
+  }
+}

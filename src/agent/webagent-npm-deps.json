@@ -1,0 +1,6 @@
+{
+  "name": "@webagent/runtime-deps",
+  "private": true,
+  "type": "module",
+  "dependencies": {}
+}

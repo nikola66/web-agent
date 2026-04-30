@@ -1,0 +1,23 @@
+{
+  "id": "openrouter",
+  "name": "OpenRouter",
+  "isDefault": true,
+  "order": 1,
+  "kind": "openai",
+  "requiresUserApiKey": true,
+  "model": "google/gemma-4-26b-a4b-it",
+  "apiKey": {
+    "settingKey": "openrouter",
+    "envVar": "OPENROUTER_API_KEY",
+    "placeholder": "sk-or-...",
+    "getKeyUrl": "https://openrouter.ai/keys"
+  },
+  "runtime": {
+    "basePath": "openrouter",
+    "fallbackBaseUrl": "https://openrouter.ai/api/v1",
+    "extraHeaders": {
+      "HTTP-Referer": "https://github.com/aratech/web-agent",
+      "X-Title": "Web Agent"
+    }
+  }
+}
