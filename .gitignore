@@ -4,6 +4,9 @@ node_modules/
 # Build output
 dist/
 
+# Tests (lots of sensetive data)
+tests/
+
 # npm cache
 .npm-cache/
 
