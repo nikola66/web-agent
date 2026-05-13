@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security report
+    url: https://github.com/nikola66/web-agent/security
+    about: Please report vulnerabilities privately.
+  - name: Support the project
+    url: http://ko-fi.com/nikola66
+    about: Help fund continued development.
+  - name: Live demo
+    url: https://webagent.aratech.ae
+    about: Try the hosted demo before filing UX feedback.

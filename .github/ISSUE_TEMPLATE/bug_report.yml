@@ -1,0 +1,51 @@
+name: Bug report
+description: Report a reproducible problem in Web Agent
+title: "[Bug]: "
+labels:
+  - bug
+body:
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: What is broken?
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: List the exact steps.
+      placeholder: |
+        1. Open ...
+        2. Click ...
+        3. Observe ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+    validations:
+      required: true
+  - type: input
+    id: browser
+    attributes:
+      label: Browser
+      placeholder: Chrome 136, Firefox 138, Safari 17.5
+  - type: input
+    id: environment
+    attributes:
+      label: Environment
+      placeholder: Hosted demo, local dev, or both
+  - type: textarea
+    id: notes
+    attributes:
+      label: Extra context
+      description: Logs, screenshots, and anything else useful.

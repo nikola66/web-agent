@@ -3,50 +3,40 @@ node_modules/
 
 # Build output
 dist/
-
-# Tests (lots of sensetive data)
-tests/
-
-# npm cache
-.npm-cache/
-
-# Docs
-docs/
-
-# TypeScript build info
+.vite/
 *.tsbuildinfo
 
 # Environment & secrets
 .env
 .env.*
 !.env.example
-AGENTS.md
 
-# Vite
-.vite/
-
-# Editor
+# Local maintainer state
+.agents/
+.claude/
+.codex/
+.cursor/
+docs/references/
+.idea/
+.opencode/
 .vscode/
 .agent/
-.claude/
-.cursor/
-.idea/
+.cronjobs.json
+.todos.json
+.webagent/
+
+# Caches and logs
+.npm-cache/
+*.log
+npm-debug.log*
+debug-logs/
+playwright-report/
+test-results/
+
+# Editor temp files
 *.swp
 *.swo
 
 # OS
 .DS_Store
 Thumbs.db
-
-# Logs
-*.log
-npm-debug.log*
-debug-logs/
-
-# Test artifacts
-test-results/
-
-# Runtime workspace state (agent saves, tests, dynamic capability fixtures)
-.webagent/skills/local/
-.webagent/skills/qa/
-.webagent/capabilities/tools/dynamic_fixture_*/
