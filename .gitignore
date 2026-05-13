@@ -19,6 +19,7 @@ dist/
 docs/references/
 .idea/
 .opencode/
+.opencode/plans/
 .vscode/
 .agent/
 .cronjobs.json
