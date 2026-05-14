@@ -51,10 +51,22 @@
 		}
 	}
 
-	# JSON CORS proxy (same contract as Vite corsProxyGate)
-	handle /api/proxy* {
+	# JSON CORS proxy (same contract as Vite corsProxyGate); path is exactly /api/proxy.
+	handle /api/proxy {
 		reverse_proxy http://{$WEBAGENT_CORS_PROXY_HOST:127.0.0.1}:{$WEBAGENT_CORS_PROXY_PORT:8799} {
 			flush_interval -1
+		}
+	}
+
+	# WASM (sql.js): skip gzip/zstd — some stacks return 502 or bad bodies for compressed wasm.
+	@wasm {
+		path_regexp wasm \.wasm$
+	}
+	handle @wasm {
+		root * dist
+		file_server {
+			hide .git
+			hide .env*
 		}
 	}
 
