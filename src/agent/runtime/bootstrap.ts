@@ -61,11 +61,8 @@ import {
   renderUserBlock,
 } from "./terminal-format.js";
 import { getDebugLogPath, logDebugEvent } from "./logging/debug-log.js";
-import {
-  buildToolRowsFromCatalog,
-  renderHelpView,
-  renderSkillsView,
-} from "./slash-command-views.js";
+import { buildToolRowsFromCatalog } from "./slash-command-views.js";
+import { formatHelpForSurface, runSkillsSlashCommand } from "./channel-outbound.js";
 import { SLASH_COMMANDS } from "./commands.js";
 import { buildPlanModeUserPrompt } from "./planning-slash.js";
 import {
@@ -346,32 +343,8 @@ export async function main() {
     await saveHistory(history);
   };
 
-  const printSkills = async (query = "") => {
-    const skills = await listSkills({ query });
-    console.log(renderSkillsView(skills, { query }));
-  };
-
   const handleSkillsCommand = async (input) => {
-    const rest = input.slice("/skills".length).trim();
-    if (!rest || rest.startsWith("search ")) {
-      await printSkills(rest.startsWith("search ") ? rest.slice("search ".length).trim() : rest);
-      return true;
-    }
-    if (rest.startsWith("install ") || rest.startsWith("import ")) {
-      const url = rest.replace(/^(install|import)\s+/, "").trim();
-      if (!url) {
-        console.log(red("Usage: /skills install <https-url-to-SKILL.md>\n"));
-        return true;
-      }
-      const result = await memoryServices.manageSkill({ action: "install_url", url });
-      if (result?.blocked) {
-        console.log(red(`Skill import blocked: ${(result.dangerous || []).join(", ")}\n`));
-      } else {
-        console.log(dim(`Installed skill /${result.slug} from ${result.source || url}\n`));
-      }
-      return true;
-    }
-    await printSkills(rest);
+    await runSkillsSlashCommand(input, "terminal", console.log);
     return true;
   };
 
@@ -437,7 +410,7 @@ export async function main() {
       continue;
     }
     if (input === "/help") {
-      console.log(renderHelpView(SLASH_COMMANDS, toolRows));
+      console.log(formatHelpForSurface("terminal", SLASH_COMMANDS, toolRows));
       continue;
     }
     if (input === "/compact") {

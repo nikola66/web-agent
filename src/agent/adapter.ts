@@ -51,6 +51,7 @@ import runtimeTranscriptDeliverySource from "../../dist/agent-runtime/transcript
 import runtimeWorkspacePathsSource from "../../dist/agent-runtime/workspace-paths.js?raw";
 import runtimeCommandsSource from "../../dist/agent-runtime/commands.js?raw";
 import runtimeSlashCommandViewsSource from "../../dist/agent-runtime/slash-command-views.js?raw";
+import runtimeChannelOutboundSource from "../../dist/agent-runtime/channel-outbound.js?raw";
 import runtimeOnboardingSource from "../../dist/agent-runtime/identity/onboarding.js?raw";
 import runtimeProviderConfigSource from "../../dist/agent-runtime/llm/provider-config.js?raw";
 import runtimeStreamingSource from "../../dist/agent-runtime/llm/streaming.js?raw";
@@ -379,6 +380,7 @@ async function writeRuntimeSources(profileId: string): Promise<void> {
   await emulator.fs.writeFile(`${webagentDir}/transcript-delivery.js`, runtimeTranscriptDeliverySource);
   await emulator.fs.writeFile(`${webagentDir}/commands.js`, runtimeCommandsSource);
   await emulator.fs.writeFile(`${webagentDir}/slash-command-views.js`, runtimeSlashCommandViewsSource);
+  await emulator.fs.writeFile(`${webagentDir}/channel-outbound.js`, runtimeChannelOutboundSource);
   await emulator.fs.writeFile(`${webagentDir}/workspace-paths.js`, runtimeWorkspacePathsSource);
   await emulator.fs.writeFile(`${webagentDir}/privacy.js`, runtimePrivacySource);
   await emulator.fs.writeFile(`${webagentDir}/identity/onboarding.js`, runtimeOnboardingSource);

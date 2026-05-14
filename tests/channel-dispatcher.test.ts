@@ -249,3 +249,87 @@ test("channel dispatcher handles /compact without starting an agent turn", async
     await fs.rm(tmp, { recursive: true, force: true });
   }
 });
+
+test("channel dispatcher handles /help without agent turn", async () => {
+  const originalCwd = process.cwd();
+  const tmp = await fs.mkdtemp(path.join(os.tmpdir(), "webagent-channel-"));
+  const dispatcherUrl = pathToFileURL(
+    path.join(originalCwd, "dist/agent-runtime/channels/dispatcher.js")
+  ).href;
+
+  process.chdir(tmp);
+  process.env.WEBAGENT_MEMORY_ROOT = path.join(tmp, "memory");
+
+  try {
+    const { createChannelInboundHandler } = await import(`${dispatcherUrl}?t=${Date.now()}-help`);
+    const replies = [];
+    let agentTurns = 0;
+    const inbound = createChannelInboundHandler({
+      cfg: {},
+      sendReply: async (_chatId, text) => {
+        replies.push(text);
+      },
+      agentTurn: async () => {
+        agentTurns += 1;
+        return [];
+      },
+    });
+
+    await inbound({
+      channel: "telegram",
+      chatId: "123",
+      text: "/help",
+    });
+
+    assert.equal(agentTurns, 0);
+    assert.equal(replies.length, 1);
+    assert.match(replies[0], /Slash commands/);
+    assert.doesNotMatch(replies[0], /\x1b\[/);
+  } finally {
+    process.chdir(originalCwd);
+    delete process.env.WEBAGENT_MEMORY_ROOT;
+    await fs.rm(tmp, { recursive: true, force: true });
+  }
+});
+
+test("channel dispatcher handles /skills without agent turn", async () => {
+  const originalCwd = process.cwd();
+  const tmp = await fs.mkdtemp(path.join(os.tmpdir(), "webagent-channel-"));
+  const dispatcherUrl = pathToFileURL(
+    path.join(originalCwd, "dist/agent-runtime/channels/dispatcher.js")
+  ).href;
+
+  process.chdir(tmp);
+  process.env.WEBAGENT_MEMORY_ROOT = path.join(tmp, "memory");
+
+  try {
+    const { createChannelInboundHandler } = await import(`${dispatcherUrl}?t=${Date.now()}-skills`);
+    const replies = [];
+    let agentTurns = 0;
+    const inbound = createChannelInboundHandler({
+      cfg: {},
+      sendReply: async (_chatId, text) => {
+        replies.push(text);
+      },
+      agentTurn: async () => {
+        agentTurns += 1;
+        return [];
+      },
+    });
+
+    await inbound({
+      channel: "telegram",
+      chatId: "123",
+      text: "/skills",
+    });
+
+    assert.equal(agentTurns, 0);
+    assert.equal(replies.length, 1);
+    assert.match(replies[0], /Installed skills|No skills installed/);
+    assert.doesNotMatch(replies[0], /\x1b\[/);
+  } finally {
+    process.chdir(originalCwd);
+    delete process.env.WEBAGENT_MEMORY_ROOT;
+    await fs.rm(tmp, { recursive: true, force: true });
+  }
+});

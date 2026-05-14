@@ -11,6 +11,14 @@ import { loadSystemPrompt } from "../state/persistence.js";
 import { formatTranscriptEventForChannel } from "../transcript.js";
 import { ensureParentDir } from "../workspace-paths.js";
 import { errorMessage } from "../utils.js";
+import { SLASH_COMMANDS } from "../commands.js";
+import {
+  formatHelpForSurface,
+  outboundSurfaceForChannel,
+  runSkillsSlashCommand,
+} from "../channel-outbound.js";
+import { buildToolRowsFromCatalog } from "../slash-command-views.js";
+import { loadToolCatalog } from "../tools/registry.js";
 
 function safeSegment(value) {
   return String(value || "").replace(/[^\w\-]/g, "_") || "_";
@@ -195,6 +203,17 @@ export function createChannelInboundHandler(deps) {
         } else {
           await sendReply(chatId, "Not enough history to compact.");
         }
+        return;
+      }
+      const surface = outboundSurfaceForChannel(channel);
+      if (trimmed === "/help") {
+        const catalog = await loadToolCatalog();
+        const toolRows = buildToolRowsFromCatalog(catalog);
+        await sendReply(chatId, formatHelpForSurface(surface, SLASH_COMMANDS, toolRows));
+        return;
+      }
+      if (trimmed === "/skills" || trimmed.startsWith("/skills ")) {
+        await runSkillsSlashCommand(trimmed, surface, (msg) => sendReply(chatId, msg));
         return;
       }
       history.push({ role: "user", content: trimmed });
