@@ -38,6 +38,14 @@ Web Agent is designed as a browser-native, local-first system:
 - profiles are isolated from each other
 - hosted deployments should remain transit-only for upstream requests, not persistence backends for user data
 
+## Network Disclaimer
+
+When `web_fetch` and `web_search` are not routed through TinyFish, requests are sent through a temporary proxy controlled by `VITE_WEBAGENT_LAUNCH_MODE` so the browser can make outbound internet requests under CORS restrictions.
+
+That proxy does not retain telemetry or logs.
+
+If you are especially concerned about privacy, clone the repository and run it locally.
+
 ## Scope Notes
 
 Security reports are especially useful for issues involving:

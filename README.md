@@ -244,7 +244,9 @@ For hosted deployments, the safest framing is:
 
 ### Use the hosted demo
 
-Open [webagent.aratech.ae](https://webagent.aratech.ae), create or select a profile, add your provider key, click **Launch**, and start chatting.
+Open [webagent.aratech.ae](https://webagent.aratech.ae), create or select a profile, add a free key from [OpenRouter.ai](https://openrouter.ai) or [Ollama](https://ollama.com), click **Launch**, and start chatting.
+
+For Web Agent, `Gemma4` is the recommended model because it strikes a strong balance between speed, price, and tool-calling support, including images, audio, and video. You can choose any model you prefer.
 
 ### Run locally
 
@@ -297,6 +299,8 @@ See [SECURITY.md](SECURITY.md) for reporting and security posture details.
 Web Agent is an open-source project. You are free to use it, fork it, modify it, and distribute it under the [MIT License](LICENSE).
 
 Inspired by OpenClaw, [Hermes Agent](https://github.com/NousResearch/hermes-agent), and OpenCrabs.
+
+Special thanks to the Nodebox used technology and the open source project behind it. It is beautiful software and made Web Agent possible.
 
 ## Support And Sponsorship
 
