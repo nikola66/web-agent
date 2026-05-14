@@ -11,9 +11,6 @@ import { useRuntimeStore } from "../stores/runtime-store";
 import { useSettingsStore } from "../stores/settings-store";
 import { useProfileStore } from "../stores/profile-store";
 
-/** Pixel floor so xterm `fit()` keeps enough columns for the welcome ASCII art (~76 cells × ~9px). */
-const TERMINAL_MIN_WIDTH_PX = 800;
-
 const RESIZE_OBSERVER_DEBOUNCE_MS = 400;
 const WINDOW_RESIZE_DEBOUNCE_MS = 250;
 const BRAND_URL_WITH_REFERRER = "https://aratech.ae/?referrer=web-agent";
@@ -269,10 +266,7 @@ export function Terminal() {
   }, []);
 
   return (
-    <div
-      className="relative min-h-0 flex-1 overflow-hidden"
-      style={{ minWidth: TERMINAL_MIN_WIDTH_PX }}
-    >
+    <div className="relative min-h-0 min-w-0 flex-1 overflow-hidden md:min-w-[800px]">
       <button
         type="button"
         onClick={toggleSidebar}

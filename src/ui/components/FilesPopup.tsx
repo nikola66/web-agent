@@ -610,7 +610,7 @@ export function FilesPopup({
 
   return (
     <div
-      className="absolute right-0 bottom-full z-40 mb-2 max-h-[75vh] w-[560px] overflow-y-auto border border-[#fb75fc4d] bg-[#05050dd9] shadow-[0_0_0_1px_rgba(251,117,252,0.16),0_18px_44px_rgba(0,0,0,0.55)] backdrop-blur-sm"
+      className="absolute right-0 bottom-full z-40 mb-2 max-h-[75vh] w-[min(560px,calc(100vw-16px))] overflow-y-auto border border-[#fb75fc4d] bg-[#05050dd9] shadow-[0_0_0_1px_rgba(251,117,252,0.16),0_18px_44px_rgba(0,0,0,0.55)] backdrop-blur-sm"
       role="dialog"
       aria-label="Files"
     >

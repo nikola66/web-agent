@@ -110,7 +110,7 @@ export function App() {
       </div>
 
       {/* Main area */}
-      <div className="terminal-hscroll relative flex flex-1 flex-col overflow-x-auto overflow-y-hidden">
+      <div className="terminal-hscroll relative flex min-w-0 flex-1 flex-col overflow-x-auto overflow-y-hidden">
         <Terminal />
         <ArtifactOfferBar />
         <ClarifyOfferBar />

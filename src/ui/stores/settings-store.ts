@@ -10,6 +10,32 @@ export const SIDEBAR_WIDTH_MAX_PX = 520;
 /** Minimum width left for the main column when computing the drag max. */
 export const SIDEBAR_MAIN_RESERVE_PX = 360;
 
+const SIDEBAR_OPEN_STORAGE_KEY = "webagent.sidebarOpen.preferred";
+
+function readInitialSidebarOpen(): boolean {
+  if (typeof window === "undefined") return true;
+  try {
+    const raw = localStorage.getItem(SIDEBAR_OPEN_STORAGE_KEY);
+    if (raw === "1") return true;
+    if (raw === "0") return false;
+  } catch {
+    /* private mode / blocked */
+  }
+  try {
+    return !window.matchMedia("(max-width: 767px)").matches;
+  } catch {
+    return true;
+  }
+}
+
+function persistSidebarOpen(open: boolean) {
+  try {
+    localStorage.setItem(SIDEBAR_OPEN_STORAGE_KEY, open ? "1" : "0");
+  } catch {
+    /* quota / private mode */
+  }
+}
+
 export function clampSidebarWidthPx(w: number): number {
   const min = SIDEBAR_WIDTH_MIN_PX;
   if (typeof window === "undefined") {
@@ -64,7 +90,7 @@ export const LLM_PROVIDERS: readonly LlmProviderConfig[] = LLM_PROVIDER_CONFIG.m
 export const useSettingsStore = create<SettingsState>((set) => ({
   apiKeys: {},
   sidebarView: "profiles",
-  sidebarOpen: true,
+  sidebarOpen: readInitialSidebarOpen(),
   sidebarWidthPx: SIDEBAR_WIDTH_DEFAULT_PX,
 
   setApiKey: (provider, key) =>
@@ -76,7 +102,12 @@ export const useSettingsStore = create<SettingsState>((set) => ({
     }),
   loadApiKeys: (keys) => set({ apiKeys: keys }),
   setSidebarView: (view) => set({ sidebarView: view }),
-  toggleSidebar: () => set((state) => ({ sidebarOpen: !state.sidebarOpen })),
+  toggleSidebar: () =>
+    set((state) => {
+      const sidebarOpen = !state.sidebarOpen;
+      persistSidebarOpen(sidebarOpen);
+      return { sidebarOpen };
+    }),
   setSidebarWidthPx: (widthPx) =>
     set({ sidebarWidthPx: clampSidebarWidthPx(widthPx) }),
 }));

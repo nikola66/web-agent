@@ -86,7 +86,7 @@ export function StatusBar() {
   }, [filesOpen]);
 
   return (
-    <div className="flex shrink-0 items-center gap-3 px-0 py-1">
+    <div className="flex min-w-0 shrink-0 flex-wrap items-center gap-3 px-0 py-1">
       <div className="flex shrink-0 items-center gap-2">
         <span
           className="inline-block h-2 w-2 shrink-0 rounded-full"

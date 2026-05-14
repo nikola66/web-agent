@@ -199,7 +199,7 @@ export function ChatInput() {
 
   return (
     <div
-      className="box-border w-full min-w-[800px] shrink-0 px-4 py-3"
+      className="box-border w-full min-w-0 shrink-0 px-4 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom,0px))] md:min-w-[800px]"
       data-testid="chat-input-root"
       data-agent-onboarding={onboardingActive ? "true" : "false"}
       data-agent-awaiting={awaitingResponse ? "true" : "false"}
