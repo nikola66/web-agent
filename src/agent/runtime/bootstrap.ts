@@ -138,7 +138,6 @@ export async function main() {
 
   if (!cfg) {
     process.stdout.write(red("✗ No LLM API key configured.\n"));
-    process.stdout.write(dim("  Add a key in Settings → provider, then restart the agent.\n"));
     await new Promise(() => {});
   }
   await logDebugEvent("runtime_started", {
