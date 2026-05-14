@@ -8,6 +8,7 @@
 # disables SPA/Caddy deploy (spa.go hasCustomStartCommand), and the image no longer includes Caddy.
 # Use railpack.json `deploy.startCommand` + `deploy.aptPackages` (see repo railpack.json) instead.
 # Override bind with WEBAGENT_CORS_PROXY_HOST / WEBAGENT_CORS_PROXY_PORT.
+# Globals stay compatible with Debian apt Caddy (~2.6): no persist_config / servers trusted_proxies.
 
 {
 	admin off
