@@ -16,10 +16,6 @@
 	log {
 		format json
 	}
-
-	servers {
-		trusted_proxies static private_ranges 100.0.0.0/8
-	}
 }
 
 :{$PORT:80} {
