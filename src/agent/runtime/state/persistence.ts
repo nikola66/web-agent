@@ -81,7 +81,7 @@ export function hasCronJobArgumentPayload(job) {
   return hasCronArgumentPayload(job, CRON_JOB_ARGUMENT_RESERVED_KEYS);
 }
 
-function normalizeCronDelivery(incoming, existingEntry = {}) {
+function normalizeCronDelivery(incoming, existingEntry: Record<string, unknown> = {}) {
   const raw = String(incoming ?? "").trim().toLowerCase();
   if (raw && !CRON_DELIVERY_MODES.has(raw)) {
     throw new Error(
@@ -89,7 +89,7 @@ function normalizeCronDelivery(incoming, existingEntry = {}) {
     );
   }
   if (CRON_DELIVERY_MODES.has(raw)) return raw;
-  const prev = String(existingEntry?.delivery ?? "").trim().toLowerCase();
+  const prev = String(existingEntry.delivery ?? "").trim().toLowerCase();
   if (CRON_DELIVERY_MODES.has(prev)) return prev;
   return "terminal";
 }
@@ -314,7 +314,7 @@ export async function upsertCronJob(job) {
 }
 
 async function runCronJobSteps(job, runTool) {
-  const results = [];
+  const results: { tool: string; result: string }[] = [];
   const record = (name, out) => {
     results.push({ tool: name, result: cronSafeJsonPreview(out) });
   };
@@ -517,7 +517,7 @@ export async function listCheckpoints() {
   try {
     await fs.mkdir(CHECKPOINTS_DIR, { recursive: true });
     const entries = await fs.readdir(CHECKPOINTS_DIR);
-    const results = [];
+    const results: { name: string; createdAt: string; sizeBytes: number }[] = [];
     for (const entry of entries.filter((e) => e.endsWith(".json"))) {
       try {
         const stat = await fs.stat(`${CHECKPOINTS_DIR}/${entry}`);
