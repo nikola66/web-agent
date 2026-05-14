@@ -2,20 +2,6 @@
 
 Thanks for contributing to Web Agent.
 
-## Desktop (Tauri)
-
-The desktop shell lives under `src-tauri/`. It starts a loopback HTTP server (random port on `127.0.0.1`), serves the Vite `dist/` bundle, mirrors the dev-server proxies from `vite.config.ts`, and opens the main window at that origin so `window.location.origin` matches the static host.
-
-```bash
-npm run build          # produce dist/ (also run by tauri before dev/build)
-npm run tauri:dev      # desktop dev (rebuild frontend first via beforeDevCommand)
-npm run tauri:build    # release bundles
-```
-
-Equivalent from the Rust directory: `cd src-tauri && cargo tauri dev` / `cargo tauri build` (requires the [Tauri CLI](https://v2.tauri.app/start/prerequisites/) on `PATH` or use `npm run tauri -- …`).
-
-**macOS release hygiene:** Apple code signing and notarization are not configured in this repository. For distribution outside your own machine, plan on an Apple Developer Program signing identity, `codesign` for the app bundle, `notarytool` submission, and stapling; see Apple’s “Notarize macOS software” documentation.
-
 ## Principles
 
 - Keep changes surgical.
@@ -39,8 +25,6 @@ Open `http://localhost:5173`.
 ```bash
 npm run dev
 npm run build
-npm run tauri:dev
-npm run tauri:build
 npm run test
 npm run test:browser
 ```
