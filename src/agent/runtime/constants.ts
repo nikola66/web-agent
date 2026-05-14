@@ -68,6 +68,9 @@ export const SESSION_MEMORY_PATH = `${WS}/.webagent/session-memory.jsonl`;
 export const SKILLS_DIR = `${WS}/.webagent/skills`;
 /** Conversation history checkpoints for rollback. */
 export const CHECKPOINTS_DIR = `${WS}/.webagent/checkpoints`;
+/** Saved markdown plans from `/plan` (workspace-relative: `.webagent/plans`). */
+export const PLANS_DIR_REL = ".webagent/plans";
+export const PLANS_DIR = `${WS}/${PLANS_DIR_REL}`;
 /** Auto-trim history when message count exceeds this threshold. */
 export const HISTORY_TRIM_THRESHOLD = 60;
 /** Keep this many recent non-system messages after trimming. */

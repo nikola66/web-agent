@@ -2,6 +2,11 @@ export const SLASH_COMMANDS = [
   { name: "/help", description: "Show built-in commands and available tools." },
   { name: "/clear", description: "Clear history and restart onboarding for this profile." },
   { name: "/compact", description: "Summarize older context and keep the current thread going." },
+  {
+    name: "/plan [goal]",
+    description:
+      "Planning mode: research the workspace, write a detailed plan under .webagent/plans, present it, then stop—execute on a follow-up message.",
+  },
   { name: "/checkpoint [name]", description: "Save a named snapshot of current history for rollback." },
   { name: "/rollback [name]", description: "List checkpoints or restore a named checkpoint." },
   { name: "/skills [search]", description: "List installed skills, or search skills by query." },

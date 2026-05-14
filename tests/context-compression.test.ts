@@ -193,6 +193,11 @@ test("compact command appears in runtime, Telegram, and ChatInput command regist
   );
 });
 
+test("/plan command appears in runtime and Telegram registries", async () => {
+  assert.ok(SLASH_COMMANDS.some((command) => String(command.name).startsWith("/plan")));
+  assert.ok(buildTelegramBotCommands().some((command) => command.command === "plan"));
+});
+
 test("adapter injects every bootstrap static ./ import (runtime entry pulls the graph)", async () => {
   const [bootstrapSource, adapterSource] = await Promise.all([
     fs.readFile(path.join(process.cwd(), "src/agent/runtime/bootstrap.ts"), "utf8"),

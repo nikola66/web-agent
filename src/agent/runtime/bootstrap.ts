@@ -67,6 +67,7 @@ import {
   renderSkillsView,
 } from "./slash-command-views.js";
 import { SLASH_COMMANDS } from "./commands.js";
+import { buildPlanModeUserPrompt } from "./planning-slash.js";
 import {
   compactHistory,
   formatCompactionNotice,
@@ -377,7 +378,7 @@ export async function main() {
   const skillInvocationPrompt = async (input) => {
     if (!input.startsWith("/") || input.startsWith("//")) return null;
     const token = input.split(/\s+/)[0].slice(1);
-    const reserved = new Set(["help", "clear", "compact", "checkpoint", "rollback", "skills", "stop", "exit"]);
+    const reserved = new Set(["help", "clear", "compact", "plan", "checkpoint", "rollback", "skills", "stop", "exit"]);
     if (!token || reserved.has(token)) return null;
     const skills = await listSkills();
     const skill = skills.find((item) => item.slug === token || commandSlug(item.name) === token);
@@ -491,9 +492,14 @@ export async function main() {
       continue;
     }
 
-    const skillPrompt = await skillInvocationPrompt(input);
     const displayInput = input;
-    if (skillPrompt) input = skillPrompt;
+    if (input === "/plan" || input.startsWith("/plan ")) {
+      const goal = input === "/plan" ? "" : input.slice("/plan ".length).trim();
+      input = buildPlanModeUserPrompt(goal);
+    } else {
+      const skillPrompt = await skillInvocationPrompt(input);
+      if (skillPrompt) input = skillPrompt;
+    }
 
     userDisplayName = cleanSetupName(process.env.WEBAGENT_USER_NAME, userDisplayName || "You");
     renderUserBlock(displayInput, userDisplayName, cleanSetupName);

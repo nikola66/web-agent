@@ -58,6 +58,7 @@ test("renderHelpView renders slash commands and tool ids without comma blob", ()
   };
   const plain = stripAnsi(renderHelpView(SLASH_COMMANDS, buildToolRowsFromCatalog(catalog)));
   assert.match(plain, /\/help/);
+  assert.match(plain, /\/plan/);
   assert.match(plain, /read_file/);
   assert.match(plain, /grep/);
   assert.doesNotMatch(plain, /read_file, grep/);
