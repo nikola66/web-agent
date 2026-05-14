@@ -38,18 +38,24 @@ export function StatusBar() {
     modelId,
     contextWindowTokens,
     estimatedPromptTokens,
+    awaitingResponse,
+    queuedInputs,
   } = rt;
   const agentWorking = profileAgentWorking(rt);
+  const queuedCount = queuedInputs.length;
+  const workingLabel =
+    !awaitingResponse && queuedCount > 0
+      ? `${queuedCount} queued — sending soon`
+      : queuedCount > 0
+        ? `Thinking · ${queuedCount} queued`
+        : "Thinking...";
   const { storageUsed, storagePersistent } = useRuntimeStore();
   const { profiles, activeProfileId } = useProfileStore();
   const [filesOpen, setFilesOpen] = useState(false);
   const filesRootRef = useRef<HTMLDivElement>(null);
   const active = profiles.find((p) => p.id === activeProfileId);
   const profileLabel = active?.name ?? "Web Agent";
-  const toolEmojis = useMemo(
-    () => recentToolCalls.map((tool: string) => TOOL_EMOJI[tool] ?? "🛠️").join(" "),
-    [recentToolCalls]
-  );
+  const toolCallsTitle = useMemo(() => recentToolCalls.join(", "), [recentToolCalls]);
   const contextUsage = useMemo(() => {
     if (!contextWindowTokens || contextWindowTokens <= 0) return null;
     const used = Math.max(0, estimatedPromptTokens);
@@ -81,33 +87,57 @@ export function StatusBar() {
 
   return (
     <div className="flex shrink-0 items-center gap-3 px-0 py-1">
-      <div className="flex items-center gap-2">
+      <div className="flex shrink-0 items-center gap-2">
         <span
-          className="inline-block h-2 w-2 rounded-full"
+          className="inline-block h-2 w-2 shrink-0 rounded-full"
           style={{
             background: STATUS_COLORS[runtimeStatus],
             boxShadow: agentWorking ? `0 0 6px ${STATUS_COLORS.running}` : undefined,
           }}
         />
-        <span className="text-[11px] font-medium text-text-secondary">
-          {profileLabel}
-        </span>
+        <span className="shrink-0 text-[11px] font-medium text-text-secondary">{profileLabel}</span>
       </div>
 
-      {toolEmojis && (
+      {recentToolCalls.length > 0 ? (
         <>
-          <span className="text-text-muted">·</span>
+          <span className="shrink-0 text-text-muted">·</span>
           <span
-            className="text-[11px] text-text-muted"
-            title={recentToolCalls.join(", ")}
+            className="inline-flex shrink-0 items-center gap-0.5 text-[11px] leading-none text-text-muted"
+            title={toolCallsTitle}
             aria-label="Recent tool calls"
           >
-            {toolEmojis}
+            {recentToolCalls.map((tool, i) => (
+              <span key={`${i}:${tool}`} className="inline-block shrink-0" title={tool}>
+                {TOOL_EMOJI[tool] ?? "🛠️"}
+              </span>
+            ))}
           </span>
         </>
-      )}
+      ) : null}
 
-      <div className="flex-1" />
+      {agentWorking ? (
+        <>
+          <span className="shrink-0 text-text-muted">·</span>
+          <div
+            className="inline-flex min-h-5 shrink-0 items-center gap-1.5"
+            aria-live="polite"
+            aria-busy="true"
+            role="status"
+            data-testid="agent-working-indicator"
+          >
+            <span className="webagent-thinking-dots inline-flex shrink-0 items-center gap-0.5" aria-hidden="true">
+              <span />
+              <span />
+              <span />
+            </span>
+            <span className="shrink-0 text-[11px] font-medium tracking-wide text-brand-magenta-light/95">
+              {workingLabel}
+            </span>
+          </div>
+        </>
+      ) : null}
+
+      <div className="min-w-0 flex-1" />
 
       {storageUsed > 0 && (
         <span className="text-[11px] text-text-muted">{formatBytes(storageUsed)}</span>

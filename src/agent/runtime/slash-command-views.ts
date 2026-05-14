@@ -91,6 +91,7 @@ export function buildHelpMarkdown(commands: SlashCommandRow[], toolRows: ToolVie
   lines.push(
     "",
     "> Invoke a skill with `/<skill-slug> [task]`. List skills with `/skills`.",
+    "",
     ""
   );
 
@@ -189,7 +190,7 @@ export function renderHelpView(commands: SlashCommandRow[], toolRows: ToolViewRo
     "",
     renderTerminalNote("Invoke a skill with `/<skill-slug> [task]`. List skills with `/skills`."),
   ];
-  return `${sections.join("\n")}\n`;
+  return `${sections.join("\n\n")}`;
 }
 
 export function renderSkillsView(skills: SkillViewRow[], options: { query?: string } = {}) {

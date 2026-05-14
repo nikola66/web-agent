@@ -67,13 +67,6 @@ export function ChatInput() {
     modelId,
   } = rt;
   const agentWorking = profileAgentWorking(rt);
-  const queuedCount = queuedInputs.length;
-  const workingLabel =
-    !awaitingResponse && queuedCount > 0
-      ? `${queuedCount} queued — sending soon`
-      : queuedCount > 0
-        ? `Thinking · ${queuedCount} queued`
-        : "Thinking...";
   const inputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const inputHistoryRef = useRef<string[]>([]);
@@ -243,29 +236,6 @@ export function ChatInput() {
         boxShadow: dragActive ? "inset 0 0 0 1px rgba(251,117,252,0.45)" : undefined,
       }}
     >
-      {agentWorking ? (
-        <div
-          className="-mt-1 mb-0.5 flex min-h-5 items-center gap-2 px-0.5"
-          aria-live="polite"
-          aria-busy="true"
-          role="status"
-          data-testid="agent-working-indicator"
-        >
-          <span className="webagent-thinking-dots inline-flex shrink-0 items-center gap-0.5" aria-hidden="true">
-            <span />
-            <span />
-            <span />
-          </span>
-          <span className="text-[11px] font-medium tracking-wide text-brand-magenta-light/95">
-            {workingLabel}
-          </span>
-          {modelId ? (
-            <span className="min-w-0 truncate text-[10px] tracking-wide text-text-muted" title={modelId}>
-              {modelId}
-            </span>
-          ) : null}
-        </div>
-      ) : null}
       <div className="relative flex w-full items-center gap-2 py-2 font-mono">
         <button
           type="button"
