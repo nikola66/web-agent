@@ -7,7 +7,7 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
 use tauri::path::BaseDirectory;
-use tauri::{AppHandle, WebviewUrl, WebviewWindowBuilder};
+use tauri::{AppHandle, Manager, WebviewUrl, WebviewWindowBuilder};
 
 fn upstream_map() -> HashMap<String, server::UpstreamTarget> {
     let mut m = HashMap::new();

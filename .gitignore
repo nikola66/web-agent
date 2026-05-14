@@ -5,6 +5,7 @@ node_modules/
 dist/
 .vite/
 *.tsbuildinfo
+src-tauri/target/
 
 # Environment & secrets
 .env

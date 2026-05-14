@@ -114,23 +114,23 @@ async fn llm_proxy(
 ) -> Response {
     let path = req.uri().path().to_string();
     let method = req.method().clone();
-    let mut headers = llm_cors_headers();
     if method == Method::OPTIONS {
-        return (StatusCode::NO_CONTENT, headers).into_response();
+        return (StatusCode::NO_CONTENT, llm_cors_headers()).into_response();
     }
     let Some((provider, _rest)) = parse_llm_route(&path, &state.upstreams) else {
         let body = serde_json::json!({
             "error": "llm_provider_not_allowed",
             "allowedProviders": state.upstreams.keys().collect::<Vec<_>>(),
         });
-        headers.insert("content-type", HeaderValue::from_static("application/json"));
-        return (StatusCode::FORBIDDEN, headers, body.to_string()).into_response();
+        let mut h = llm_cors_headers();
+        h.insert("content-type", HeaderValue::from_static("application/json"));
+        return (StatusCode::FORBIDDEN, h, body.to_string()).into_response();
     };
     let Some(u) = state.upstreams.get(&provider) else {
-        return StatusCode::FORBIDDEN.into_response();
+        return (StatusCode::FORBIDDEN, llm_cors_headers()).into_response();
     };
     let Some(upstream_path) = rewrite_upstream_path(&provider, &path, u) else {
-        return StatusCode::BAD_GATEWAY.into_response();
+        return (StatusCode::BAD_GATEWAY, llm_cors_headers()).into_response();
     };
     let target = format!(
         "{}{}",
@@ -213,9 +213,9 @@ async fn forward_llm_request(
     for (name, value) in llm_cors_headers().iter() {
         res = res.header(name, value);
     }
-    let stream = upstream.bytes_stream().map_err(|e| {
-        std::io::Error::new(std::io::ErrorKind::Other, e.to_string())
-    });
+    let stream = upstream
+        .bytes_stream()
+        .map_err(|e: reqwest::Error| std::io::Error::other(e.to_string()));
     match res.body(Body::from_stream(stream)) {
         Ok(resp) => resp,
         Err(_) => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
