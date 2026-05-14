@@ -131,6 +131,15 @@ test("summarizeToolApproval email send is readable", () => {
   assert.equal(s.includes("BODY"), false);
 });
 
+test("summarizeToolApproval email send reads to/subject from nested arguments", () => {
+  const s = summarizeToolApproval("email:send", {
+    action: "send",
+    arguments: { to: "x@y.z", subject: "Nested subj", text: "…" },
+  });
+  assert.match(s, /x@y\.z/);
+  assert.match(s, /Nested subj/);
+});
+
 test("formatApprovalTerminalBlock generic keeps semicolon summary on one line", () => {
   const block = formatApprovalTerminalBlock({
     toolLabel: "email:send",

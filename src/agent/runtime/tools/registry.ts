@@ -25,6 +25,7 @@ import {
 } from "./argument-normalization.js";
 import { toolPathStringFromArgs } from "./filesystem/path-hints.js";
 import { inferEmailActionArgument } from "./email-tools.js";
+import { hoistNestedToolArguments } from "./llm-arg-shape.js";
 import { gateToolExecution, summarizeToolApproval } from "./tool-policy.js";
 import { expandSkillBulkSaveArgs } from "./skill-bulk-args.js";
 import { classifyToolError } from "./error-classifier.js";
@@ -374,20 +375,20 @@ function prepareToolCall({
 }): PreparedToolCall {
   const name = typeof call?.name === "string" ? call.name : "";
   let rawArgs = call.arguments;
+  if (typeof rawArgs === "string") {
+    try {
+      rawArgs = JSON.parse(rawArgs);
+    } catch {
+      rawArgs = {};
+    }
+  }
+  rawArgs = hoistNestedToolArguments(name, rawArgs);
 
-  // Infer email action before validation
   if (name === "email") {
     rawArgs = inferEmailActionArgument(rawArgs);
   }
 
   let argsForNormalize = rawArgs;
-  if (typeof argsForNormalize === "string") {
-    try {
-      argsForNormalize = JSON.parse(argsForNormalize);
-    } catch {
-      argsForNormalize = {};
-    }
-  }
   if (!argsForNormalize || typeof argsForNormalize !== "object" || Array.isArray(argsForNormalize)) {
     argsForNormalize = {};
   } else {

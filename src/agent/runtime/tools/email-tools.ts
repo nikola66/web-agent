@@ -79,13 +79,28 @@ async function postResendEmails(cfg, emailPayload) {
     headers,
     body: serialized,
   });
+  const bodyText = await resp.text();
   if (!resp.ok) {
-    const err = await resp.json().catch(() => ({}));
+    let err = {};
+    try {
+      err = bodyText.trim() ? JSON.parse(bodyText) : {};
+    } catch {
+      /* ignore */
+    }
     throw new Error(
-      `Resend send failed (${resp.status}): ${err.message ?? JSON.stringify(err).slice(0, 200)}`
+      `Resend send failed (${resp.status}): ${err.message ?? bodyText.slice(0, 200)}`
     );
   }
-  return resp.json();
+  if (!bodyText.trim()) {
+    throw new Error(
+      "Resend send: empty success response (check API key, Resend status, and that the request reached api.resend.com)."
+    );
+  }
+  try {
+    return JSON.parse(bodyText);
+  } catch {
+    throw new Error(`Resend send: invalid JSON response (${bodyText.slice(0, 200)})`);
+  }
 }
 
 export function inferEmailActionArgument(args) {

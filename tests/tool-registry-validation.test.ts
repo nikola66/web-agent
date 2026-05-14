@@ -81,6 +81,97 @@ test("runTools infers email action before required-field validation", async (t) 
   assert.equal(seenArgs?.to, "x@y.z");
 });
 
+test("runTools hoists email fields from nested arguments (cron-style shape)", async (t) => {
+  let seenArgs = null;
+  registerTestTool(t, "email", async (args) => {
+    seenArgs = args;
+    return { ok: true };
+  });
+  const ctx = createToolContext({ runId: "email-nested-args-runTools" });
+  const catalog = {
+    email: {
+      inputSchema: {
+        type: "object",
+        properties: {
+          action: { type: "string" },
+          to: { type: "string" },
+          subject: { type: "string" },
+          text: { type: "string" },
+        },
+        required: ["action"],
+        additionalProperties: true,
+      },
+    },
+  };
+  const results = await runTools(
+    [
+      {
+        name: "email",
+        arguments: {
+          action: "send",
+          arguments: { to: "p@q.r", subject: "Subj", text: "Hi" },
+        },
+      },
+    ],
+    ctx,
+    catalog
+  );
+  assert.ok(!results[0]?.error, results[0]?.error);
+  assert.equal(seenArgs?.action, "send");
+  assert.equal(seenArgs?.to, "p@q.r");
+});
+
+test("runTools hoists run_shell command from nested arguments", async (t) => {
+  let seenArgs = null;
+  registerTestTool(t, "run_shell", async (args) => {
+    seenArgs = args;
+    return { ok: true, stdout: "", stderr: "", exit_code: 0 };
+  });
+  const ctx = createToolContext({ runId: "run-shell-hoist", autoApprove: true });
+  const catalog = {
+    run_shell: {
+      inputSchema: {
+        type: "object",
+        properties: { command: { type: "string" } },
+        required: ["command"],
+        additionalProperties: true,
+      },
+    },
+  };
+  const results = await runTools(
+    [{ name: "run_shell", arguments: { arguments: { command: "node --version" } } }],
+    ctx,
+    catalog
+  );
+  assert.ok(!results[0]?.error, results[0]?.error);
+  assert.equal(seenArgs?.command, "node --version");
+});
+
+test("runTools leaves cron_register tool+arguments sibling shape intact", async (t) => {
+  let seenArgs = null;
+  registerTestTool(t, "cron_register", async (args) => {
+    seenArgs = args;
+    return { ok: true };
+  });
+  const ctx = createToolContext({ runId: "cron-no-hoist", autoApprove: true });
+  const catalog = {
+    cron_register: {
+      inputSchema: { type: "object", properties: {}, additionalProperties: true },
+    },
+  };
+  const payload = {
+    id: "t_job",
+    everyMinutes: 60,
+    tool: "web_search",
+    arguments: { query: "rust", page: 0 },
+  };
+  const results = await runTools([{ name: "cron_register", arguments: payload }], ctx, catalog);
+  assert.ok(!results[0]?.error, results[0]?.error);
+  assert.equal(seenArgs?.tool, "web_search");
+  assert.deepEqual(seenArgs?.arguments, { query: "rust", page: 0 });
+  assert.equal(seenArgs?.query, undefined);
+});
+
 test("required argument validation reports missing fields clearly", async () => {
   const schema = {
     type: "object",

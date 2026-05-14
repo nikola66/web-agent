@@ -8,6 +8,7 @@ interface JSONSchema {
   type?: string | string[];
   properties?: Record<string, unknown>;
   required?: string[];
+  examples?: unknown[];
   [key: string]: unknown;
 }
 
@@ -26,9 +27,18 @@ export function validateRequiredArguments(
   });
 
   if (!missing.length) return null;
+  let hint = "";
+  const ex = schema?.examples;
+  if (Array.isArray(ex) && ex.length && ex[0] && typeof ex[0] === "object") {
+    try {
+      hint = ` Example: ${JSON.stringify(ex[0])}`;
+    } catch {
+      /* ignore */
+    }
+  }
   return `invalid arguments: missing required field(s) [${missing.join(
     ", "
-  )}] for ${toolName}. Provide all required fields from the tool schema.`;
+  )}] for ${toolName}. Provide all required fields from the tool schema.${hint}`;
 }
 
 export function normalizeToolArguments(

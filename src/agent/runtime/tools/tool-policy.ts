@@ -76,8 +76,12 @@ export function summarizeToolApproval(name, args, approvalSummaryTemplate) {
     const action = tool.slice("email:".length).trim() || "(action)";
     const a = args && typeof args === "object" ? args : {};
     if (action === "send") {
-      const to = String(a.to ?? "").trim();
-      let subject = String(a.subject ?? "").replace(/\s+/g, " ").trim();
+      const nested =
+        a.arguments && typeof a.arguments === "object" && !Array.isArray(a.arguments)
+          ? a.arguments
+          : {};
+      const to = String(a.to ?? nested.to ?? "").trim();
+      let subject = String(a.subject ?? nested.subject ?? "").replace(/\s+/g, " ").trim();
       if (subject.length > 100) subject = `${subject.slice(0, 97)}…`;
       const parts = [];
       if (to) parts.push(`to=${to}`);
