@@ -1,0 +1,62 @@
+# Railpack serves static Vite output with Caddy. A root Caddyfile replaces the default
+# (see https://railpack.com/languages/node#static-sites ). These routes mirror
+# vite.config.ts `LLM_PROXIES` so POST /api/llm/{provider}/... works in production.
+
+{
+	admin off
+	persist_config off
+	auto_https off
+
+	log {
+		format json
+	}
+
+	servers {
+		trusted_proxies static private_ranges 100.0.0.0/8
+	}
+}
+
+:{$PORT:80} {
+	log {
+		format json
+	}
+
+	respond /health 200
+
+	header {
+		X-Content-Type-Options "nosniff"
+		-Server
+	}
+
+	# OpenRouter: /api/llm/openrouter/* -> https://openrouter.ai/api/v1/*
+	handle /api/llm/openrouter* {
+		uri replace /api/llm/openrouter /api/v1
+		reverse_proxy https://openrouter.ai:443 {
+			flush_interval -1
+			header_up Host openrouter.ai
+		}
+	}
+
+	# Ollama cloud: /api/llm/ollama/* -> https://ollama.com/v1/*
+	handle /api/llm/ollama* {
+		uri replace /api/llm/ollama /v1
+		reverse_proxy https://ollama.com:443 {
+			flush_interval -1
+			header_up Host ollama.com
+		}
+	}
+
+	# Static SPA (Vite default outDir: dist; override with RAILPACK_SPA_OUTPUT_DIR if needed)
+	handle {
+		root * dist
+		file_server {
+			hide .git
+			hide .env*
+		}
+		encode {
+			gzip
+			zstd
+		}
+		try_files {path} {path}.html {path}/index.html /index.html
+	}
+}
