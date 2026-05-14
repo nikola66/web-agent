@@ -396,6 +396,7 @@ export default defineConfig(({ mode }) => {
       format: "es",
     },
     build: {
+      emptyOutDir: false,
       rollupOptions: {
         external: [],
         output: {

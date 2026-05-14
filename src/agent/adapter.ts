@@ -516,7 +516,8 @@ function buildEnv(profileId: string, profile: Profile, apiKeys: Record<string, s
   for (const channel of CHANNELS) {
     const envVar = channel.auth?.envVar;
     const settingKey = channel.auth?.settingKey;
-    const value = settingKey ? apiKeys[settingKey]?.trim() : "";
+    const value =
+      (settingKey ? apiKeys[settingKey]?.trim() : "") || (envVar ? apiKeys[envVar]?.trim() : "");
     if (!envVar || !settingKey || !value) continue;
     env[envVar] = value;
     if (!env.WEBAGENT_CHANNEL) {
