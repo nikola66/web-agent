@@ -4,8 +4,10 @@
 # POST /api/proxy mirrors vite.config.ts `corsProxyGate` (web_fetch / web_search when
 # no TinyFish key, youtube_transcribe, etc.): reverse_proxy to a small sidecar —
 # `node scripts/cors-proxy-server.mjs` (default http://127.0.0.1:8799). Railpack/Dokploy:
-# use `npm start` (see package.json + scripts/start-with-proxy.sh) so the sidecar runs
-# before Caddy. Override bind with WEBAGENT_CORS_PROXY_HOST / WEBAGENT_CORS_PROXY_PORT.
+# Do not set `scripts.start` in package.json: Railpack treats that as a custom start command,
+# disables SPA/Caddy deploy (spa.go hasCustomStartCommand), and the image no longer includes Caddy.
+# Use railpack.json `deploy.startCommand` + `deploy.aptPackages` (see repo railpack.json) instead.
+# Override bind with WEBAGENT_CORS_PROXY_HOST / WEBAGENT_CORS_PROXY_PORT.
 
 {
 	admin off

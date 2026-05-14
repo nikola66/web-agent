@@ -16,4 +16,9 @@ else
 	exit 1
 fi
 
+if ! command -v caddy >/dev/null 2>&1; then
+	echo "start-with-proxy: caddy not in PATH (install caddy, e.g. deploy.aptPackages in railpack.json)" >&2
+	exit 1
+fi
+
 exec caddy run --config "$CADDY_CFG" --adapter caddyfile
