@@ -9,6 +9,7 @@
     "dev": "npm run build:embed-runtime && concurrently -k \"npm:watch:embed-runtime\" \"vite\"",
     "build": "npm run build:embed-runtime && tsc -b && vite build",
     "preview": "vite preview",
+    "cors-proxy-server": "node scripts/cors-proxy-server.mjs",
     "test": "npm run build:embed-runtime && tsx --test tests/*.test.ts",
     "test:tools": "node scripts/run-tool-smoke.mjs",
     "test:tools:network": "node scripts/run-tool-smoke.mjs --network",

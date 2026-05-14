@@ -1,6 +1,10 @@
 # Railpack serves static Vite output with Caddy. A root Caddyfile replaces the default
 # (see https://railpack.com/languages/node#static-sites ). These routes mirror
 # vite.config.ts `LLM_PROXIES` so POST /api/llm/{provider}/... works in production.
+# POST /api/proxy mirrors vite.config.ts `corsProxyGate` (web_fetch / web_search when
+# no TinyFish key, youtube_transcribe, etc.): reverse_proxy to a small sidecar —
+# `node scripts/cors-proxy-server.mjs` (default http://127.0.0.1:8799), or set
+# WEBAGENT_CORS_PROXY_HOST / WEBAGENT_CORS_PROXY_PORT for the sidecar listener.
 
 {
 	admin off
@@ -43,6 +47,13 @@
 		reverse_proxy https://ollama.com:443 {
 			flush_interval -1
 			header_up Host ollama.com
+		}
+	}
+
+	# JSON CORS proxy (same contract as Vite corsProxyGate)
+	handle /api/proxy* {
+		reverse_proxy http://{$WEBAGENT_CORS_PROXY_HOST:127.0.0.1}:{$WEBAGENT_CORS_PROXY_PORT:8799} {
+			flush_interval -1
 		}
 	}
 
