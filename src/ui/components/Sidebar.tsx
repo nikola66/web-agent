@@ -22,9 +22,18 @@ export function Sidebar() {
         className="flex shrink-0 items-center border-b px-3 py-2"
         style={{ borderColor: "var(--color-border-subtle)" }}
       >
-        <h1 className="text-sm font-semibold tracking-wide text-text-primary">
-          Web Agent
-        </h1>
+        <div className="flex min-w-0 items-baseline gap-1.5">
+          <h1 className="shrink-0 text-sm font-semibold tracking-wide text-text-primary">
+            Web Agent
+          </h1>
+          <span
+            className="shrink-0 text-[10px] font-normal tabular-nums opacity-[0.32]"
+            style={{ color: "var(--color-text-muted)" }}
+            aria-hidden
+          >
+            v{import.meta.env.VITE_APP_VERSION}
+          </span>
+        </div>
       </div>
 
       <div

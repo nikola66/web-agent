@@ -12,6 +12,10 @@ import {
   sanitizeForLogs,
 } from "./src/agent/runtime/privacy";
 
+const PACKAGE_JSON = JSON.parse(
+  fs.readFileSync(path.resolve(__dirname, "package.json"), "utf8"),
+) as { version: string };
+
 /** Vite's `ProxyOptions` omits `router` even though the underlying proxy supports it. */
 type ProxyWithRouter = ProxyOptions & {
   router?: (req: IncomingMessage) => string;
@@ -378,6 +382,9 @@ export default defineConfig(({ mode }) => {
     console.warn("[privacy] Production deploys should set VITE_WEBAGENT_LAUNCH_MODE=transit_only_proxy.");
   }
   return {
+    define: {
+      "import.meta.env.VITE_APP_VERSION": JSON.stringify(PACKAGE_JSON.version),
+    },
     plugins: [rawRuntimeFilesPlugin(), crossOriginIsolationHeaders(), llmProxyGate(), corsProxyGate(), react(), tailwindcss()],
     resolve: {
       alias: {

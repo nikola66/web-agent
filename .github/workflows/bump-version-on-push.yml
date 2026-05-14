@@ -1,0 +1,33 @@
+name: Bump version on push
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+jobs:
+  bump-patch:
+    runs-on: ubuntu-latest
+    if: ${{ !contains(github.event.head_commit.message, '[version-bump]') }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - name: Bump patch version
+        run: npm version patch --no-git-tag-version
+
+      - name: Commit and push
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add package.json package-lock.json
+          NEW=$(jq -r .version package.json)
+          git commit -m "chore: bump version to v${NEW} [version-bump]"
+          git push
