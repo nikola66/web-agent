@@ -20,7 +20,7 @@ export default defineTool({
   run: skillBulkSaveTool,
   emoji: "📚",
   description:
-    "Batch save or import skills (one approval). Required: non-empty `items` array of `{ url }` (HTTPS raw SKILL.md) and/or `{ name, content, ... }` inline. For a single URL you may pass top-level `url` or `urls` (string[]) instead; optional `category` is applied to URL imports. Never set `url` together with `name` or `content` on the same item. Examples (arguments JSON only): " +
+    "Use for HTTPS SKILL.md installs (including GitHub); do not use run_shell or npx to install skills. GitHub blob links are accepted (server normalizes to raw). Batch save or import (one approval). Required: non-empty `items` of `{ url }` (HTTPS SKILL.md) and/or `{ name, content, ... }` inline, or top-level `url` or `urls` (string[]) instead; optional `category` for URL imports. Never set `url` together with `name` or `content` on the same item. Examples (arguments JSON only): " +
     JSON.stringify(SKILL_BULK_EXAMPLES[0]) +
     " | " +
     JSON.stringify(SKILL_BULK_EXAMPLES[1]) +

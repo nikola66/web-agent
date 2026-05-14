@@ -3,7 +3,7 @@ import { runShellTool } from "../filesystem-tools.js";
 
 const RUN_SHELL_EXAMPLES = [
   { command: "node --version" },
-  { command: "printf '%s\\n' ok", cwd: ".", timeout_ms: 5000 },
+  { command: "node -e \"console.log('ok')\"", cwd: ".", timeout_ms: 5000 },
 ];
 
 export default defineTool({
@@ -11,7 +11,7 @@ export default defineTool({
   run: runShellTool,
   emoji: "🖥️",
   description:
-    "Run a shell command in the workspace. On Nodebox (browser runtime, WEBAGENT_RUNTIME=nodebox) there is no OS `sh` process: only direct `node …` invocations are supported (spawned without a shell). For pipes, `grep`/`sed`, or other binaries, use read_file/grep tools, web_fetch, or a local terminal—not run_shell. Do not rely on run_shell inside heartbeat cron steps in Nodebox. Required: `command` (string). Examples (arguments JSON only): " +
+    "Not a general-purpose tool—prefer built-ins first (`grep`, `read_file`, `web_fetch`, `list_dir`, `system_info`, etc.). Last resort for workspace commands with no dedicated tool. **Host:** runs via POSIX `sh -c` (optional `cwd`, `timeout_ms`, `background`); `crontab`/`at` are blocked—use `cron_register`. **Nodebox** (`WEBAGENT_RUNTIME=nodebox`): not a real shell—only `node …` (spawned without `sh -c`); no pipes, `npx`, `curl`, `git`, or other binaries; no `background`; avoid in heartbeat cron. Required: `command` (string). Examples (arguments JSON only): " +
     JSON.stringify(RUN_SHELL_EXAMPLES[0]) +
     " | " +
     JSON.stringify(RUN_SHELL_EXAMPLES[1]),
@@ -20,7 +20,7 @@ export default defineTool({
     properties: {
       command: {
         type: "string",
-        description: "Shell command (host) or `node …` only in Nodebox.",
+        description: "POSIX shell string on host; in Nodebox must start with `node ` (no shell wrapper).",
       },
       cwd: { type: "string", description: "Optional working directory (host)." },
       timeout_ms: { type: "number", description: "Optional timeout cap in milliseconds." },

@@ -19,6 +19,13 @@ This skill is for self-maintenance. It is not a static tool catalog and it does 
 3. Inspect the current repository and nearby tests before changing behavior. Prefer present source files, registry manifests, and focused tests over remembered inventories.
 4. Treat facts, session notes, reflections, and learnings as hints that need confirmation against current runtime outputs or files.
 
+### `run_shell` (narrow use)
+
+- Prefer specialized tools over `run_shell` for searching, reading files, HTTP, listing directories, clocks (`system_info`), skill installs, and most package/git flows.
+- **Nodebox:** only `node …` commands work (no shell wrapper, no `npx`/`printf`/`curl` as the command). Use small `node -e` snippets when you must run JS in that sandbox.
+- **Host:** real `sh -c` shell for the workspace; still not a default—reach for it when the user needs a specific command (e.g. project test runner) and no tool fits.
+- Do not use `run_shell` for recurring jobs; use `cron_register` and non-shell steps on Nodebox (see `HEARTBEAT.md`).
+
 ## Persistence Ladder
 
 Store information at the smallest durable layer that matches the need:
@@ -47,6 +54,14 @@ Use:
 - `skill_manage` for targeted skill updates, especially `action: "patch"` for local changes.
 - `skill_bulk_save` when adding or updating many skills in one operation.
 - support files only under the allowed skill folders such as `references/`, `templates/`, `scripts/`, or `assets/`.
+
+### Remote SKILL.md installs (from the internet)
+
+- Collect **per-file** HTTPS `SKILL.md` URLs (a GitHub repo home URL is not a skill document; use `web_fetch` on the GitHub tree API or equivalent to list paths, then build raw or blob URLs per file).
+- Call `skill_bulk_save` with `urls` (or top-level `url` for one file, or `items: [{ url }, ...]`). At most **75** URLs per call; repeat for larger packs.
+- One remote file without the batch approval flow: `skill_manage` with `action: install_url` or `import_url` plus `url`.
+- Never use `run_shell`, `npx`, or `git clone` to install skills; the runtime fetches and validates URL imports itself.
+- Afterward, confirm with `skill_list` and `skill_view`.
 
 This autonomy applies to skill files. Repository code changes still follow the user request and normal implementation workflow.
 
