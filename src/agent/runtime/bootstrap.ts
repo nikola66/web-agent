@@ -344,7 +344,7 @@ export async function main() {
   };
 
   const handleSkillsCommand = async (input) => {
-    await runSkillsSlashCommand(input, "terminal", console.log);
+    await runSkillsSlashCommand(input, "terminal", (msg) => console.log(msg));
     return true;
   };
 

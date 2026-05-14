@@ -486,7 +486,7 @@ export async function runHeartbeatTick(runTool, reason = "interval") {
   }
 
   if (dirty) await saveCronJobs(cron);
-  process.stdout.write(dim(`▸ heartbeat done, ran ${ran} job(s)\n`));
+  process.stdout.write(dim(`▸ heartbeat done, ran ${ran} job(s)\n\n`));
 }
 
 // ---------------------------------------------------------------------------

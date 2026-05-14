@@ -68,14 +68,17 @@ async function sendChannelError({ channel, chatId, sendReply, logType, error }) 
   await sendReply(chatId, `Error: ${message.slice(0, 3800)}`).catch(() => {});
 }
 
-function createTranscriptSender({ channel, chatId, sendReply }) {
+function createTranscriptSender({ channel, chatId, sendReply, transcriptStyle, toolCatalog }) {
   let lastTranscriptText = "";
   let transcriptMessageCount = 0;
   let lastAssistantPreview = "";
 
   return {
     async send(event) {
-      const outbound = formatTranscriptEventForChannel(event).trim();
+      const outbound = formatTranscriptEventForChannel(event, {
+        style: transcriptStyle,
+        toolCatalog,
+      }).trim();
       if (!outbound || outbound === lastTranscriptText) return;
       try {
         await sendReply(chatId, outbound);
@@ -238,7 +241,16 @@ export function createChannelInboundHandler(deps) {
       history = await sanitizeMessagesMissingSnapshotRefs(history);
       const runId = createRunId();
       const stopTyping = typeof startTyping === "function" ? startTyping(chatId) : null;
-      const transcriptSender = createTranscriptSender({ channel, chatId, sendReply });
+      const transcriptStyle = channel === "telegram" ? "telegram" : "terminal";
+      const toolCatalog =
+        transcriptStyle === "telegram" ? await loadToolCatalog() : undefined;
+      const transcriptSender = createTranscriptSender({
+        channel,
+        chatId,
+        sendReply,
+        transcriptStyle,
+        toolCatalog,
+      });
 
       try {
         const tail = await agentTurn(history, cfg, {

@@ -53,13 +53,10 @@ test("channel dispatcher sends tool notices and then the final answer", async ()
     });
 
     assert.equal(replies.length, 3);
-    assert.match(replies[0], /^▸ web_search/);
+    assert.match(replies[0], /^▸ .*web_search$/);
     assert.match(replies[0], /web_search/);
-    assert.equal(replies[1], "✓ web_search");
-    assert.equal(
-      replies[2],
-      "Opaline\n ⎿ There is no active UAE-Iran war in the checked reports."
-    );
+    assert.match(replies[1], /^✓ .*web_search$/);
+    assert.equal(replies[2], "There is no active UAE-Iran war in the checked reports.");
   } finally {
     process.chdir(originalCwd);
     delete process.env.WEBAGENT_MEMORY_ROOT;
@@ -108,10 +105,7 @@ test("channel dispatcher does not need onToolCalls for channel tool notices", as
       text: "read the file",
     });
 
-    assert.deepEqual(replies, [
-      "▸ read_file {\"path\":\"README.md\"}",
-      "Opaline\n ⎿ Done",
-    ]);
+    assert.deepEqual(replies, ["▸ 📄 read_file", "Done"]);
   } finally {
     process.chdir(originalCwd);
     delete process.env.WEBAGENT_MEMORY_ROOT;
@@ -135,7 +129,7 @@ test("channel dispatcher surfaces final assistant delivery failures", async () =
     const inbound = createChannelInboundHandler({
       cfg: {},
       sendReply: async (_chatId, text) => {
-        if (String(text).startsWith("Opaline\n")) throw new Error("telegram unavailable");
+        if (String(text).includes("Final answer")) throw new Error("telegram unavailable");
         replies.push(text);
       },
       agentTurn: async (_history, _cfg, meta) => {
@@ -156,7 +150,7 @@ test("channel dispatcher surfaces final assistant delivery failures", async () =
       text: "question",
     });
 
-    assert.deepEqual(replies, ["✓ web_search", "Error: telegram unavailable"]);
+    assert.deepEqual(replies, ["✓ 🔍 web_search", "Error: telegram unavailable"]);
   } finally {
     process.chdir(originalCwd);
     delete process.env.WEBAGENT_MEMORY_ROOT;
@@ -180,7 +174,7 @@ test("channel dispatcher continues when non-critical transcript delivery fails",
     const inbound = createChannelInboundHandler({
       cfg: {},
       sendReply: async (_chatId, text) => {
-        if (text === "✓ web_search") throw new Error("tool notice failed");
+        if (/^✓ /.test(text)) throw new Error("tool notice failed");
         replies.push(text);
       },
       agentTurn: async (_history, _cfg, meta) => {
@@ -202,7 +196,7 @@ test("channel dispatcher continues when non-critical transcript delivery fails",
       text: "question",
     });
 
-    assert.deepEqual(replies, ["Opaline\n ⎿ Final answer"]);
+    assert.deepEqual(replies, ["Final answer"]);
   } finally {
     process.chdir(originalCwd);
     delete process.env.WEBAGENT_MEMORY_ROOT;

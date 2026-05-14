@@ -1,6 +1,20 @@
 import { BLOCK_CONTINUATION_PREFIX } from "./terminal-format.js";
 import { stripAnsi } from "./utils.js";
 
+export type ChannelTranscriptStyle = "terminal" | "telegram";
+
+function normalizeToolEmoji(emoji: string) {
+  return String(emoji || "").replace(/([\p{Extended_Pictographic}])\s+(\uFE0F)/gu, "$1$2");
+}
+
+function toolEmojiFromCatalog(
+  catalog: Record<string, { emoji?: string } | undefined> | undefined,
+  toolName: string
+) {
+  const raw = catalog?.[toolName]?.emoji;
+  return normalizeToolEmoji(String(raw || "").trim());
+}
+
 function prefixPlainBlock(text, branchBelowName = true) {
   const lines = String(text || "").trimEnd().split("\n");
   const firstPrefix = branchBelowName ? " ⎿ " : BLOCK_CONTINUATION_PREFIX;
@@ -119,9 +133,20 @@ export function createSystemLineTranscriptEvent({ round, text } = {}) {
   };
 }
 
-export function formatTranscriptEventForChannel(event) {
+export function formatTranscriptEventForChannel(
+  event,
+  options?: {
+    style?: ChannelTranscriptStyle;
+    toolCatalog?: Record<string, { emoji?: string } | undefined>;
+  }
+) {
+  const style = options?.style ?? "terminal";
+  const catalog = options?.toolCatalog;
   const kind = String(event?.type || "");
   if (kind === "assistant") {
+    if (style === "telegram") {
+      return stripAnsi(String(event?.text ?? "")).trimEnd();
+    }
     return formatAssistantTranscript({
       agentName: event.agentName,
       text: event.text,
@@ -129,8 +154,30 @@ export function formatTranscriptEventForChannel(event) {
       branchBelowName: event.branchBelowName !== false,
     });
   }
-  if (kind === "tool_start") return formatToolStartTranscript(event);
-  if (kind === "tool_result") return formatToolResultTranscript(event);
-  if (kind === "system_line") return String(event.text || "").trimEnd();
+  if (kind === "tool_start") {
+    if (style === "telegram") {
+      const toolName = String(event?.name || "unknown").trim() || "unknown";
+      const em = toolEmojiFromCatalog(catalog, toolName);
+      return em ? `▸ ${em} ${toolName}` : `▸ ${toolName}`;
+    }
+    return formatToolStartTranscript(event);
+  }
+  if (kind === "tool_result") {
+    if (style === "telegram") {
+      const toolName = String(event?.name || "unknown").trim() || "unknown";
+      const em = toolEmojiFromCatalog(catalog, toolName);
+      const prefix = em ? `${em} ` : "";
+      const status = String(event?.status || "ok");
+      if (status === "denied") return `⊘ ${prefix}${toolName}`;
+      if (status === "error")
+        return `✗ ${prefix}${toolName}: ${String(event?.error || "error").slice(0, 200)}`;
+      return `✓ ${prefix}${toolName}`;
+    }
+    return formatToolResultTranscript(event);
+  }
+  if (kind === "system_line") {
+    if (style === "telegram") return "";
+    return String(event.text || "").trimEnd();
+  }
   return "";
 }

@@ -122,7 +122,6 @@ function renderMarkdownForTelegram(markdown) {
       continue;
     }
     if (/^\s*([-*_])\1{2,}\s*$/.test(line)) {
-      out.push("────────────────────────");
       continue;
     }
     const quote = line.match(/^\s*>\s?(.*)$/);

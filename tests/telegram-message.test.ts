@@ -78,6 +78,26 @@ test("sendTelegramMessage preserves underscores inside exact tokens", async () =
   assert.equal(calls[0].text, "Final token: LIVE_DIRECT_OK_TOKEN");
 });
 
+test("sendTelegramMessage omits markdown horizontal rules in HTML", async () => {
+  const originalFetch = globalThis.fetch;
+  const calls = [];
+  globalThis.fetch = async (_url, opts) => {
+    calls.push(JSON.parse(opts.body));
+    return okResponse();
+  };
+
+  try {
+    await sendTelegramMessage("token", "chat-hr", "Section A\n---\nSection B");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+
+  assert.equal(calls.length, 1);
+  assert.doesNotMatch(calls[0].text, /────────/);
+  assert.match(calls[0].text, /Section A/);
+  assert.match(calls[0].text, /Section B/);
+});
+
 test("sendTelegramMessage ignores empty messages", async () => {
   const originalFetch = globalThis.fetch;
   let calls = 0;

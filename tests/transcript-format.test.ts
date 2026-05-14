@@ -38,6 +38,43 @@ test("channel transcript formatter includes assistant name and branch prefix", (
   );
 });
 
+test("telegram channel transcript omits agent name and tool args", () => {
+  const cat = { web_search: { emoji: "🔍" } };
+  assert.equal(
+    formatTranscriptEventForChannel(
+      {
+        type: "assistant",
+        agentName: "Indara",
+        text: "Hello **world**",
+        branchBelowName: true,
+      },
+      { style: "telegram" }
+    ),
+    "Hello **world**"
+  );
+  assert.equal(
+    formatTranscriptEventForChannel(
+      { type: "tool_start", name: "web_search", argsPreview: '{"q":1}' },
+      { style: "telegram", toolCatalog: cat }
+    ),
+    "▸ 🔍 web_search"
+  );
+  assert.equal(
+    formatTranscriptEventForChannel(
+      { type: "tool_result", name: "web_search", status: "ok" },
+      { style: "telegram", toolCatalog: cat }
+    ),
+    "✓ 🔍 web_search"
+  );
+  assert.equal(
+    formatTranscriptEventForChannel(
+      { type: "system_line", text: "▸ skipped 1 invalid tool call(s): x" },
+      { style: "telegram" }
+    ),
+    ""
+  );
+});
+
 test("channel transcript formatter prefers the canonical terminal-rendered body", () => {
   assert.equal(
     formatTranscriptEventForChannel({
