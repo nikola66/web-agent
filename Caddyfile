@@ -3,8 +3,9 @@
 # vite.config.ts `LLM_PROXIES` so POST /api/llm/{provider}/... works in production.
 # POST /api/proxy mirrors vite.config.ts `corsProxyGate` (web_fetch / web_search when
 # no TinyFish key, youtube_transcribe, etc.): reverse_proxy to a small sidecar —
-# `node scripts/cors-proxy-server.mjs` (default http://127.0.0.1:8799), or set
-# WEBAGENT_CORS_PROXY_HOST / WEBAGENT_CORS_PROXY_PORT for the sidecar listener.
+# `node scripts/cors-proxy-server.mjs` (default http://127.0.0.1:8799). Railpack/Dokploy:
+# use `npm start` (see package.json + scripts/start-with-proxy.sh) so the sidecar runs
+# before Caddy. Override bind with WEBAGENT_CORS_PROXY_HOST / WEBAGENT_CORS_PROXY_PORT.
 
 {
 	admin off

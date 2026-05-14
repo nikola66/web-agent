@@ -4,6 +4,7 @@
   "version": "0.0.3",
   "type": "module",
   "scripts": {
+    "start": "sh scripts/start-with-proxy.sh",
     "build:embed-runtime": "node scripts/build-embed-runtime.mjs",
     "watch:embed-runtime": "node scripts/build-embed-runtime.mjs --watch",
     "dev": "npm run build:embed-runtime && concurrently -k \"npm:watch:embed-runtime\" \"vite\"",
