@@ -1,7 +1,9 @@
 import { expect, test } from "@playwright/test";
 import {
+  anyChatInput,
   assertProfileHasCustomModel,
   clearBrowserStorage,
+  clickStartAgent,
   configureOpenRouterApiKey,
   createProfile,
   editProfileButton,
@@ -216,23 +218,23 @@ test("keeps marker tool parser as fallback path", async ({ page }) => {
 
 test("first launch can rename the agent and capture the user name", async ({ page }) => {
   requireOpenRouterApiKey();
+  await clearBrowserStorage(page);
   await page.goto("/");
   await waitForProfilesLoaded(page);
   await configureOpenRouter(page);
-  await launchDefaultAgent(page);
+  await clickStartAgent(page);
 
-  const chatInput = runningChatInput(page);
+  const chatRoot = page.getByTestId("chat-input-root");
+  await expect(chatRoot).toHaveAttribute("data-agent-onboarding", "true", { timeout: 90_000 });
+  const chatInput = anyChatInput(page);
   await chatInput.focus();
-  await page.keyboard.type("/clear");
-  await page.keyboard.press("Enter");
-  await page.waitForTimeout(250);
-  await page.keyboard.type("Astra Prime");
-  await page.keyboard.press("Enter");
-  await page.waitForTimeout(250);
-  await page.keyboard.type("Nicolas");
-  await page.keyboard.press("Enter");
-
+  await chatInput.fill("Astra Prime");
+  await chatInput.press("Enter");
+  await chatInput.fill("Nicolas");
+  await chatInput.press("Enter");
+  await expect(chatRoot).toHaveAttribute("data-agent-onboarding", "false", { timeout: 60_000 });
   await expectChatReady(page);
+
   await expect(page.locator("p.text-sm.font-semibold").filter({ hasText: /^Astra Prime$/ })).toBeVisible({
     timeout: 30_000,
   });
@@ -241,7 +243,7 @@ test("first launch can rename the agent and capture the user name", async ({ pag
   await expect(page.getByRole("button", { name: "Stop", exact: true })).toBeVisible();
 });
 
-test("/clear resets identity and retriggers onboarding", async ({ page }) => {
+test("/clear clears conversation without restarting onboarding", async ({ page }) => {
   requireOpenRouterApiKey();
   await page.goto("/");
   await waitForProfilesLoaded(page);
@@ -252,19 +254,9 @@ test("/clear resets identity and retriggers onboarding", async ({ page }) => {
   await chatInput.focus();
   await chatInput.fill("/clear");
   await chatInput.press("Enter");
-  await expect(page.getByTestId("chat-input-root")).toHaveAttribute("data-agent-onboarding", "true", {
-    timeout: 30_000,
-  });
-  await page.waitForTimeout(250);
-  await page.keyboard.type("Astra Prime");
-  await page.keyboard.press("Enter");
-  await page.waitForTimeout(250);
-  await page.keyboard.type("Necolas");
-  await page.keyboard.press("Enter");
-
-  await expect(page.locator("p.text-sm.font-semibold").filter({ hasText: /^Astra Prime$/ })).toBeVisible({
-    timeout: 30_000,
-  });
+  await waitForTurnDrained(page, 30_000);
+  await expect(page.getByTestId("chat-input-root")).toHaveAttribute("data-agent-onboarding", "false");
+  await expectChatReady(page);
 });
 
 test("agent boots and completes onboarding", async ({ page }) => {

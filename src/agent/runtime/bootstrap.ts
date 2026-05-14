@@ -381,32 +381,16 @@ export async function main() {
       break;
     }
     if (input === "/clear") {
-      await fs.rm(AGENT_MD, { force: true });
-      await fs.rm(USER_MD, { force: true });
-      process.env.WEBAGENT_AGENT_NAME = cleanSetupName(
-        process.env.WEBAGENT_PROFILE_NAME,
-        "Agent"
-      );
-      process.env.WEBAGENT_USER_NAME = "User";
-      const clearOnboarding = await runFirstRunSetup(rl, fileExists);
-      const nextAgentName = cleanSetupName(
-        clearOnboarding?.agentName || process.env.WEBAGENT_PROFILE_NAME,
-        "Agent"
-      );
-      const nextUserName = cleanSetupName(
-        clearOnboarding?.userName || process.env.WEBAGENT_USER_NAME,
-        "User"
-      );
-      process.env.WEBAGENT_PROFILE_NAME = nextAgentName;
-      process.env.WEBAGENT_AGENT_NAME = nextAgentName;
-      process.env.WEBAGENT_USER_NAME = nextUserName;
-      emitProfileUpdate(nextAgentName);
-      emitUserUpdate(nextUserName);
-      userDisplayName = cleanSetupName(nextUserName, "You");
-      await synchronizeIdentityFiles(nextAgentName, nextUserName);
       history = await refreshHistoryWithLatestSystemPrompt([]);
+      history = await sanitizeMessagesMissingSnapshotRefs(history);
+      await cleanupSnapshotsNotReferenced(history).catch(() => {});
       await saveHistory(history);
-      console.log(dim("History and onboarding identity reset.\n"));
+      emitContextUpdate({
+        modelId: cfg.model || null,
+        contextWindowTokens: cfg.contextWindowTokens ?? null,
+        estimatedPromptTokens: 0,
+      });
+      console.log(dim("Conversation cleared (identity unchanged).\n"));
       continue;
     }
     if (input === "/help") {

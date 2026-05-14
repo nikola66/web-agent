@@ -280,11 +280,8 @@ export async function submitUserInput(raw: string): Promise<void> {
     }
     useRuntimeStore.getState().clearQueuedInputs(targetProfileId);
     useRuntimeStore.getState().resetModelContext(targetProfileId);
-    state.onboardingActive = true;
-    state.onboardingField = "agent";
     state.agentReadyForInput = false;
     useRuntimeStore.getState().setAwaitingResponse(targetProfileId, true);
-    useRuntimeStore.getState().setOnboardingActive(targetProfileId, true);
     await writeToWebAgent(targetProfileId, "/clear\n");
     return;
   }

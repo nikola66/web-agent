@@ -1,6 +1,6 @@
 export const SLASH_COMMANDS = [
   { name: "/help", description: "Show built-in commands and available tools." },
-  { name: "/clear", description: "Clear history and restart onboarding for this profile." },
+  { name: "/clear", description: "Clear conversation history and start a fresh thread; keeps agent and user identity." },
   { name: "/compact", description: "Summarize older context and keep the current thread going." },
   {
     name: "/plan [goal]",

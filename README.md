@@ -83,7 +83,7 @@ These commands make the terminal experience feel like an operator console rather
 | Command | What it does |
 | --- | --- |
 | `/help` | Show built-in commands and available tools. |
-| `/clear` | Clear history and restart onboarding for this profile. |
+| `/clear` | Clear conversation history for a fresh thread; keeps agent and user identity. |
 | `/compact` | Summarize older context and keep the current thread going. |
 | `/checkpoint [name]` | Save a named snapshot of current history for rollback. |
 | `/rollback [name]` | List checkpoints or restore a named checkpoint. |
