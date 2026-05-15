@@ -220,6 +220,7 @@ export async function agentTurn(
   const skillsBlock = await buildSkillsContextBlock();
   const toolCatalog = await loadToolCatalog();
   const openAiTools = await buildOpenAiToolDefinitions(toolCatalog);
+  const streamTools = turnMeta?.textOnly === true ? [] : openAiTools;
   const toolNames = await getToolNamesAsync();
   const safeMessages = await sanitizeMessagesMissingSnapshotRefs(messages);
   type ChatTurnMsg = { role?: string; content?: unknown };
@@ -315,7 +316,7 @@ export async function agentTurn(
       let streamResult;
       let streamAborted = false;
       try {
-        streamResult = await streamOpenAI(conv, cfg, onDelta, openAiTools, {
+        streamResult = await streamOpenAI(conv, cfg, onDelta, streamTools, {
           signal: turnController.signal,
         });
       } catch (error) {
@@ -471,57 +472,59 @@ export async function agentTurn(
       }
 
       if (!tools.length) {
-        const nudgeState = getAutoContinueNudgeState({
-          turnInput: turnMeta.input,
-          visible,
-          executedToolsInTurn,
-          autoContinueNudges,
-          maxNudges: maxAutoContinueNudges,
-          toolNames,
-          originalUserInput,
-          suppressActionPlanNudge,
-          webSearchCount: webSearchCountInTurn,
-          webFetchCount: webFetchCountInTurn,
-        });
-        if (nudgeState.want && !nudgeState.underCap) {
-          process.stdout.write(
-            dim(
-              `▸ auto-continue cap reached (${autoContinueNudges}/${nudgeState.maxNudges} nudges); stopping. Increase WEBAGENT_MAX_AUTO_CONTINUE_NUDGES to allow more recovery nudges.\n`
-            )
-          );
-          emitLoopStopLine(`auto_continue_cap (${nudgeState.reason})`);
-          await logDebugEvent("turn_completed", {
-            round,
-            durationMs: Date.now() - roundStartedAt,
-            continued: false,
-            autoContinueCap: true,
-            capReason: nudgeState.reason,
+        if (!turnMeta?.textOnly) {
+          const nudgeState = getAutoContinueNudgeState({
+            turnInput: turnMeta.input,
+            visible,
+            executedToolsInTurn,
+            autoContinueNudges,
+            maxNudges: maxAutoContinueNudges,
+            toolNames,
+            originalUserInput,
+            suppressActionPlanNudge,
+            webSearchCount: webSearchCountInTurn,
+            webFetchCount: webFetchCountInTurn,
           });
-          break;
-        }
-        if (nudgeState.shouldNudge) {
-          autoContinueNudges += 1;
-          const exactTokens = extractExactResponseTokens(originalUserInput);
-          const nudge =
-            nudgeState.reason === "missing_exact_final"
-              ? `The task is not complete because the requested exact final text is missing. Continue now, using tools if needed, and finish with the exact requested text: ${exactTokens.join(", ")}`
-              : nudgeState.reason === "tool_sequence"
-                ? "Continue the same testing sequence now. Emit the next tool call immediately with valid arguments, then keep going step-by-step."
-                : nudgeState.reason === "scheduling_automation"
-                  ? "The user asked for recurring or scheduled work (heartbeat cron). Continue now with native tool calls: use cron_list if helpful, then cron_register with id, delivery (silent | terminal | email — confirm with the user), everyMinutes, steps or tool/arguments; if delivery is terminal, optional notifyChannel (e.g. telegram:<chatId>); if delivery is email, deliveryEmailTo (and optional deliveryEmailSubject). Host crontab/run_shell crontab are unavailable — only .cronjobs.json via cron_register."
-                  : nudgeState.reason === "research_incomplete"
-                    ? `Open-web research is incomplete (${webSearchCountInTurn} web_search, ${webFetchCountInTurn} web_fetch). Continue: fan out more web_search (topic × region × platform), web_fetch top URLs, then answer with confirmed/likely labels. Do not conclude nothing exists until at least ${MIN_RESEARCH_SEARCHES} searches and ${MIN_RESEARCH_FETCHES} fetches.`
-                    : `Stay aligned ONLY with the user's latest request: ${JSON.stringify(
-                      originalUserInput
-                    )}. Continue immediately with the next concrete action now. Emit the tool call right away with valid arguments, then proceed until that request is complete. If it is genuinely finished, reply with a single sentence stating the final answer; otherwise do not reply with prose only.`;
-          conv.push({ role: "user", content: nudge });
-          await logDebugEvent("turn_auto_continue_nudge", {
-            round,
-            nudgeIndex: autoContinueNudges,
-            reason: nudgeState.reason,
-            visiblePreview: String(visible || "").slice(0, 200),
-          });
-          continue;
+          if (nudgeState.want && !nudgeState.underCap) {
+            process.stdout.write(
+              dim(
+                `▸ auto-continue cap reached (${autoContinueNudges}/${nudgeState.maxNudges} nudges); stopping. Increase WEBAGENT_MAX_AUTO_CONTINUE_NUDGES to allow more recovery nudges.\n`
+              )
+            );
+            emitLoopStopLine(`auto_continue_cap (${nudgeState.reason})`);
+            await logDebugEvent("turn_completed", {
+              round,
+              durationMs: Date.now() - roundStartedAt,
+              continued: false,
+              autoContinueCap: true,
+              capReason: nudgeState.reason,
+            });
+            break;
+          }
+          if (nudgeState.shouldNudge) {
+            autoContinueNudges += 1;
+            const exactTokens = extractExactResponseTokens(originalUserInput);
+            const nudge =
+              nudgeState.reason === "missing_exact_final"
+                ? `The task is not complete because the requested exact final text is missing. Continue now, using tools if needed, and finish with the exact requested text: ${exactTokens.join(", ")}`
+                : nudgeState.reason === "tool_sequence"
+                  ? "Continue the same testing sequence now. Emit the next tool call immediately with valid arguments, then keep going step-by-step."
+                  : nudgeState.reason === "scheduling_automation"
+                    ? "The user asked for recurring or scheduled work (heartbeat cron). Continue now with native tool calls: use cron_list if helpful, then cron_register with id, delivery (silent | terminal | email — confirm with the user), everyMinutes, steps or tool/arguments; if delivery is terminal, optional notifyChannel (e.g. telegram:<chatId>); if delivery is email, deliveryEmailTo (and optional deliveryEmailSubject). Host crontab/run_shell crontab are unavailable — only .cronjobs.json via cron_register."
+                    : nudgeState.reason === "research_incomplete"
+                      ? `Open-web research is incomplete (${webSearchCountInTurn} web_search, ${webFetchCountInTurn} web_fetch). Continue: fan out more web_search (topic × region × platform), web_fetch top URLs, then answer with confirmed/likely labels. Do not conclude nothing exists until at least ${MIN_RESEARCH_SEARCHES} searches and ${MIN_RESEARCH_FETCHES} fetches.`
+                      : `Stay aligned ONLY with the user's latest request: ${JSON.stringify(
+                        originalUserInput
+                      )}. Continue immediately with the next concrete action now. Emit the tool call right away with valid arguments, then proceed until that request is complete. If it is genuinely finished, reply with a single sentence stating the final answer; otherwise do not reply with prose only.`;
+            conv.push({ role: "user", content: nudge });
+            await logDebugEvent("turn_auto_continue_nudge", {
+              round,
+              nudgeIndex: autoContinueNudges,
+              reason: nudgeState.reason,
+              visiblePreview: String(visible || "").slice(0, 200),
+            });
+            continue;
+          }
         }
         await logDebugEvent("turn_completed", {
           round,

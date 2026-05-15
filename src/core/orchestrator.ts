@@ -479,6 +479,9 @@ export async function startAgent(profileId?: string): Promise<void> {
         onPromptReady: () => {
           void onAgentPromptReady(profile.id);
         },
+        onAwaitingResponse: () => {
+          useRuntimeStore.getState().setAwaitingResponse(profile.id, true);
+        },
         onOnboardingStateChange: (active) => {
           agentState.onboardingActive = active;
           agentState.onboardingField = "agent";

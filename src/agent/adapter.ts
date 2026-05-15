@@ -102,6 +102,8 @@ export interface AgentStartOptions {
     estimatedPromptTokens: number;
   }) => void;
   onPromptReady?: () => void;
+  /** Emitted by runtime before slow LLM work with no user message (startup greeting). Shows Thinking… until input-ready. */
+  onAwaitingResponse?: () => void;
   onOnboardingStateChange?: (active: boolean) => void;
   /** Emitted after a guarded tool asks for stdin approval (`y`/…). */
   onPendingToolConfirmation?: (profileId: string) => void;
@@ -138,6 +140,8 @@ const ARTIFACT_PRESENT_START = "<<<WEBAGENT_ARTIFACT>>>";
 const ARTIFACT_PRESENT_END = "<<<END_WEBAGENT_ARTIFACT>>>";
 const CLARIFY_PROMPT_START = "<<<CLARIFY>>>";
 const CLARIFY_PROMPT_END = "<<<END>>>";
+/** Emitted when the runtime begins work before visible streaming (e.g. startup greeting). Stripped from terminal output. */
+const AWAITING_RESPONSE_LINE = "<<<WEBAGENT_AWAITING_RESPONSE>>>";
 /** Emitted when the agent is ready for the next user message (turn finished or failed). Not shown in the terminal. */
 const INPUT_READY_LINE = "<<<WEBAGENT_INPUT_READY>>>";
 const PROXY_REQ_PREFIX = "<<<WEBAGENT_PROXY_REQ:";
@@ -259,18 +263,13 @@ function stripAnsi(input: string): string {
   return input.replace(/\x1B\[[0-?]*[ -/]*[@-~]/g, "");
 }
 
-/**
- * Strip hidden input-ready markers from stdout without newline-gating the whole stream.
- * Newline-based buffering blocked prompt detection: the shell prints `❯ ` with no trailing \n
- * until the user types, so nothing reached promptParseBuffer and the UI stayed "working"/queued.
- */
-function stripWebagentInputReadyFromStream(
+function stripWebagentControlMarkerFromStream(
   carry: string,
   chunk: string,
-  onReady: () => void
+  marker: string,
+  onMatch?: () => void
 ): { data: string; nextCarry: string } {
   let buf = carry + chunk;
-  const marker = INPUT_READY_LINE;
   while (true) {
     const idx = buf.indexOf(marker);
     if (idx === -1) break;
@@ -279,7 +278,7 @@ function stripWebagentInputReadyFromStream(
     if (buf[afterIdx] === "\r") afterIdx++;
     if (buf[afterIdx] === "\n") afterIdx++;
     buf = before + buf.slice(afterIdx);
-    onReady();
+    onMatch?.();
   }
   let hold = 0;
   const maxHold = Math.min(buf.length, marker.length - 1);
@@ -292,6 +291,19 @@ function stripWebagentInputReadyFromStream(
   const data = hold === 0 ? buf : buf.slice(0, -hold);
   const nextCarry = hold === 0 ? "" : buf.slice(-hold);
   return { data, nextCarry };
+}
+
+/**
+ * Strip hidden input-ready markers from stdout without newline-gating the whole stream.
+ * Newline-based buffering blocked prompt detection: the shell prints `❯ ` with no trailing \n
+ * until the user types, so nothing reached promptParseBuffer and the UI stayed "working"/queued.
+ */
+function stripWebagentInputReadyFromStream(
+  carry: string,
+  chunk: string,
+  onReady: () => void
+): { data: string; nextCarry: string } {
+  return stripWebagentControlMarkerFromStream(carry, chunk, INPUT_READY_LINE, onReady);
 }
 
 function stripRenderedPrompt(input: string): string {
@@ -545,6 +557,7 @@ export async function startWebAgent(options: AgentStartOptions): Promise<void> {
     onToolCall,
     onContextUpdate,
     onPromptReady,
+    onAwaitingResponse,
     onOnboardingStateChange,
     onPendingToolConfirmation,
     onArtifactOffer,
@@ -703,6 +716,7 @@ export async function startWebAgent(options: AgentStartOptions): Promise<void> {
   let onboardingParseBuffer = "";
   let lastOnboardingIdentity = "";
   let inputReadyMarkerCarry = "";
+  let awaitingResponseMarkerCarry = "";
   const profileIdForSave = profile.id;
 
   const persistSnapshotNow = async (): Promise<void> => {
@@ -731,9 +745,18 @@ export async function startWebAgent(options: AgentStartOptions): Promise<void> {
   };
 
   const handleAgentOutput = (rawData: string) => {
+    const awaitingStrip = stripWebagentControlMarkerFromStream(
+      awaitingResponseMarkerCarry,
+      rawData,
+      AWAITING_RESPONSE_LINE,
+      () => {
+        onAwaitingResponse?.();
+      }
+    );
+    awaitingResponseMarkerCarry = awaitingStrip.nextCarry;
     const { data, nextCarry } = stripWebagentInputReadyFromStream(
       inputReadyMarkerCarry,
-      rawData,
+      awaitingStrip.data,
       () => {
         onPromptReady?.();
         scheduleSnapshotSave();

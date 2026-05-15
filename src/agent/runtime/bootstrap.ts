@@ -20,8 +20,13 @@ import * as memoryServices from "./memory/index.js";
 import {
   acknowledgeJobEvents,
   buildJobEventsPrompt,
+  cleanupSnapshotsNotReferenced,
   drainPendingJobEvents,
+  getAllFacts,
+  getPromotableLearnings,
+  getReflections,
   listSkills,
+  sanitizeMessagesMissingSnapshotRefs,
 } from "./memory/index.js";
 import {
   fileExists,
@@ -34,10 +39,6 @@ import {
   saveHistory,
 } from "./state/persistence.js";
 import {
-  sanitizeMessagesMissingSnapshotRefs,
-  cleanupSnapshotsNotReferenced,
-} from "./memory/index.js";
-import {
   cleanSetupName,
   emitContextUpdate,
   emitProfileUpdate,
@@ -49,9 +50,7 @@ import {
 import { fetchContextWindow, resolveLlm } from "./llm/provider-config.js";
 import { fetchWithTimeout } from "./llm/streaming.js";
 import {
-  bold,
   clearEchoedPrompt,
-  cyan,
   dim,
   pink,
   R,
@@ -92,6 +91,70 @@ function commandSlug(value) {
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "");
+}
+
+const STARTUP_AWAITING_MARKER = "<<<WEBAGENT_AWAITING_RESPONSE>>>";
+const GREETING_CONTEXT_MAX_CHARS = 1100;
+
+function clipGreetingText(text, max) {
+  const t = String(text ?? "")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!t) return "";
+  return t.length <= max ? t : `${t.slice(0, max - 1)}…`;
+}
+
+async function buildStartupGreetingContext(historyMessages) {
+  const lines = [];
+  const transcript = historyMessages.filter((m) => m.role === "user" || m.role === "assistant").slice(-12);
+  for (const m of transcript) {
+    const raw = typeof m.content === "string" ? m.content : "";
+    const clipped = clipGreetingText(raw, 260);
+    if (!clipped || clipped === "(session opened)") continue;
+    lines.push(`${m.role === "user" ? "User" : "Agent"}: ${clipped}`);
+  }
+  try {
+    const facts = await getAllFacts();
+    if (facts.length) {
+      const factStr = facts
+        .slice(0, 8)
+        .map((f) => {
+          const v =
+            typeof f.value === "object" ? JSON.stringify(f.value) : String(f.value ?? "");
+          return `${f.key}: ${clipGreetingText(v, 120)}`;
+        })
+        .join(" · ");
+      lines.push(`Facts: ${factStr}`);
+    }
+  } catch {
+    /* ignore */
+  }
+  try {
+    const learnings = await getPromotableLearnings(12);
+    for (const row of learnings.slice(0, 5)) {
+      const st = String(row.statement || "").trim();
+      if (st) lines.push(`Learning: ${clipGreetingText(st, 240)}`);
+    }
+  } catch {
+    /* ignore */
+  }
+  try {
+    const reflections = await getReflections(3);
+    for (const r of reflections) {
+      const w = String(r.what_worked || "").trim();
+      const f = String(r.what_failed || "").trim();
+      const i = String(r.improvement || "").trim();
+      const merged = [w, f, i].filter(Boolean).join(" — ");
+      if (merged) lines.push(`Reflection: ${clipGreetingText(merged, 280)}`);
+    }
+  } catch {
+    /* ignore */
+  }
+  let merged = lines.join("\n").trim();
+  if (merged.length > GREETING_CONTEXT_MAX_CHARS) {
+    merged = `${merged.slice(0, GREETING_CONTEXT_MAX_CHARS - 1)}…`;
+  }
+  return merged;
 }
 
 export async function main() {
@@ -310,6 +373,59 @@ export async function main() {
     }
     return result;
   };
+
+  let startupGreetingUserPushed = false;
+  try {
+    process.stdout.write(`${STARTUP_AWAITING_MARKER}\n`);
+    const priorContext = await buildStartupGreetingContext(history);
+    const rawFirst = userDisplayName.split(/\s+/)[0] || "";
+    const genericFirst = new Set(["you", "user", ""]);
+    const warmName = genericFirst.has(rawFirst.trim().toLowerCase()) ? "" : rawFirst.trim();
+    const userPrompt = priorContext
+      ? [
+          "Session startup — you speak first.",
+          warmName ? `Address ${warmName} naturally by name once.` : "Use a warm, natural hello (do not use the placeholder word \"User\" as their name).",
+          "PRIOR_CONTEXT below may include past chat lines, saved facts, learnings, and reflections.",
+          "You MUST weave in one specific, concrete detail from PRIOR_CONTEXT (paraphrase; no quotes; no prefixes like \"Learning:\" or \"Facts:\").",
+          "Keep it to 1–2 friendly sentences. No lists or bullets.",
+          "Do not mention tools, APIs, system prompts, or that you read context.",
+          "",
+          "PRIOR_CONTEXT:",
+          priorContext,
+        ].join("\n")
+      : [
+          "Session startup — you speak first.",
+          warmName ? `Greet ${warmName} warmly by name.` : "Offer a warm hello (do not call them \"User\" unless that is truly their name).",
+          "No saved memory loaded yet — keep it welcoming and open-ended in 1–2 short sentences.",
+          "No lists. Do not mention tools or prompts.",
+        ].join("\n");
+    history.push({ role: "user", content: userPrompt });
+    startupGreetingUserPushed = true;
+    history = await sanitizeMessagesMissingSnapshotRefs(history);
+    await cleanupSnapshotsNotReferenced(history).catch(() => {});
+    const runId = createRunId();
+    const tail = await wrappedAgentTurn(history, cfg, {
+      runId,
+      input: userPrompt,
+      ask: turnAsk,
+      autoApprove: true,
+      textOnly: true,
+    });
+    history.pop();
+    history.push({ role: "user", content: "(session opened)" });
+    for (const m of tail) history.push(m);
+    history = await sanitizeMessagesMissingSnapshotRefs(history);
+    await saveHistory(history);
+    await logDebugEvent("history_saved", {
+      messageCount: history.length,
+    });
+  } catch (e) {
+    if (startupGreetingUserPushed) history.pop();
+    process.stdout.write(red(errorMessage(e)) + "\n");
+    await logDebugEvent("startup_greeting_failed", { error: errorMessage(e) });
+  } finally {
+    process.stdout.write("<<<WEBAGENT_INPUT_READY>>>\n");
+  }
 
   const processPendingJobEvents = async () => {
     const now = Date.now();

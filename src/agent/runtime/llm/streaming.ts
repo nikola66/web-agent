@@ -286,15 +286,25 @@ export async function streamOpenAI(messages, cfg, onDelta, tools, options = {}) 
     ...cfg.extraHeaders,
   });
   if (cfg.apiKey) headers.Authorization = `Bearer ${cfg.apiKey}`;
-  const withToolsBody = {
-    model: cfg.model,
-    messages,
-    stream: true,
-    max_tokens: 8192,
-    tools,
-    tool_choice: "auto",
-    stream_options: { include_usage: true },
-  };
+  const toolList = Array.isArray(tools) ? tools : [];
+  const withToolsBody =
+    toolList.length > 0
+      ? {
+          model: cfg.model,
+          messages,
+          stream: true,
+          max_tokens: 8192,
+          tools: toolList,
+          tool_choice: "auto",
+          stream_options: { include_usage: true },
+        }
+      : {
+          model: cfg.model,
+          messages,
+          stream: true,
+          max_tokens: 8192,
+          stream_options: { include_usage: true },
+        };
   const endpoint = `${cfg.baseUrl}/chat/completions`;
   const startedAt = Date.now();
   await logDebugEvent("llm_stream_start", {
@@ -303,7 +313,7 @@ export async function streamOpenAI(messages, cfg, onDelta, tools, options = {}) 
     model: cfg.model,
     endpoint,
     messageCount: messages.length,
-    toolCount: Array.isArray(tools) ? tools.length : 0,
+    toolCount: toolList.length,
   });
   const STREAM_HTTP_MAX_ATTEMPTS = Math.max(1, Math.min(6, Number(process.env.WEBAGENT_STREAM_HTTP_MAX_ATTEMPTS) || 3));
   const transientStreamStatus = new Set([429, 502, 503, 504]);
@@ -391,7 +401,7 @@ export async function streamOpenAI(messages, cfg, onDelta, tools, options = {}) 
     }
     if (res.ok) break;
     firstError = await res.text();
-    const toolCount = Array.isArray(tools) ? tools.length : 0;
+    const toolCount = toolList.length;
     await logDebugEvent("llm_stream_initial_error", {
       provider: cfg.provider,
       status: res.status,
