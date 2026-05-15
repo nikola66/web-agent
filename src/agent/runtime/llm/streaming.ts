@@ -316,7 +316,7 @@ export async function streamOpenAI(messages, cfg, onDelta, tools, options = {}) 
     toolCount: toolList.length,
   });
   const STREAM_HTTP_MAX_ATTEMPTS = Math.max(1, Math.min(6, Number(process.env.WEBAGENT_STREAM_HTTP_MAX_ATTEMPTS) || 3));
-  const transientStreamStatus = new Set([429, 502, 503, 504]);
+  const transientStreamStatus = new Set([429, 502, 503, 504, 524]);
   const useIpcStream = shouldUseIpcStream(endpoint);
   let buf = "";
   let full = "";
