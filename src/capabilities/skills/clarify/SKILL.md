@@ -12,6 +12,10 @@ tags: [ux, ambiguity, clarification, dialog]
 - One sharp question resolves the fork faster than parallel tool guesses.
 - UI can render options (browser host parses `<<<CLARIFY>>>` markers).
 
+## Relation to other skills
+
+Use **clarify first** when the user’s intent is **still unresolved** (conflicting requirements, unclear fork, unknown deliverable). Once the question is scoped, follow the chosen workflow—e.g. **`open-web-research`** requires minimum search/fetch before pivots; do **not** use clarify to postpone evidence after intent is clear.
+
 ## Output Contract
 
 Emit exactly this block **as plain assistant text** (no tool call):

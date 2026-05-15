@@ -6,6 +6,10 @@ category: bundled
 tags: [memory, session, skills, facts, context]
 ---
 
+## Canonical scope
+
+This skill is the **single guide** for choosing among durable facts, rolling session notes, and procedural skills. Maintainer-only evolution of Web Agent is covered in **`web-agent-skill`**—invoke that for self-maintenance; use this document for everyday layer choice.
+
 ## When to Use
 
 - User asks "remember this" vs "save a reusable workflow."

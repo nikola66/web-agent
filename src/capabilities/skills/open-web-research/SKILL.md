@@ -10,6 +10,10 @@ tags: [research, web, search, discovery, creators, influencers]
 
 Use for open-web discovery: find people, channels, companies, communities, or content about a topic in a region or platform. Not for academic papers (use `research-pack`).
 
+## Intent vs evidence
+
+If **what to research** is still ambiguous (topic, region, platform, or success criteria), call `skill_view` **`clarify`** and emit one `<<<CLARIFY>>>` block first; wait for the user’s choice. Once intent is settled, meet the minimum-effort bar below—do not stall search/fetch behind extra open questions.
+
 ## Minimum Effort (before any final answer)
 
 - **≥6** `web_search` calls with varied queries (topic × region × platform).

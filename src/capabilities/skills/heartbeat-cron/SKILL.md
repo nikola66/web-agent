@@ -23,7 +23,7 @@ tags: [cron, schedule, heartbeat, automation, telegram, email]
 ## Authoring
 
 1. Use **`cron_register`** (or edit `.cronjobs.json` carefully) with `id`, `everyMinutes` (≥1), and `delivery` (confirm email vs terminal with the user).
-2. Prefer **`web_search`**, **`write_file`**, memory tools — **not** `run_shell` in steps on Nodebox (no real POSIX shell). For step choices, see **`browser-runtime-map`**.
+2. Prefer **`web_search`**, **`write_file`**, memory tools — **not** `run_shell` in steps on Nodebox (no real POSIX shell). The **canonical** tool decision table is **`browser-runtime-map`**; this skill only adds cron/heartbeat/delivery rules.
 3. For Telegram side-channel: `delivery: terminal` plus `notifyChannel: telegram:<chatId>` when Telegram is configured; `silent`/`email` do not use `notifyChannel`.
 4. Multi-step: ordered `steps` with shape `{"tool":"…","arguments":{…}}` (legacy `action` aliases to `tool`).
 

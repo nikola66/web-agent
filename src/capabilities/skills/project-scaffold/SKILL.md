@@ -12,6 +12,7 @@ tags: [project, scaffold, verification]
 - Work will create **multiple new files** or a tree that should live together.
 - **Scratch or disposable** experiment: try an API, spike a parser, sandbox a pattern.
 - User wants something **runnable or verifiable** in isolation (smoke test, start command).
+- **Risky or high-value** new trees (could destroy data or hard to redo): pair with **`workspace-safety`**—checkpoint or export before big writes, alongside picking `projects/` vs `work/`.
 
 ## Procedure
 

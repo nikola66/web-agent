@@ -6,6 +6,10 @@ category: bundled
 tags: [nodebox, shell, runtime, tools, webcontainer]
 ---
 
+## Canonical scope
+
+This skill is the **single quick-reference** for choosing tools in Web Agent (filesystem vs HTTP vs search vs cron vs narrow `run_shell`). Other bundled skills defer here instead of repeating the full table.
+
 ## When to Use
 
 - User hits "shell" or command errors in the browser agent.

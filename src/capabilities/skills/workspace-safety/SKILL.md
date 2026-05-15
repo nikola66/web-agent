@@ -6,6 +6,10 @@ category: bundled
 tags: [backup, export, checkpoint, safety, destructive]
 ---
 
+## Canonical scope
+
+This skill owns **backup, checkpoint, export, and risk isolation** before destructive or high-value work. For **where** to put new isolated trees (`projects/` vs `work/`), see **`project-scaffold`**—use **both** when starting a new subtree that could still go wrong (scaffold the path, then checkpoint/export if it matters).
+
 ## When to Use
 
 - Before bulk deletes, wide `run_shell` refactors, or experiments that could break the tree.

@@ -6,6 +6,10 @@ category: bundled
 tags: [research, papers, citations, academic, arxiv, semantic-scholar]
 ---
 
+## When to use (and not)
+
+Use this skill for **scholarly** workflows: papers, arXiv, Semantic Scholar, citations. For general open-web discovery (people, products, creators, regional lists), use **`open-web-research`**—different minimum-effort norms.
+
 ## Preconditions
 
 Use `web_fetch` for HTTP GET. Respect rate limits (cache results; batch sparingly).

@@ -19,22 +19,17 @@ This skill is for self-maintenance. It is not a static tool catalog and it does 
 3. Inspect the current repository and nearby tests before changing behavior. Prefer present source files, registry manifests, and focused tests over remembered inventories.
 4. Treat facts, session notes, reflections, and learnings as hints that need confirmation against current runtime outputs or files.
 
-### `run_shell` (narrow use)
+### Runtime and tools
 
-- Prefer specialized tools over `run_shell` for searching, reading files, HTTP, listing directories, clocks (`system_info`), skill installs, and most package/git flows.
-- **Nodebox:** only `node …` commands work (no shell wrapper, no `npx`/`printf`/`curl` as the command). Use small `node -e` snippets when you must run JS in that sandbox.
-- **Host:** real `sh -c` shell for the workspace; still not a default—reach for it when the user needs a specific command (e.g. project test runner) and no tool fits.
-- Do not use `run_shell` for recurring jobs; use `cron_register` and non-shell steps on Nodebox (see `HEARTBEAT.md`).
+Follow the **canonical** tool-choice map: call `skill_view` **`browser-runtime-map`** before reasoning about `run_shell`, HTTP, filesystem, or cron. Recurring jobs: **`heartbeat-cron`** (not host crontab or shell-heavy steps on Nodebox). Skill installs use `skill_bulk_save` / `skill_manage` with URLs—never shell clone/fetch.
 
 ## Persistence Ladder
 
-Store information at the smallest durable layer that matches the need:
+Call `skill_view` **`memory-layers`** for facts vs session vs skills. Reference tools: `memory_save`, `memory_recall`, `memory_search`, `session_memory_append`, `session_memory_list`, `session_search` (when to use each is defined there—not duplicated here). For maintainer work on Web Agent itself, keep this in addition:
 
-- Use `memory_save`, `memory_recall`, and `memory_search` for durable facts such as user preferences, stable environment constraints, or confirmed runtime rules.
-- Use `session_memory_append`, `session_memory_list`, and `session_search` for rolling session context, temporary decisions, investigation notes, and artifact references.
-- Treat reflections and promotable learnings as system-generated signal. Inspect and promote them when useful; do not create parallel manual learning stores.
-- Use `cron_list` and `cron_register` for recurring maintenance or recurring checks that should run while the app is open.
-- Promote only durable procedural knowledge into skills. Use a skill when the lesson has a repeatable trigger and a reusable step sequence.
+- Use `cron_list` / `cron_register` for recurring checks while the app is open (authoring detail: **`heartbeat-cron`**).
+- Treat reflections and promotable learnings as signal—confirm against code/runtime before promoting; do not create parallel manual stores.
+- Promote only durable procedural knowledge into skills (repeatable trigger + step sequence).
 
 ## Self-Evolution Loop
 
