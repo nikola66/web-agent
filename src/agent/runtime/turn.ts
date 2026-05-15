@@ -70,6 +70,9 @@ import {
   shouldTreatPostToolTextAsFinal,
   shouldAutoContinueToolSequence,
   shouldSuppressActionPlanAutoContinue,
+  isResearchIntent,
+  MIN_RESEARCH_FETCHES,
+  MIN_RESEARCH_SEARCHES,
 } from "./turn-sequencing.js";
 import { errorMessage } from "./utils.js";
 import { WS } from "./constants.js";
@@ -82,6 +85,7 @@ import { emitTranscriptEvent } from "./transcript-delivery.js";
 import {
   getAutoContinueNudgeState,
   emitLoopStopLine,
+  resolveMaxAutoContinueNudges,
 } from "./auto-continue.js";
 import {
   summarizeToolExecutions,
@@ -235,6 +239,7 @@ export async function agentTurn(
     "\n\nExact text discipline: when the user asks for an exact string, token, filename, identifier, code symbol, JSON key, or command output, copy it byte-for-byte. Preserve underscores, hyphens, slashes, capitalization, digits, punctuation, and spacing. Never normalize or prettify exact tokens such as FOO_BAR_TOKEN." +
     "\n\nTopic discipline: when the user's latest message changes the subject or starts a new request, treat that as the active task. Do not continue earlier plans, files, or tools from older turns unless the user explicitly asks you to resume them." +
     "\n\nContinuation discipline: when a multi-step task is in progress, do not stop after narrating intent. If you write phrases like \"Next:\", \"Now I'll…\", \"Let me check…\", \"Step 3:\", or any forward-looking plan, the very same response must include the actual tool call that performs that step — not just the description. Only stop and produce a final answer when (a) the task is fully complete, (b) you need a piece of information only the user can provide, or (c) you have hit an unrecoverable error. \"I'll keep reading\" or \"Next: list the directory\" without the corresponding tool call is a bug." +
+    "\n\nResearch discipline: for find/discover/list/who posts about requests, call `skill_view` with `open-web-research` first. Fan out many `web_search` queries (topic × region × platform) and `web_fetch` top URLs before synthesizing. After any `web_search` batch, the next tools must be `web_fetch` on at least two result URLs (YouTube channel/video pages first). Never state that none exist without at least two `web_fetch` calls on URLs from results. Treat sparse niche-keyword hits as inconclusive—not proof nothing exists. Do not ask the user what to do next until six searches and two fetches are done." +
     "\n\nSkill discipline: skills are procedural knowledge, separate from memory facts. The prompt contains only a compact skills index; call skill_view before relying on detailed skill instructions. After a repeatable workflow, errors you recovered from, or a user saying \"remember this\", draft and save with `skill_save` or `skill_manage` as soon as the content is ready—no separate approval step unless the user declined. Use skill_delete when removing a saved skill (confirmation required) and skill_bulk_save when installing or creating two or more skills in one request (one confirmation for the batch). For **remote SKILL.md installation** only: use `skill_bulk_save` with HTTPS URLs (top-level `url`, `urls`, or `items: [{ url }]`) or `skill_manage` with `action: install_url` / `import_url` for a single URL—never `run_shell`, `npx`, `git clone`, or workspace writes to mimic a skill installer. GitHub repo home pages are not fetchable as skills; discover per-file raw HTTPS `SKILL.md` URLs (e.g. `web_fetch` on the GitHub tree API), then `skill_bulk_save` with `urls`, at most 75 URLs per call (repeat if needed)." +
     "\n\n`run_shell` discipline: **not** a catch-all executor—use dedicated tools first (`grep`, `read_file`, `list_dir`, `find_files`, `web_fetch`, `web_search`, `system_info`, skill/memory tools, etc.). Do not use `run_shell` for skill installs, arbitrary downloads, package managers (`npx`/`npm`/`pip`) when another tool or the user's local terminal is appropriate, or git workflows unless the user explicitly needs a host command you cannot replace. **Nodebox** (`WEBAGENT_RUNTIME=nodebox`): there is **no** POSIX shell—only invocations that start with `node ` (no `sh -c`, pipes, or external binaries); failures here usually mean you picked the wrong tool. **Host** shell: `sh -c` applies; host scheduling via `crontab`/`at` is blocked—use `cron_register`." +
     "\n\nDeliverable discipline: prefer GitHub-flavored Markdown pipe tables over Unicode box-drawing tables in assistant-visible text. When you call `artifact_present`, do not dump the entire document body again in chat afterward — a one-line summary plus a pointer to the artifact/download is enough." +
@@ -275,6 +280,10 @@ export async function agentTurn(
   let round = 0;
   let autoContinueNudges = 0;
   let executedToolsInTurn = false;
+  let webSearchCountInTurn = 0;
+  let webFetchCountInTurn = 0;
+  const researchIntent = isResearchIntent(originalUserInput);
+  const maxAutoContinueNudges = resolveMaxAutoContinueNudges(originalUserInput);
   const successfulToolKeysInTurn = new Set<string>();
   let conv = [...fullMessages];
   const agentName = process.env.WEBAGENT_AGENT_NAME || process.env.WEBAGENT_PROFILE_NAME || "Agent";
@@ -433,7 +442,11 @@ export async function agentTurn(
         tools.length &&
         executedToolsInTurn &&
         !isToolSequenceIntent(turnMeta.input) &&
-        shouldTreatPostToolTextAsFinal(visible)
+        shouldTreatPostToolTextAsFinal(visible, {
+          researchIntent,
+          webSearchCount: webSearchCountInTurn,
+          webFetchCount: webFetchCountInTurn,
+        })
       ) {
         run.rejected_tool_calls.push(
           ...tools.map((tool) => ({
@@ -463,10 +476,12 @@ export async function agentTurn(
           visible,
           executedToolsInTurn,
           autoContinueNudges,
-          maxNudges: MAX_AUTO_CONTINUE_NUDGES,
+          maxNudges: maxAutoContinueNudges,
           toolNames,
           originalUserInput,
           suppressActionPlanNudge,
+          webSearchCount: webSearchCountInTurn,
+          webFetchCount: webFetchCountInTurn,
         });
         if (nudgeState.want && !nudgeState.underCap) {
           process.stdout.write(
@@ -494,7 +509,9 @@ export async function agentTurn(
                 ? "Continue the same testing sequence now. Emit the next tool call immediately with valid arguments, then keep going step-by-step."
                 : nudgeState.reason === "scheduling_automation"
                   ? "The user asked for recurring or scheduled work (heartbeat cron). Continue now with native tool calls: use cron_list if helpful, then cron_register with id, delivery (silent | terminal | email — confirm with the user), everyMinutes, steps or tool/arguments; if delivery is terminal, optional notifyChannel (e.g. telegram:<chatId>); if delivery is email, deliveryEmailTo (and optional deliveryEmailSubject). Host crontab/run_shell crontab are unavailable — only .cronjobs.json via cron_register."
-                  : `Stay aligned ONLY with the user's latest request: ${JSON.stringify(
+                  : nudgeState.reason === "research_incomplete"
+                    ? `Open-web research is incomplete (${webSearchCountInTurn} web_search, ${webFetchCountInTurn} web_fetch). Continue: fan out more web_search (topic × region × platform), web_fetch top URLs, then answer with confirmed/likely labels. Do not conclude nothing exists until at least ${MIN_RESEARCH_SEARCHES} searches and ${MIN_RESEARCH_FETCHES} fetches.`
+                    : `Stay aligned ONLY with the user's latest request: ${JSON.stringify(
                       originalUserInput
                     )}. Continue immediately with the next concrete action now. Emit the tool call right away with valid arguments, then proceed until that request is complete. If it is genuinely finished, reply with a single sentence stating the final answer; otherwise do not reply with prose only.`;
           conv.push({ role: "user", content: nudge });
@@ -540,7 +557,12 @@ export async function agentTurn(
       const exec = await runTools(tools, turnCtx, toolCatalog);
       if (exec.length > 0) executedToolsInTurn = true;
       for (let i = 0; i < tools.length; i++) {
-        if (!exec[i]?.error) successfulToolKeysInTurn.add(toolExecutionKey(tools[i]));
+        const tname = String(tools[i]?.name || "");
+        if (!exec[i]?.error) {
+          successfulToolKeysInTurn.add(toolExecutionKey(tools[i]));
+          if (tname === "web_search") webSearchCountInTurn += 1;
+          if (tname === "web_fetch") webFetchCountInTurn += 1;
+        }
       }
       const guardWarn = updateLoopGuardAfterResults(loopGuard, tools, exec);
       if (guardWarn) {
@@ -577,6 +599,18 @@ export async function agentTurn(
         role: "user",
         content: "Tool results (compact JSON):\n" + JSON.stringify(summarized, null, 2),
       });
+      if (
+        researchIntent &&
+        webFetchCountInTurn < MIN_RESEARCH_FETCHES &&
+        tools.length > 0 &&
+        tools.every((tool) => tool.name === "web_search")
+      ) {
+        conv.push({
+          role: "user",
+          content:
+            "Research reminder: your last step was search-only. Run web_fetch on at least two URLs from those results (YouTube channel or video pages first) before concluding.",
+        });
+      }
       await logDebugEvent("turn_completed", {
         round,
         durationMs: Date.now() - roundStartedAt,
@@ -599,7 +633,7 @@ export async function agentTurn(
         rounds: round,
         maxRounds: MAX_AGENT_ROUNDS,
         autoContinueNudges,
-        maxAutoContinueNudges: MAX_AUTO_CONTINUE_NUDGES,
+        maxAutoContinueNudges,
       });
     }
     run.status = turnController.signal.aborted ? "aborted" : "completed";

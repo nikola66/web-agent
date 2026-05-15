@@ -252,6 +252,19 @@ export function createChannelInboundHandler(deps) {
         toolCatalog,
       });
 
+      const RESEARCH_PROGRESS_MS = 90_000;
+      let progressTimer: ReturnType<typeof setInterval> | null = null;
+      if (channel === "telegram") {
+        const turnStartedAt = Date.now();
+        progressTimer = setInterval(() => {
+          const elapsedMin = Math.floor((Date.now() - turnStartedAt) / 60_000);
+          void sendReply(
+            chatId,
+            `⏳ Still researching… (${elapsedMin} min elapsed)`
+          ).catch(() => {});
+        }, RESEARCH_PROGRESS_MS);
+      }
+
       try {
         const tail = await agentTurn(history, cfg, {
           runId,
@@ -284,6 +297,7 @@ export function createChannelInboundHandler(deps) {
           error: e,
         });
       } finally {
+        if (progressTimer) clearInterval(progressTimer);
         try {
           if (typeof stopTyping === "function") stopTyping();
         } catch {

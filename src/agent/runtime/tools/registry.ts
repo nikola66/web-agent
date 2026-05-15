@@ -539,16 +539,89 @@ async function executePreparedToolCall(
   }
 }
 
+/** Read-only tools safe to run concurrently (Hermes _PARALLEL_SAFE_TOOLS subset). */
+export const PARALLEL_SAFE_TOOLS = new Set([
+  "web_search",
+  "web_fetch",
+  "grep",
+  "read_file",
+  "list_dir",
+  "find_files",
+  "skill_view",
+]);
+
+const MAX_PARALLEL_TOOLS = 6;
+
+export function shouldParallelizeToolBatch(
+  prepared: Array<{ name: string }>
+): boolean {
+  if (prepared.length <= 1) return false;
+  return prepared.every((p) => PARALLEL_SAFE_TOOLS.has(p.name));
+}
+
+async function runOnePreparedTool(
+  prepared: PreparedToolCall,
+  toolMap: Record<string, ToolImplementFn>,
+  toolCatalog: Record<string, unknown>,
+  results: Array<Record<string, unknown>>
+) {
+  if (prepared.ctx?.signal?.aborted) {
+    await finishToolCallError(prepared, results, {
+      error: "aborted",
+      resultExtra: { aborted: true },
+      debugEvent: "tool_call_aborted",
+      debugExtra: {
+        runId: prepared.ctx.runId || null,
+        reason: prepared.ctx.signal.reason ? String(prepared.ctx.signal.reason) : "aborted",
+      },
+    });
+    return;
+  }
+
+  const fn = toolMap[prepared.name];
+  if (!fn) {
+    await finishToolCallError(prepared, results, { error: "unknown tool" });
+    return;
+  }
+
+  const missingRequiredError = validateRequiredArguments(
+    prepared.name,
+    prepared.args,
+    prepared.schema
+  );
+  if (missingRequiredError) {
+    await finishToolCallError(prepared, results, {
+      error: missingRequiredError,
+      resultExtra: {
+        error_code: "invalid_arguments",
+        missing_required: true,
+      },
+      debugExtra: { errorCode: "invalid_arguments" },
+    });
+    return;
+  }
+
+  try {
+    const allowed = await gatePreparedToolCall(prepared, toolCatalog);
+    if (!allowed) {
+      await finishToolCallError(prepared, results, {
+        error: "user_denied",
+        status: "denied",
+        resultExtra: { denied: true },
+        debugEvent: "tool_call_denied",
+      });
+      return;
+    }
+  } catch (gateErr) {
+    await finishToolCallError(prepared, results, { error: errorMessage(gateErr) });
+    return;
+  }
+
+  await executePreparedToolCall(prepared, fn, results);
+}
+
 /**
- * Execute a list of tool calls sequentially, threading a per-call
- * ToolContext into each tool. The second `ctx` argument is the standard
- * way to invoke; for backwards compatibility, callers may omit it and a
- * default context will be constructed.
- *
- * Tools receive `(args, callCtx)` — older single-arg tools that ignore
- * the second argument keep working unchanged. Cancellation is enforced
- * at the registry boundary: as soon as `ctx.signal.aborted` flips, all
- * remaining queued calls short-circuit with `{ aborted: true }`.
+ * Execute tool calls; batches of read-only safe tools run concurrently (cap 6).
  */
 export async function runTools(
   toolCalls: unknown,
@@ -560,72 +633,39 @@ export async function runTools(
   if (!Array.isArray(toolCalls)) {
     return results;
   }
-  let index = 0;
-  for (const call of toolCalls) {
-    const prepared = prepareToolCall({
+
+  const preparedList = toolCalls.map((call, index) =>
+    prepareToolCall({
       call: call as IncomingToolCall,
       ctx,
       toolCatalog,
-      index: index++,
-    });
-    await announcePreparedToolCall(prepared);
-    if (ctx?.signal?.aborted) {
-      await finishToolCallError(prepared, results, {
-        error: "aborted",
-        resultExtra: { aborted: true },
-        debugEvent: "tool_call_aborted",
-        debugExtra: {
-          runId: ctx.runId || null,
-          reason: ctx.signal.reason ? String(ctx.signal.reason) : "aborted",
-        },
-      });
-      continue;
-    }
+      index,
+    })
+  );
 
-    const fn = toolMap[prepared.name];
-    if (!fn) {
-      await finishToolCallError(prepared, results, {
-        error: "unknown tool",
-      });
-      continue;
+  if (shouldParallelizeToolBatch(preparedList)) {
+    for (const prepared of preparedList) {
+      await announcePreparedToolCall(prepared);
     }
-
-    const missingRequiredError = validateRequiredArguments(
-      prepared.name,
-      prepared.args,
-      prepared.schema
-    );
-    if (missingRequiredError) {
-      await finishToolCallError(prepared, results, {
-        error: missingRequiredError,
-        resultExtra: {
-          error_code: "invalid_arguments",
-          missing_required: true,
-        },
-        debugExtra: { errorCode: "invalid_arguments" },
-      });
-      continue;
-    }
-
-    try {
-      /* eslint-disable-next-line no-await-in-loop */
-      const allowed = await gatePreparedToolCall(prepared, toolCatalog);
-      if (!allowed) {
-        await finishToolCallError(prepared, results, {
-          error: "user_denied",
-          status: "denied",
-          resultExtra: { denied: true },
-          debugEvent: "tool_call_denied",
-        });
-        continue;
+    for (let i = 0; i < preparedList.length; i += MAX_PARALLEL_TOOLS) {
+      const chunk = preparedList.slice(i, i + MAX_PARALLEL_TOOLS);
+      const chunkOut: Array<Array<Record<string, unknown>>> = await Promise.all(
+        chunk.map(async (prepared) => {
+          const slot: Array<Record<string, unknown>> = [];
+          await runOnePreparedTool(prepared, toolMap, toolCatalog, slot);
+          return slot;
+        })
+      );
+      for (const slot of chunkOut) {
+        if (slot[0]) results.push(slot[0]);
       }
-    } catch (gateErr) {
-      const gerr = errorMessage(gateErr);
-      await finishToolCallError(prepared, results, { error: gerr });
-      continue;
     }
+    return results;
+  }
 
-    await executePreparedToolCall(prepared, fn, results);
+  for (const prepared of preparedList) {
+    await announcePreparedToolCall(prepared);
+    await runOnePreparedTool(prepared, toolMap, toolCatalog, results);
   }
   return results;
 }

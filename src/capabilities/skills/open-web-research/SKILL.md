@@ -1,0 +1,72 @@
+---
+name: Open Web Research
+description: Fan-out web discovery for people, products, creators, and niche topics—search, verify, then synthesize with confidence labels.
+version: 1.1.0
+category: bundled
+tags: [research, web, search, discovery, creators, influencers]
+---
+
+## When to Use
+
+Use for open-web discovery: find people, channels, companies, communities, or content about a topic in a region or platform. Not for academic papers (use `research-pack`).
+
+## Minimum Effort (before any final answer)
+
+- **≥6** `web_search` calls with varied queries (topic × region × platform).
+- **≥2** `web_fetch` calls on high-signal URLs (channel pages, profiles, top hits).
+- Empty or noisy niche-keyword results are **inconclusive**, not proof that nothing exists.
+- Do **not** ask "would you like me to…" or pivot to outreach until the minimum bar is met.
+
+## Search Then Fetch (mandatory)
+
+After any batch of `web_search`, the **next** tool calls must be `web_fetch` (or one batch `web_fetch` with `urls`) on at least two result URLs. Prefer YouTube channel (`youtube.com/@…`) or video pages.
+
+Do not write a verdict, table, or "zero found" summary until those fetches complete.
+
+## Query Fan-Out
+
+Build a small matrix and run searches in parallel when the runtime allows multiple tool calls in one turn:
+
+| Axis | Examples |
+|------|----------|
+| Topic | product name, alternate spellings, related terms |
+| Region | country, city, `"UAE" OR "Dubai"`, `location: ae` (one code per call: `ae` or `sa`, not `ae, sa`) |
+| Platform | `site:youtube.com`, `site:instagram.com`, `site:twitter.com` |
+| Language | English + local (e.g. Arabic tutorial) |
+
+**Operators** (in `query`): `site:`, quoted `"exact phrase"`, `-term`, `OR`.
+
+Use `web_search` `location` (e.g. `ae`, `sa`) and `language` when the provider supports them.
+
+## Verify Before Concluding
+
+1. Search for metadata (titles, URLs, snippets).
+2. `web_fetch` channel/about pages to confirm geography and topic fit.
+3. Label each finding: **confirmed**, **likely**, or **not regional** (with reason).
+
+**Golden check (UAE + agent tools):** Before claiming no UAE creators, search `Tech With Tim Dubai OpenClaw` and `web_fetch` `https://www.youtube.com/@TechWithTim` — he is UAE-based and covers Hermes Agent and OpenClaw.
+
+## Output Template
+
+```markdown
+## Confirmed
+- **Name** — platform, base (✅), links, what they cover
+
+## Likely / Unverified
+- ...
+
+## Not regional (reference only)
+- ...
+
+## Summary table
+| Creator | Platform | Base | Topic match |
+|---------|----------|------|-------------|
+```
+
+Prefer pipe tables. Include direct links. State clearly when KSA/UAE YouTube coverage is thin but Instagram/social exists.
+
+## Stop Rules
+
+- Do not conclude "none exist" or "zero" after only exact-match niche queries or search-only rounds.
+- Do not substitute generic "AI influencers" unless the user asked for a broad list.
+- Continue searching with broader queries (`AI agent`, `LLM`, regional tech) before giving up.

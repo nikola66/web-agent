@@ -147,6 +147,53 @@ const NEXT_STEP_RE =
 const TOOL_SEQUENCE_USER_INTENT_RE =
   /(?:\btest(?:ing|s)?\b|re-?test|\btry\b|continue testing|one\s+(?:by|bye|bie)\s+one|systematically|\ball tools\b|tool tests|sequentially|without stopping|until completion)/;
 
+/** Open-web discovery: find/list/who posts about + external entities or platforms. */
+export const RESEARCH_INTENT_RE = new RegExp(
+  [
+    "\\b(find|discover|list|identify|locate|search for|look for|who)\\b[^.!?]{0,120}\\b(youtubers?|creators?|influencers?|channels?|people|companies|communities|reviewers?|posting about|talking about|covering)\\b",
+    "\\b(youtubers?|creators?|influencers?)\\b[^.!?]{0,80}\\b(in|from|based in)\\b",
+    "\\bwho\\s+(posts?|talks?|makes?\\s+videos?)\\s+about\\b",
+    "\\bposting\\s+about\\b",
+  ].join("|"),
+  "i"
+);
+
+export const MIN_RESEARCH_SEARCHES = 4;
+export const MIN_RESEARCH_FETCHES = 2;
+
+const RESEARCH_PREMATURE_CONCLUSION_RE =
+  /(\bno (one|results?|youtubers?|creators?|channels?|specific|local|current|dedicated)\b|\bnone (found|exist|yet)\b|\bzero\b[^.!?]{0,40}\b(youtubers?|creators?|channels?)\b|\bdidn'?t (find|yield|return)\b|\bnot (found|finding)\b[^.!?]{0,80}\b(yet|specific|dedicated|local)\b|\bexhausted\b[^.!?]{0,40}\b(search|parameters)\b|\b(final|verified)\s+(verdict|breakdown)\b|\bpivot\b|\bfirst-?mover\b|\binstead of looking\b|\bgeneric\b[^.!?]{0,40}\binfluencers?\b)/i;
+
+export function isResearchIntent(input) {
+  return RESEARCH_INTENT_RE.test(String(input || ""));
+}
+
+export function shouldNudgeIncompleteResearchReply(
+  visible,
+  { researchIntent = false, webSearchCount = 0, webFetchCount = 0 } = {}
+) {
+  if (!researchIntent) return false;
+  const saidRaw = String(visible || "").trim();
+  if (!saidRaw) {
+    return webSearchCount < MIN_RESEARCH_SEARCHES || webFetchCount < MIN_RESEARCH_FETCHES;
+  }
+  const said = saidRaw.toLowerCase();
+  if (COMPLETION_RE.test(said) && webSearchCount >= MIN_RESEARCH_SEARCHES && webFetchCount >= MIN_RESEARCH_FETCHES) {
+    return false;
+  }
+  if (webFetchCount < MIN_RESEARCH_FETCHES) {
+    if (RESEARCH_PREMATURE_CONCLUSION_RE.test(said)) return true;
+    if (WAITING_FOR_USER_RE.test(said) || /\?\s*$/.test(saidRaw)) return true;
+    if (saidRaw.length > 120) return true;
+  }
+  if (webSearchCount < MIN_RESEARCH_SEARCHES) {
+    if (RESEARCH_PREMATURE_CONCLUSION_RE.test(said)) return true;
+    if (WAITING_FOR_USER_RE.test(said) || /\?\s*$/.test(saidRaw)) return true;
+    if (saidRaw.length > 80) return true;
+  }
+  return false;
+}
+
 export function shouldAutoContinueToolSequence(input, visible, toolNames) {
   const userIntent = String(input || "").toLowerCase();
   if (!TOOL_SEQUENCE_USER_INTENT_RE.test(userIntent)) {
@@ -294,12 +341,23 @@ export function shouldAutoContinueStrict(visible) {
  * still attach another stale tool call. Treat direct, non-forward-looking text
  * as final so the stale call cannot restart the run.
  */
-export function shouldTreatPostToolTextAsFinal(visible) {
+export function shouldTreatPostToolTextAsFinal(
+  visible,
+  { researchIntent = false, webSearchCount = 0, webFetchCount = 0 } = {}
+) {
   const saidRaw = stripModelControlTokens(String(visible || "")).trim();
   if (!saidRaw) return false;
   const said = saidRaw.toLowerCase();
   if (/\?\s*$/.test(saidRaw)) return false;
-  if (WAITING_FOR_USER_RE.test(said)) return false;
+  if (researchIntent) {
+    if (webSearchCount < MIN_RESEARCH_SEARCHES || webFetchCount < MIN_RESEARCH_FETCHES) {
+      return false;
+    }
+    if (RESEARCH_PREMATURE_CONCLUSION_RE.test(said)) return false;
+    if (WAITING_FOR_USER_RE.test(said)) return false;
+  } else if (WAITING_FOR_USER_RE.test(said)) {
+    return false;
+  }
   if (shouldAutoContinueAfterToolUse(saidRaw)) return false;
   if (shouldAutoContinueStrict(saidRaw)) return false;
   return true;

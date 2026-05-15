@@ -7,12 +7,15 @@ import { dim } from "./terminal-format.js";
 import {
   isExplicitSequenceCompletion,
   extractExactResponseTokens,
+  isResearchIntent,
   isSchedulingAutomationIntent,
   shouldAutoContinueActionPlan,
   shouldAutoContinueAfterToolUse,
   shouldAutoContinueStrict,
   shouldAutoContinueToolSequence,
+  shouldNudgeIncompleteResearchReply,
   shouldNudgeIncompleteSchedulingReply,
+  MIN_RESEARCH_FETCHES,
 } from "./turn-sequencing.js";
 
 // Strict post-tool continuation: after at least one tool ran in the turn,
@@ -26,6 +29,26 @@ const STRICT_POST_TOOL_CONTINUE = (() => {
   return raw !== "0" && raw !== "false" && raw !== "off" && raw !== "no";
 })();
 
+export function resolveMaxAutoContinueNudges(originalUserInput) {
+  const base = (() => {
+    const raw = String(typeof process !== "undefined" ? process.env?.WEBAGENT_MAX_AUTO_CONTINUE_NUDGES ?? "" : "").trim();
+    if (raw) {
+      const parsed = Number(raw);
+      if (Number.isFinite(parsed)) return Math.max(0, parsed);
+    }
+    return 20;
+  })();
+  if (!isResearchIntent(originalUserInput)) return base;
+  const researchRaw = String(
+    typeof process !== "undefined" ? process.env?.WEBAGENT_RESEARCH_MAX_AUTO_CONTINUE_NUDGES ?? "" : ""
+  ).trim();
+  if (researchRaw) {
+    const parsed = Number(researchRaw);
+    if (Number.isFinite(parsed)) return Math.max(base, parsed);
+  }
+  return Math.max(base, 30);
+}
+
 export function getAutoContinueNudgeState({
   turnInput,
   visible,
@@ -35,7 +58,10 @@ export function getAutoContinueNudgeState({
   toolNames,
   originalUserInput,
   suppressActionPlanNudge,
+  webSearchCount = 0,
+  webFetchCount = 0,
 }) {
+  const researchIntent = isResearchIntent(originalUserInput);
   const exactTokens = extractExactResponseTokens(originalUserInput);
   const shouldNudgeForSequence =
     !isExplicitSequenceCompletion(visible) &&
@@ -64,17 +90,29 @@ export function getAutoContinueNudgeState({
     !isExplicitSequenceCompletion(visible) &&
     isSchedulingAutomationIntent(originalUserInput) &&
     shouldNudgeIncompleteSchedulingReply(visible);
+  const shouldNudgeForResearch =
+    researchIntent &&
+    !isExplicitSequenceCompletion(visible) &&
+    shouldNudgeIncompleteResearchReply(visible, {
+      researchIntent: true,
+      webSearchCount,
+      webFetchCount,
+    });
+  const researchBlocksOtherNudges =
+    shouldNudgeForResearch && webFetchCount < MIN_RESEARCH_FETCHES;
 
   const want =
     shouldNudgeForSequence ||
     shouldNudgeForSchedulingAutomation ||
-    shouldNudgeForAction ||
-    shouldNudgeAfterTools ||
-    shouldNudgeStrictPostTool ||
+    shouldNudgeForResearch ||
+    (!researchBlocksOtherNudges && shouldNudgeForAction) ||
+    (!researchBlocksOtherNudges && shouldNudgeAfterTools) ||
+    (!researchBlocksOtherNudges && shouldNudgeStrictPostTool) ||
     shouldNudgeForMissingExact;
   let reason = "";
   if (want) {
     if (shouldNudgeForMissingExact) reason = "missing_exact_final";
+    else if (shouldNudgeForResearch) reason = "research_incomplete";
     else if (shouldNudgeForSchedulingAutomation) reason = "scheduling_automation";
     else if (shouldNudgeForAction) reason = "action_plan";
     else if (shouldNudgeAfterTools) reason = "post_tool_commitment";

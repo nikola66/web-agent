@@ -114,6 +114,17 @@ function pickRemoteTimeoutMs(ctx, providerTimeoutMs, fallback = 150_000) {
   return candidates.length ? Math.min(...candidates) : fallback;
 }
 
+/** Use a single geo code per request (models often pass "ae, sa"). */
+export function normalizeSearchLocation(location: unknown): string | undefined {
+  const raw = String(location ?? "").trim();
+  if (!raw) return undefined;
+  const parts = raw
+    .split(/[,;|]/)
+    .map((s) => s.trim().toLowerCase())
+    .filter(Boolean);
+  return parts[0] || undefined;
+}
+
 async function browserAgentSearch(provider, { query, location, language, page = 0 }, ctx) {
   const q = String(query || "").trim();
   if (!q) throw new Error("`query` is required for web_search.");
@@ -127,7 +138,8 @@ async function browserAgentSearch(provider, { query, location, language, page = 
   if (!endpoint) throw new Error(`${provider?.name || "Browser agent"} does not support web_search.`);
   const url = new URL(endpoint);
   url.searchParams.set("query", q);
-  if (location) url.searchParams.set("location", String(location));
+  const loc = normalizeSearchLocation(location);
+  if (loc) url.searchParams.set("location", loc);
   if (language) url.searchParams.set("language", String(language));
   if (page !== undefined && page !== null && String(page).trim() !== "") {
     url.searchParams.set("page", String(Math.trunc(p)));
@@ -259,7 +271,12 @@ function hasProviderApiKey(provider, ctx) {
 
 async function proxyFetch(url, ctx) {
   const { status, body, contentType } = readProxyResponse(await proxyRequest({ method: "GET", url }, ctx));
-  if (status < 200 || status >= 300) throw new Error(`Fetch failed (${status}): ${String(body || "").slice(0, 240)}`);
+  if (status < 200 || status >= 300) {
+    const detail = String(body || "").slice(0, 240);
+    throw new Error(
+      `Fetch failed (${status}): ${detail || "unknown error"}. Retry web_search with a simpler query, one location code (ae or sa, not "ae, sa"), or check network/API settings.`
+    );
+  }
   return { ok: true, url, status, contentType, text: body.slice(0, 100_000) };
 }
 
@@ -272,12 +289,19 @@ export async function webSearchTool(args: ToolArgs = {}, ctx) {
     throw new Error("`page` must be a number between 0 and 10.");
   }
   const provider = await getBrowserAgentProvider(ctx);
+  const loc = normalizeSearchLocation(location);
   if (provider && hasProviderApiKey(provider, ctx)) {
-    return await browserAgentSearch(provider, { query: q, location, language, page: p }, ctx);
+    return await browserAgentSearch(provider, { query: q, location: loc, language, page: p }, ctx);
   }
   // Fallback: DuckDuckGo HTML search via proxy (no API key required).
   const searchUrl = `https://html.duckduckgo.com/html/?q=${encodeURIComponent(q)}${p ? `&s=${p * 20}` : ""}`;
-  const { text } = await proxyFetch(searchUrl, ctx);
+  let text: string;
+  try {
+    ({ text } = await proxyFetch(searchUrl, ctx));
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    throw new Error(`${msg} (duckduckgo-fallback)`);
+  }
   const results: Array<{ title: string; url: string; snippet: string }> = [];
   const linkRe = /<a[^>]+class="result__a"[^>]+href="([^"]+)"[^>]*>([^<]+)<\/a>/gi;
   const snippetRe = /<a[^>]+class="result__snippet"[^>]*>([^<]+)<\/a>/gi;
@@ -307,20 +331,14 @@ async function webFetchReadableFromProxy(url, ctx) {
   return { ok: true, url, provider: "proxy-fallback", text: readable };
 }
 
-export async function webFetchTool(args: ToolArgs = {}, ctx) {
-  const url = typeof args.url === "string" ? args.url : "";
-  const headers = (args.headers && typeof args.headers === "object" && !Array.isArray(args.headers)
-    ? args.headers
-    : {}) as Record<string, unknown>;
-  if (!url) throw new Error("`url` is required for web_fetch.");
+const WEB_FETCH_BATCH_MAX = 5;
+
+async function webFetchOne(url: string, ctx) {
   const u = new URL(url);
-  if (!["http:", "https:"].includes(u.protocol)) throw new Error(`web_fetch only supports http(s) URLs, got: ${u.protocol}`);
-  void headers;
+  if (!["http:", "https:"].includes(u.protocol)) {
+    throw new Error(`web_fetch only supports http(s) URLs, got: ${u.protocol}`);
+  }
   const provider = await getBrowserAgentProvider(ctx);
-  /**
-   * Success contract (TinyFish API or proxy fallback): always `{ ok: true, url, provider, text }`.
-   * Keep `text` populated so snapshot unwrap + compact tool summaries (see tool-result-preview.js) work for either backend.
-   */
   if (provider && hasProviderApiKey(provider, ctx)) {
     try {
       const text = await browserAgentFetch(provider, url, ctx);
@@ -334,6 +352,37 @@ export async function webFetchTool(args: ToolArgs = {}, ctx) {
     }
   }
   return webFetchReadableFromProxy(url, ctx);
+}
+
+export async function webFetchTool(args: ToolArgs = {}, ctx) {
+  const headers = (args.headers && typeof args.headers === "object" && !Array.isArray(args.headers)
+    ? args.headers
+    : {}) as Record<string, unknown>;
+  void headers;
+
+  const rawUrls = Array.isArray(args.urls) ? args.urls : [];
+  const single = typeof args.url === "string" ? args.url.trim() : "";
+  const targets = [
+    ...(single ? [single] : []),
+    ...rawUrls.map((u) => String(u || "").trim()).filter(Boolean),
+  ];
+  if (!targets.length) throw new Error("`url` or `urls` is required for web_fetch.");
+  if (targets.length > WEB_FETCH_BATCH_MAX) {
+    throw new Error(`web_fetch accepts at most ${WEB_FETCH_BATCH_MAX} URLs per call.`);
+  }
+
+  if (targets.length === 1) return webFetchOne(targets[0], ctx);
+
+  const documents = await Promise.all(
+    targets.map(async (url) => {
+      try {
+        return await webFetchOne(url, ctx);
+      } catch (err) {
+        return { ok: false, url, error: String(err?.message || err) };
+      }
+    })
+  );
+  return { ok: true, count: documents.length, documents };
 }
 
 export async function memorySaveTool(args: ToolArgs = {}, ctx) {

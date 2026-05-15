@@ -34,6 +34,14 @@ Legacy `snapshots/openclaw` and `snapshots/hermes` trees are removed once by `ru
 - **LLM:** Native `fetch` streaming — OpenAI-compatible SSE (`/chat/completions`) and Anthropic SSE (`/v1/messages`).
 - **Tools:** Model emits lines `<<<TOOL>>>{"name":"...","arguments":{...}}<<<END>>>`. The agent strips these for chat history and executes tools in-process.
 
+## Open-web research (Hermes-style)
+
+- Bundled skill: `open-web-research` — fan-out `web_search`, verify with `web_fetch`, minimum effort before answering.
+- Parallel safe tools (`web_search`, `web_fetch`, `grep`, `read_file`, …) run concurrently (cap 6) when emitted in one assistant turn.
+- Research turns use a higher auto-continue cap via `WEBAGENT_RESEARCH_MAX_AUTO_CONTINUE_NUDGES` (default 30 when unset).
+- Optional: `WEBAGENT_MAX_AGENT_ROUNDS=90` for long discovery tasks; configure a browser-agent search API key (Settings) — DuckDuckGo fallback is weaker for niche queries.
+- Telegram sends `Still researching…` every 90s during an active channel turn.
+
 ## Profiles
 
 - Stored as JSON in idb-keyval under `profiles:v1`.
