@@ -151,6 +151,41 @@ test("cron_register validates tool names and persists jobs", async () => {
   });
 });
 
+test("cron_register action remove deletes job from store", async () => {
+  await withIsolatedWorkspace(async () => {
+    const catalog = await loadToolCatalog();
+    const id = `coverage-cron-remove-${Date.now()}`;
+    const registered = await runOne(
+      "cron_register",
+      {
+        id,
+        tool: "system_info",
+        arguments: {},
+        everyMinutes: 45,
+        delivery: "silent",
+      },
+      catalog
+    );
+    assert.ok(!registered?.error, registered?.error);
+    const removed = await runOne("cron_register", { action: "remove", id }, catalog);
+    assert.ok(!removed?.error, removed?.error);
+    assert.equal((removed?.result as { removed?: boolean })?.removed, true);
+    const listed = await runOne("cron_list", {}, catalog);
+    const jobs = (listed?.result as { jobs?: Array<{ id?: string }> })?.jobs || [];
+    assert.ok(!jobs.some((entry) => entry.id === id), "removed job should not appear in cron_list");
+  });
+});
+
+test("cron_register action remove errors on unknown id", async () => {
+  await withIsolatedWorkspace(async () => {
+    const catalog = await loadToolCatalog();
+    const id = `coverage-cron-missing-${Date.now()}`;
+    const out = await runOne("cron_register", { action: "remove", id }, catalog);
+    assert.ok(out?.error, "expected error for unknown id");
+    assert.match(String(out.error), /unknown id/i);
+  });
+});
+
 test("cron_register lifts top-level root tool args into arguments", async () => {
   await withIsolatedWorkspace(async () => {
     const catalog = await loadToolCatalog();

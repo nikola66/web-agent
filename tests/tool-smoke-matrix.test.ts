@@ -209,6 +209,37 @@ test("local smoke tier tools execute without error", async (t) => {
         if (tc.check) await tc.check(out?.result);
       });
     }
+
+    await t.test("cron_register remove after register", async () => {
+      const ctx = createToolContext({ runId: `tool_smoke_cron_remove_${stamp}`, autoApprove: true });
+      const removeId = `smoke-cron-remove-${stamp}`;
+      const [reg] = await runTools(
+        [
+          {
+            name: "cron_register",
+            arguments: {
+              id: removeId,
+              tool: "system_info",
+              arguments: {},
+              everyMinutes: 60,
+              delivery: "silent",
+            },
+          },
+        ],
+        ctx,
+        catalog
+      );
+      assert.ok(!reg?.error, reg?.error);
+      const [rem] = await runTools(
+        [{ name: "cron_register", arguments: { action: "remove", id: removeId } }],
+        ctx,
+        catalog
+      );
+      assert.ok(!rem?.error, rem?.error);
+      const [listed] = await runTools([{ name: "cron_list", arguments: {} }], ctx, catalog);
+      const jobs = (listed?.result as { jobs?: Array<{ id?: string }> })?.jobs || [];
+      assert.ok(!jobs.some((j) => j.id === removeId));
+    });
   });
 });
 

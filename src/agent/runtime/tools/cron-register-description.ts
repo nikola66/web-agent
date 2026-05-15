@@ -2,9 +2,11 @@
  * Tool catalog copy for `cron_register` (Node registry + browser metadata).
  * Keep dependency-free so browser stubs can import it safely.
  */
-export const CRON_REGISTER_TOOL_DESCRIPTION = `Save a recurring heartbeat job to \`.cronjobs.json\`. The job runs only while the app tab is open; the runtime checks due jobs on heartbeat ticks (see HEARTBEAT.md — \`everyMinutes\` is minimum spacing between runs, not wall-clock cron like systemd).
+export const CRON_REGISTER_TOOL_DESCRIPTION = `Save a recurring heartbeat job to \`.cronjobs.json\`, or remove one. The job runs only while the app tab is open; the runtime checks due jobs on heartbeat ticks (see HEARTBEAT.md — \`everyMinutes\` is minimum spacing between runs, not wall-clock cron like systemd).
 
-**What you send:** Always include \`id\` (string) and \`everyMinutes\` (number, ≥1). Set \`delivery\` to \`silent\`, \`terminal\`, or \`email\`. For \`email\`, also set \`deliveryEmailTo\` (and optional \`deliveryEmailSubject\`). Optional: \`notifyChannel\` as \`telegram:<chatId>\` when Telegram is configured.
+**Remove a job:** \`{"action":"remove","id":"<job_id>"}\`. Requires an existing id; unknown ids error (use \`cron_list\` first).
+
+**Register / update (default):** Always include \`id\` (string) and \`everyMinutes\` (number, ≥1). Set \`delivery\` to \`silent\`, \`terminal\`, or \`email\`. For \`email\`, also set \`deliveryEmailTo\` (and optional \`deliveryEmailSubject\`). Optional: \`notifyChannel\` as \`telegram:<chatId>\` when Telegram is configured.
 
 **What runs:** Either (1) one tool at the job root, or (2) an ordered \`steps\` array. Each step must be a **built-in tool name** plus that tool’s arguments.
 
@@ -34,4 +36,9 @@ Multi-step (each step is \`tool\` + \`arguments\`):
 Email digest when done:
 \`\`\`json
 {"id":"weekly_email","everyMinutes":10080,"delivery":"email","deliveryEmailTo":"you@example.com","deliveryEmailSubject":"Weekly digest","tool":"web_search","arguments":{"query":"industry news","page":0}}
+\`\`\`
+
+Remove (strict — id must exist):
+\`\`\`json
+{"action":"remove","id":"hourly_ping"}
 \`\`\``;

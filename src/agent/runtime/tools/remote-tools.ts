@@ -235,6 +235,13 @@ export async function proxyRequest(request, _ctx) {
 
 export async function cronRegisterTool(args: ToolArgs = {}, ctx) {
   void ctx;
+  const action = String(args?.action ?? "").trim().toLowerCase();
+  if (action === "remove") {
+    const { removeCronJob } = await import("../state/persistence.js");
+    const id = String(args?.id ?? "").trim();
+    return removeCronJob(id);
+  }
+
   const { getToolNamesAsync } = await import("./registry.js");
   const { upsertCronJob } = await import("../state/persistence.js");
   const { assertCronStepsUseAllowedTools, normalizeCronRegisterSteps } = await import("./cron-register.js");

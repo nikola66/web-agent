@@ -217,6 +217,24 @@ async function saveCronJobs(cron) {
 }
 
 /**
+ * Remove a job by `id` from `.cronjobs.json`. Used when `cron_register` is called with `action: "remove"`.
+ */
+export async function removeCronJob(id: string) {
+  const trimmed = String(id ?? "").trim();
+  if (!trimmed) throw new Error("cron_register remove requires `id` (string).");
+
+  const cron = await loadCronJobs();
+  const jobs = Array.isArray(cron.jobs) ? [...cron.jobs] : [];
+  const idx = jobs.findIndex((j) => j && String(j.id) === trimmed);
+  if (idx < 0) {
+    throw new Error(`cron_register remove: unknown id "${trimmed}".`);
+  }
+  jobs.splice(idx, 1);
+  await saveCronJobs({ jobs });
+  return { ok: true, id: trimmed, removed: true, jobsRegistered: jobs.length };
+}
+
+/**
  * Merge or append a single job by `id`. Used by the `cron_register` tool.
  */
 export async function upsertCronJob(job) {
