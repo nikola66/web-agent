@@ -14,6 +14,7 @@ import {
   isSchedulingAutomationIntent,
   shouldNudgeIncompleteSchedulingReply,
 } from "../dist/agent-runtime/turn-sequencing.js";
+import { getAutoContinueNudgeState } from "../dist/agent-runtime/auto-continue.js";
 
 const TOOL_NAMES = [
   "make_dir",
@@ -45,6 +46,12 @@ test("auto-continue matches transcript style: Test N with normalized tool alias"
 test("auto-continue matches step phrasing with underscore tool name", () => {
   const input = "Test all tools systematically and continue testing";
   const visible = "Step 3: now testing run_shell with pwd";
+  assert.equal(shouldAutoContinueToolSequence(input, visible, TOOL_NAMES), true);
+});
+
+test("auto-continue matches running tool N phrasing", () => {
+  const input = "Test tools one by one until completion";
+  const visible = "Running tool 5 — invoking grep for TODO markers across src/";
   assert.equal(shouldAutoContinueToolSequence(input, visible, TOOL_NAMES), true);
 });
 
@@ -229,6 +236,174 @@ test("action-plan detector accepts 'Next: list contents…'", () => {
   const input = "Research the project and produce notes.";
   const visible = "Next: list contents of ./projects/hermes.";
   assert.equal(shouldAutoContinueActionPlan(input, visible), true);
+});
+
+test("action-plan detector accepts transcript 'First, researching …' after Round heading", () => {
+  const input =
+    "For 5 rounds, research a topic, write summary, translate, save markdown file.";
+  const visible =
+    "Round 1: Agentic AI Orchestration (The Shift from Chatbots to Agents)\n\nFirst, researching the current state of Agentic Orchestration.";
+  assert.equal(shouldAutoContinueActionPlan(input, visible), true);
+});
+
+test("action-plan detector accepts 'Round N: …' section header", () => {
+  const input = "Repeat until you have 5 articles.";
+  const visible = "Round 2: Quantum Networking\n\nI'll gather sources next.";
+  assert.equal(shouldAutoContinueActionPlan(input, visible), true);
+});
+
+test("action-plan detector does not treat inline 'first,' as a step header", () => {
+  const input = "Summarize the README.";
+  const visible =
+    "The README explains setup first, then lists dependencies. Here is the overview.";
+  assert.equal(shouldAutoContinueActionPlan(input, visible), false);
+});
+
+test("post-tool nudge fires on 'First, researching …' transcript line", () => {
+  const visible =
+    "Round 1: Agentic AI Orchestration\n\nFirst, researching the current state of Agentic Orchestration.";
+  assert.equal(shouldAutoContinueAfterToolUse(visible), true);
+});
+
+test("post-tool nudge fires on 'Round N Topic: …' and I'm diving …", () => {
+  const visible = [
+    "Round 2 Topic: The Role of Memory in Autonomous Agents (Short-term vs. Long-term/RAG).",
+    "",
+    "I'm diving into the research now. Stand by.",
+  ].join("\n");
+  assert.equal(shouldAutoContinueAfterToolUse(visible), true);
+});
+
+test("post-tool nudge fires on Hermes-style 'Round N (Breadth): …' header", () => {
+  assert.equal(
+    shouldAutoContinueAfterToolUse(
+      "Round 1 (Breadth): fan out parallel web_search queries across regions and platforms."
+    ),
+    true
+  );
+});
+
+test("post-tool nudge fires on 'Phase N: …' step header", () => {
+  assert.equal(
+    shouldAutoContinueAfterToolUse("Phase 2: validate the proxy configuration against staging URLs."),
+    true
+  );
+});
+
+test("post-tool nudge fires on apostrophe-less Im going commitment", () => {
+  assert.equal(
+    shouldAutoContinueAfterToolUse("Im going to open the next snapshot and trace the form action."),
+    true
+  );
+});
+
+test("strict post-tool continue accepts We've read observation", () => {
+  assert.equal(
+    shouldAutoContinueStrict(
+      "We've read run_789.json — the snapshot lists three outbound URLs worth fetching next."
+    ),
+    true
+  );
+});
+
+test("post-tool nudge does not treat inline Phase mention as line-start header", () => {
+  assert.equal(
+    shouldAutoContinueAfterToolUse(
+      "We will tackle Phase 2 only after Phase 1 passes CI."
+    ),
+    false
+  );
+});
+
+test("strict post-tool continue still skips inline Phase prose without observation verb", () => {
+  assert.equal(
+    shouldAutoContinueStrict("Phase 2 is riskier because it touches authentication."),
+    false
+  );
+});
+
+test("research incomplete does not block strict post-tool recovery nudge", () => {
+  const state = getAutoContinueNudgeState({
+    turnInput: "Continue research.",
+    visible:
+      "I've read memory/snapshots/run_999.json — it expands into multiple channels we still need to web_fetch before concluding.",
+    executedToolsInTurn: true,
+    autoContinueNudges: 0,
+    maxNudges: 20,
+    toolNames: TOOL_NAMES,
+    originalUserInput:
+      "Find YouTube creators posting about mechanical keyboards in Germany",
+    suppressActionPlanNudge: false,
+    webSearchCount: 6,
+    webFetchCount: 0,
+  });
+  assert.equal(state.shouldNudge, true);
+  assert.equal(state.reason, "research_incomplete");
+});
+
+test("getAutoContinueNudgeState returns scheduling_automation for cron intent and incomplete reply", () => {
+  const state = getAutoContinueNudgeState({
+    turnInput: "Set up a daily digest via cron.",
+    visible: "I can help automate that.",
+    executedToolsInTurn: false,
+    autoContinueNudges: 0,
+    maxNudges: 20,
+    toolNames: TOOL_NAMES,
+    originalUserInput:
+      "Register a recurring job using .cronjobs.json — run every day at 9am.",
+    suppressActionPlanNudge: false,
+    webSearchCount: 0,
+    webFetchCount: 0,
+  });
+  assert.equal(state.shouldNudge, true);
+  assert.equal(state.reason, "scheduling_automation");
+});
+
+test("post-tool nudge fires when milestone 'completed round' mixes with next-round intent", () => {
+  const visible = [
+    "I have completed the second round of research and documentation.",
+    "",
+    "Round 2: AI Safety & Governance in Autonomous Agents",
+    "",
+    "Current Progress: 2/5 Rounds Complete.",
+    "",
+    "I am now proceeding to Round 3, focusing on Open-Source Agent Frameworks.",
+    "I'll start by researching the latest benchmarks for SLMs in agentic roles.",
+  ].join("\n");
+  assert.equal(shouldAutoContinueAfterToolUse(visible), true);
+});
+
+test("strict post-tool continue accepts milestone plus proceeding / I'll research", () => {
+  const visible = [
+    "I have completed the second round of research and documentation.",
+    "I am now proceeding to Round 3.",
+    "I'll start by researching the latest benchmarks for SLMs.",
+  ].join("\n");
+  assert.equal(shouldAutoContinueStrict(visible), true);
+});
+
+test("post-tool nudge skips completion-only round milestone", () => {
+  assert.equal(shouldAutoContinueAfterToolUse("I have completed round 2. Done."), false);
+});
+
+test("strict post-tool continue skips completion-only round milestone", () => {
+  assert.equal(shouldAutoContinueStrict("I have completed round 2. Done."), false);
+});
+
+test("strict post-tool continue accepts 'First, researching …' (forward-looking)", () => {
+  const visible = "First, researching the current state.";
+  assert.equal(shouldAutoContinueStrict(visible), true);
+});
+
+test("post-tool nudge does not match inline 'round 3' mid-prose", () => {
+  const visible =
+    "We already finished round 2 yesterday; today we only verify links.";
+  assert.equal(shouldAutoContinueAfterToolUse(visible), false);
+});
+
+test("strict post-tool continue does not match inline round mention", () => {
+  const visible = "Skipping round 4 because the source timed out.";
+  assert.equal(shouldAutoContinueStrict(visible), false);
 });
 
 test("strict post-tool continue fires on plain narration without commitment", () => {

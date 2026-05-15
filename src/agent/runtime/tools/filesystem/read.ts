@@ -70,6 +70,31 @@ export async function readFileTool(args = {}, ctx) {
     }
 
     const head = errorMessage(e);
+    const bn = nodePath.basename(rel);
+    const reqParts = bn.match(/^run_(\d+)_(.+)_r(\d+)_0\.json$/);
+    if (reqParts && peers.length) {
+      const slug = reqParts[2];
+      const round = reqParts[3];
+      const matches = peers.filter((p) => {
+        const m = p.match(/^run_(\d+)_(.+)_r(\d+)_0\.json$/);
+        return m && m[2] === slug && m[3] === round;
+      });
+      if (matches.length === 1 && matches[0] !== bn) {
+        const fixedRel = `memory/snapshots/${matches[0]}`;
+        try {
+          const content = await fs.readFile(resolveWorkspacePath(ctx, fixedRel), "utf8");
+          return {
+            ok: true,
+            path: fixedRel,
+            remapped_from: rel,
+            bytes: Buffer.byteLength(content, "utf8"),
+            content,
+          };
+        } catch {
+          /* fall through */
+        }
+      }
+    }
     const recovery =
       "Stale snapshot spill: workspace history may have been compacted, the path never existed for this run id, or the path duplicates an outdated turn.\nFollow `result_ref` strings exactly from the most recent preceding \"Tool results (compact JSON)\" user message — never invent run ids.\nIf no valid result_ref matches, rerun the originating tool (`web_fetch`, etc.) instead of re-reading this path.";
     const suffix = peers.length

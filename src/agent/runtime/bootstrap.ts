@@ -208,13 +208,16 @@ export async function main() {
     debugLogPath: getDebugLogPath(),
   });
 
+  const turnMutex = createTurnMutex();
+  const heartbeatSkipOpts = { shouldSkipTick: () => turnMutex.isBusy() };
+
   const heartbeatRunTool = async (toolName, args) => {
     const heartbeatController = new AbortController();
     const heartbeatCtx = createToolContext({
       runId: "heartbeat",
       cwd: WS,
       signal: heartbeatController.signal,
-      timeoutMs: 60_000,
+      timeoutMs: 120_000,
       env: process.env,
       services: { memory: memoryServices },
     });
@@ -227,13 +230,13 @@ export async function main() {
     return result?.result;
   };
   const heartbeatHandle = setInterval(() => {
-    runHeartbeatTick(heartbeatRunTool, "timer").catch((err) => {
+    runHeartbeatTick(heartbeatRunTool, "timer", heartbeatSkipOpts).catch((err) => {
       process.stdout.write(red(`heartbeat error: ${errorMessage(err)}\n`));
     });
   }, HEARTBEAT_INTERVAL_MS);
   const STARTUP_HEARTBEAT_DEFER_MS = 5000;
   setTimeout(() => {
-    runHeartbeatTick(heartbeatRunTool, "startup").catch((err) => {
+    runHeartbeatTick(heartbeatRunTool, "startup", heartbeatSkipOpts).catch((err) => {
       process.stdout.write(red(`heartbeat error: ${errorMessage(err)}\n`));
     });
   }, STARTUP_HEARTBEAT_DEFER_MS);
@@ -281,7 +284,6 @@ export async function main() {
   let userDisplayName = cleanSetupName(process.env.WEBAGENT_USER_NAME, "You");
   let lastAutoJobEventAt = 0;
 
-  const turnMutex = createTurnMutex();
   const wrappedAgentTurn = (messages, cfgIn, meta) =>
     turnMutex.run(() => agentTurn(messages, cfgIn, meta));
 

@@ -16,9 +16,9 @@ const WAITING_FOR_USER_RE =
 // "I read …" and contracted "I've read …" / "I'd checked …" / "I'll open …"
 // (models often use contractions; a bare `\bi (read|…)\b` misses "i've read".)
 const MID_TASK_VERBS =
-  "(?:read|opened|checked|looked at|reviewed|found|searched|ran|loaded|fetched|inspected|examined|parsed)";
+  "(?:read|opened|checked|looked at|reviewed|found|searched|ran|loaded|fetched|inspected|examined|parsed|scanned|downloaded|retrieved)";
 const MID_TASK_OBSERVATION_RE = new RegExp(
-  `(?:\\bi ${MID_TASK_VERBS}\\b|\\bi${APO}(?:ve|d|ll)\\s+${MID_TASK_VERBS}\\b)`,
+  `(?:\\bi ${MID_TASK_VERBS}\\b|\\bi${APO}(?:ve|d|ll)\\s+${MID_TASK_VERBS}\\b|\\bwe${APO}(?:ve|d|ll)\\s+${MID_TASK_VERBS}\\b)`,
   "i"
 );
 
@@ -117,7 +117,9 @@ const COMMITMENT_RE = new RegExp(
   [
     `\\bi${APO}ll\\b`,
     `\\bi will\\b`,
-    `\\bi${APO}m (going to|gonna|about to)\\b`,
+    `\\bi${APO}m (going to|gonna|about to|diving|researching)\\b`,
+    `\\bim\\s+(going to|gonna|about to|diving|researching)\\b`,
+    `\\bwe${APO}(?:ll|re|ve)\\s+(?:read|open|check|review|gather|research|continue|investigate|fetch|search)\\b`,
     `\\blet me\\b`,
     `\\bgoing to\\b`,
     `\\bnow i${APO}ll\\b`,
@@ -137,11 +139,13 @@ const COMMITMENT_RE = new RegExp(
 
 // Step-header patterns models love when narrating a plan instead of executing
 // it — e.g. "Next: list contents…", "Now: read the file", "Step 3: parse…",
-// "### Next", "- Next: open the snapshot". Anchored to line start (allowing
+// "First, researching …", "Round 1: Title",
+// "### Next", "- Next: open the snapshot", "Round 2 Topic: …", "Round 1 (Breadth): …",
+// "Phase 2: …". Anchored to line start (allowing
 // optional list markers or markdown heading hashes) so prose like "the next
 // snapshot…" doesn't false-match. Multiline + case-insensitive.
 const NEXT_STEP_RE =
-  /(^|\n)[ \t]*(?:[*\-+][ \t]+|\d+[.)][ \t]+|#{1,6}[ \t]+)?(?:next|now|then|step[ \t]*\d+|next steps?|todo)[ \t]*[:\-—–][ \t]*\S/im;
+  /(^|\n)[ \t]*(?:[*\-+][ \t]+|\d+[.)][ \t]+|#{1,6}[ \t]+)?(?:(?:next|now|then|step[ \t]*\d+|next steps?|todo)[ \t]*[:\-—–]|(?:first|round[ \t]+\d+)[ \t]*[,:\-—–]|round[ \t]+\d+[ \t]+[^\n:]+:|round[ \t]+\d+[ \t]*\([^)]*\)[ \t]*[:\-—–]|(?:phase|part|task)[ \t]+\d+[ \t]*[:\-—–])[ \t]*\S/im;
 
 /** User message suggests systematic / one-by-one tool exercise (shared by sequence nudge + turn guards). */
 const TOOL_SEQUENCE_USER_INTENT_RE =
@@ -200,7 +204,11 @@ export function shouldAutoContinueToolSequence(input, visible, toolNames) {
     return false;
   }
   const said = String(visible || "").toLowerCase();
-  if (!/(now testing|next|continue|let'?s test|testing|test\s*\d+|step\s*\d+|i('| a)?ll test)/.test(said)) {
+  if (
+    !/(now testing|next|continue|let'?s test|testing|test\s*\d+|step\s*\d+|tool\s*\d+|\binvok|\brunning\b|i('| a)?ll test)/.test(
+      said
+    )
+  ) {
     return false;
   }
   const normalize = (value) => String(value || "").toLowerCase().replace(/[^a-z0-9]/g, "");
@@ -216,6 +224,83 @@ export function shouldAutoContinueToolSequence(input, visible, toolNames) {
 export function isToolSequenceIntent(input) {
   const userIntent = String(input || "").toLowerCase();
   return TOOL_SEQUENCE_USER_INTENT_RE.test(userIntent);
+}
+
+function estimateTaskStepsFromInput(input) {
+  const text = String(input || "").trim().toLowerCase();
+  if (!text) return 1;
+
+  let score = 1;
+
+  const stepNumberMatch = text.match(/\b(\d{1,2})\s+(steps?|tasks?)\b/);
+  if (stepNumberMatch) {
+    const n = Number(stepNumberMatch[1]);
+    if (Number.isFinite(n) && n > score) score = n;
+  }
+
+  const connectors = text.match(/\b(and then|then|next|after that|finally|first|second|third)\b/g);
+  if (connectors?.length) {
+    score = Math.max(score, 1 + connectors.length);
+  }
+
+  if (isToolSequenceIntent(text) || /\b(all tools|one by one|systematically|without stopping)\b/.test(text)) {
+    score = Math.max(score, 7);
+  }
+
+  let roundsN = 0;
+  const roundsMatch = text.match(/\b(\d{1,2})\s+rounds?\b/);
+  if (roundsMatch) {
+    roundsN = Number(roundsMatch[1]);
+    if (Number.isFinite(roundsN) && roundsN >= 2) score = Math.max(score, 7);
+  }
+
+  const imperativeHits = text.match(
+    /\b(refactor|migrate|implement|notify|remove|add|update|fix|research|translate|write|summarize|summarise|save|fetch|install|verify|test)\b/g
+  );
+  if (imperativeHits && imperativeHits.length >= 5) score = Math.max(score, 7);
+
+  const semiChunks = text.split(";").map((s) => s.trim()).filter((s) => s.length > 6);
+  if (semiChunks.length >= 4) score = Math.max(score, 7);
+
+  if (/\brepeat\s+until\b/.test(text) && /\b(articles?|files?|outputs?)\b/.test(text)) {
+    score = Math.max(score, 7);
+  }
+
+  if (
+    Number.isFinite(roundsN) &&
+    roundsN >= 2 &&
+    /\b(research|write|summarize|summarise)\b/.test(text) &&
+    /\btranslate\b/.test(text)
+  ) {
+    score = Math.max(score, 8);
+  }
+
+  return Math.max(1, Math.min(score, 12));
+}
+
+/** Lightweight tier for todo (>3 steps) vs plan (>6) gates; aligns with Hermes-style discipline. */
+export function estimateTaskComplexity(input) {
+  const estimatedSteps = estimateTaskStepsFromInput(input);
+  const tier = estimatedSteps > 6 ? "plan" : estimatedSteps > 3 ? "todo" : "simple";
+  return { estimatedSteps, tier };
+}
+
+/** True when content is the synthetic `/plan` user prompt from planning-slash. */
+export function isPlanningModePrompt(input) {
+  return /invoked \*\*planning mode\*\* via `\/plan`/i.test(String(input || ""));
+}
+
+/** Assistant appears finished — enables one-shot skill self-improve nudge after heavy turns. */
+export function assistantSignalsTaskCompleteForSkillCapture(visible) {
+  const saidRaw = String(visible || "").trim();
+  if (!saidRaw) return false;
+  const said = saidRaw.toLowerCase();
+  if (/\?\s*$/.test(saidRaw)) return false;
+  if (WAITING_FOR_USER_RE.test(said)) return false;
+  if (COMMITMENT_RE.test(said)) return false;
+  if (NEXT_STEP_RE.test(saidRaw)) return false;
+  if (/:\s*$/.test(saidRaw)) return false;
+  return COMPLETION_RE.test(said) || FINAL_ACTION_ANSWER_RE.test(said);
 }
 
 export function isExplicitSequenceCompletion(visible) {
@@ -304,13 +389,10 @@ export function shouldAutoContinueAfterToolUse(visible) {
   if (!saidRaw) return true;
   const said = saidRaw.toLowerCase();
   if (/\?\s*$/.test(saidRaw)) return false;
-  if (COMPLETION_RE.test(said)) return false;
   if (WAITING_FOR_USER_RE.test(said)) return false;
-  return (
-    COMMITMENT_RE.test(said) ||
-    NEXT_STEP_RE.test(saidRaw) ||
-    /:\s*$/.test(saidRaw)
-  );
+  if (hasForwardLookingSignal(saidRaw)) return true;
+  if (COMPLETION_RE.test(said)) return false;
+  return false;
 }
 
 /**
@@ -329,9 +411,9 @@ export function shouldAutoContinueStrict(visible) {
   if (!saidRaw) return true;
   const said = saidRaw.toLowerCase();
   if (/\?\s*$/.test(saidRaw)) return false;
-  if (COMPLETION_RE.test(said)) return false;
   if (WAITING_FOR_USER_RE.test(said)) return false;
   if (hasForwardLookingSignal(saidRaw)) return true;
+  if (COMPLETION_RE.test(said)) return false;
   if (FINAL_ACTION_ANSWER_RE.test(said)) return false;
   return MID_TASK_OBSERVATION_RE.test(said);
 }

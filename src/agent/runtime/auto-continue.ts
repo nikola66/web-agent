@@ -5,6 +5,7 @@
 import { isDebugLogEnabled } from "./logging/debug-log.js";
 import { dim } from "./terminal-format.js";
 import {
+  assistantSignalsTaskCompleteForSkillCapture,
   isExplicitSequenceCompletion,
   extractExactResponseTokens,
   isResearchIntent,
@@ -98,16 +99,16 @@ export function getAutoContinueNudgeState({
       webSearchCount,
       webFetchCount,
     });
-  const researchBlocksOtherNudges =
+  const researchSoftBlocks =
     shouldNudgeForResearch && webFetchCount < MIN_RESEARCH_FETCHES;
 
   const want =
     shouldNudgeForSequence ||
     shouldNudgeForSchedulingAutomation ||
     shouldNudgeForResearch ||
-    (!researchBlocksOtherNudges && shouldNudgeForAction) ||
-    (!researchBlocksOtherNudges && shouldNudgeAfterTools) ||
-    (!researchBlocksOtherNudges && shouldNudgeStrictPostTool) ||
+    (!researchSoftBlocks && shouldNudgeForAction) ||
+    shouldNudgeAfterTools ||
+    shouldNudgeStrictPostTool ||
     shouldNudgeForMissingExact;
   let reason = "";
   if (want) {
@@ -125,6 +126,34 @@ export function getAutoContinueNudgeState({
     shouldNudge: want && underCap,
     underCap,
     reason,
+    maxNudges,
+  };
+}
+
+/** One-shot Hermes-style skill capture after todo/plan/long runs — avoids silent skill churn. */
+export function getSkillSelfImproveNudgeState({
+  visible,
+  executedToolsInTurn,
+  usedTodoWrite,
+  usedPlanningGate,
+  estimatedStepsOverSix,
+  skillMutatingCalled,
+  autoContinueNudges,
+  maxNudges,
+}) {
+  const eligible =
+    executedToolsInTurn &&
+    !skillMutatingCalled &&
+    (usedTodoWrite || usedPlanningGate || estimatedStepsOverSix) &&
+    assistantSignalsTaskCompleteForSkillCapture(visible);
+
+  const want = !!eligible;
+  const underCap = autoContinueNudges < maxNudges;
+  return {
+    want,
+    shouldNudge: want && underCap,
+    underCap,
+    reason: want ? "skill_self_improve" : "",
     maxNudges,
   };
 }

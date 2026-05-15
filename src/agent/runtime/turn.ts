@@ -58,7 +58,9 @@ import {
 import { logDebugEvent } from "./logging/debug-log.js";
 import { createReflectionFromRun, derivePromotableLearning } from "./reflection.js";
 import {
+  estimateTaskComplexity,
   isExplicitSequenceCompletion,
+  isPlanningModePrompt,
   isToolSequenceIntent,
   extractExactResponseTokens,
   isSchedulingAutomationIntent,
@@ -84,6 +86,7 @@ import {
 import { emitTranscriptEvent } from "./transcript-delivery.js";
 import {
   getAutoContinueNudgeState,
+  getSkillSelfImproveNudgeState,
   emitLoopStopLine,
   resolveMaxAutoContinueNudges,
 } from "./auto-continue.js";
@@ -94,16 +97,9 @@ import {
   toolExecutionKey,
   getPreviousUserMessageContent,
 } from "./stream-output.js";
+import { buildPlanModeUserPrompt } from "./planning-slash.js";
 
 const MAX_AGENT_ROUNDS = Math.max(1, Number(typeof process !== "undefined" ? process.env?.WEBAGENT_MAX_AGENT_ROUNDS : undefined) || 64);
-const MAX_AUTO_CONTINUE_NUDGES = (() => {
-  const raw = String(typeof process !== "undefined" ? process.env?.WEBAGENT_MAX_AUTO_CONTINUE_NUDGES ?? "" : "").trim();
-  if (raw) {
-    const parsed = Number(raw);
-    if (Number.isFinite(parsed)) return Math.max(0, parsed);
-  }
-  return 20;
-})();
 const MAX_TOOL_RESULT_INLINE_CHARS = Math.max(
   200,
   Number(process.env.WEBAGENT_MAX_TOOL_RESULT_INLINE_CHARS) || 10_000
@@ -112,11 +108,20 @@ const MAX_TOOL_RESULT_INLINE_CHARS = Math.max(
 /** Serialize terminal turns and inbound channel turns (Telegram, etc.). */
 export function createTurnMutex() {
   let tail = Promise.resolve();
+  let busy = false;
   return {
     run(fn) {
-      const next = tail.then(() => Promise.resolve().then(fn));
+      busy = true;
+      const next = tail
+        .then(() => Promise.resolve().then(fn))
+        .finally(() => {
+          busy = false;
+        });
       tail = next.catch(() => {});
       return next;
+    },
+    isBusy() {
+      return busy;
     },
   };
 }
@@ -240,7 +245,7 @@ export async function agentTurn(
     "\n\nExact text discipline: when the user asks for an exact string, token, filename, identifier, code symbol, JSON key, or command output, copy it byte-for-byte. Preserve underscores, hyphens, slashes, capitalization, digits, punctuation, and spacing. Never normalize or prettify exact tokens such as FOO_BAR_TOKEN." +
     "\n\nTopic discipline: when the user's latest message changes the subject or starts a new request, treat that as the active task. Do not continue earlier plans, files, or tools from older turns unless the user explicitly asks you to resume them." +
     "\n\nContinuation discipline: when a multi-step task is in progress, do not stop after narrating intent. If you write phrases like \"Next:\", \"Now I'll…\", \"Let me check…\", \"Step 3:\", or any forward-looking plan, the very same response must include the actual tool call that performs that step — not just the description. Only stop and produce a final answer when (a) the task is fully complete, (b) you need a piece of information only the user can provide, or (c) you have hit an unrecoverable error. \"I'll keep reading\" or \"Next: list the directory\" without the corresponding tool call is a bug." +
-    "\n\nResearch discipline: for find/discover/list/who posts about requests, call `skill_view` with `open-web-research` first. Fan out many `web_search` queries (topic × region × platform) and `web_fetch` top URLs before synthesizing. After any `web_search` batch, the next tools must be `web_fetch` on at least two result URLs (YouTube channel/video pages first). Never state that none exist without at least two `web_fetch` calls on URLs from results. Treat sparse niche-keyword hits as inconclusive—not proof nothing exists. Do not ask the user what to do next until six searches and two fetches are done." +
+    `\n\nResearch discipline: for find/discover/list/who posts about requests, call \`skill_view\` with \`open-web-research\` first. Fan out many \`web_search\` queries (topic × region × platform) and \`web_fetch\` top URLs before synthesizing. After any \`web_search\` batch, the next tools must be \`web_fetch\` on at least two result URLs (YouTube channel/video pages first). Never state that none exist without at least two \`web_fetch\` calls on URLs from results. Treat sparse niche-keyword hits as inconclusive—not proof nothing exists. Do not ask the user what to do next until at least ${MIN_RESEARCH_SEARCHES} searches and ${MIN_RESEARCH_FETCHES} fetches are done.` +
     "\n\nSkill discipline: skills are procedural knowledge, separate from memory facts. The prompt contains only a compact skills index; call skill_view before relying on detailed skill instructions. After a repeatable workflow, errors you recovered from, or a user saying \"remember this\", draft and save with `skill_save` or `skill_manage` as soon as the content is ready—no separate approval step unless the user declined. Use skill_delete when removing a saved skill (confirmation required) and skill_bulk_save when installing or creating two or more skills in one request (one confirmation for the batch). For **remote SKILL.md installation** only: use `skill_bulk_save` with HTTPS URLs (top-level `url`, `urls`, or `items: [{ url }]`) or `skill_manage` with `action: install_url` / `import_url` for a single URL—never `run_shell`, `npx`, `git clone`, or workspace writes to mimic a skill installer. GitHub repo home pages are not fetchable as skills; discover per-file raw HTTPS `SKILL.md` URLs (e.g. `web_fetch` on the GitHub tree API), then `skill_bulk_save` with `urls`, at most 75 URLs per call (repeat if needed)." +
     "\n\n`run_shell` discipline: **not** a catch-all executor—use dedicated tools first (`grep`, `read_file`, `list_dir`, `find_files`, `web_fetch`, `web_search`, `system_info`, skill/memory tools, etc.). Do not use `run_shell` for skill installs, arbitrary downloads, package managers (`npx`/`npm`/`pip`) when another tool or the user's local terminal is appropriate, or git workflows unless the user explicitly needs a host command you cannot replace. **Nodebox** (`WEBAGENT_RUNTIME=nodebox`): there is **no** POSIX shell—only invocations that start with `node ` (no `sh -c`, pipes, or external binaries); failures here usually mean you picked the wrong tool. **Host** shell: `sh -c` applies; host scheduling via `crontab`/`at` is blocked—use `cron_register`." +
     "\n\nDeliverable discipline: prefer GitHub-flavored Markdown pipe tables over Unicode box-drawing tables in assistant-visible text. When you call `artifact_present`, do not dump the entire document body again in chat afterward — a one-line summary plus a pointer to the artifact/download is enough." +
@@ -287,6 +292,39 @@ export async function agentTurn(
   const maxAutoContinueNudges = resolveMaxAutoContinueNudges(originalUserInput);
   const successfulToolKeysInTurn = new Set<string>();
   let conv = [...fullMessages];
+
+  const complexityEstimate = estimateTaskComplexity(originalUserInput);
+  let injectedPlanningGate = false;
+  if (!turnMeta?.textOnly && originalUserInput && !isPlanningModePrompt(originalUserInput)) {
+    if (complexityEstimate.tier === "plan") {
+      for (let i = conv.length - 1; i >= 0; i--) {
+        const row = conv[i] as ChatTurnMsg;
+        if (row.role === "user") {
+          conv[i] = { ...row, content: buildPlanModeUserPrompt(originalUserInput) };
+          injectedPlanningGate = true;
+          break;
+        }
+      }
+    } else if (complexityEstimate.tier === "todo") {
+      const hint =
+        "[Gate] Multi-step task: call `todo_write` first with a minimal checklist (exactly one item `in_progress`), then execute.";
+      for (let i = conv.length - 1; i >= 0; i--) {
+        const row = conv[i] as ChatTurnMsg;
+        if (row.role === "user") {
+          const cur = typeof row.content === "string" ? row.content : "";
+          conv[i] = { ...row, content: `${hint}\n\n${cur}` };
+          break;
+        }
+      }
+    }
+  }
+  const usedPlanningGateForSkill =
+    injectedPlanningGate || isPlanningModePrompt(originalUserInput);
+
+  let usedTodoWriteInTurn = false;
+  let skillMutatingCalledInTurn = false;
+  let skillImproveNudgeSent = false;
+
   const agentName = process.env.WEBAGENT_AGENT_NAME || process.env.WEBAGENT_PROFILE_NAME || "Agent";
   let turnHeaderPrinted = false;
   const loopGuard = createLoopGuardState();
@@ -442,7 +480,7 @@ export async function agentTurn(
       if (
         tools.length &&
         executedToolsInTurn &&
-        !isToolSequenceIntent(turnMeta.input) &&
+        !isToolSequenceIntent(originalUserInput) &&
         shouldTreatPostToolTextAsFinal(visible, {
           researchIntent,
           webSearchCount: webSearchCountInTurn,
@@ -474,7 +512,7 @@ export async function agentTurn(
       if (!tools.length) {
         if (!turnMeta?.textOnly) {
           const nudgeState = getAutoContinueNudgeState({
-            turnInput: turnMeta.input,
+            turnInput: originalUserInput,
             visible,
             executedToolsInTurn,
             autoContinueNudges,
@@ -525,6 +563,38 @@ export async function agentTurn(
             });
             continue;
           }
+
+          const skillState = getSkillSelfImproveNudgeState({
+            visible,
+            executedToolsInTurn,
+            usedTodoWrite: usedTodoWriteInTurn,
+            usedPlanningGate: usedPlanningGateForSkill,
+            estimatedStepsOverSix: complexityEstimate.estimatedSteps > 6,
+            skillMutatingCalled: skillMutatingCalledInTurn,
+            autoContinueNudges,
+            maxNudges: maxAutoContinueNudges,
+          });
+          if (skillState.want && !skillState.underCap) {
+            process.stdout.write(
+              dim(
+                `▸ skill self-improve nudge skipped (auto-continue cap ${autoContinueNudges}/${skillState.maxNudges})\n`
+              )
+            );
+          } else if (skillState.shouldNudge && !skillImproveNudgeSent) {
+            autoContinueNudges += 1;
+            skillImproveNudgeSent = true;
+            conv.push({
+              role: "user",
+              content:
+                "Hermes self-improve (one shot): If this turn produced a repeatable checklist, recovery, or shortcut worth reusing next time, call skill_save or skill_manage once with a compact procedural SKILL.md body (name + bullets). If nothing is reusable, reply one sentence: no skill warranted.",
+            });
+            await logDebugEvent("turn_skill_self_improve_nudge", {
+              round,
+              nudgeIndex: autoContinueNudges,
+              visiblePreview: String(visible || "").slice(0, 200),
+            });
+            continue;
+          }
         }
         await logDebugEvent("turn_completed", {
           round,
@@ -565,6 +635,8 @@ export async function agentTurn(
           successfulToolKeysInTurn.add(toolExecutionKey(tools[i]));
           if (tname === "web_search") webSearchCountInTurn += 1;
           if (tname === "web_fetch") webFetchCountInTurn += 1;
+          if (tname === "todo_write") usedTodoWriteInTurn = true;
+          if (/^skill_(save|manage|bulk_save)$/.test(tname)) skillMutatingCalledInTurn = true;
         }
       }
       const guardWarn = updateLoopGuardAfterResults(loopGuard, tools, exec);

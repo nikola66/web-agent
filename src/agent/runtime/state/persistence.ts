@@ -429,11 +429,17 @@ function deliverCronFailure(job, err) {
   process.stdout.write(red(`▸ cron '${job.id || "unknown"}' failed: ${msg}\n`));
 }
 
-export async function runHeartbeatTick(runTool, reason = "interval") {
+export async function runHeartbeatTick(
+  runTool,
+  reason = "interval",
+  opts: { shouldSkipTick?: () => boolean } = {}
+) {
   const now = Date.now();
   const state = await loadHeartbeatState();
   const elapsed = now - Number(state.lastHeartbeatAt || 0);
   if (elapsed < HEARTBEAT_INTERVAL_MS) return;
+
+  if (typeof opts.shouldSkipTick === "function" && opts.shouldSkipTick()) return;
 
   state.lastHeartbeatAt = now;
   await saveHeartbeatState(state);
