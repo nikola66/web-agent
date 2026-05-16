@@ -44,6 +44,7 @@ import runtimeStreamOutputSource from "../../dist/agent-runtime/stream-output.js
 import runtimeAutoContinueSource from "../../dist/agent-runtime/auto-continue.js?raw";
 import runtimeContextCompressionSource from "../../dist/agent-runtime/context-compression.js?raw";
 import runtimePlanningSlashSource from "../../dist/agent-runtime/planning-slash.js?raw";
+import runtimeWikiSlashSource from "../../dist/agent-runtime/wiki-slash.js?raw";
 import runtimeTerminalFormatSource from "../../dist/agent-runtime/terminal-format.js?raw";
 import runtimeToolResultPreviewSource from "../../dist/agent-runtime/tool-result-preview.js?raw";
 import runtimeTranscriptSource from "../../dist/agent-runtime/transcript.js?raw";
@@ -386,6 +387,7 @@ async function writeRuntimeSources(profileId: string): Promise<void> {
   await emulator.fs.writeFile(`${webagentDir}/auto-continue.js`, runtimeAutoContinueSource);
   await emulator.fs.writeFile(`${webagentDir}/context-compression.js`, runtimeContextCompressionSource);
   await emulator.fs.writeFile(`${webagentDir}/planning-slash.js`, runtimePlanningSlashSource);
+  await emulator.fs.writeFile(`${webagentDir}/wiki-slash.js`, runtimeWikiSlashSource);
   await emulator.fs.writeFile(`${webagentDir}/terminal-format.js`, runtimeTerminalFormatSource);
   await emulator.fs.writeFile(`${webagentDir}/tool-result-preview.js`, runtimeToolResultPreviewSource);
   await emulator.fs.writeFile(`${webagentDir}/transcript.js`, runtimeTranscriptSource);

@@ -87,6 +87,7 @@ export function App() {
 
       {/* Sidebar — width animates when toggling; drag handle sets pixel width */}
       <div
+        id="app-sidebar"
         className="relative shrink-0 overflow-hidden"
         inert={!sidebarOpen ? true : undefined}
         style={{

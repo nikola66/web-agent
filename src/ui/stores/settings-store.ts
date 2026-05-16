@@ -15,6 +15,11 @@ const SIDEBAR_OPEN_STORAGE_KEY = "webagent.sidebarOpen.preferred";
 function readInitialSidebarOpen(): boolean {
   if (typeof window === "undefined") return true;
   try {
+    if (window.matchMedia("(max-width: 767px)").matches) return false;
+  } catch {
+    /* fall through */
+  }
+  try {
     const raw = localStorage.getItem(SIDEBAR_OPEN_STORAGE_KEY);
     if (raw === "1") return true;
     if (raw === "0") return false;

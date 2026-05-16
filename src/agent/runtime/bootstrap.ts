@@ -65,6 +65,11 @@ import { formatHelpForSurface, runSkillsSlashCommand } from "./channel-outbound.
 import { SLASH_COMMANDS } from "./commands.js";
 import { buildPlanModeUserPrompt } from "./planning-slash.js";
 import {
+  buildWikiSearchUserPrompt,
+  buildWikiSetupUserPrompt,
+  buildWikiSyncUserPrompt,
+} from "./wiki-slash.js";
+import {
   compactHistory,
   formatCompactionNotice,
   maybeCompactHistory,
@@ -469,7 +474,20 @@ export async function main() {
   const skillInvocationPrompt = async (input) => {
     if (!input.startsWith("/") || input.startsWith("//")) return null;
     const token = input.split(/\s+/)[0].slice(1);
-    const reserved = new Set(["help", "clear", "compact", "plan", "checkpoint", "rollback", "skills", "stop", "exit"]);
+    const reserved = new Set([
+      "help",
+      "clear",
+      "compact",
+      "plan",
+      "checkpoint",
+      "rollback",
+      "skills",
+      "stop",
+      "exit",
+      "wiki-setup",
+      "wiki-sync",
+      "wiki-search",
+    ]);
     if (!token || reserved.has(token)) return null;
     const skills = await listSkills();
     const skill = skills.find((item) => item.slug === token || commandSlug(item.name) === token);
@@ -568,7 +586,16 @@ export async function main() {
     }
 
     const displayInput = input;
-    if (input === "/plan" || input.startsWith("/plan ")) {
+    if (input === "/wiki-setup" || input.startsWith("/wiki-setup ")) {
+      const rest = input === "/wiki-setup" ? "" : input.slice("/wiki-setup ".length);
+      input = buildWikiSetupUserPrompt(rest);
+    } else if (input === "/wiki-sync" || input.startsWith("/wiki-sync ")) {
+      const rest = input === "/wiki-sync" ? "" : input.slice("/wiki-sync ".length);
+      input = buildWikiSyncUserPrompt(rest);
+    } else if (input === "/wiki-search" || input.startsWith("/wiki-search ")) {
+      const rest = input === "/wiki-search" ? "" : input.slice("/wiki-search ".length);
+      input = buildWikiSearchUserPrompt(rest);
+    } else if (input === "/plan" || input.startsWith("/plan ")) {
       const goal = input === "/plan" ? "" : input.slice("/plan ".length).trim();
       input = buildPlanModeUserPrompt(goal);
     } else {

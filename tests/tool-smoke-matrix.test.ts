@@ -56,6 +56,9 @@ const SMOKE_TIERS = {
   vision_analyze: "network-proxy",
   web_fetch: "network-proxy",
   web_search: "network-proxy",
+  wiki_search: "local-setup",
+  wiki_setup: "local-setup",
+  wiki_sync: "local-setup",
   write_file: "local-setup",
   youtube_transcribe: "network-proxy",
 } as const;
@@ -301,6 +304,14 @@ test("local-setup smoke tier tools execute on an isolated workspace tree", async
       },
     },
     { name: "delete_file", args: { path: `${relRoot}/moved/patched.txt` } },
+    {
+      name: "wiki_setup",
+      args: { root_path: `${relRoot}/knowledge-vault` },
+    },
+    {
+      name: "wiki_search",
+      args: { query: "PARA", root_path: `${relRoot}/knowledge-vault`, limit: 5 },
+    },
     { name: "run_shell", args: { command: "printf matrix-ok", cwd: relRoot, timeout_ms: 5000 } },
   ];
 
@@ -310,6 +321,43 @@ test("local-setup smoke tier tools execute on an isolated workspace tree", async
       assert.ok(!out?.error, `${tc.name}: ${out?.error}`);
     });
   }
+
+  await t.test("wiki_sync after wiki_setup and memory_save", async () => {
+    const stubFacts = [
+      {
+        key: `wiki_smoke_${Date.now()}`,
+        value: "sync-marker",
+        created_at: "2026-05-12T00:00:00.000Z",
+        updated_at: "2026-05-12T00:00:00.000Z",
+      },
+    ];
+    const ctx = createToolContext({
+      runId: `wiki_sync_smoke_${Date.now()}`,
+      autoApprove: true,
+      services: {
+        memory: {
+          getAllFacts: async () => stubFacts,
+          getPromotableLearnings: async () => [],
+        },
+      },
+    });
+    const kv = `${relRoot}/kv-sync`;
+    let [out] = await runTools([{ name: "wiki_setup", arguments: { root_path: kv } }], ctx, catalog);
+    assert.ok(!out?.error, out?.error);
+    [out] = await runTools([{ name: "wiki_sync", arguments: { root_path: kv, scope: "facts" } }], ctx, catalog);
+    assert.ok(!out?.error, out?.error);
+    const res = out?.result as { touched?: string[]; counts?: { facts?: number } };
+    assert.ok(res?.touched?.some((p) => p.includes("index.md")));
+    assert.equal(res?.counts?.facts >= 1, true);
+    [out] = await runTools(
+      [{ name: "wiki_search", arguments: { query: "sync-marker", root_path: kv } }],
+      ctx,
+      catalog
+    );
+    assert.ok(!out?.error, out?.error);
+    const hits = (out?.result as { matches?: Array<{ path?: string }> })?.matches || [];
+    assert.ok(hits.length >= 1);
+  });
 
   await t.test("run_shell background completion events", async () => {
     const memoryCalls = {

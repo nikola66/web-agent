@@ -33,6 +33,7 @@ npm-debug.log*
 debug-logs/
 playwright-report/
 test-results/
+marketing/
 
 # Editor temp files
 *.swp

@@ -127,6 +127,12 @@ body,
   width: 100% !important;
 }
 
+@media (max-width: 767px) {
+  .xterm {
+    padding: 0 8px;
+  }
+}
+
 .xterm .xterm-viewport {
   height: 100% !important;
   width: 100% !important;

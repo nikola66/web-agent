@@ -27,6 +27,7 @@ import {
   flushTerminalTypewriter,
 } from "./terminal-typewriter";
 import { snapXtermViewportToLatest } from "./terminal-viewport-sync";
+import { fitTerminalForViewport } from "./xterm-fit-viewport";
 
 interface OrchestratorAgentState {
   profileId: string;
@@ -119,7 +120,7 @@ export async function switchToProfile(profileId: string): Promise<void> {
     const fitAddon = (terminal as any).__fitAddon;
     if (fitAddon) {
       await Promise.resolve();
-      fitAddon.fit();
+      fitTerminalForViewport(terminal, fitAddon);
     }
   }
 }

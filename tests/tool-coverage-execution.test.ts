@@ -84,10 +84,67 @@ test("each builtin tool has a documented execution test path", () => {
     "vision_analyze",
     "web_fetch",
     "web_search",
+    "wiki_search",
+    "wiki_setup",
+    "wiki_sync",
     "write_file",
     "youtube_transcribe",
   ]);
   assert.deepEqual([...covered].sort(), Object.keys(BUILTIN_TOOLS).sort());
+});
+
+test("wiki_setup and wiki_search run on isolated workspace", async () => {
+  await withIsolatedWorkspace(async () => {
+    const catalog = await loadToolCatalog();
+    const vaultRoot = `tmp/wiki-tool-coverage-${Date.now()}`;
+    const setup = await runOne("wiki_setup", { root_path: vaultRoot }, catalog);
+    assert.ok(!setup?.error, setup?.error);
+    const created = (setup?.result as { files_written?: string[] })?.files_written || [];
+    assert.ok(created.length >= 1);
+    const search = await runOne(
+      "wiki_search",
+      { query: "PARA", root_path: vaultRoot, limit: 5 },
+      catalog
+    );
+    assert.ok(!search?.error, search?.error);
+    const matches = (search?.result as { matches?: unknown[] })?.matches || [];
+    assert.ok(matches.length >= 1);
+  });
+});
+
+test("wiki_sync updates wiki index when facts exist", async () => {
+  await withIsolatedWorkspace(async () => {
+    const catalog = await loadToolCatalog();
+    const stubFacts = [
+      {
+        key: `coverage_wiki_${Date.now()}`,
+        value: { note: "vault projection" },
+        created_at: "2026-05-12T00:00:00.000Z",
+        updated_at: "2026-05-12T00:00:00.000Z",
+      },
+    ];
+    const ctx = createToolContext({
+      runId: `tool_coverage_wiki_sync_${Date.now()}`,
+      autoApprove: true,
+      services: {
+        memory: {
+          getAllFacts: async () => stubFacts,
+          getPromotableLearnings: async () => [],
+        },
+      },
+    });
+    const vaultRoot = `tmp/wiki-sync-coverage-${Date.now()}`;
+    let [out] = await runTools([{ name: "wiki_setup", arguments: { root_path: vaultRoot } }], ctx, catalog);
+    assert.ok(!out?.error, out?.error);
+    [out] = await runTools(
+      [{ name: "wiki_sync", arguments: { root_path: vaultRoot, scope: "facts", max_items: 10 } }],
+      ctx,
+      catalog
+    );
+    assert.ok(!out?.error, out?.error);
+    const counts = (out?.result as { counts?: { facts?: number } })?.counts;
+    assert.ok((counts?.facts ?? 0) >= 1);
+  });
 });
 
 test("memory_recall returns a saved fact by exact key", async () => {

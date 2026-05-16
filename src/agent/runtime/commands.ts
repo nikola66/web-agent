@@ -10,6 +10,20 @@ export const SLASH_COMMANDS = [
   { name: "/checkpoint [name]", description: "Save a named snapshot of current history for rollback." },
   { name: "/rollback [name]", description: "List checkpoints or restore a named checkpoint." },
   { name: "/skills [search]", description: "List installed skills, or search skills by query." },
+  {
+    name: "/wiki-setup [path]",
+    description:
+      "Initialize PARA + Obsidian wiki vault (Projects/Areas/Resources/KnowledgeVault/Archives). Optional workspace-relative root (default knowledge-vault).",
+  },
+  {
+    name: "/wiki-sync [scope] [path]",
+    description:
+      "Sync runtime facts/session/learnings into the wiki (scope: facts | session | all). Optional root path after scope.",
+  },
+  {
+    name: "/wiki-search <query>",
+    description: "Search markdown in the wiki vault when memory tools are not enough.",
+  },
   { name: "/<skill> [task]", description: "Invoke an installed skill for a task." },
   { name: "/stop", description: "Interrupt the current run." },
   { name: "/exit", description: "Exit the active terminal agent session." },

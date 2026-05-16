@@ -5,8 +5,8 @@ import { FitAddon } from "@xterm/addon-fit";
 import { Unicode11Addon } from "@xterm/addon-unicode11";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { terminalTheme } from "../theme";
-import { submitUserInput } from "@/core/orchestrator";
 import { attachProfileTerminal, detachTerminal, notifyAgentTerminalResized, switchToProfile } from "@/core/orchestrator";
+import { fitTerminalForViewport } from "@/core/xterm-fit-viewport";
 import { useRuntimeStore } from "../stores/runtime-store";
 import { useSettingsStore } from "../stores/settings-store";
 import { useProfileStore } from "../stores/profile-store";
@@ -180,8 +180,8 @@ export function Terminal() {
     const fitOnlyActive = () => {
       const active = prevProfileId.current;
       if (active && instancesRef.current.has(active)) {
-        const { fitAddon } = instancesRef.current.get(active)!;
-        fitAddon.fit();
+        const { terminal, fitAddon } = instancesRef.current.get(active)!;
+        fitTerminalForViewport(terminal, fitAddon);
       }
     };
 
@@ -270,8 +270,10 @@ export function Terminal() {
       <button
         type="button"
         onClick={toggleSidebar}
-        className="absolute top-2 left-2 z-20 rounded-sm border border-white/10 bg-black/40 p-1 text-text-muted backdrop-blur-sm transition-colors hover:text-text-primary"
+        className="absolute top-2 left-2 z-20 flex min-h-[44px] min-w-[44px] items-center justify-center rounded-sm border border-white/10 bg-black/40 p-2 text-text-muted touch-manipulation backdrop-blur-sm transition-colors hover:text-text-primary md:min-h-0 md:min-w-0 md:p-1"
         style={{ transitionDuration: "var(--duration-fast)" }}
+        aria-expanded={sidebarOpen}
+        aria-controls="app-sidebar"
         aria-label={sidebarOpen ? "Close sidebar" : "Open sidebar"}
       >
         {sidebarOpen ? (

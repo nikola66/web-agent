@@ -241,7 +241,7 @@ export function ChatInput() {
           type="button"
           aria-label="Upload files"
           data-testid="chat-input-upload"
-          className="inline-flex h-4 w-4 shrink-0 items-center justify-center text-text-muted transition-colors hover:text-text-primary"
+          className="inline-flex min-h-10 min-w-10 shrink-0 touch-manipulation items-center justify-center text-text-muted transition-colors hover:text-text-primary"
           onClick={() => {
             if (runtimeStatus !== "running" || !activeProfileId) {
               showUploadUnavailable();
@@ -343,7 +343,7 @@ export function ChatInput() {
             }
           }}
           disabled={disabled}
-          className="h-7 flex-1 bg-transparent text-sm text-text-primary outline-none placeholder:text-text-muted disabled:cursor-not-allowed disabled:opacity-60"
+          className="h-10 min-h-10 flex-1 bg-transparent text-sm text-text-primary outline-none placeholder:text-text-muted disabled:cursor-not-allowed disabled:opacity-60 md:h-7 md:min-h-0"
           placeholder={
             runtimeStatus === "running"
               ? "Type message (Enter to send, /stop to interrupt)"

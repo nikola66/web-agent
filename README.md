@@ -22,13 +22,13 @@
 
 Web Agent is an open-source AI agent that runs directly in the browser on top of WebContainers. There is nothing to install to use it: no Docker, no VPS, no VM, no Mac mini, no Hostinger box, no local Python stack. Open the app, launch a profile, and start working.
 
-It is designed to feel simple for end users and capable for power users: isolated profiles, browser-local persistence, tools, skills, sessions, reflections, learnings, cron jobs, and a self-improving runtime that stays on the user’s machine.
+It is designed to feel simple for end users and capable for power users: isolated profiles, browser-local persistence, tools, skills, sessions, reflections, learnings, cron jobs, **planning mode** (`/plan`), a **PARA + Obsidian-style knowledge vault** (`wiki_*` tools and `/wiki-*` commands), and a self-improving runtime that stays on the user’s machine.
 
 ## Why Web Agent
 
 - **Click and run**. Launch from the browser with no install step for end users.
 - **Isolated by default**. Every profile gets its own workspace, memory, and runtime state.
-- **Self-learning**. Skills, reflections, learnings, facts, and session memory help the agent improve over time.
+- **Self-learning**. Skills, reflections, learnings, facts, session memory, and optional wiki projections help the agent improve over time without losing browser-local control.
 - **Local-first persistence**. Workspaces, memory, sessions, and skills live in browser storage and can be exported or re-imported later.
 - **Hosted without server-side user state**. The hosted demo serves the app, while user files and agent state stay in the browser.
 - **Open source**. Free to use, fork, modify, and distribute under the MIT License.
@@ -37,7 +37,9 @@ It is designed to feel simple for end users and capable for power users: isolate
 
 - Browser-native Node.js runtime powered by WebContainers
 - Isolated profiles with separate workspaces and memories
-- Built-in tools for files, shell, search, fetch, memory, sessions, cron, and skills
+- Built-in tools for files, shell, search, fetch, memory, sessions, cron, skills, and **knowledge vault** (`wiki_setup`, `wiki_sync`, `wiki_search`)
+- **`/plan` planning mode**: research the workspace, save a dated markdown plan under `.webagent/plans/`, present it with `artifact_present`, then execute on a **follow-up** message
+- **`/wiki-setup` · `/wiki-sync` · `/wiki-search`**: deterministic shortcuts that route to the wiki tools (default vault root: `knowledge-vault/`)
 - Persistent fact store, rolling session memory, reflections, and learnings
 - Uploads into the live workspace with image handoff to vision tools
 - Encrypted API keys stored locally in the browser
@@ -65,34 +67,83 @@ flowchart LR
   T --> R[🌐 Web + Vision]
 ```
 
+### Planning, wiki vault, and self-learning
+
+These three loops sit beside the main capability diagram: **planning** produces reviewable specs before implementation; the **wiki** mirrors runtime memory into browseable markdown (Obsidian-friendly); **self-learning** ties facts, session notes, skills, and reflections together over time.
+
+#### Planning (`/plan`)
+
+```mermaid
+flowchart LR
+  P["/plan goal"] --> R[Read-only workspace research]
+  R --> W["write_file → .webagent/plans/*.md"]
+  W --> A["artifact_present View/Download"]
+  A --> N["Stop — next message: execute or revise"]
+```
+
+#### Knowledge vault (`wiki_*` / `/wiki-*`)
+
+```mermaid
+flowchart LR
+  U[wiki_setup] --> V["PARA + KnowledgeVault"]
+  M["memory_* · session_* · learnings"] --> S[wiki_sync]
+  V --> S
+  S --> I["index · log · ops"]
+  Q[wiki_search] --> V
+```
+
+#### Self-learning loop
+
+```mermaid
+flowchart TB
+  X[Runs tools & conversation] --> F[memory_* durable facts]
+  X --> SM[session_memory_* rolling notes]
+  X --> SK["skill_* reusable SKILL.md"]
+  X --> RF["reflections · promotable learnings"]
+  RF -.->|hints| F
+  RF -.->|hints| SK
+  F --> W2[Optional wiki_sync projection]
+  SM --> W2
+```
+
+For choosing **facts vs session vs skills vs vault**, use the bundled **`/memory-layers`** skill.
+
 ### Quick Capability Map
 
 | Area | What lives there | What it enables |
 | --- | --- | --- |
-| `⌨️ Commands` | Session controls like `/help`, `/compact`, `/checkpoint` | Faster navigation, recovery, and operator control |
+| `⌨️ Commands` | Session controls like `/help`, `/compact`, `/plan`, `/checkpoint`, `/wiki-*` | Faster navigation, recovery, planning, vault ops, and operator control |
 | `🛠️ Workspace tools` | Read, write, edit, diff, move, search, shell | Real work inside an isolated project workspace |
 | `🧠 Memory tools` | Facts, session notes, conversation recall | Persistent context that improves continuity |
+| `📓 Wiki tools` | `wiki_setup`, `wiki_sync`, `wiki_search` | PARA-shaped markdown vault and search when memory tools are not enough |
+| `📋 Planning` | `/plan` + `write_file` into `.webagent/plans/` + `artifact_present` | Spec-first workflows: plan now, implement on the next turn |
 | `⏱️ Automation tools` | Heartbeat cron jobs and todos | Recurring tasks while the app is open |
 | `🌐 Remote tools` | Search, fetch, email, vision, YouTube transcript | Web-aware and multimodal task execution |
 | `📚 Skills` | Reusable `SKILL.md` procedures | Higher-level workflows without retraining the model |
 
 ## Slash Commands
 
-These commands make the terminal experience feel like an operator console rather than a plain chatbot. They cover help, interruption, context compaction, checkpoint-based recovery, and direct skill invocation.
+These commands make the terminal experience feel like an operator console rather than a plain chatbot. They cover help, interruption, context compaction, **planning mode**, **wiki vault** shortcuts, checkpoint-based recovery, and direct skill invocation.
 
 | Command | What it does |
 | --- | --- |
 | `/help` | Show built-in commands and available tools. |
 | `/clear` | Clear conversation history for a fresh thread; keeps agent and user identity. |
 | `/compact` | Summarize older context and keep the current thread going. |
+| `/plan [goal]` | **Planning mode:** research the workspace with read-only tools, write the full plan markdown under `.webagent/plans/`, present it via `artifact_present`, then **stop** — reply on the **next** turn with “execute the plan” (or edits) to implement. |
 | `/checkpoint [name]` | Save a named snapshot of current history for rollback. |
 | `/rollback [name]` | List checkpoints or restore a named checkpoint. |
 | `/skills [search]` | List installed skills, or search skills by query. |
+| `/wiki-setup [path]` | Initialize the PARA + wiki scaffold (`Projects/`, `Areas/`, `Resources/KnowledgeVault/…`, `Archives/`). Optional workspace-relative root; default **`knowledge-vault`**. |
+| `/wiki-sync [scope] [path]` | Push runtime projections into the vault: **`facts`**, **`session`**, or **`all`** (includes learnings). Optional path after `scope`. Requires `wiki_setup` first. |
+| `/wiki-search <query>` | Search markdown under the wiki vault (ranked hits + snippets). |
 | `/<skill> [task]` | Invoke an installed skill for a task. |
 | `/stop` | Interrupt the current run. |
 | `/exit` | Exit the active terminal agent session. |
 
 > `📌 Tip:` Use `/skills` to discover capabilities, then jump straight into a workflow with `/<skill-slug> [task]`.
+
+> `📌 Tip:` Natural-language asks like “set up my knowledge vault” or “sync facts to the wiki” map to the same **`wiki_*`** tools as the `/wiki-*` commands.
 
 ## Settings And Providers
 
@@ -135,6 +186,7 @@ Web Agent ships with a broad native tool belt. The built-ins cover workspace man
 | --- | --- | --- |
 | `📁 Files & Workspace` | `read_file`, `write_file`, `edit_file`, `multi_edit`, `move_file`, `delete_file`, `tree`, `list_dir`, `find_files`, `grep`, `file_diff`, `file_stat`, `make_dir` | Building, editing, inspecting, and organizing project files |
 | `🧠 Memory & Recall` | `memory_save`, `memory_recall`, `memory_search`, `session_memory_append`, `session_memory_list`, `session_search` | Long-lived facts, rolling notes, and recovering prior context |
+| `📓 Knowledge wiki` | `wiki_setup`, `wiki_sync`, `wiki_search` | PARA + Obsidian-friendly vault under the workspace; project facts/session/learnings into markdown; full-text vault search |
 | `📚 Skills` | `skill_list`, `skill_view`, `skill_save`, `skill_manage`, `skill_bulk_save`, `skill_delete`, `skill_recall` | Discovering, reading, creating, importing, and maintaining skills |
 | `⏱️ Automation` | `cron_register`, `cron_list`, `todo_write` | Recurring jobs, heartbeat-driven workflows, and checklists |
 | `🌐 Remote & Multimodal` | `web_search`, `web_fetch`, `vision_analyze`, `youtube_transcribe`, `email` | Research, fetching live content, image analysis, transcripts, and outbound delivery |
@@ -181,6 +233,9 @@ Web Agent ships with a broad native tool belt. The built-ins cover workspace man
 | `🖼️ vision_analyze` | Analyze an image with the configured vision model. |
 | `🌐 web_fetch` | Fetch and summarize content from a URL. |
 | `🔍 web_search` | Search the web and return ranked results. |
+| `📓 wiki_search` | Search markdown files under the wiki vault root; ranked snippets when `memory_search` is not enough. |
+| `📓 wiki_setup` | Create the PARA + `Resources/KnowledgeVault/` scaffold (idempotent). |
+| `🔄 wiki_sync` | Update vault `index.md` / `log.md` and write `ops/wiki-sync-*.md` from facts, session tail, and/or learnings. |
 | `✍️ write_file` | Write text to a file and create parent folders as needed. |
 | `📹 youtube_transcribe` | Fetch a full YouTube transcript with timestamps. |
 
@@ -198,7 +253,10 @@ Skills are reusable procedures stored as `SKILL.md` files. They let Web Agent sw
 | `/project-scaffold` | Project Scaffold | Create an isolated workspace folder for a new app, demo, spike, sandbox, or test harness before file generation begins. | `project`, `scaffold`, `verification` |
 | `/research-pack` | Research Pack | Run scholarly research workflows using existing web tools such as arXiv and Semantic Scholar paths. | `research`, `papers`, `citations`, `academic`, `arxiv`, `semantic-scholar` |
 | `/systematic-debugging` | Systematic Debugging | Use a lightweight hypothesis-and-experiment loop for bugs and flaky behavior. | `debugging`, `reliability`, `investigation`, `science` |
+| `/memory-layers` | Memory Layers | Pick the right layer among facts, session notes, skills, and wiki projections — avoid duplicate or contradictory stored context. | `memory`, `session`, `skills`, `facts`, `context` |
 | `/web-agent-skill` | Web Agent Skill | Evolve Web Agent safely using its runtime, memory layers, cron, bundled skills, and repository truth. | `web-agent`, `self-evolution`, `maintenance`, `skills`, `memory`, `cron` |
+
+Additional bundled skills appear under `/skills`; the table above highlights common starting points.
 
 ### Why Skills Matter
 
@@ -206,6 +264,11 @@ Skills are reusable procedures stored as `SKILL.md` files. They let Web Agent sw
 - `🛡️ Safer`: skills encode preferred patterns before the agent starts changing files.
 - `⚡ Faster`: `/skill-slug [task]` is quicker than re-explaining a workflow every session.
 - `🧠 Teachable`: users can grow the agent by saving new procedures directly into the workspace.
+
+### Wiki vs memory (short)
+
+- **`memory_*` / `session_*`** hold the canonical structured context the runtime uses.
+- **`wiki_sync`** projects summaries and sync markers into markdown for humans (or Obsidian); treat the vault as a **browseable mirror**, not a second source of truth, unless you intentionally archive prose there.
 
 ## Workspace Features
 
@@ -219,6 +282,8 @@ Every profile gets its own isolated workspace rooted in browser storage. The wor
 | `🖼️ Upload handoff` | Uploaded files land in the live workspace, including image paths for vision tools. |
 | `🧰 File operations` | Read, write, edit, diff, move, delete, list, grep, and tree tools all operate inside the workspace. |
 | `🖥️ Live shell access` | The runtime can execute supported workspace commands in the browser-native Node environment. |
+| `📋 Saved plans` | `/plan` writes timestamped markdown under **`.webagent/plans/`** (workspace-relative). |
+| `📓 Knowledge vault` | Default **`knowledge-vault/`** PARA tree with **`Resources/KnowledgeVault/`** for wikilinks, logs, and ops detail files after `wiki_sync`. |
 | `🧹 Clean reset` | Destroy a single profile workspace or nuke all local agent state from the sidebar. |
 | `📊 Storage visibility` | The Workspaces tab shows browser storage usage and quota. |
 
@@ -230,7 +295,7 @@ Every profile gets its own isolated workspace rooted in browser storage. The wor
 
 ## How Persistence Works
 
-Web Agent keeps user state in browser storage on the user’s machine. That includes workspaces, sessions, memory, facts, learnings, skills, todos, cron metadata, and local credentials. Nothing in that persistent agent state is meant to live on the server.
+Web Agent keeps user state in browser storage on the user’s machine. That includes workspaces, sessions, memory, facts, learnings, skills, todos, cron metadata, saved **`/plan`** markdown under `.webagent/plans/`, wiki vault files if you create them, and local credentials. Nothing in that persistent agent state is meant to live on the server.
 
 As long as the browser keeps its local storage and OPFS data, the agent keeps its history and workspace. When you want portability, export the workspace or browser-local state and import it later on the same machine or another one.
 
@@ -284,6 +349,7 @@ Contributor-facing docs:
 - **Persistence**: IndexedDB + OPFS in the browser
 - **Isolation**: profile-scoped workspaces and runtime state
 - **Model access**: OpenRouter or OpenAI-compatible providers
+- **Plans & vault**: timestamped plans under `.webagent/plans/`; optional PARA wiki tree (default `knowledge-vault/`) synchronized via `wiki_*` tools
 
 The agent runtime is embedded into the browser app, mounted into a live workspace, and launched inside a terminal-backed Node environment. Profiles keep personalities, settings, workspace state, and memory separated.
 

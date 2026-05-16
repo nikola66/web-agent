@@ -34,8 +34,11 @@ import tool32 from "./tree.js";
 import tool33 from "./vision_analyze.js";
 import tool34 from "./web_fetch.js";
 import tool35 from "./web_search.js";
-import tool36 from "./write_file.js";
-import tool37 from "./youtube_transcribe.js";
+import tool36 from "./wiki_search.js";
+import tool37 from "./wiki_setup.js";
+import tool38 from "./wiki_sync.js";
+import tool39 from "./write_file.js";
+import tool40 from "./youtube_transcribe.js";
 
 export const BUILTIN_TOOL_DEFINITIONS = [
   tool0,
@@ -76,4 +79,7 @@ export const BUILTIN_TOOL_DEFINITIONS = [
   tool35,
   tool36,
   tool37,
+  tool38,
+  tool39,
+  tool40,
 ] as const;

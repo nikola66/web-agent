@@ -548,6 +548,7 @@ export const PARALLEL_SAFE_TOOLS = new Set([
   "list_dir",
   "find_files",
   "skill_view",
+  "wiki_search",
 ]);
 
 const MAX_PARALLEL_TOOLS = 6;

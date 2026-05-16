@@ -45,7 +45,7 @@ export function Sidebar() {
             key={id}
             type="button"
             onClick={() => setSidebarView(id)}
-            className="flex items-center gap-1 rounded-button px-2 py-1 text-[11px] font-medium transition-all"
+            className="flex min-h-10 touch-manipulation items-center gap-1 rounded-button px-2 py-1 text-[11px] font-medium transition-all"
             style={{
               transitionDuration: "var(--duration-fast)",
               transitionTimingFunction: "var(--ease-out)",

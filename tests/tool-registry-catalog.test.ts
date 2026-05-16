@@ -40,6 +40,9 @@ const EXPECTED_TOOLS = [
   "vision_analyze",
   "web_fetch",
   "web_search",
+  "wiki_search",
+  "wiki_setup",
+  "wiki_sync",
   "write_file",
   "youtube_transcribe",
 ].sort();

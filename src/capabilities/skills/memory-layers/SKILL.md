@@ -23,6 +23,7 @@ This skill is the **single guide** for choosing among durable facts, rolling ses
 | **Facts** | `memory_save`, `memory_recall`, `memory_search` | Stable preferences (timezone, stack choices, env constraints that stay true). |
 | **Session** | `session_memory_append`, `session_memory_list`, `session_search` | Rolling investigation notes, temporary decisions, pointers to artifacts this session. |
 | **Skills** | `skill_view`, `skill_list`, `skill_save`, `skill_manage`, `skill_bulk_save`, `skill_delete`, `skill_recall` | Repeatable **procedures** with a clear trigger — not one-off facts. |
+| **Knowledge vault** | `wiki_setup`, `wiki_sync`, `wiki_search` | PARA-shaped markdown vault in the workspace (Obsidian-friendly). Use `wiki_sync` to **project** facts/session/learnings into vault notes for browsing; canonical structured facts stay in memory tools unless you intentionally archive prose there. |
 
 ## Heuristics
 
@@ -38,6 +39,7 @@ This skill is the **single guide** for choosing among durable facts, rolling ses
 
 - Storing secrets in memory — see **`credential-hygiene`**.
 - Duplicating the same content in facts and a skill — pick one layer.
+- Mirroring the same long content in both `memory_save` and synced wiki pages — prefer facts/skills as source of truth and keep vault entries as summaries or links unless you need an archival copy.
 
 ## Anti-patterns
 
