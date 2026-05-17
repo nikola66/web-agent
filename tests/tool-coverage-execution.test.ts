@@ -147,6 +147,48 @@ test("wiki_sync updates wiki index when facts exist", async () => {
   });
 });
 
+test("wiki_sync resolves root_path with stray wrapping quotes", async () => {
+  await withIsolatedWorkspace(async () => {
+    const catalog = await loadToolCatalog();
+    const stubFacts = [
+      {
+        key: `coverage_wiki_quote_${Date.now()}`,
+        value: { note: "quoted path" },
+        created_at: "2026-05-12T00:00:00.000Z",
+        updated_at: "2026-05-12T00:00:00.000Z",
+      },
+    ];
+    const ctx = createToolContext({
+      runId: `tool_coverage_wiki_sync_quotes_${Date.now()}`,
+      autoApprove: true,
+      services: {
+        memory: {
+          getAllFacts: async () => stubFacts,
+          getPromotableLearnings: async () => [],
+        },
+      },
+    });
+    const vaultRoot = `tmp/wiki-sync-quotes-${Date.now()}`;
+    let [out] = await runTools([{ name: "wiki_setup", arguments: { root_path: vaultRoot } }], ctx, catalog);
+    assert.ok(!out?.error, out?.error);
+    [out] = await runTools(
+      [
+        {
+          name: "wiki_sync",
+          arguments: {
+            root_path: `"${vaultRoot}"`,
+            scope: "facts",
+            max_items: 10,
+          },
+        },
+      ],
+      ctx,
+      catalog
+    );
+    assert.ok(!out?.error, String(out?.error));
+  });
+});
+
 test("memory_recall returns a saved fact by exact key", async () => {
   await withIsolatedWorkspace(async () => {
     const catalog = await loadToolCatalog();

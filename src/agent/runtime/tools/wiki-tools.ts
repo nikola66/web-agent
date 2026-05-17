@@ -52,9 +52,24 @@ function knowledgeVaultBaseRel(rootRel: string) {
 
 type WikiRootResolution = { rootRel: string; implicitDefault: boolean };
 
+/** Strip extra wrapping quotes when models double-escape root_path as a JSON string value. */
+function stripSurroundingQuotes(s: string) {
+  let t = s.trim();
+  while (t.length >= 2) {
+    const a = t[0];
+    const b = t[t.length - 1];
+    if ((a === '"' && b === '"') || (a === "'" && b === "'")) {
+      t = t.slice(1, -1).trim();
+      continue;
+    }
+    break;
+  }
+  return t;
+}
+
 function wikiRootFromArgs(args: Record<string, unknown> | undefined): WikiRootResolution {
   const raw = args?.root_path;
-  const trimmed = raw === undefined || raw === null ? "" : String(raw).trim();
+  const trimmed = raw === undefined || raw === null ? "" : stripSurroundingQuotes(String(raw));
   if (!trimmed) {
     return {
       rootRel: normalizeWorkspaceRelativePath(WIKI_DEFAULT_ROOT),
