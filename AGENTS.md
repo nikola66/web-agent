@@ -1,1 +1,1 @@
-When fixing bugs, always make surgical fixes. Do not add new lines of code unless absolutely neccessiry. If making changes or removing a feature make sure to clean all related stale code related. Strive to write less code, not more. Ask clarifying questions if unsure.
+When fixing bugs, always make surgical fixes. Do not add new lines of code unless absolutely neccessiry. If making changes or removing a feature make sure to clean all related stale code. Strive to write less code, not more. Ask clarifying questions if unsure.
