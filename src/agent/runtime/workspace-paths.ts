@@ -1,6 +1,10 @@
 import fs from "node:fs/promises";
 import nodePath from "node:path";
-import { ROOT, WORKSPACE_LABEL, WS } from "./constants.js";
+import { ROOT, WORKSPACE_LABEL, WS, getWorkspaceRoot } from "./constants.js";
+
+function workspaceRootAbs() {
+  return nodePath.resolve(getWorkspaceRoot());
+}
 
 let ROOT_EQUALS_WS = true;
 let WORKSPACE_SESSION_DIR = ".";
@@ -26,10 +30,11 @@ export function normalizeWorkspaceRelativePath(input) {
   }
   if (nodePath.isAbsolute(raw)) {
     const normalizedAbs = nodePath.resolve(raw);
-    const workspacePrefix = ROOT + nodePath.sep;
-    if (normalizedAbs === ROOT) return ".";
+    const rootAbs = workspaceRootAbs();
+    const workspacePrefix = rootAbs + nodePath.sep;
+    if (normalizedAbs === rootAbs) return ".";
     if (normalizedAbs.startsWith(workspacePrefix)) {
-      return nodePath.relative(ROOT, normalizedAbs);
+      return nodePath.relative(rootAbs, normalizedAbs);
     }
     const normalized = raw.replace(/\\/g, "/");
     const marker = `${WORKSPACE_LABEL}/`;
@@ -50,7 +55,8 @@ export function normalizeWorkspaceRelativePath(input) {
 
 export function withinWorkspace(rel) {
   const s = normalizeWorkspaceRelativePath(rel);
-  const abs = nodePath.resolve(ROOT, s);
+  const rootAbs = workspaceRootAbs();
+  const abs = nodePath.resolve(rootAbs, s);
   if (!isWithinWorkspaceAbs(abs)) {
     throw new Error(`Path escapes workspace: ${rel}`);
   }
@@ -58,16 +64,18 @@ export function withinWorkspace(rel) {
 }
 
 export function isWithinWorkspaceAbs(absPath) {
+  const rootAbs = workspaceRootAbs();
   const abs = nodePath.resolve(String(absPath || ""));
-  return abs === ROOT || abs.startsWith(ROOT + nodePath.sep);
+  return abs === rootAbs || abs.startsWith(rootAbs + nodePath.sep);
 }
 
 export function toWorkspaceRelative(absPath) {
-  const abs = nodePath.resolve(String(absPath || ROOT));
+  const rootAbs = workspaceRootAbs();
+  const abs = nodePath.resolve(String(absPath || rootAbs));
   if (!isWithinWorkspaceAbs(abs)) {
     throw new Error(`Path escapes workspace: ${absPath}`);
   }
-  return nodePath.relative(ROOT, abs) || ".";
+  return nodePath.relative(rootAbs, abs) || ".";
 }
 
 /** Top-level file basenames permitted at workspace root (identity, agent state, minimal JS/TS scaffolding). */
@@ -140,7 +148,9 @@ export function toWorkspaceDisplayPath(absPath) {
 export function resolveWorkspacePath(ctx, rel) {
   const cwd = ctx?.cwd;
   const raw = String(rel ?? ".").trim();
-  if (!cwd || cwd === ROOT || cwd === WS) return withinWorkspace(rel);
+  const rootAbs = workspaceRootAbs();
+  const cwdResolved = cwd ? nodePath.resolve(String(cwd)) : "";
+  if (!cwd || cwdResolved === rootAbs || cwd === ROOT || cwd === WS) return withinWorkspace(rel);
 
   if (nodePath.isAbsolute(raw) || raw === WORKSPACE_LABEL || raw.startsWith(`${WORKSPACE_LABEL}/`)) {
     return withinWorkspace(rel);
@@ -159,8 +169,9 @@ export function resolveWorkspacePath(ctx, rel) {
 
 export async function ensureParentDir(abs) {
   const dir = nodePath.dirname(abs);
-  if (dir === ROOT) {
-    await fs.mkdir(ROOT, { recursive: true });
+  const rootAbs = workspaceRootAbs();
+  if (nodePath.resolve(dir) === rootAbs) {
+    await fs.mkdir(rootAbs, { recursive: true });
     return;
   }
   if (dir === WS) return;

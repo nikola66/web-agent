@@ -6,14 +6,14 @@ export default defineTool({
   run: wikiSearchTool,
   emoji: "🔎",
   description:
-    "Full-text search markdown files under the wiki vault root (default knowledge-vault). Returns ranked matches with snippets when memory_search is insufficient.",
+    "Full-text search markdown files under the wiki vault root (default .webagent/knowledge-vault). Returns ranked matches with snippets when memory_search is insufficient.",
   inputSchema: {
     type: "object",
     properties: {
       query: { type: "string", description: "Keywords to find (2+ char tokens)." },
       root_path: {
         type: "string",
-        description: "Workspace-relative vault root (default: knowledge-vault).",
+        description: "Workspace-relative vault root (default: .webagent/knowledge-vault).",
       },
       limit: { type: "number", description: "Max matches (default 10, max 50)." },
       max_files: {

@@ -12,7 +12,7 @@ export default defineTool({
     properties: {
       root_path: {
         type: "string",
-        description: "Workspace-relative vault root (default: knowledge-vault).",
+        description: "Workspace-relative vault root (default: .webagent/knowledge-vault).",
       },
       scope: {
         type: "string",

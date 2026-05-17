@@ -11,7 +11,22 @@ dist/
 .env.*
 !.env.example
 
-# Local maintainer state
+# Agent / profile workspace mirrors (virtual disk lives in browser OPFS — do not commit working copies)
+/memory/
+/uploads/
+/tmp/
+/debug-logs/
+.webagent/
+knowledge-vault/
+*.sqlite
+*.sqlite-journal
+.history.json
+.channel-state.json
+.heartbeat-state.json
+.cronjobs.json
+.todos.json
+
+# Local maintainer / IDE (optional)
 .agents/
 .claude/
 .codex/
@@ -22,16 +37,11 @@ docs/references/
 .opencode/plans/
 .vscode/
 .agent/
-.cronjobs.json
-.todos.json
-.webagent/
-tmp/
 
 # Caches and logs
 .npm-cache/
 *.log
 npm-debug.log*
-debug-logs/
 playwright-report/
 test-results/
 marketing/

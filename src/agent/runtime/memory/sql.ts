@@ -5,11 +5,21 @@
 import fs from "node:fs/promises";
 import nodePath from "node:path";
 // @ts-ignore
-import { MEMORY_CONVERSATIONS_DIR, MEMORY_DB_PATH, MEMORY_JOBS_DIR, MEMORY_REFLECTIONS_DIR, MEMORY_ROOT, MEMORY_RUNS_DIR, MEMORY_SNAPSHOTS_DIR } from "../constants.js";
+import {
+  MEMORY_CONVERSATIONS_DIR,
+  MEMORY_DB_PATH,
+  MEMORY_JOBS_DIR,
+  MEMORY_REFLECTIONS_DIR,
+  MEMORY_ROOT,
+  MEMORY_RUNS_DIR,
+  MEMORY_SNAPSHOTS_DIR,
+  getMemoryRoot,
+  getWorkspaceRoot,
+} from "../constants.js";
 // @ts-ignore
 import { logDebugEvent } from "../logging/debug-log.js";
 // @ts-ignore
-import { ensureParentDir, toWorkspaceDisplayPath, withinWorkspace } from "../workspace-paths.js";
+import { ensureParentDir, isWithinWorkspaceAbs, toWorkspaceDisplayPath } from "../workspace-paths.js";
 // @ts-ignore
 import { errorMessage } from "../utils.js";
 
@@ -37,8 +47,29 @@ export function safeId(prefix: string): string {
   return `${prefix}_${stamp}_${random}`;
 }
 
-export function memoryPath(path: string): string {
-  return withinWorkspace(path);
+export function memoryPath(input: string): string {
+  const liveMemoryRoot = nodePath.resolve(getMemoryRoot());
+  const frozenMr = nodePath.resolve(MEMORY_ROOT);
+  const wsRoot = nodePath.resolve(getWorkspaceRoot());
+  const raw = String(input ?? "").trim();
+
+  let abs: string;
+  if (nodePath.isAbsolute(raw)) {
+    abs = nodePath.resolve(raw);
+    if (abs === frozenMr || abs.startsWith(frozenMr + nodePath.sep)) {
+      const suffix = nodePath.relative(frozenMr, abs);
+      abs = nodePath.resolve(liveMemoryRoot, suffix);
+    }
+  } else if (raw === "memory" || raw.startsWith(`memory${nodePath.sep}`) || raw.startsWith("memory/")) {
+    abs = nodePath.resolve(wsRoot, raw.replace(/\\/g, "/"));
+  } else {
+    abs = nodePath.resolve(liveMemoryRoot, raw);
+  }
+
+  if (!isWithinWorkspaceAbs(abs)) {
+    throw new Error(`Path escapes workspace: ${abs}`);
+  }
+  return abs;
 }
 
 export async function ensureMemoryDirs(): Promise<void> {

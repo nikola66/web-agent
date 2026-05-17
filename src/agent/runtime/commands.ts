@@ -13,7 +13,7 @@ export const SLASH_COMMANDS = [
   {
     name: "/wiki-setup [path]",
     description:
-      "Initialize PARA + Obsidian wiki vault (Projects/Areas/Resources/KnowledgeVault/Archives). Optional workspace-relative root (default knowledge-vault).",
+      "Initialize PARA + Obsidian wiki vault (Projects/Areas/Resources/KnowledgeVault/Archives). Optional workspace-relative root (default .webagent/knowledge-vault).",
   },
   {
     name: "/wiki-sync [scope] [path]",

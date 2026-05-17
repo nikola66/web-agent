@@ -39,7 +39,7 @@ It is designed to feel simple for end users and capable for power users: isolate
 - Isolated profiles with separate workspaces and memories
 - Built-in tools for files, shell, search, fetch, memory, sessions, cron, skills, and **knowledge vault** (`wiki_setup`, `wiki_sync`, `wiki_search`)
 - **`/plan` planning mode**: research the workspace, save a dated markdown plan under `.webagent/plans/`, present it with `artifact_present`, then execute on a **follow-up** message
-- **`/wiki-setup` · `/wiki-sync` · `/wiki-search`**: deterministic shortcuts that route to the wiki tools (default vault root: `knowledge-vault/`)
+- **`/wiki-setup` · `/wiki-sync` · `/wiki-search`**: deterministic shortcuts that route to the wiki tools (default vault root: `.webagent/knowledge-vault/`)
 - Persistent fact store, rolling session memory, reflections, and learnings
 - Uploads into the live workspace with image handoff to vision tools
 - Encrypted API keys stored locally in the browser
@@ -134,7 +134,7 @@ These commands make the terminal experience feel like an operator console rather
 | `/checkpoint [name]` | Save a named snapshot of current history for rollback. |
 | `/rollback [name]` | List checkpoints or restore a named checkpoint. |
 | `/skills [search]` | List installed skills, or search skills by query. |
-| `/wiki-setup [path]` | Initialize the PARA + wiki scaffold (`Projects/`, `Areas/`, `Resources/KnowledgeVault/…`, `Archives/`). Optional workspace-relative root; default **`knowledge-vault`**. |
+| `/wiki-setup [path]` | Initialize the PARA + wiki scaffold (`Projects/`, `Areas/`, `Resources/KnowledgeVault/…`, `Archives/`). Optional workspace-relative root; default **`.webagent/knowledge-vault`**. Workspaces that still use the old default vault folder **`knowledge-vault/`** are relocated automatically on the next wiki operation that omits `root_path`. |
 | `/wiki-sync [scope] [path]` | Push runtime projections into the vault: **`facts`**, **`session`**, or **`all`** (includes learnings). Optional path after `scope`. Requires `wiki_setup` first. |
 | `/wiki-search <query>` | Search markdown under the wiki vault (ranked hits + snippets). |
 | `/<skill> [task]` | Invoke an installed skill for a task. |
@@ -283,7 +283,7 @@ Every profile gets its own isolated workspace rooted in browser storage. The wor
 | `🧰 File operations` | Read, write, edit, diff, move, delete, list, grep, and tree tools all operate inside the workspace. |
 | `🖥️ Live shell access` | The runtime can execute supported workspace commands in the browser-native Node environment. |
 | `📋 Saved plans` | `/plan` writes timestamped markdown under **`.webagent/plans/`** (workspace-relative). |
-| `📓 Knowledge vault` | Default **`knowledge-vault/`** PARA tree with **`Resources/KnowledgeVault/`** for wikilinks, logs, and ops detail files after `wiki_sync`. |
+| `📓 Knowledge vault` | Default **`.webagent/knowledge-vault/`** PARA tree with **`Resources/KnowledgeVault/`** for wikilinks, logs, and ops detail files after `wiki_sync`. Older **`knowledge-vault/`** trees migrate automatically when you use default wiki paths. |
 | `🧹 Clean reset` | Destroy a single profile workspace or nuke all local agent state from the sidebar. |
 | `📊 Storage visibility` | The Workspaces tab shows browser storage usage and quota. |
 
@@ -295,7 +295,7 @@ Every profile gets its own isolated workspace rooted in browser storage. The wor
 
 ## How Persistence Works
 
-Web Agent keeps user state in browser storage on the user’s machine. That includes workspaces, sessions, memory, facts, learnings, skills, todos, cron metadata, saved **`/plan`** markdown under `.webagent/plans/`, wiki vault files if you create them, and local credentials. Nothing in that persistent agent state is meant to live on the server.
+Web Agent keeps user state in browser storage on the user’s machine. That includes workspaces, sessions, memory, facts, learnings, skills, todos, cron metadata, saved **`/plan`** markdown under `.webagent/plans/`, wiki vault files under **`.webagent/knowledge-vault/`** by default (legacy **`knowledge-vault/`** at the workspace root is automatically moved there when wiki tools run without an explicit `root_path`), and local credentials. Nothing in that persistent agent state is meant to live on the server.
 
 As long as the browser keeps its local storage and OPFS data, the agent keeps its history and workspace. When you want portability, export the workspace or browser-local state and import it later on the same machine or another one.
 
@@ -349,7 +349,7 @@ Contributor-facing docs:
 - **Persistence**: IndexedDB + OPFS in the browser
 - **Isolation**: profile-scoped workspaces and runtime state
 - **Model access**: OpenRouter or OpenAI-compatible providers
-- **Plans & vault**: timestamped plans under `.webagent/plans/`; optional PARA wiki tree (default `knowledge-vault/`) synchronized via `wiki_*` tools
+- **Plans & vault**: timestamped plans under `.webagent/plans/`; optional PARA wiki tree (default `.webagent/knowledge-vault/`) synchronized via `wiki_*` tools
 
 The agent runtime is embedded into the browser app, mounted into a live workspace, and launched inside a terminal-backed Node environment. Profiles keep personalities, settings, workspace state, and memory separated.
 

@@ -6,13 +6,13 @@ export default defineTool({
   run: wikiSetupTool,
   emoji: "📚",
   description:
-    "Create a PARA-style vault + Obsidian wiki scaffold under `root_path` (default knowledge-vault): Projects, Areas, Resources/KnowledgeVault/{sources,entities,concepts,synthesis,ops}, Archives, index.md, log.md. Idempotent: skips existing files unless overwrite=true.",
+    "Create a PARA-style vault + Obsidian wiki scaffold under `root_path` (default .webagent/knowledge-vault): Projects, Areas, Resources/KnowledgeVault/{sources,entities,concepts,synthesis,ops}, Archives, index.md, log.md. Idempotent: skips existing files unless overwrite=true.",
   inputSchema: {
     type: "object",
     properties: {
       root_path: {
         type: "string",
-        description: "Workspace-relative vault root (default: knowledge-vault).",
+        description: "Workspace-relative vault root (default: .webagent/knowledge-vault).",
       },
       mode: {
         type: "string",

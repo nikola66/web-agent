@@ -36,7 +36,11 @@ async function safeGetPromotableLearnings(
   return mem.getPromotableLearnings(limit);
 }
 
-export const WIKI_DEFAULT_ROOT = "knowledge-vault";
+/** Canonical wiki vault root (per-agent workspace; hidden state directory). */
+export const WIKI_DEFAULT_ROOT = ".webagent/knowledge-vault";
+
+/** Legacy default before agent-scoped migration (implicit-default only). */
+const WIKI_LEGACY_ROOT = "knowledge-vault";
 
 function posixJoin(...parts: string[]) {
   return nodePath.posix.join(...parts.map((p) => String(p).replace(/\\/g, "/")));
@@ -44,6 +48,68 @@ function posixJoin(...parts: string[]) {
 
 function knowledgeVaultBaseRel(rootRel: string) {
   return posixJoin(rootRel, "Resources", "KnowledgeVault");
+}
+
+type WikiRootResolution = { rootRel: string; implicitDefault: boolean };
+
+function wikiRootFromArgs(args: Record<string, unknown> | undefined): WikiRootResolution {
+  const raw = args?.root_path;
+  const trimmed = raw === undefined || raw === null ? "" : String(raw).trim();
+  if (!trimmed) {
+    return {
+      rootRel: normalizeWorkspaceRelativePath(WIKI_DEFAULT_ROOT),
+      implicitDefault: true,
+    };
+  }
+  return {
+    rootRel: normalizeWorkspaceRelativePath(trimmed),
+    implicitDefault: false,
+  };
+}
+
+type WikiMigrationMeta = { migrated_from?: string; migration_note?: string };
+
+async function maybeMigrateLegacyWikiVault(
+  ctx: ToolCtx | null,
+  implicitDefault: boolean
+): Promise<WikiMigrationMeta> {
+  if (!implicitDefault) return {};
+  const legacyRel = normalizeWorkspaceRelativePath(WIKI_LEGACY_ROOT);
+  const newRel = normalizeWorkspaceRelativePath(WIKI_DEFAULT_ROOT);
+  if (legacyRel === newRel) return {};
+
+  const legacyAbs = resolveWorkspacePath(ctx, legacyRel);
+  const newAbs = resolveWorkspacePath(ctx, newRel);
+
+  let legacyExists = false;
+  let newExists = false;
+  try {
+    await fs.stat(legacyAbs);
+    legacyExists = true;
+  } catch {
+    /* absent */
+  }
+  try {
+    await fs.stat(newAbs);
+    newExists = true;
+  } catch {
+    /* absent */
+  }
+
+  if (!legacyExists) return {};
+
+  if (newExists) {
+    return {
+      migration_note: `Legacy wiki vault exists at "${legacyRel}" but canonical vault is at "${newRel}"; using "${newRel}". Remove "${legacyRel}" manually if unused.`,
+    };
+  }
+
+  await ensureParentDir(newAbs);
+  await fs.rename(legacyAbs, newAbs);
+  return {
+    migrated_from: legacyRel,
+    migration_note: `Moved wiki vault from "${legacyRel}" to "${newRel}".`,
+  };
 }
 
 const INDEX_MARKERS = /<!--\s*WIKI_SYNC_START\s*-->[\s\S]*?<!--\s*WIKI_SYNC_END\s*-->/;
@@ -144,8 +210,8 @@ async function safeWriteFile(
 
 /** Ensure wiki vault scaffold under workspace-relative \`rootRel\`. */
 export async function wikiSetupTool(args: Record<string, unknown> = {}, ctx: ToolCtx | null = null) {
-  const rootRel =
-    normalizeWorkspaceRelativePath(String(args?.root_path ?? WIKI_DEFAULT_ROOT).trim() || WIKI_DEFAULT_ROOT);
+  const { rootRel, implicitDefault } = wikiRootFromArgs(args);
+  const migration = await maybeMigrateLegacyWikiVault(ctx, implicitDefault);
   const mode = String(args?.mode ?? "para_plus_wiki").trim();
   const overwrite = Boolean(args?.overwrite);
   if (mode !== "para_plus_wiki") {
@@ -219,6 +285,7 @@ export async function wikiSetupTool(args: Record<string, unknown> = {}, ctx: Too
     files_written: written,
     files_skipped: skipped,
     note: "Use wiki_sync to push runtime facts/session/learnings into index.md and log.md.",
+    ...migration,
   };
 }
 
@@ -286,8 +353,8 @@ function formatLearningsBlock(
 
 /** Sync runtime memory projections into the wiki vault. */
 export async function wikiSyncTool(args: Record<string, unknown> = {}, ctx: ToolCtx | null = null) {
-  const rootRel =
-    normalizeWorkspaceRelativePath(String(args?.root_path ?? WIKI_DEFAULT_ROOT).trim() || WIKI_DEFAULT_ROOT);
+  const { rootRel, implicitDefault } = wikiRootFromArgs(args);
+  const migration = await maybeMigrateLegacyWikiVault(ctx, implicitDefault);
   const scopeRaw = String(args?.scope ?? "all").trim().toLowerCase();
   const scope = ["facts", "session", "all"].includes(scopeRaw) ? scopeRaw : "all";
   const maxItems = Math.min(200, Math.max(1, Number(args?.max_items ?? 40) || 40));
@@ -463,6 +530,7 @@ export async function wikiSyncTool(args: Record<string, unknown> = {}, ctx: Tool
       session_entries: sessionEntries.length,
       learnings: learnings.length,
     },
+    ...migration,
   };
 }
 
@@ -504,8 +572,8 @@ function firstTokenOffset(haystackLc: string, tokens: string[]) {
 export async function wikiSearchTool(args: Record<string, unknown> = {}, ctx: ToolCtx | null = null) {
   const query = String(args?.query ?? "").trim();
   if (!query) throw new Error("`query` is required for wiki_search.");
-  const rootRel =
-    normalizeWorkspaceRelativePath(String(args?.root_path ?? WIKI_DEFAULT_ROOT).trim() || WIKI_DEFAULT_ROOT);
+  const { rootRel, implicitDefault } = wikiRootFromArgs(args);
+  const migration = await maybeMigrateLegacyWikiVault(ctx, implicitDefault);
   const limit = Math.min(50, Math.max(1, Number(args?.limit ?? 10) || 10));
   const maxFiles = Math.min(2000, Math.max(50, Number(args?.max_files ?? 500) || 500));
 
@@ -582,5 +650,6 @@ export async function wikiSearchTool(args: Record<string, unknown> = {}, ctx: To
     query,
     scanned_files: mdFiles.length,
     matches,
+    ...migration,
   };
 }

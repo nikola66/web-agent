@@ -10,7 +10,7 @@ import {
 test("buildWikiSetupUserPrompt mentions wiki_setup and default root", () => {
   const p = buildWikiSetupUserPrompt("");
   assert.match(p, /wiki_setup/);
-  assert.match(p, /knowledge-vault/);
+  assert.match(p, /\.webagent\/knowledge-vault/);
 });
 
 test("buildWikiSyncUserPrompt parses scope and optional root", () => {

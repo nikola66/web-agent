@@ -8,6 +8,7 @@ Thanks for contributing to Web Agent.
 - Do not add complexity unless it is necessary.
 - Clean up stale code caused by your change.
 - Preserve the browser-native, local-first, isolated design of the project.
+- Do not commit per-profile workspace mirrors (`memory/`, `tmp/`, `knowledge-vault/`, `.webagent/`, SQLite DBs, etc.): they belong in browser storage and are listed in `.gitignore`.
 
 ## Development Setup
 
