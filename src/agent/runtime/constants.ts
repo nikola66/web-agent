@@ -64,6 +64,8 @@ export const MEMORY_JOBS_DIR = `${MEMORY_ROOT}/jobs`;
 export const MEMORY_DB_PATH = `${MEMORY_ROOT}/memory.sqlite`;
 /** Append-only session notes for this workspace (MVP “task memory lite”). */
 export const SESSION_MEMORY_PATH = `${WS}/.webagent/session-memory.jsonl`;
+/** First-Telegram-user lock state (`workspaceStatePath(TELEGRAM_AUTH_REL)`). */
+export const TELEGRAM_AUTH_REL = ".webagent/telegram-auth.json";
 /** Skill documents — reusable procedure markdown files injected into system prompt. */
 export const SKILLS_DIR = `${WS}/.webagent/skills`;
 /** Conversation history checkpoints for rollback. */

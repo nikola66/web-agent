@@ -1,5 +1,5 @@
 import fs from "node:fs/promises";
-import { workspaceStatePath } from "../constants.js";
+import { TELEGRAM_AUTH_REL, workspaceStatePath } from "../constants.js";
 import { logDebugEvent } from "../logging/debug-log.js";
 import { ensureParentDir } from "../workspace-paths.js";
 import { buildTelegramBotCommands } from "../commands.js";
@@ -32,6 +32,39 @@ async function saveNextPollOffset(offset) {
   const prev = typeof s.telegram === "object" && s.telegram !== null ? s.telegram : {};
   s.telegram = { ...prev, nextPollOffset: offset };
   await writeStateFile(s);
+}
+
+export async function loadTelegramAllowedUserId() {
+  const p = workspaceStatePath(TELEGRAM_AUTH_REL);
+  try {
+    const raw = await fs.readFile(p, "utf8");
+    const j = JSON.parse(raw);
+    const id = String(j?.telegram?.allowedUserId ?? "").trim();
+    return id || null;
+  } catch {
+    return null;
+  }
+}
+
+export async function saveTelegramAllowedUserId(userId) {
+  const p = workspaceStatePath(TELEGRAM_AUTH_REL);
+  await ensureParentDir(p);
+  /** @type {Record<string, unknown>} */
+  let prev = {};
+  try {
+    const raw = await fs.readFile(p, "utf8");
+    const j = JSON.parse(raw);
+    prev = j && typeof j === "object" && !Array.isArray(j) ? j : {};
+  } catch {
+    prev = {};
+  }
+  const prevTg = typeof prev.telegram === "object" && prev.telegram !== null ? prev.telegram : {};
+  prev.telegram = {
+    ...prevTg,
+    allowedUserId: String(userId).trim(),
+    setAt: Date.now(),
+  };
+  await fs.writeFile(p, JSON.stringify(prev, null, 2), "utf8");
 }
 
 async function fetchTelegramResult(urlString, opts = {}) {

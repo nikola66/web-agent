@@ -1,7 +1,9 @@
 import { createChannelInboundHandler } from "../../../channels/dispatcher.js";
 import {
+  loadTelegramAllowedUserId,
   pollTelegramUpdates,
   registerTelegramCommands,
+  saveTelegramAllowedUserId,
   sendTelegramDocument,
   sendTelegramMessage,
   startTelegramTyping,
@@ -28,10 +30,31 @@ export function start(deps) {
     startTyping: (chatId) => startTelegramTyping(token, chatId, { signal }),
   });
 
+  const gatedInbound = async (msg) => {
+    const userId = String(msg?.userId ?? "").trim();
+    const chatId = String(msg?.chatId ?? "").trim();
+    let allowed = await loadTelegramAllowedUserId();
+    if (!allowed) {
+      if (!userId) {
+        writeStderrStyled?.("channel: skipping Telegram inbound (missing user id)");
+        return;
+      }
+      await saveTelegramAllowedUserId(userId);
+      allowed = userId;
+      const line = `Telegram user id is set to "${userId}".`;
+      writeStderrStyled?.(line);
+      await sendTelegramMessage(token, chatId, line).catch(() => {});
+    } else if (userId !== allowed) {
+      await sendTelegramMessage(token, chatId, "Unauthorized.").catch(() => {});
+      return;
+    }
+    return inbound(msg);
+  };
+
   const handle = pollTelegramUpdates({
     token,
     signal,
-    onInbound: inbound,
+    onInbound: gatedInbound,
     onError: (err) =>
       writeStderrStyled?.(
         `channel: ${err instanceof Error ? err.message : String(err)}`
