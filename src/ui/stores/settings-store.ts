@@ -71,6 +71,7 @@ interface SettingsState {
   loadApiKeys: (keys: Record<string, string>) => void;
   setSidebarView: (view: SidebarView) => void;
   toggleSidebar: () => void;
+  setSidebarOpen: (open: boolean) => void;
   setSidebarWidthPx: (widthPx: number) => void;
 }
 
@@ -112,6 +113,12 @@ export const useSettingsStore = create<SettingsState>((set) => ({
       const sidebarOpen = !state.sidebarOpen;
       persistSidebarOpen(sidebarOpen);
       return { sidebarOpen };
+    }),
+  setSidebarOpen: (open) =>
+    set((state) => {
+      if (state.sidebarOpen === open) return state;
+      persistSidebarOpen(open);
+      return { sidebarOpen: open };
     }),
   setSidebarWidthPx: (widthPx) =>
     set({ sidebarWidthPx: clampSidebarWidthPx(widthPx) }),

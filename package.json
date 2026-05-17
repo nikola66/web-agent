@@ -1,7 +1,7 @@
 {
   "name": "web-agent",
   "private": true,
-  "version": "0.0.7",
+  "version": "0.0.8",
   "type": "module",
   "scripts": {
     "build:embed-runtime": "node scripts/build-embed-runtime.mjs",

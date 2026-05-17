@@ -110,6 +110,9 @@ export function ProfileSelector() {
     if (isThisRunning) {
       await stopAgent(profileId);
     } else {
+      if (typeof window !== "undefined" && window.matchMedia("(max-width: 767px)").matches) {
+        useSettingsStore.getState().setSidebarOpen(false);
+      }
       await startAgent(profileId);
     }
   };

@@ -8,7 +8,7 @@ import {
 } from "../stores/runtime-store";
 import { startAgent, stopAgent } from "@/core/orchestrator";
 import { createAgentName, type Profile } from "@/core/profiles";
-import { LLM_PROVIDERS } from "../stores/settings-store";
+import { LLM_PROVIDERS, useSettingsStore } from "../stores/settings-store";
 import { loadProfileCredentials, saveProfileCredentials } from "@/core/credential-vault";
 import { DEFAULT_PROVIDER_ID } from "@/core/providers";
 import { DEFAULT_ACCENT_COLOR, PRESET_ACCENT_COLORS, randomAccentColor } from "@/core/mascots";
@@ -169,6 +169,9 @@ export function ProfileEditor(props: {
     });
     onClose();
     if (saveImpliesReboot) {
+      if (typeof window !== "undefined" && window.matchMedia("(max-width: 767px)").matches) {
+        useSettingsStore.getState().setSidebarOpen(false);
+      }
       await stopAgent(profileId);
       await startAgent(profileId);
     }

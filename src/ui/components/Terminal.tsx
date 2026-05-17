@@ -3,17 +3,54 @@ import { Terminal as XTerm } from "@xterm/xterm";
 import type { IUnicodeVersionProvider } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { Unicode11Addon } from "@xterm/addon-unicode11";
-import { ChevronLeft, ChevronRight } from "lucide-react";
 import { terminalTheme } from "../theme";
 import { attachProfileTerminal, detachTerminal, notifyAgentTerminalResized, switchToProfile } from "@/core/orchestrator";
 import { fitTerminalForViewport } from "@/core/xterm-fit-viewport";
 import { useRuntimeStore } from "../stores/runtime-store";
-import { useSettingsStore } from "../stores/settings-store";
 import { useProfileStore } from "../stores/profile-store";
 
 const RESIZE_OBSERVER_DEBOUNCE_MS = 400;
 const WINDOW_RESIZE_DEBOUNCE_MS = 250;
 const BRAND_URL_WITH_REFERRER = "https://aratech.ae/?referrer=web-agent";
+
+/** Matches Tailwind `md` — stacked banner fits narrow terminal cols without wrapping mid-logo. */
+const MOBILE_ASCII_BANNER_MQ = "(max-width: 767px)";
+
+const BANNER_ROW_COLORS = [
+  "38;2;251;117;252",
+  "38;2;200;51;247",
+  "38;2;138;56;245",
+  "38;2;104;35;229",
+  "38;2;75;28;221",
+  "38;2;75;28;221",
+] as const;
+
+const BANNER_DESKTOP_LINES = [
+  "  ██╗    ██╗███████╗██████╗      █████╗  ██████╗ ███████╗███╗   ██╗████████╗",
+  "  ██║    ██║██╔════╝██╔══██╗    ██╔══██╗██╔════╝ ██╔════╝████╗  ██║╚══██╔══╝",
+  "  ██║ █╗ ██║█████╗  ██████╔╝    ███████║██║  ███╗█████╗  ██╔██╗ ██║   ██║   ",
+  "  ██║███╗██║██╔══╝  ██╔══██╗    ██╔══██║██║   ██║██╔══╝  ██║╚██╗██║   ██║   ",
+  "  ╚███╔███╔╝███████╗██████╔╝    ██║  ██║╚██████╔╝███████╗██║ ╚████║   ██║   ",
+  "   ╚══╝╚══╝ ╚══════╝╚═════╝     ╚═╝  ╚═╝ ╚═════╝ ╚══════╝╚═╝  ╚═══╝   ╚═╝   ",
+] as const;
+
+const WEB_BANNER_LINES = [
+  "  ██╗    ██╗███████╗██████╗",
+  "  ██║    ██║██╔════╝██╔══██╗",
+  "  ██║ █╗ ██║█████╗  ██████╔╝",
+  "  ██║███╗██║██╔══╝  ██╔══██╗",
+  "  ╚███╔███╔╝███████╗██████╔╝",
+  "   ╚══╝╚══╝ ╚══════╝╚═════╝",
+] as const;
+
+const AGENT_BANNER_LINES = [
+  "  █████╗  ██████╗ ███████╗███╗   ██╗████████╗",
+  "  ██╔══██╗██╔════╝ ██╔════╝████╗  ██║╚══██╔══╝",
+  "  ███████║██║  ███╗█████╗  ██╔██╗ ██║   ██║",
+  "  ██╔══██║██║   ██║██╔══╝  ██║╚██╗██║   ██║",
+  "  ██║  ██║╚██████╔╝███████╗██║ ╚████║   ██║",
+  "  ╚═╝  ╚═╝ ╚═════╝ ╚══════╝╚═╝  ╚═══╝   ╚═╝",
+] as const;
 
 interface TerminalEntry {
   terminal: XTerm;
@@ -50,24 +87,20 @@ function createEmojiUnicodeProvider(): IUnicodeVersionProvider {
 
 function writeWelcomeBanner(terminal: XTerm): void {
   terminal.writeln("");
-  terminal.writeln(
-    "\x1b[38;2;251;117;252m  ██╗    ██╗███████╗██████╗      █████╗  ██████╗ ███████╗███╗   ██╗████████╗\x1b[0m"
-  );
-  terminal.writeln(
-    "\x1b[38;2;200;51;247m  ██║    ██║██╔════╝██╔══██╗    ██╔══██╗██╔════╝ ██╔════╝████╗  ██║╚══██╔══╝\x1b[0m"
-  );
-  terminal.writeln(
-    "\x1b[38;2;138;56;245m  ██║ █╗ ██║█████╗  ██████╔╝    ███████║██║  ███╗█████╗  ██╔██╗ ██║   ██║   \x1b[0m"
-  );
-  terminal.writeln(
-    "\x1b[38;2;104;35;229m  ██║███╗██║██╔══╝  ██╔══██╗    ██╔══██║██║   ██║██╔══╝  ██║╚██╗██║   ██║   \x1b[0m"
-  );
-  terminal.writeln(
-    "\x1b[38;2;75;28;221m  ╚███╔███╔╝███████╗██████╔╝    ██║  ██║╚██████╔╝███████╗██║ ╚████║   ██║   \x1b[0m"
-  );
-  terminal.writeln(
-    "\x1b[38;2;75;28;221m   ╚══╝╚══╝ ╚══════╝╚═════╝     ╚═╝  ╚═╝ ╚═════╝ ╚══════╝╚═╝  ╚═══╝   ╚═╝   \x1b[0m"
-  );
+  const stacked =
+    typeof window !== "undefined" && window.matchMedia(MOBILE_ASCII_BANNER_MQ).matches;
+  const writeBlock = (bodies: readonly string[]) => {
+    for (let i = 0; i < bodies.length; i++) {
+      terminal.writeln(`\x1b[${BANNER_ROW_COLORS[i]}m${bodies[i]}\x1b[0m`);
+    }
+  };
+  if (stacked) {
+    writeBlock(WEB_BANNER_LINES);
+    terminal.writeln("");
+    writeBlock(AGENT_BANNER_LINES);
+  } else {
+    writeBlock(BANNER_DESKTOP_LINES);
+  }
   terminal.writeln("");
   terminal.writeln(
     `\x1b[38;2;188;50;214m  Browser-native agent · profiles · tools\x1b[0m  \x1b[90m— by \x1b[0m\x1b]8;;${BRAND_URL_WITH_REFERRER}\x07\x1b[97maratech\x1b[0m\x1b]8;;\x07`
@@ -82,7 +115,6 @@ export function Terminal() {
   const mainRef = useRef<HTMLDivElement>(null);
   const instancesRef = useRef<Map<string, TerminalEntry>>(new Map());
   const prevProfileId = useRef<string | null>(null);
-  const { sidebarOpen, toggleSidebar } = useSettingsStore();
   const activeProfileId = useProfileStore((s) => s.activeProfileId);
   const [, setIsOnboarding] = useState(false);
 
@@ -267,21 +299,6 @@ export function Terminal() {
 
   return (
     <div className="relative min-h-0 min-w-0 flex-1 overflow-hidden md:min-w-[800px]">
-      <button
-        type="button"
-        onClick={toggleSidebar}
-        className="absolute top-2 left-2 z-20 flex min-h-[44px] min-w-[44px] items-center justify-center rounded-sm border border-white/10 bg-black/40 p-2 text-text-muted touch-manipulation backdrop-blur-sm transition-colors hover:text-text-primary md:min-h-0 md:min-w-0 md:p-1"
-        style={{ transitionDuration: "var(--duration-fast)" }}
-        aria-expanded={sidebarOpen}
-        aria-controls="app-sidebar"
-        aria-label={sidebarOpen ? "Close sidebar" : "Open sidebar"}
-      >
-        {sidebarOpen ? (
-          <ChevronLeft size={16} strokeWidth={1.5} />
-        ) : (
-          <ChevronRight size={16} strokeWidth={1.5} />
-        )}
-      </button>
       <div
         ref={mainRef}
         className="h-full w-full"
