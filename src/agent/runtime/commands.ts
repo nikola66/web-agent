@@ -11,17 +11,17 @@ export const SLASH_COMMANDS = [
   { name: "/rollback [name]", description: "List checkpoints or restore a named checkpoint." },
   { name: "/skills [search]", description: "List installed skills, or search skills by query." },
   {
-    name: "/wiki-setup [path]",
+    name: "/wiki_setup [path]",
     description:
       "Initialize PARA + Obsidian wiki vault (Projects/Areas/Resources/KnowledgeVault/Archives). Optional workspace-relative root (default .webagent/knowledge-vault).",
   },
   {
-    name: "/wiki-sync [scope] [path]",
+    name: "/wiki_sync [scope] [path]",
     description:
       "Sync runtime facts/session/learnings into the wiki (scope: facts | session | all). Optional root path after scope.",
   },
   {
-    name: "/wiki-search <query>",
+    name: "/wiki_search <query>",
     description: "Search markdown in the wiki vault when memory tools are not enough.",
   },
   { name: "/<skill> [task]", description: "Invoke an installed skill for a task." },

@@ -64,11 +64,7 @@ import { buildToolRowsFromCatalog } from "./slash-command-views.js";
 import { formatHelpForSurface, runSkillsSlashCommand } from "./channel-outbound.js";
 import { SLASH_COMMANDS } from "./commands.js";
 import { buildPlanModeUserPrompt } from "./planning-slash.js";
-import {
-  buildWikiSearchUserPrompt,
-  buildWikiSetupUserPrompt,
-  buildWikiSyncUserPrompt,
-} from "./wiki-slash.js";
+import { rewriteWikiSlashUserMessage } from "./wiki-slash.js";
 import {
   compactHistory,
   formatCompactionNotice,
@@ -492,9 +488,9 @@ export async function main() {
       "skills",
       "stop",
       "exit",
-      "wiki-setup",
-      "wiki-sync",
-      "wiki-search",
+      "wiki_setup",
+      "wiki_sync",
+      "wiki_search",
     ]);
     if (!token || reserved.has(token)) return null;
     const skills = await listSkills();
@@ -594,15 +590,9 @@ export async function main() {
     }
 
     const displayInput = input;
-    if (input === "/wiki-setup" || input.startsWith("/wiki-setup ")) {
-      const rest = input === "/wiki-setup" ? "" : input.slice("/wiki-setup ".length);
-      input = buildWikiSetupUserPrompt(rest);
-    } else if (input === "/wiki-sync" || input.startsWith("/wiki-sync ")) {
-      const rest = input === "/wiki-sync" ? "" : input.slice("/wiki-sync ".length);
-      input = buildWikiSyncUserPrompt(rest);
-    } else if (input === "/wiki-search" || input.startsWith("/wiki-search ")) {
-      const rest = input === "/wiki-search" ? "" : input.slice("/wiki-search ".length);
-      input = buildWikiSearchUserPrompt(rest);
+    const wikiFromSlash = rewriteWikiSlashUserMessage(input);
+    if (wikiFromSlash !== null) {
+      input = wikiFromSlash;
     } else if (input === "/plan" || input.startsWith("/plan ")) {
       const goal = input === "/plan" ? "" : input.slice("/plan ".length).trim();
       input = buildPlanModeUserPrompt(goal);

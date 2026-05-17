@@ -39,7 +39,7 @@ It is designed to feel simple for end users and capable for power users: isolate
 - Isolated profiles with separate workspaces and memories
 - Built-in tools for files, shell, search, fetch, memory, sessions, cron, skills, and **knowledge vault** (`wiki_setup`, `wiki_sync`, `wiki_search`)
 - **`/plan` planning mode**: research the workspace, save a dated markdown plan under `.webagent/plans/`, present it with `artifact_present`, then execute on a **follow-up** message
-- **`/wiki-setup` · `/wiki-sync` · `/wiki-search`**: deterministic shortcuts that route to the wiki tools (default vault root: `.webagent/knowledge-vault/`)
+- **`/wiki_setup` · `/wiki_sync` · `/wiki_search`**: deterministic shortcuts that route to the wiki tools (default vault root: `.webagent/knowledge-vault/`)
 - Persistent fact store, rolling session memory, reflections, and learnings
 - Uploads into the live workspace with image handoff to vision tools
 - Encrypted API keys stored locally in the browser
@@ -81,7 +81,7 @@ flowchart LR
   A --> N["Stop — next message: execute or revise"]
 ```
 
-#### Knowledge vault (`wiki_*` / `/wiki-*`)
+#### Knowledge vault (`wiki_*` / `/wiki_*`)
 
 ```mermaid
 flowchart LR
@@ -112,7 +112,7 @@ For choosing **facts vs session vs skills vs vault**, use the bundled **`/memory
 
 | Area | What lives there | What it enables |
 | --- | --- | --- |
-| `⌨️ Commands` | Session controls like `/help`, `/compact`, `/plan`, `/checkpoint`, `/wiki-*` | Faster navigation, recovery, planning, vault ops, and operator control |
+| `⌨️ Commands` | Session controls like `/help`, `/compact`, `/plan`, `/checkpoint`, `/wiki_*` | Faster navigation, recovery, planning, vault ops, and operator control |
 | `🛠️ Workspace tools` | Read, write, edit, diff, move, search, shell | Real work inside an isolated project workspace |
 | `🧠 Memory tools` | Facts, session notes, conversation recall | Persistent context that improves continuity |
 | `📓 Wiki tools` | `wiki_setup`, `wiki_sync`, `wiki_search` | PARA-shaped markdown vault and search when memory tools are not enough |
@@ -134,16 +134,16 @@ These commands make the terminal experience feel like an operator console rather
 | `/checkpoint [name]` | Save a named snapshot of current history for rollback. |
 | `/rollback [name]` | List checkpoints or restore a named checkpoint. |
 | `/skills [search]` | List installed skills, or search skills by query. |
-| `/wiki-setup [path]` | Initialize the PARA + wiki scaffold (`Projects/`, `Areas/`, `Resources/KnowledgeVault/…`, `Archives/`). Optional workspace-relative root; default **`.webagent/knowledge-vault`**. Workspaces that still use the old default vault folder **`knowledge-vault/`** are relocated automatically on the next wiki operation that omits `root_path`. |
-| `/wiki-sync [scope] [path]` | Push runtime projections into the vault: **`facts`**, **`session`**, or **`all`** (includes learnings). Optional path after `scope`. Requires `wiki_setup` first. |
-| `/wiki-search <query>` | Search markdown under the wiki vault (ranked hits + snippets). |
+| `/wiki_setup [path]` | Initialize the PARA + wiki scaffold (`Projects/`, `Areas/`, `Resources/KnowledgeVault/…`, `Archives/`). Optional workspace-relative root; default **`.webagent/knowledge-vault`**. Workspaces that still use the old default vault folder **`knowledge-vault/`** are relocated automatically on the next wiki operation that omits `root_path`. |
+| `/wiki_sync [scope] [path]` | Push runtime projections into the vault: **`facts`**, **`session`**, or **`all`** (includes learnings). Optional path after `scope`. Requires `wiki_setup` first. |
+| `/wiki_search <query>` | Search markdown under the wiki vault (ranked hits + snippets). |
 | `/<skill> [task]` | Invoke an installed skill for a task. |
 | `/stop` | Interrupt the current run. |
 | `/exit` | Exit the active terminal agent session. |
 
 > `📌 Tip:` Use `/skills` to discover capabilities, then jump straight into a workflow with `/<skill-slug> [task]`.
 
-> `📌 Tip:` Natural-language asks like “set up my knowledge vault” or “sync facts to the wiki” map to the same **`wiki_*`** tools as the `/wiki-*` commands.
+> `📌 Tip:` Natural-language asks like “set up my knowledge vault” or “sync facts to the wiki” map to the same **`wiki_*`** tools as the `/wiki_*` slash commands.
 
 ## Settings And Providers
 

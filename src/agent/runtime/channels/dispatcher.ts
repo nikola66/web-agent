@@ -19,6 +19,7 @@ import {
 } from "../channel-outbound.js";
 import { buildToolRowsFromCatalog } from "../slash-command-views.js";
 import { loadToolCatalog } from "../tools/registry.js";
+import { rewriteWikiSlashUserMessage } from "../wiki-slash.js";
 
 function safeSegment(value) {
   return String(value || "").replace(/[^\w\-]/g, "_") || "_";
@@ -219,7 +220,8 @@ export function createChannelInboundHandler(deps) {
         await runSkillsSlashCommand(trimmed, surface, (msg) => sendReply(chatId, msg));
         return;
       }
-      history.push({ role: "user", content: trimmed });
+      const userContent = rewriteWikiSlashUserMessage(trimmed) ?? trimmed;
+      history.push({ role: "user", content: userContent });
       const compaction = await maybeCompactHistory(history, cfg, {
         ...contextCompaction,
         onWarning: async (warning, error) => {
