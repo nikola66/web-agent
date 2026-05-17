@@ -25,6 +25,7 @@ docs/references/
 .cronjobs.json
 .todos.json
 .webagent/
+tmp/
 
 # Caches and logs
 .npm-cache/
