@@ -293,13 +293,20 @@ export async function main() {
     turnMutex.run(() => agentTurn(messages, cfgIn, meta));
 
   const channelAbort = new AbortController();
-  const channelSidecar = startChannelSidecar({
-    signal: channelAbort.signal,
-    agentTurn: wrappedAgentTurn,
-    cfg,
-    abortTurn: abortCurrentTurn,
-    writeStderrStyled: (line) => process.stdout.write(red(`${line}\n`)),
-  });
+  const noop = () => {};
+  let channelSidecar = { stop: noop };
+  let channelSidecarStarted = false;
+  const startBootedChannelSidecar = () => {
+    if (channelSidecarStarted) return;
+    channelSidecarStarted = true;
+    channelSidecar = startChannelSidecar({
+      signal: channelAbort.signal,
+      agentTurn: wrappedAgentTurn,
+      cfg,
+      abortTurn: abortCurrentTurn,
+      writeStderrStyled: (line) => process.stdout.write(red(`${line}\n`)),
+    });
+  };
 
   const turnAsk = async ({ kind = "input", prompt = "" } = {}) => {
     const raceQuestion = (label, onAbort) =>
@@ -432,6 +439,7 @@ export async function main() {
     await logDebugEvent("startup_greeting_failed", { error: errorMessage(e) });
   } finally {
     process.stdout.write("<<<WEBAGENT_INPUT_READY>>>\n");
+    startBootedChannelSidecar();
   }
 
   const processPendingJobEvents = async () => {
