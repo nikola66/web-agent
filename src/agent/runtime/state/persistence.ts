@@ -127,6 +127,108 @@ function formatCronDetail(results) {
   }
 }
 
+const CRON_EMAIL_TEXT_MAX = 50000;
+const CRON_EMAIL_HTML_MAX = 50000;
+
+function truncateCronEmailText(s) {
+  if (s.length <= CRON_EMAIL_TEXT_MAX) return s;
+  return `${s.slice(0, CRON_EMAIL_TEXT_MAX - 40)}\n\n[Truncated…]`;
+}
+
+function cronStepOutputTruncated(resultStr) {
+  return typeof resultStr === "string" && resultStr.endsWith("\n…");
+}
+
+function escapeHtmlEmail(s) {
+  return String(s)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+function renderCronEmailHtml(jobId, brief, results, detailCount, footerHtml) {
+  const id = escapeHtmlEmail(jobId);
+  const summary = escapeHtmlEmail(brief);
+  let stepsList = '<ul style="margin:8px 0 16px;padding-left:20px">';
+  for (let i = 0; i < results.length; i++) {
+    const tool = escapeHtmlEmail(String(results[i]?.tool ?? ""));
+    const resStr = String(results[i]?.result ?? "");
+    const mark = cronStepOutputTruncated(resStr)
+      ? ' <span style="color:#666">(output truncated)</span>'
+      : "";
+    stepsList += `<li><strong>${tool}</strong>${mark}</li>`;
+  }
+  stepsList += "</ul>";
+  let details = "";
+  const n = Math.max(0, Math.min(detailCount, results.length));
+  for (let i = 0; i < n; i++) {
+    const tool = escapeHtmlEmail(String(results[i]?.tool ?? ""));
+    const pre = escapeHtmlEmail(String(results[i]?.result ?? ""));
+    details += `<details style="margin-bottom:12px;border:1px solid #ddd;border-radius:6px;padding:8px"><summary style="cursor:pointer;font-weight:600">Step ${i + 1}: ${tool}</summary><pre style="margin:8px 0 0;white-space:pre-wrap;word-break:break-word;font-size:12px;line-height:1.4">${pre}</pre></details>`;
+  }
+  const footer = footerHtml ? `<div style="margin-top:16px">${footerHtml}</div>` : "";
+  return `<!DOCTYPE html><html><head><meta charset="utf-8"/></head><body style="font-family:system-ui,sans-serif;line-height:1.45;max-width:720px;margin:16px"><h2 style="margin:0 0 12px">Cron job</h2><p style="margin:0 0 8px"><strong>Job:</strong> ${id}</p><p style="margin:0 0 16px"><strong>Summary:</strong> ${summary}</p><h3 style="margin:16px 0 8px;font-size:16px">Steps</h3>${stepsList}<h3 style="margin:16px 0 8px;font-size:16px">Full outputs</h3>${details}${footer}</body></html>`;
+}
+
+function fitCronEmailHtml(jobId, brief, results) {
+  const nSteps = results.length;
+  for (let k = nSteps; k >= 1; k--) {
+    const footer =
+      k < nSteps
+        ? `<p style="color:#666;font-size:14px;margin:0">HTML shows the first ${k} step output(s); plain text includes all.</p>`
+        : "";
+    const html = renderCronEmailHtml(jobId, brief, results, k, footer);
+    if (html.length <= CRON_EMAIL_HTML_MAX) return html;
+  }
+  const fallback = renderCronEmailHtml(
+    jobId,
+    brief,
+    results,
+    0,
+    `<p style="color:#666;font-size:14px;margin:0">Step outputs omitted from HTML (body too large); use the plain-text part.</p>`
+  );
+  return fallback.length <= CRON_EMAIL_HTML_MAX
+    ? fallback
+    : `${fallback.slice(0, CRON_EMAIL_HTML_MAX - 40)}…`;
+}
+
+/** Plain-text + HTML digest for cron success emails (not the raw JSON array used for terminal/Telegram). */
+function buildCronEmailBodies(jobId, brief, results) {
+  const safeId = String(jobId ?? "");
+  const safeBrief = String(brief ?? "");
+  if (!Array.isArray(results) || results.length === 0) {
+    const text = truncateCronEmailText(
+      [`Cron job: ${safeId}`, `Summary: ${safeBrief}`, "", "Results:", "(no structured results)"].join("\n")
+    );
+    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"/></head><body style="font-family:system-ui,sans-serif;line-height:1.45;max-width:720px;margin:16px"><h2 style="margin:0 0 12px">Cron job</h2><p style="margin:0 0 8px"><strong>Job:</strong> ${escapeHtmlEmail(
+      safeId
+    )}</p><p style="margin:0 0 16px"><strong>Summary:</strong> ${escapeHtmlEmail(
+      safeBrief
+    )}</p><p style="margin:0;color:#666">(no structured results)</p></body></html>`;
+    return { text, html };
+  }
+  const textLines = [`Cron job: ${safeId}`, `Summary: ${safeBrief}`, "", "Steps:"];
+  for (let i = 0; i < results.length; i++) {
+    const tool = String(results[i]?.tool ?? "");
+    const resStr = String(results[i]?.result ?? "");
+    const mark = cronStepOutputTruncated(resStr) ? " (output truncated)" : "";
+    textLines.push(`  • ${tool}${mark}`);
+  }
+  textLines.push("", "Full outputs:");
+  for (let i = 0; i < results.length; i++) {
+    const tool = String(results[i]?.tool ?? "");
+    const resStr = String(results[i]?.result ?? "");
+    textLines.push(`--- Step ${i + 1}: ${tool} ---`);
+    textLines.push(resStr);
+    textLines.push("");
+  }
+  return {
+    text: truncateCronEmailText(textLines.join("\n")),
+    html: fitCronEmailHtml(safeId, safeBrief, results),
+  };
+}
+
 /** Shown to the model in every system prompt; answer only when the user asks about credits or origins. */
 const PRODUCT_ATTRIBUTION = `## Web Agent credits
 
@@ -390,20 +492,14 @@ async function dispatchCronEmail(job, outcome) {
   if (!to) throw new Error("deliveryEmailTo missing");
   const subject =
     String(job.deliveryEmailSubject || "").trim() || `Cron '${job.id}' completed`;
-  const detail = formatCronDetail(outcome.results);
-  const text = [
-    `Cron job: ${job.id}`,
-    `Summary: ${outcome.brief}`,
-    "",
-    "Results:",
-    detail || "(no structured results)",
-  ].join("\n");
+  const { text, html } = buildCronEmailBodies(job.id, outcome.brief, outcome.results);
   await emailTool(
     {
       action: "send",
       to,
       subject,
       text,
+      html,
     },
     { env: process.env }
   );
