@@ -1,4 +1,5 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { X, Eye, EyeOff, Trash2, Pencil } from "lucide-react";
 import { useProfileStore } from "../stores/profile-store";
 import {
@@ -33,6 +34,9 @@ const PROVIDER_OPTIONS = PROVIDERS.map((providerId) => ({
 }));
 const isKnownProvider = (providerId: string): providerId is Profile["provider"] =>
   PROVIDERS.includes(providerId as Profile["provider"]);
+
+/** Sidebar uses `transform`, which traps `fixed` — portal on desktop so the dialog centers on the viewport. */
+const PROFILE_EDITOR_VIEWPORT_PORTAL_MQ = "(min-width: 768px)";
 
 function Field(props: { label: ReactNode; children: ReactNode }) {
   return (
@@ -77,6 +81,17 @@ export function ProfileEditor(props: {
   const [channelTokenVisible, setChannelTokenVisible] = useState<Record<string, boolean>>({});
   const [personalityExpanded, setPersonalityExpanded] = useState(false);
   const [activeTab, setActiveTab] = useState<EditorTab>("profile");
+  const [portalEditorToBody, setPortalEditorToBody] = useState(
+    () => typeof window !== "undefined" && window.matchMedia(PROFILE_EDITOR_VIEWPORT_PORTAL_MQ).matches
+  );
+
+  useLayoutEffect(() => {
+    const mq = window.matchMedia(PROFILE_EDITOR_VIEWPORT_PORTAL_MQ);
+    const sync = () => setPortalEditorToBody(mq.matches);
+    sync();
+    mq.addEventListener("change", sync);
+    return () => mq.removeEventListener("change", sync);
+  }, []);
 
   useEffect(() => {
     if (!open) return;
@@ -180,7 +195,7 @@ export function ProfileEditor(props: {
   const providerDefaultModelPlaceholder =
     LLM_PROVIDERS.find((p) => p.id === provider)?.model?.trim() || "Default";
 
-  return (
+  const dialog = (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center p-4"
       style={{ background: "rgba(0,0,0,0.65)" }}
@@ -555,4 +570,6 @@ export function ProfileEditor(props: {
       </div>
     </div>
   );
+
+  return portalEditorToBody ? createPortal(dialog, document.body) : dialog;
 }
