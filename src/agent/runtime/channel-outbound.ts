@@ -7,7 +7,7 @@ export type OutboundSurface = "terminal" | "telegram";
 
 /** Map inbound channel id to formatting surface; extend when adding channels. */
 export function outboundSurfaceForChannel(channel: string): OutboundSurface {
-  return String(channel || "").trim() === "telegram" ? "telegram" : "telegram";
+  return String(channel || "").trim() === "telegram" ? "telegram" : "terminal";
 }
 
 const TG = {
@@ -146,14 +146,13 @@ export async function runSkillsSlashCommand(
       return true;
     }
     const result = await memoryServices.manageSkill({ action: "install_url", url });
-    if (result?.blocked) {
+    if ("blocked" in result && result.blocked) {
       await emit(
-        styleErr(`Skill import blocked: ${(result.dangerous || []).join(", ")}\n`)
+        styleErr(`Skill import blocked: ${result.dangerous.join(", ")}\n`)
       );
-    } else {
-      await emit(
-        styleOk(`Installed skill /${result.slug} from ${result.source || url}\n`)
-      );
+    } else if ("slug" in result) {
+      const src = "source" in result ? String(result.source) : url;
+      await emit(styleOk(`Installed skill /${result.slug} from ${src}\n`));
     }
     return true;
   }
