@@ -281,7 +281,7 @@ export async function main() {
   };
 
   renderBanner(cfg);
-  let history = await refreshHistoryWithLatestSystemPrompt(await loadHistory());
+  let history = await refreshHistoryWithLatestSystemPrompt([]);
   let userDisplayName = cleanSetupName(process.env.WEBAGENT_USER_NAME, "You");
   let lastAutoJobEventAt = 0;
 

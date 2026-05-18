@@ -338,7 +338,9 @@ npm run test:browser
 Contributor-facing docs:
 
 - [CONTRIBUTING.md](CONTRIBUTING.md)
+- [AGENTS.md](AGENTS.md) — rules for AI coding agents
 - [CAPABILITIES.md](CAPABILITIES.md)
+- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — system map, IPC protocol, storage layers
 - [docs/agent-notes.md](docs/agent-notes.md)
 - [docs/testing-checklist.md](docs/testing-checklist.md)
 

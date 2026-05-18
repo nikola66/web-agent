@@ -13,6 +13,12 @@ import { errorMessage } from "../utils.js";
 
 const SKILLS_CONTEXT_CHAR_BUDGET = 6_000;
 const SKILL_FILE_NAME = "SKILL.md";
+
+let _skillsContextBlockCache: string | null = null;
+
+export function invalidateSkillsContextCache(): void {
+  _skillsContextBlockCache = null;
+}
 const DEFAULT_SKILL_CATEGORY = "local";
 const SKILL_SUPPORT_ROOTS = new Set(["references", "templates", "scripts", "assets"]);
 const SKILL_SAFE_FILE_MAX_BYTES = 512 * 1024;
@@ -253,6 +259,7 @@ export async function saveSkill({ name, description, version, tags, category, co
   await fs.mkdir(skillDir, { recursive: true });
   const filePath = nodePath.join(skillDir, SKILL_FILE_NAME);
   await fs.writeFile(filePath, raw.endsWith("\n") ? raw : `${raw}\n`, "utf8");
+  invalidateSkillsContextCache();
   return {
     ok: true,
     name: validated.meta.name || name,
@@ -325,6 +332,7 @@ export async function deleteSkill(name) {
   const record = await findSkillRecord(name);
   if (!record) throw new Error(`skill_delete: skill "${name}" not found.`);
   await fs.rm(record.dir, { recursive: true, force: true });
+  invalidateSkillsContextCache();
   return { ok: true, name: record.name, slug: record.slug, category: record.category };
 }
 
@@ -544,6 +552,7 @@ export async function manageSkill(args = {}) {
     const content = String(args.content || "");
     validateSkillDocument(content);
     await fs.writeFile(record.skillPath, content.endsWith("\n") ? content : `${content}\n`, "utf8");
+    invalidateSkillsContextCache();
     return { ok: true, action, name: record.name, slug: record.slug, path: skillPublicPath(record.skillPath) };
   }
 
@@ -565,6 +574,7 @@ export async function manageSkill(args = {}) {
     const next = original.replace(oldString, newString);
     if (filePath === SKILL_FILE_NAME) validateSkillDocument(next);
     await fs.writeFile(targetPath, next, "utf8");
+    if (filePath === SKILL_FILE_NAME) invalidateSkillsContextCache();
     return { ok: true, action, name: record.name, slug: record.slug, file_path: filePath };
   }
 
@@ -597,6 +607,7 @@ export async function manageSkill(args = {}) {
 }
 
 export async function buildSkillsContextBlock() {
+  if (_skillsContextBlockCache !== null) return _skillsContextBlockCache;
   try {
     const skills = (await listSkills()).sort((a, b) => {
       const bundledRank = (s) => (s.source === "bundled" || s.category === "bundled" ? 0 : 1);
@@ -621,7 +632,8 @@ export async function buildSkillsContextBlock() {
       lines.push(line);
       budget -= line.length;
     }
-    return `\n\n${lines.join("\n")}`;
+    _skillsContextBlockCache = `\n\n${lines.join("\n")}`;
+    return _skillsContextBlockCache;
   } catch {
     return "";
   }

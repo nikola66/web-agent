@@ -26,6 +26,7 @@ import {
 import { SearchableSelect } from "./SearchableSelect";
 import { MemoryTab } from "./MemoryTab";
 import { terminalTheme } from "../theme";
+import { formatBytes } from "../utils/format";
 
 const DEBUG_LOG_VIEWER_ENABLED =
   String(import.meta.env.VITE_WEBAGENT_DEBUG_LOG || "").trim() === "1";
@@ -45,14 +46,6 @@ const PREVIEW_EXTENSIONS = new Set([
   "log",
   "env",
 ]);
-
-function formatBytes(bytes: number): string {
-  if (bytes === 0) return "0 B";
-  const k = 1024;
-  const sizes = ["B", "KB", "MB", "GB"];
-  const i = Math.floor(Math.log(bytes) / Math.log(k));
-  return `${parseFloat((bytes / Math.pow(k, i)).toFixed(1))} ${sizes[i]}`;
-}
 
 function canPreview(path: string): boolean {
   const ext = path.split(".").pop()?.toLowerCase() ?? "";

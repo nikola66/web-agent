@@ -2,7 +2,6 @@
  * Path resolution and validation utilities.
  */
 
-// @ts-ignore
 import { resolveWorkspacePath, assertAllowedWorkspaceWritePath, ensureParentDir, toWorkspaceRelative, normalizeWorkspaceRelativePath } from "../../workspace-paths.js";
 
 export {

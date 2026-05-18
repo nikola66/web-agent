@@ -1,11 +1,15 @@
-import { useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
 import { Square, Plus, Pencil, Trash2 } from "lucide-react";
 import { useProfileStore } from "../stores/profile-store";
 import { useRuntimeStore } from "../stores/runtime-store";
 import { useSettingsStore, LLM_PROVIDERS } from "../stores/settings-store";
 import { refreshStorageUsage, startAgent, stopAgent } from "@/core/orchestrator";
 import type { Profile } from "@/core/profiles";
-import { ProfileEditor } from "./ProfileEditor";
+import { ErrorBoundary } from "./ErrorBoundary";
+
+const ProfileEditor = lazy(() =>
+  import("./ProfileEditor").then((m) => ({ default: m.ProfileEditor })),
+);
 import { mascotForAccentColor } from "../mascots";
 import { destroyWorkspace } from "@/core/workspace";
 import { clearProfileCredentials, loadProfileCredentials } from "@/core/credential-vault";
@@ -349,16 +353,22 @@ export function ProfileSelector() {
       })}
 
 
-      <ProfileEditor
-        open={editorOpen}
-        editing={editing}
-        onClose={() => {
-          setEditorOpen(false);
-          setEditing(null);
-          void loadProfiles();
-          setCredentialRefreshTick((t) => t + 1);
-        }}
-      />
+      {editorOpen && (
+        <ErrorBoundary label="Profile editor" onReset={() => setEditorOpen(false)}>
+          <Suspense fallback={null}>
+            <ProfileEditor
+              open={editorOpen}
+              editing={editing}
+              onClose={() => {
+                setEditorOpen(false);
+                setEditing(null);
+                void loadProfiles();
+                setCredentialRefreshTick((t) => t + 1);
+              }}
+            />
+          </Suspense>
+        </ErrorBoundary>
+      )}
     </div>
   );
 }

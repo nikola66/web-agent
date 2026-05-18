@@ -4,6 +4,22 @@ import { DEFAULT_PROVIDER_ID, PROVIDERS } from "@/core/providers";
 import { DEFAULT_ACCENT_COLOR } from "@/core/mascots";
 
 const STORAGE_KEY = "profiles:v1";
+const STORAGE_SCHEMA_VERSION = 2;
+
+interface StorageEnvelope {
+  version: number;
+  profiles: Profile[];
+}
+
+function isEnvelope(value: unknown): value is StorageEnvelope {
+  return (
+    !!value &&
+    typeof value === "object" &&
+    !Array.isArray(value) &&
+    Array.isArray((value as StorageEnvelope).profiles) &&
+    typeof (value as StorageEnvelope).version === "number"
+  );
+}
 
 export const AGENT_NAMES = [
   "Velora",
@@ -69,27 +85,34 @@ function now(): number {
   return Date.now();
 }
 
+function normalizeProfiles(input: unknown): Profile[] {
+  if (!Array.isArray(input)) return [];
+  return input
+    .filter((entry): entry is Profile => !!entry && typeof entry === "object")
+    .map((entry) => ({
+      ...entry,
+      userName: String(entry.userName || "User"),
+      provider:
+        entry.provider === "auto" ? DEFAULT_PROVIDER_ID : entry.provider,
+    }));
+}
+
 async function readAll(): Promise<Profile[]> {
   const raw = await get<string>(STORAGE_KEY);
   if (!raw) return [];
   try {
-    const parsed = JSON.parse(raw) as Profile[];
-    if (!Array.isArray(parsed)) return [];
-    return parsed
-      .filter((entry): entry is Profile => !!entry && typeof entry === "object")
-      .map((entry) => ({
-        ...entry,
-        userName: String(entry.userName || "User"),
-        provider:
-          entry.provider === "auto" ? DEFAULT_PROVIDER_ID : entry.provider,
-      }));
+    const parsed = JSON.parse(raw) as unknown;
+    if (isEnvelope(parsed)) return normalizeProfiles(parsed.profiles);
+    if (Array.isArray(parsed)) return normalizeProfiles(parsed);
+    return [];
   } catch {
     return [];
   }
 }
 
 async function writeAll(profiles: Profile[]): Promise<void> {
-  await set(STORAGE_KEY, JSON.stringify(profiles));
+  const envelope: StorageEnvelope = { version: STORAGE_SCHEMA_VERSION, profiles };
+  await set(STORAGE_KEY, JSON.stringify(envelope));
 }
 
 export function createAgentName(existingNames: string[] = []): string {

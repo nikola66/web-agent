@@ -4,7 +4,7 @@ import { estimateMessagesTokens, fetchWithTimeout } from "./llm/streaming.js";
 import { errorMessage } from "./utils.js";
 
 export const CONTEXT_COMPACTION_PREFIX = "[CONTEXT COMPACTION]";
-export const CONTEXT_COMPACTION_THRESHOLD_RATIO = 0.6;
+export const CONTEXT_COMPACTION_THRESHOLD_RATIO = 0.5;
 const MIN_TAIL_MESSAGES = 20;
 const TOOL_RESULT_PREFIX = "Tool results (compact JSON):";
 const LARGE_TOOL_RESULT_CHAR_LIMIT = 1500;

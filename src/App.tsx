@@ -5,6 +5,7 @@ import { Terminal } from "./ui/components/Terminal";
 import { ChatInput } from "./ui/components/ChatInput";
 import { ArtifactOfferBar } from "./ui/components/ArtifactOfferBar";
 import { ClarifyOfferBar } from "./ui/components/ClarifyOfferBar";
+import { ErrorBoundary } from "./ui/components/ErrorBoundary";
 import { useBrowserMetadata } from "./ui/use-browser-metadata";
 import { useActiveProfileRuntime } from "./ui/stores/runtime-store";
 import {
@@ -191,7 +192,9 @@ export function App() {
           ["--sidebar-edge" as string]: `${sidebarEdgePx}px`,
         }}
       >
-        <Terminal />
+        <ErrorBoundary label="Terminal">
+          <Terminal />
+        </ErrorBoundary>
         <ArtifactOfferBar />
         <ClarifyOfferBar />
         <ChatInput />

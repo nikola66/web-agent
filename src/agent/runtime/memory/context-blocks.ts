@@ -30,7 +30,7 @@ export async function buildMemoryContextBlock() {
   let learnings = [];
   try {
     reflections = await getReflections(MEMORY_REFLECTION_LIMIT);
-    facts = await getAllFacts();
+    facts = await getAllFacts(24);
     stats = await getToolStats();
     learnings = await getPromotableLearnings(8);
   } catch (error) {

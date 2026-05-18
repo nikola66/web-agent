@@ -105,6 +105,17 @@ const MAX_TOOL_RESULT_INLINE_CHARS = Math.max(
   Number(process.env.WEBAGENT_MAX_TOOL_RESULT_INLINE_CHARS) || 10_000
 );
 
+let _cachedSystemPrompt: string | null = null;
+let _cachedToolNames: string[] | null = null;
+
+export function invalidateSystemPromptCache(): void {
+  _cachedSystemPrompt = null;
+}
+
+export function invalidateToolNamesCache(): void {
+  _cachedToolNames = null;
+}
+
 /** Serialize terminal turns and inbound channel turns (Telegram, etc.). */
 export function createTurnMutex() {
   let tail = Promise.resolve();
@@ -220,13 +231,15 @@ export async function agentTurn(
     final_visible_assistant_text: "",
   };
   const runStartedAt = Date.now();
-  const sys = await loadSystemPrompt();
+  if (!_cachedSystemPrompt) _cachedSystemPrompt = await loadSystemPrompt();
+  const sys = _cachedSystemPrompt;
   const memoryBlock = await buildMemoryContextBlock();
   const skillsBlock = await buildSkillsContextBlock();
   const toolCatalog = await loadToolCatalog();
   const openAiTools = await buildOpenAiToolDefinitions(toolCatalog);
   const streamTools = turnMeta?.textOnly === true ? [] : openAiTools;
-  const toolNames = await getToolNamesAsync();
+  if (!_cachedToolNames) _cachedToolNames = await getToolNamesAsync();
+  const toolNames = _cachedToolNames;
   const safeMessages = await sanitizeMessagesMissingSnapshotRefs(messages);
   type ChatTurnMsg = { role?: string; content?: unknown };
   const safeList = safeMessages as ChatTurnMsg[];

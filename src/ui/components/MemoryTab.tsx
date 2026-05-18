@@ -9,6 +9,7 @@ import {
   type MemoryReflection,
   type SessionMemoryEntry,
 } from "@/core/agent-memory";
+import { formatBytes } from "../utils/format";
 
 type MemorySection =
   | "overview"
@@ -26,14 +27,6 @@ const SECTIONS: Array<{ id: MemorySection; label: string }> = [
   { id: "reflections", label: "Reflections" },
   { id: "jobs", label: "Jobs" },
 ];
-
-function formatBytes(bytes: number): string {
-  if (bytes === 0) return "0 B";
-  const k = 1024;
-  const sizes = ["B", "KB", "MB", "GB"];
-  const i = Math.floor(Math.log(bytes) / Math.log(k));
-  return `${parseFloat((bytes / Math.pow(k, i)).toFixed(1))} ${sizes[i]}`;
-}
 
 function formatTimestamp(value?: string | null): string {
   if (!value) return "—";
@@ -131,25 +124,32 @@ export function MemoryTab({
   const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
   const [copyState, setCopyState] = useState<"idle" | "copied" | "error">("idle");
 
-  const loadSnapshot = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const next = await loadAgentMemorySnapshot(profileId);
-      setSnapshot(next);
-      setSelectedReflectionIndex(0);
-      setSelectedJobId(next.cronJobs[0]?.id ?? null);
-    } catch (err) {
-      console.error("Failed to load agent memory:", err);
-      setSnapshot(null);
-      setError("Failed to load memory.");
-    } finally {
-      setLoading(false);
-    }
-  }, [profileId]);
+  const loadSnapshot = useCallback(
+    async (signal?: AbortSignal) => {
+      setLoading(true);
+      setError(null);
+      try {
+        const next = await loadAgentMemorySnapshot(profileId);
+        if (signal?.aborted) return;
+        setSnapshot(next);
+        setSelectedReflectionIndex(0);
+        setSelectedJobId(next.cronJobs[0]?.id ?? null);
+      } catch (err) {
+        if (signal?.aborted) return;
+        console.error("Failed to load agent memory:", err);
+        setSnapshot(null);
+        setError("Failed to load memory.");
+      } finally {
+        if (!signal?.aborted) setLoading(false);
+      }
+    },
+    [profileId],
+  );
 
   useEffect(() => {
-    void loadSnapshot();
+    const controller = new AbortController();
+    void loadSnapshot(controller.signal);
+    return () => controller.abort();
   }, [loadSnapshot, refreshKey]);
 
   const trimmedSearch = search.trim();

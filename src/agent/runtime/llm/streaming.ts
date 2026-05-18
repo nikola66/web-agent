@@ -38,7 +38,8 @@ export function computeRetryDelay(attempt) {
 }
 
 function sleepMs(ms) {
-  return new Promise((r) => setTimeout(r, ms));
+  const delay = Math.max(0, Number(ms) || 0);
+  return new Promise((r) => setTimeout(r, delay));
 }
 
 function formatStreamIdleWait(ms) {

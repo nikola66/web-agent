@@ -49,12 +49,14 @@ export async function getFact(key) {
   )[0] || null;
 }
 
-export async function getAllFacts() {
+export async function getAllFacts(limit = 0) {
   const db = await getDb();
-  return factRows(
-    db,
-    "SELECT key, value, created_at, updated_at FROM facts ORDER BY updated_at DESC, key ASC"
-  );
+  const cap = Math.round(Number(limit) || 0);
+  const sql =
+    cap > 0
+      ? `SELECT key, value, created_at, updated_at FROM facts ORDER BY updated_at DESC, key ASC LIMIT ${cap}`
+      : "SELECT key, value, created_at, updated_at FROM facts ORDER BY updated_at DESC, key ASC";
+  return factRows(db, sql);
 }
 
 export async function searchFacts(query, limit = 30) {

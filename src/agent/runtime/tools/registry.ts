@@ -178,13 +178,21 @@ async function loadCapabilityTools(): Promise<{
         continue;
       }
       if (BUILTIN_TOOLS[manifest.id]) {
+        console.warn(`[tools] capability "${manifest.id}" shadows built-in; skipped (${dir})`);
         await logDebugEvent("capability_tool_skipped", {
           tool: manifest.id,
           reason: "duplicate built-in tool",
         });
         continue;
       }
-      if (tools[manifest.id]) continue;
+      if (tools[manifest.id]) {
+        console.warn(`[tools] capability "${manifest.id}" already loaded; skipped (${dir})`);
+        await logDebugEvent("capability_tool_skipped", {
+          tool: manifest.id,
+          reason: "duplicate capability tool",
+        });
+        continue;
+      }
       const mod = await import(/* @vite-ignore */ `${pathToFileURL(handlerPath).href}?v=${stat.mtimeMs}`);
       const fn = typeof mod.run === "function" ? mod.run : mod.default;
       if (typeof fn !== "function") {

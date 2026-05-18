@@ -1,17 +1,12 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { Folder } from "lucide-react";
 import { profileAgentWorking, useActiveProfileRuntime, useRuntimeStore } from "../stores/runtime-store";
 import { useProfileStore } from "../stores/profile-store";
 import { TOOL_CATALOG } from "@/agent/tool-catalog";
-import { FilesPopup } from "./FilesPopup";
+import { ErrorBoundary } from "./ErrorBoundary";
+import { formatBytes } from "../utils/format";
 
-function formatBytes(bytes: number): string {
-  if (bytes === 0) return "0 B";
-  const k = 1024;
-  const sizes = ["B", "KB", "MB", "GB"];
-  const i = Math.floor(Math.log(bytes) / Math.log(k));
-  return `${parseFloat((bytes / Math.pow(k, i)).toFixed(1))} ${sizes[i]}`;
-}
+const FilesPopup = lazy(() => import("./FilesPopup").then((m) => ({ default: m.FilesPopup })));
 
 const STATUS_COLORS: Record<string, string> = {
   idle: "#666666",
@@ -155,7 +150,11 @@ export function StatusBar() {
           <Folder size={12} strokeWidth={1.7} />
         </button>
         {filesOpen && activeProfileId && (
-          <FilesPopup profileId={activeProfileId} onClose={() => setFilesOpen(false)} />
+          <ErrorBoundary label="Files panel" onReset={() => setFilesOpen(false)}>
+            <Suspense fallback={null}>
+              <FilesPopup profileId={activeProfileId} onClose={() => setFilesOpen(false)} />
+            </Suspense>
+          </ErrorBoundary>
         )}
       </div>
 

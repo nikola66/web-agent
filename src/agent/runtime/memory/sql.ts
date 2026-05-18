@@ -4,7 +4,6 @@
 
 import fs from "node:fs/promises";
 import nodePath from "node:path";
-// @ts-ignore
 import {
   MEMORY_CONVERSATIONS_DIR,
   MEMORY_DB_PATH,
@@ -16,11 +15,8 @@ import {
   getMemoryRoot,
   getWorkspaceRoot,
 } from "../constants.js";
-// @ts-ignore
 import { logDebugEvent } from "../logging/debug-log.js";
-// @ts-ignore
 import { ensureParentDir, isWithinWorkspaceAbs, toWorkspaceDisplayPath } from "../workspace-paths.js";
-// @ts-ignore
 import { errorMessage } from "../utils.js";
 
 interface SqlDatabase {
@@ -162,7 +158,6 @@ export async function readJsonFilesNewestFirst(
 export async function getDb(): Promise<SqlDatabase> {
   if (!_initSqlJs) {
     try {
-      // @ts-ignore
       const mod = await import("../vendor/sql-wasm.cjs");
       _initSqlJs = (mod.default ?? mod) as InitSqlJs;
     } catch {

@@ -397,6 +397,9 @@ export default defineConfig(({ mode }) => {
     },
     build: {
       emptyOutDir: false,
+      target: "es2022",
+      cssCodeSplit: true,
+      sourcemap: false,
       rollupOptions: {
         external: [],
         output: {
@@ -405,6 +408,15 @@ export default defineConfig(({ mode }) => {
             if (normalized.includes("/node_modules/sql.js/")) return "sqljs";
             if (normalized.includes("/node_modules/@xterm/")) return "xterm";
             if (normalized.includes("/node_modules/@codesandbox/nodebox/")) return "nodebox";
+            if (normalized.includes("/node_modules/markdown-it/")) return "markdown";
+            if (normalized.includes("/node_modules/lucide-react/")) return "icons";
+            if (
+              normalized.includes("/node_modules/react/") ||
+              normalized.includes("/node_modules/react-dom/") ||
+              normalized.includes("/node_modules/scheduler/")
+            )
+              return "react-vendor";
+            if (normalized.includes("/node_modules/zustand/")) return "zustand";
             return undefined;
           },
         },
