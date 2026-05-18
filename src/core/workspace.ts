@@ -18,7 +18,10 @@ import {
 import { clearCredentials } from "./credential-vault";
 import { isAllowedUploadFile } from "@embed-runtime/tools/upload-allowlist.js";
 import { getActiveNodebox, getNodebox } from "@/runtimes/webcontainer/boot";
-import { WORKSPACE_WEBAGENT_USER_SUBDIRS } from "./workspace-layout";
+import {
+  WORKSPACE_PLANS_DIR_REL,
+  WORKSPACE_WEBAGENT_USER_SUBDIRS,
+} from "./workspace-layout";
 
 export * from "./workspace-layout";
 
@@ -410,6 +413,7 @@ async function listLiveWorkspaceFiles(profileId: string): Promise<WorkspaceFileE
     for (const sub of WORKSPACE_WEBAGENT_USER_SUBDIRS) {
       await emulator.fs.mkdir(`${workspaceDir}/.webagent/${sub}`, { recursive: true });
     }
+    await emulator.fs.mkdir(`${workspaceDir}/${WORKSPACE_PLANS_DIR_REL}`, { recursive: true });
   } catch {
     /* best effort */
   }
@@ -431,6 +435,14 @@ async function listLiveWorkspaceFiles(profileId: string): Promise<WorkspaceFileE
         continue;
       }
       if (isDir) {
+        if (abs !== workspaceDir) {
+          const prefix = `${workspaceDir}/`;
+          const rel =
+            abs.startsWith(prefix)
+              ? abs.slice(prefix.length)
+              : normalizeSnapshotRelativePath(abs.replace(/^\/+/, ""));
+          if (rel) results.push({ path: `${rel}/`, size: 0 });
+        }
         await walk(abs);
         continue;
       }
@@ -524,6 +536,17 @@ export async function listWorkspaceFiles(
     }
     for (const entry of entries) {
       if (entry.kind === "directory") {
+        const relativePath = entry.path.startsWith(`${root}/`)
+          ? entry.path.slice(root.length + 1)
+          : basename(entry.path);
+        const normalizedPath = normalizeSnapshotRelativePath(relativePath);
+        if (normalizedPath && normalizedPath !== ".") {
+          results.push({
+            path: normalizedPath.endsWith("/") ? normalizedPath : `${normalizedPath}/`,
+            size: 0,
+            lastModified: entry.lastModified,
+          });
+        }
         await walk(entry.path);
         continue;
       }

@@ -146,14 +146,17 @@ function buildFileTree(
       ? entry.path.slice(basePrefix.length + 1)
       : entry.path;
     if (!relative) continue;
+    const explicitDirectory = relative.endsWith("/");
     const segments = relative.split("/").filter(Boolean);
+    if (segments.length === 0) continue;
     let level = roots;
     let builtRelative = "";
 
     segments.forEach((segment, index) => {
       builtRelative = builtRelative ? `${builtRelative}/${segment}` : segment;
       const fullPath = basePrefix ? `${basePrefix}/${builtRelative}` : builtRelative;
-      const isDirectory = index < segments.length - 1;
+      const isDirectory =
+        index < segments.length - 1 || (explicitDirectory && index === segments.length - 1);
       const node = upsertChild(level, segment, fullPath, isDirectory);
       if (isDirectory) level = node.children;
     });
@@ -301,13 +304,16 @@ export function FilesPopup({
       const nextFiles = await listWorkspaceFiles(profileId, { preferLive: true });
       setFiles(nextFiles);
       setSelectedPath((current) => {
-        if (current && nextFiles.some((file) => file.path === current)) {
+        if (current && nextFiles.some((file) => file.path === current && !file.path.endsWith("/"))) {
           return current;
         }
         const preferred = nextFiles.find(
-          (file) => file.path.startsWith(".webagent/") || file.path === ".webagent"
+          (file) =>
+            !file.path.endsWith("/") &&
+            (file.path.startsWith(".webagent/") || file.path === ".webagent")
         );
-        return preferred?.path ?? nextFiles[0]?.path ?? null;
+        const firstFile = nextFiles.find((file) => !file.path.endsWith("/"));
+        return preferred?.path ?? firstFile?.path ?? null;
       });
       if (DEBUG_LOG_VIEWER_ENABLED) {
         const nextDebugLogs = nextFiles

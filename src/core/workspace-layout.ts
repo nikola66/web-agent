@@ -6,14 +6,13 @@
 
 /** Subdirectory names directly under `.webagent/` (not including the `.webagent` prefix). */
 export const WORKSPACE_WEBAGENT_USER_SUBDIRS = [
-  "plans",
   "knowledge-vault",
   "skills",
   "checkpoints",
   "capabilities",
 ] as const;
 
-export const WORKSPACE_PLANS_DIR_REL = ".webagent/plans";
+export const WORKSPACE_PLANS_DIR_REL = "plans";
 export const WORKSPACE_KNOWLEDGE_VAULT_DIR_REL = ".webagent/knowledge-vault";
 
 export const WORKSPACE_SESSION_MEMORY_REL = ".webagent/session-memory.jsonl";

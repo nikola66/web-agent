@@ -71,7 +71,7 @@ export const SKILLS_DIR = `${WS}/.webagent/skills`;
 /** Conversation history checkpoints for rollback. */
 export const CHECKPOINTS_DIR = `${WS}/.webagent/checkpoints`;
 /** Saved markdown plans from `/plan` (workspace-relative). Must match `WORKSPACE_PLANS_DIR_REL` in `src/core/workspace-layout.ts`. */
-export const PLANS_DIR_REL = ".webagent/plans";
+export const PLANS_DIR_REL = "plans";
 export const PLANS_DIR = `${WS}/${PLANS_DIR_REL}`;
 /** Auto-trim history when message count exceeds this threshold. */
 export const HISTORY_TRIM_THRESHOLD = 60;

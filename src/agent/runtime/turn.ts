@@ -366,12 +366,13 @@ export async function agentTurn(
     injectedPlanningGate || isPlanningModePrompt(originalUserInput);
   const fallbackApprovedPlanGoalActive =
     !!approvedPlanGoal &&
-    /^Execute (approved plan at|the most recent approved plan)/.test(approvedPlanGoal);
+    (/^Execute approved plan at /.test(approvedPlanGoal) ||
+      /^Execute the most recent approved plan in /.test(approvedPlanGoal));
   if (fallbackApprovedPlanGoalActive) {
     conv.push({
       role: "user",
       content:
-        "[Approved plan execution context] The user already approved execution of an existing plan. Do not ask them to restate or paste the plan again. If the user message includes a `.webagent/plans/*.md` path, read that file first. Otherwise list `.webagent/plans`, pick the newest markdown plan file, read it, and execute.",
+        "[Approved plan execution context] The user already approved execution of an existing plan. Do not ask them to restate or paste the plan again. If the user message includes `plans/*.md` or legacy `.webagent/plans/*.md`, read that file first. Otherwise list `plans/`, pick the newest markdown plan file; if none, check `.webagent/plans/`, then execute.",
     });
   }
 

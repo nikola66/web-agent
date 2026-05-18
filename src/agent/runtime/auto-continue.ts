@@ -63,7 +63,9 @@ function hasRecallEvidenceFromExecutions(executions) {
       if (
         path.startsWith("memory/runs/") ||
         path.startsWith("memory/conversations/") ||
-        path === ".webagent/session-memory.jsonl"
+        path === ".webagent/session-memory.jsonl" ||
+        path.startsWith("plans/") ||
+        path.startsWith(".webagent/plans/")
       ) {
         return true;
       }

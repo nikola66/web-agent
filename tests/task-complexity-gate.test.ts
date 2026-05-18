@@ -108,11 +108,11 @@ test("resolveApprovedPlanExecutionGoal activates from explicit plan-approval phr
       priorUserContent: "",
       currentUserContent: "PLan is approved, execute it",
     }),
-    "Execute the most recent approved plan in .webagent/plans."
+    "Execute the most recent approved plan in plans/."
   );
 });
 
-test("resolveApprovedPlanExecutionGoal uses explicit plan file path when present", () => {
+test("resolveApprovedPlanExecutionGoal uses explicit legacy plan file path when present", () => {
   assert.equal(
     resolveApprovedPlanExecutionGoal({
       textOnly: false,
@@ -121,6 +121,18 @@ test("resolveApprovedPlanExecutionGoal uses explicit plan file path when present
         "It's here: .webagent/plans/2026-05-18_204842-create-a-comprehensive-plan-for-youtube-creators.md",
     }),
     "Execute approved plan at .webagent/plans/2026-05-18_204842-create-a-comprehensive-plan-for-youtube-creators.md."
+  );
+});
+
+test("resolveApprovedPlanExecutionGoal uses explicit plans/ path when present", () => {
+  assert.equal(
+    resolveApprovedPlanExecutionGoal({
+      textOnly: false,
+      priorUserContent: "",
+      currentUserContent:
+        "Run it: plans/2026-05-18_204842-create-a-comprehensive-plan-for-youtube-creators.md",
+    }),
+    "Execute approved plan at plans/2026-05-18_204842-create-a-comprehensive-plan-for-youtube-creators.md."
   );
 });
 

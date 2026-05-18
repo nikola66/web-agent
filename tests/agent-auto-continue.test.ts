@@ -383,7 +383,7 @@ test("auto-continue nudges when assistant claims clean slate despite recall evid
           matches: [
             {
               path: "memory/runs/run_1779125043961_2bwahk.json",
-              context: "Execute approved plan at .webagent/plans/...",
+              context: "Execute approved plan at plans/...",
             },
           ],
         },

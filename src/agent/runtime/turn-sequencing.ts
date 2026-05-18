@@ -301,8 +301,11 @@ const PLAN_APPROVAL_EXECUTION_RE =
   /\b(plan\s+is\s+approved|approved\s+plan|approve(?:d)?\s+(?:the\s+)?plan|execute\s+(?:the\s+)?plan|proceed\s+with\s+(?:the\s+)?plan|start\s+(?:the\s+)?plan|run\s+(?:the\s+)?plan)\b/i;
 
 function extractPlanFilePath(text) {
-  const m = /(^|[\s`"'([{])(\.webagent\/plans\/[^\s`"')\]}]+\.md)\b/i.exec(String(text || ""));
-  return m ? String(m[2] || "").trim() : "";
+  const s = String(text || "");
+  const legacy = /(^|[\s`"'([{])(\.webagent\/plans\/[^\s`"')\]}]+\.md)\b/i.exec(s);
+  if (legacy) return String(legacy[2] || "").trim();
+  const modern = /(^|[\s`"'([{])(plans\/[^\s`"')\]}]+\.md)\b/i.exec(s);
+  return modern ? String(modern[2] || "").trim() : "";
 }
 
 /** Any follow-up user turn after planning mode activates the goal loop (`/plan` or auto gate). */
@@ -323,7 +326,7 @@ export function resolveApprovedPlanExecutionGoal(opts = {}) {
     return `Execute approved plan at ${explicitPlanPath}.`;
   }
   if (hasExplicitPlanExecution) {
-    return "Execute the most recent approved plan in .webagent/plans.";
+    return "Execute the most recent approved plan in plans/.";
   }
   return null;
 }

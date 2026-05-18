@@ -6,7 +6,7 @@ import { buildPlanModeUserPrompt } from "../dist/agent-runtime/planning-slash.js
 test("buildPlanModeUserPrompt includes plan path, tools, and follow-up", () => {
   const fixed = new Date(2026, 4, 14, 9, 8, 7);
   const p = buildPlanModeUserPrompt("Add auth flow", fixed);
-  assert.ok(p.includes(".webagent/plans/"));
+  assert.ok(p.includes("plans/"));
   assert.match(p, /2026-05-14_090807-add-auth-flow\.md/);
   assert.match(p, /Do \*\*not\*\* call make_dir for this plan path/);
   assert.match(p, /artifact_present/);

@@ -5,7 +5,7 @@ export const SLASH_COMMANDS = [
   {
     name: "/plan [goal]",
     description:
-      "Planning mode: research the workspace, write a detailed plan under .webagent/plans, present it, then stop—execute on a follow-up message.",
+      "Planning mode: research the workspace, write a detailed plan under plans/, present it, then stop—execute on a follow-up message.",
   },
   { name: "/checkpoint [name]", description: "Save a named snapshot of current history for rollback." },
   { name: "/rollback [name]", description: "List checkpoints or restore a named checkpoint." },

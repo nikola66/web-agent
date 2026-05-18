@@ -31,7 +31,7 @@ export function buildPlanModeUserPrompt(goal: string, now = new Date()) {
     "**Constraints:**",
     "- First **research** the workspace using read-only tools (e.g. list_dir, grep, read_file, tree, find_files) before finalizing the plan.",
     "- **Do not** implement the work: no write_file, edit_file, apply_patch, or mutating run_shell except to create the single plan markdown at the path below (write_file creates parent dirs).",
-    "- Do **not** call make_dir for this plan path. `.webagent/plans/` is canonical and write_file can create missing parents when needed.",
+    "- Do **not** call make_dir for this plan path. `plans/` is canonical and write_file can create missing parents when needed.",
     "",
     "**Deliverables (in order):**",
     `1. write_file — save the full plan markdown to workspace-relative path: \`${relPath}\``,

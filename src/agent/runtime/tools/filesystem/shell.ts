@@ -157,11 +157,13 @@ export async function makeDirTool({ path: rel }, ctx) {
   if (!rel || typeof rel !== "string") {
     throw new Error("make_dir requires `path` (string).");
   }
+  let createdPath = rel;
   await withPathHints(async () => {
     const abs = resolveWorkspacePath(ctx, rel);
+    createdPath = toWorkspaceRelative(abs);
     if (abs !== ROOT) await fs.mkdir(abs, { recursive: true });
   }, ctx, rel);
-  return { ok: true };
+  return { ok: true, path: createdPath };
 }
 
 export async function deleteFileTool({ path: rel }, ctx) {

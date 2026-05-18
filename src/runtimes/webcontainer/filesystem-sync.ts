@@ -100,6 +100,12 @@ export async function saveWorkspaceSnapshot(
           continue;
         }
         if (abs === `${workspaceDir}/memory/snapshots`) continue;
+        const relPath = abs.startsWith(`${workspaceDir}/`)
+          ? abs.slice(workspaceDir.length + 1)
+          : abs.replace(/^\/+/, "");
+        if (relPath) {
+          await mkdir(`${prefix}/${relPath}`);
+        }
         await walk(abs);
       } else {
         await exportFile(abs);
