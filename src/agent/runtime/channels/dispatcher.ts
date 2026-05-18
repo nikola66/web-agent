@@ -19,6 +19,7 @@ import {
 } from "../channel-outbound.js";
 import { buildToolRowsFromCatalog } from "../slash-command-views.js";
 import { loadToolCatalog } from "../tools/registry.js";
+import { buildPlanModeUserPrompt } from "../planning-slash.js";
 import { rewriteWikiSlashUserMessage } from "../wiki-slash.js";
 
 function safeSegment(value) {
@@ -220,7 +221,14 @@ export function createChannelInboundHandler(deps) {
         await runSkillsSlashCommand(trimmed, surface, (msg) => sendReply(chatId, msg));
         return;
       }
-      const userContent = rewriteWikiSlashUserMessage(trimmed) ?? trimmed;
+      const wikiRewrite = rewriteWikiSlashUserMessage(trimmed);
+      let userContent =
+        wikiRewrite ??
+        (trimmed === "/plan" || trimmed.startsWith("/plan ")
+          ? buildPlanModeUserPrompt(
+              trimmed === "/plan" ? "" : trimmed.slice("/plan ".length).trim()
+            )
+          : trimmed);
       history.push({ role: "user", content: userContent });
       const compaction = await maybeCompactHistory(history, cfg, {
         ...contextCompaction,

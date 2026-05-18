@@ -36,7 +36,7 @@ async function safeGetPromotableLearnings(
   return mem.getPromotableLearnings(limit);
 }
 
-/** Canonical wiki vault root (per-agent workspace; hidden state directory). */
+/** Canonical wiki vault root — must match `WORKSPACE_KNOWLEDGE_VAULT_DIR_REL` in `src/core/workspace-layout.ts`. */
 export const WIKI_DEFAULT_ROOT = ".webagent/knowledge-vault";
 
 /** Legacy default before agent-scoped migration (implicit-default only). */

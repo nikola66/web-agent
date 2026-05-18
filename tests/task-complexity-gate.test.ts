@@ -5,8 +5,12 @@ import {
   assistantSignalsTaskCompleteForSkillCapture,
   estimateTaskComplexity,
   isPlanningModePrompt,
+  extractPlanningGoalFromPrompt,
+  resolveApprovedPlanExecutionGoal,
+  parsePlanGoalJudgeJson,
 } from "../dist/agent-runtime/turn-sequencing.js";
 import { getSkillSelfImproveNudgeState } from "../dist/agent-runtime/auto-continue.js";
+import { buildPlanModeUserPrompt } from "../dist/agent-runtime/planning-slash.js";
 
 test("estimateTaskComplexity is simple for short asks", () => {
   const r = estimateTaskComplexity("Fix the typo in README");
@@ -66,6 +70,77 @@ test("isPlanningModePrompt matches synthetic /plan prompt line", () => {
     true
   );
   assert.equal(isPlanningModePrompt("regular user ask"), false);
+});
+
+test("extractPlanningGoalFromPrompt parses **Goal:** from synthetic prompt", () => {
+  const p = buildPlanModeUserPrompt("Ship auth", new Date(2026, 0, 15, 12, 0, 0));
+  assert.equal(extractPlanningGoalFromPrompt(p), "Ship auth");
+});
+
+test("resolveApprovedPlanExecutionGoal activates after planning prompt turn", () => {
+  const plan = buildPlanModeUserPrompt("Migrate DB");
+  assert.equal(resolveApprovedPlanExecutionGoal({
+    textOnly: true,
+    priorUserContent: plan,
+    currentUserContent: "Proceed",
+  }), null);
+  assert.equal(resolveApprovedPlanExecutionGoal({
+    textOnly: false,
+    priorUserContent: plan,
+    currentUserContent: "Proceed",
+  }), "Migrate DB");
+  assert.equal(resolveApprovedPlanExecutionGoal({
+    textOnly: false,
+    priorUserContent: plan,
+    currentUserContent: plan,
+  }), null);
+  assert.equal(resolveApprovedPlanExecutionGoal({
+    textOnly: false,
+    priorUserContent: "something else",
+    currentUserContent: "Proceed",
+  }), null);
+});
+
+test("resolveApprovedPlanExecutionGoal activates from explicit plan-approval phrasing", () => {
+  assert.equal(
+    resolveApprovedPlanExecutionGoal({
+      textOnly: false,
+      priorUserContent: "",
+      currentUserContent: "PLan is approved, execute it",
+    }),
+    "Execute the most recent approved plan in .webagent/plans."
+  );
+});
+
+test("resolveApprovedPlanExecutionGoal uses explicit plan file path when present", () => {
+  assert.equal(
+    resolveApprovedPlanExecutionGoal({
+      textOnly: false,
+      priorUserContent: "Plan is approved, execute it",
+      currentUserContent:
+        "It's here: .webagent/plans/2026-05-18_204842-create-a-comprehensive-plan-for-youtube-creators.md",
+    }),
+    "Execute approved plan at .webagent/plans/2026-05-18_204842-create-a-comprehensive-plan-for-youtube-creators.md."
+  );
+});
+
+test("parsePlanGoalJudgeJson requires strict JSON one-liner semantics", () => {
+  assert.deepEqual(parsePlanGoalJudgeJson('{"done":true,"reason":"ok"}'), {
+    ok: true,
+    done: true,
+    reason: "ok",
+  });
+  assert.deepEqual(parsePlanGoalJudgeJson('{"done":true}'), {
+    ok: true,
+    done: true,
+    reason: "",
+  });
+  const fence = parsePlanGoalJudgeJson('```json\n{"done":false,"reason":"need more"}\n```');
+  assert.equal(fence.ok, true);
+  assert.equal(fence.done, false);
+  assert.deepEqual(parsePlanGoalJudgeJson("not json").ok, false);
+  assert.equal(parsePlanGoalJudgeJson('{"reason":"only reason"}').ok, false);
+  assert.equal(parsePlanGoalJudgeJson('\uFEFF{"done":false,"reason":"x"}').ok, true);
 });
 
 test("assistantSignalsTaskCompleteForSkillCapture accepts Done", () => {

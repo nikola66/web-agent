@@ -290,6 +290,66 @@ export function isPlanningModePrompt(input) {
   return /invoked \*\*planning mode\*\* via `\/plan`/i.test(String(input || ""));
 }
 
+/** Pull `**Goal:**` line from synthetic planning prompts (`buildPlanModeUserPrompt`). */
+export function extractPlanningGoalFromPrompt(content) {
+  const raw = String(content || "").replace(/\r\n/g, "\n");
+  const m = /\*\*Goal:\*\*\s*([^\r\n]+)/i.exec(raw);
+  return m ? String(m[1] ?? "").trim() : "";
+}
+
+const PLAN_APPROVAL_EXECUTION_RE =
+  /\b(plan\s+is\s+approved|approved\s+plan|approve(?:d)?\s+(?:the\s+)?plan|execute\s+(?:the\s+)?plan|proceed\s+with\s+(?:the\s+)?plan|start\s+(?:the\s+)?plan|run\s+(?:the\s+)?plan)\b/i;
+
+function extractPlanFilePath(text) {
+  const m = /(^|[\s`"'([{])(\.webagent\/plans\/[^\s`"')\]}]+\.md)\b/i.exec(String(text || ""));
+  return m ? String(m[2] || "").trim() : "";
+}
+
+/** Any follow-up user turn after planning mode activates the goal loop (`/plan` or auto gate). */
+export function resolveApprovedPlanExecutionGoal(opts = {}) {
+  if (opts.textOnly) return null;
+  const cur = String(opts.currentUserContent || "").trim();
+  const prev = opts.priorUserContent != null ? String(opts.priorUserContent || "").trim() : "";
+  if (!cur || isPlanningModePrompt(cur)) return null;
+  if (prev && isPlanningModePrompt(prev)) {
+    const goal = extractPlanningGoalFromPrompt(prev).trim();
+    if (goal) return goal;
+  }
+
+  const hasExplicitPlanExecution =
+    PLAN_APPROVAL_EXECUTION_RE.test(cur) || PLAN_APPROVAL_EXECUTION_RE.test(prev);
+  const explicitPlanPath = extractPlanFilePath(cur) || extractPlanFilePath(prev);
+  if (explicitPlanPath) {
+    return `Execute approved plan at ${explicitPlanPath}.`;
+  }
+  if (hasExplicitPlanExecution) {
+    return "Execute the most recent approved plan in .webagent/plans.";
+  }
+  return null;
+}
+
+export function parsePlanGoalJudgeJson(rawText) {
+  const stripped = String(rawText || "")
+    .trim()
+    .replace(/^\uFEFF/, "")
+    .replace(/^```[^\n]*\n?/, "")
+    .replace(/```$/m, "")
+    .trim();
+  const iOpen = stripped.indexOf("{");
+  const iClose = stripped.lastIndexOf("}");
+  if (iOpen < 0 || iClose <= iOpen) return { ok: false, done: false, reason: "bad_json" };
+  try {
+    const j = JSON.parse(stripped.slice(iOpen, iClose + 1));
+    if (!j || typeof j !== "object" || typeof j.done !== "boolean") {
+      return { ok: false, done: false, reason: "bad_json" };
+    }
+    const reason = String(j.reason ?? "").slice(0, 220);
+    return { ok: true, done: j.done, reason };
+  } catch {
+    return { ok: false, done: false, reason: "parse_fail" };
+  }
+}
+
 /** Assistant appears finished — enables one-shot skill self-improve nudge after heavy turns. */
 export function assistantSignalsTaskCompleteForSkillCapture(visible) {
   const saidRaw = String(visible || "").trim();

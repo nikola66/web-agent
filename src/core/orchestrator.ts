@@ -43,6 +43,8 @@ let activeProfileId: string | null = null;  // Currently displayed profile
 const runningProfileIds = new Set<string>();
 let agentStates = new Map<string, OrchestratorAgentState>();
 let profileTerminals = new Map<string, Terminal>();  // Per-profile xterm instances
+/** Drops duplicate onPromptReady in one stdout flush (strip + ❯ heuristic). */
+const promptReadyInFlight = new Set<string>();
 let storageCheckInterval: ReturnType<typeof setInterval> | null = null;
 let lastStorageWarningAt = 0;
 const MAX_CONCURRENT_AGENTS = 4;
@@ -229,21 +231,24 @@ async function dispatchQueuedInputIfReady(profileId: string): Promise<void> {
   if (!runningProfileIds.has(profileId)) return;
   const state = getOrCreateAgentState(profileId);
   if (!state.agentReadyForInput) return;
-  const rt = useRuntimeStore.getState();
-  const nextInput = rt.dequeueInput(profileId);
+  const nextInput = useRuntimeStore.getState().commitQueuedDispatch(profileId);
   if (!nextInput) return;
   state.agentReadyForInput = false;
-  rt.setAwaitingResponse(profileId, true);
   await writeToWebAgent(profileId, `${nextInput}\n`);
 }
 
 async function onAgentPromptReady(profileId: string): Promise<void> {
-  const state = getOrCreateAgentState(profileId);
-  state.agentReadyForInput = true;
-  const rt = useRuntimeStore.getState();
-  rt.setAwaitingResponse(profileId, false);
-  rt.setPendingToolConfirm(profileId, false);
-  await dispatchQueuedInputIfReady(profileId);
+  if (promptReadyInFlight.has(profileId)) return;
+  promptReadyInFlight.add(profileId);
+  try {
+    const state = getOrCreateAgentState(profileId);
+    state.agentReadyForInput = true;
+    const rt = useRuntimeStore.getState();
+    rt.setPendingToolConfirm(profileId, false);
+    await dispatchQueuedInputIfReady(profileId);
+  } finally {
+    promptReadyInFlight.delete(profileId);
+  }
 }
 
 export async function submitUserInput(raw: string): Promise<void> {
@@ -329,7 +334,7 @@ export async function submitUserInput(raw: string): Promise<void> {
 
   if (!state.agentReadyForInput) {
     useRuntimeStore.getState().enqueueInput(targetProfileId, input);
-    write(`\r\n\x1b[90m▸ Queued for next turn (${input.slice(0, 80)})\x1b[0m\r\n`);
+    write(`\r\n\x1b[90m▸ Queued for next turn (${input.slice(0, 80)})\x1b[0m\r\n\n`);
     return;
   }
 

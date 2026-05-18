@@ -363,6 +363,37 @@ test("post-tool auto-continue suppressed after nodebox_shell_unsupported failure
   assert.equal(state.shouldNudge, false);
 });
 
+test("auto-continue nudges when assistant claims clean slate despite recall evidence", () => {
+  const state = getAutoContinueNudgeState({
+    turnInput: "What did we work on last?",
+    visible:
+      "It looks like I'm starting with a clean slate. We haven't tackled a specific project yet.",
+    executedToolsInTurn: true,
+    autoContinueNudges: 0,
+    maxNudges: 20,
+    toolNames: TOOL_NAMES,
+    originalUserInput: "What did we work on last?",
+    suppressActionPlanNudge: false,
+    webSearchCount: 0,
+    webFetchCount: 0,
+    lastToolExecutions: [
+      {
+        tool: "session_search",
+        result: {
+          matches: [
+            {
+              path: "memory/runs/run_1779125043961_2bwahk.json",
+              context: "Execute approved plan at .webagent/plans/...",
+            },
+          ],
+        },
+      },
+    ],
+  });
+  assert.equal(state.shouldNudge, true);
+  assert.equal(state.reason, "false_no_history");
+});
+
 test("research incomplete does not block strict post-tool recovery nudge", () => {
   const state = getAutoContinueNudgeState({
     turnInput: "Continue research.",

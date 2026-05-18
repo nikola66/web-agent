@@ -5,6 +5,47 @@ import os from "node:os";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 
+test("channel dispatcher rewrites /plan like CLI bootstrap synthetic prompt", async () => {
+  const originalCwd = process.cwd();
+  const tmp = await fs.mkdtemp(path.join(os.tmpdir(), "webagent-channel-"));
+  const dispatcherUrl = pathToFileURL(
+    path.join(originalCwd, "dist/agent-runtime/channels/dispatcher.js")
+  ).href;
+
+  process.chdir(tmp);
+  process.env.WEBAGENT_MEMORY_ROOT = path.join(tmp, "memory");
+
+  try {
+    const { createChannelInboundHandler } = await import(`${dispatcherUrl}?t=${Date.now()}-plan`);
+
+    let lastHistory = [];
+
+    const inbound = createChannelInboundHandler({
+      cfg: {},
+      sendReply: async () => {},
+      agentTurn: async (history, _cfg, _meta) => {
+        lastHistory = history;
+        return [];
+      },
+    });
+
+    await inbound({
+      channel: "telegram",
+      chatId: "99",
+      text: "/plan roll out SSO",
+    });
+
+    const tail = [...lastHistory].reverse().find((m) => m?.role === "user");
+    const content = String(tail?.content || "");
+    assert.match(content, /\*\*Goal:\*\*\s*roll out SSO/);
+    assert.match(content, /invoked \*\*planning mode\*\* via `\/plan`/i);
+  } finally {
+    process.chdir(originalCwd);
+    delete process.env.WEBAGENT_MEMORY_ROOT;
+    await fs.rm(tmp, { recursive: true, force: true });
+  }
+});
+
 test("channel dispatcher sends tool notices and then the final answer", async () => {
   const originalCwd = process.cwd();
   const tmp = await fs.mkdtemp(path.join(os.tmpdir(), "webagent-channel-"));

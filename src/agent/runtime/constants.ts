@@ -62,15 +62,15 @@ export const MEMORY_REFLECTIONS_DIR = `${MEMORY_ROOT}/reflections`;
 export const MEMORY_SNAPSHOTS_DIR = `${MEMORY_ROOT}/snapshots`;
 export const MEMORY_JOBS_DIR = `${MEMORY_ROOT}/jobs`;
 export const MEMORY_DB_PATH = `${MEMORY_ROOT}/memory.sqlite`;
-/** Append-only session notes for this workspace (MVP “task memory lite”). */
+/** Append-only session notes for this workspace (MVP “task memory lite”). Path must match `WORKSPACE_SESSION_MEMORY_REL` in `src/core/workspace-layout.ts`. */
 export const SESSION_MEMORY_PATH = `${WS}/.webagent/session-memory.jsonl`;
-/** First-Telegram-user lock state (`workspaceStatePath(TELEGRAM_AUTH_REL)`). */
+/** First-Telegram-user lock state (`workspaceStatePath(TELEGRAM_AUTH_REL)`). Must match `WORKSPACE_TELEGRAM_AUTH_REL` in `src/core/workspace-layout.ts`. */
 export const TELEGRAM_AUTH_REL = ".webagent/telegram-auth.json";
 /** Skill documents — reusable procedure markdown files injected into system prompt. */
 export const SKILLS_DIR = `${WS}/.webagent/skills`;
 /** Conversation history checkpoints for rollback. */
 export const CHECKPOINTS_DIR = `${WS}/.webagent/checkpoints`;
-/** Saved markdown plans from `/plan` (workspace-relative: `.webagent/plans`). */
+/** Saved markdown plans from `/plan` (workspace-relative). Must match `WORKSPACE_PLANS_DIR_REL` in `src/core/workspace-layout.ts`. */
 export const PLANS_DIR_REL = ".webagent/plans";
 export const PLANS_DIR = `${WS}/${PLANS_DIR_REL}`;
 /** Auto-trim history when message count exceeds this threshold. */

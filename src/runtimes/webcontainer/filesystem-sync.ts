@@ -11,7 +11,11 @@ import {
   mkdir,
   exists,
 } from "@/core/persistence";
-import { snapshotPrefix } from "@/core/workspace";
+import {
+  snapshotPrefix,
+  WORKSPACE_WEBAGENT_USER_FILES,
+  WORKSPACE_WEBAGENT_USER_SUBDIRS,
+} from "@/core/workspace";
 
 export interface SyncOptions {
   onProgress?: (path: string) => void;
@@ -87,14 +91,15 @@ export async function saveWorkspaceSnapshot(
       if (isDir) {
         // Runtime under `.webagent/` is re-seeded on every launch; only persist user-owned paths.
         if (abs === `${workspaceDir}/.webagent`) {
-          await walk(`${abs}/skills`);
-          await walk(`${abs}/checkpoints`);
-          await exportFile(`${abs}/session-memory.jsonl`);
+          for (const sub of WORKSPACE_WEBAGENT_USER_SUBDIRS) {
+            await walk(`${abs}/${sub}`);
+          }
+          for (const rel of WORKSPACE_WEBAGENT_USER_FILES) {
+            await exportFile(`${workspaceDir}/${rel}`);
+          }
           continue;
         }
         if (abs === `${workspaceDir}/memory/snapshots`) continue;
-        if (abs === `${workspaceDir}/memory/runs`) continue;
-        if (abs === `${workspaceDir}/memory/conversations`) continue;
         await walk(abs);
       } else {
         await exportFile(abs);

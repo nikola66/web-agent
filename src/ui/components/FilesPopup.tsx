@@ -20,6 +20,9 @@ import {
   listWorkspaceFiles,
   readWorkspaceFileText,
   startWorkspaceTerminalSession,
+  WORKSPACE_EMPTY_DIR_INJECTION,
+  WORKSPACE_KNOWLEDGE_VAULT_DIR_REL,
+  WORKSPACE_PLANS_DIR_REL,
   type WorkspaceTerminalSession,
   type WorkspaceFileEntry,
 } from "@/core/workspace";
@@ -175,6 +178,49 @@ function buildFileTree(
   return normalize(roots);
 }
 
+function injectEmptyWorkspaceDirs(
+  roots: FileTreeNode[],
+  emptyDirPaths: string[]
+): FileTreeNode[] {
+  if (emptyDirPaths.length === 0) return roots;
+  const next = [...roots];
+  for (const dirPath of emptyDirPaths) {
+    const segments = dirPath.split("/").filter(Boolean);
+    if (segments.length === 0) continue;
+    let level = next;
+    let accumulated = "";
+    for (const seg of segments) {
+      accumulated = accumulated ? `${accumulated}/${seg}` : seg;
+      let node = level.find((n) => n.name === seg);
+      if (!node) {
+        node = {
+          id: accumulated,
+          name: seg,
+          path: accumulated,
+          isDirectory: true,
+          children: [],
+        };
+        level.push(node);
+      } else if (!node.isDirectory) {
+        break;
+      }
+      level = node.children;
+    }
+  }
+
+  const normalize = (nodes: FileTreeNode[]): FileTreeNode[] =>
+    nodes
+      .map((node) => ({
+        ...node,
+        children: node.isDirectory ? normalize(node.children) : [],
+      }))
+      .sort((a, b) => {
+        if (a.isDirectory !== b.isDirectory) return a.isDirectory ? -1 : 1;
+        return a.name.localeCompare(b.name);
+      });
+  return normalize(next);
+}
+
 export function FilesPopup({
   profileId,
   onClose,
@@ -210,7 +256,11 @@ export function FilesPopup({
 
   const webagentRoot = ".webagent";
   const memoryRoot = "memory";
-  const fileTree = useMemo(() => buildFileTree(files, ""), [files]);
+  const fileTree = useMemo(
+    () =>
+      injectEmptyWorkspaceDirs(buildFileTree(files, ""), [...WORKSPACE_EMPTY_DIR_INJECTION]),
+    [files]
+  );
   const selectedFile = useMemo(
     () => files.find((file) => file.path === selectedPath) ?? null,
     [files, selectedPath]
@@ -327,6 +377,8 @@ export function FilesPopup({
       return;
     }
     next.add(webagentRoot);
+    next.add(WORKSPACE_PLANS_DIR_REL);
+    next.add(WORKSPACE_KNOWLEDGE_VAULT_DIR_REL);
     next.add(`${webagentRoot}/tools`);
     next.add(`${webagentRoot}/channels`);
     next.add(`${webagentRoot}/state`);

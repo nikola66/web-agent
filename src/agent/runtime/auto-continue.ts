@@ -30,6 +30,48 @@ const STRICT_POST_TOOL_CONTINUE = (() => {
   return raw !== "0" && raw !== "false" && raw !== "off" && raw !== "no";
 })();
 
+const FALSE_NO_HISTORY_RE =
+  /\b(clean slate|starting with a clean slate|don't see (a )?plan|no (previous|prior) (tasks?|projects?|work|history)|haven't tackled|no conversation archives?)\b/i;
+
+function hasRecallEvidenceFromExecutions(executions) {
+  if (!Array.isArray(executions) || executions.length === 0) return false;
+  for (const item of executions) {
+    if (!item || typeof item !== "object" || item.error) continue;
+    const tool = String(item.tool || "");
+    const result = item.result;
+    if (tool === "session_search") {
+      const matches =
+        result && typeof result === "object" && Array.isArray(result.matches)
+          ? result.matches
+          : [];
+      if (matches.length > 0) return true;
+      continue;
+    }
+    if (tool === "session_memory_list") {
+      const entries =
+        result && typeof result === "object" && Array.isArray(result.entries)
+          ? result.entries
+          : [];
+      if (entries.length > 0) return true;
+      continue;
+    }
+    if (tool === "read_file") {
+      const path =
+        result && typeof result === "object" && typeof result.path === "string"
+          ? result.path.toLowerCase()
+          : "";
+      if (
+        path.startsWith("memory/runs/") ||
+        path.startsWith("memory/conversations/") ||
+        path === ".webagent/session-memory.jsonl"
+      ) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
 export function resolveMaxAutoContinueNudges(originalUserInput) {
   const base = (() => {
     const raw = String(typeof process !== "undefined" ? process.env?.WEBAGENT_MAX_AUTO_CONTINUE_NUDGES ?? "" : "").trim();
@@ -116,10 +158,15 @@ export function getAutoContinueNudgeState({
     });
   const researchSoftBlocks =
     shouldNudgeForResearch && webFetchCount < MIN_RESEARCH_FETCHES;
+  const shouldNudgeForFalseNoHistory =
+    executedToolsInTurn &&
+    FALSE_NO_HISTORY_RE.test(String(visible || "")) &&
+    hasRecallEvidenceFromExecutions(lastToolExecutions);
 
   const want =
     shouldNudgeForSequence ||
     shouldNudgeForSchedulingAutomation ||
+    shouldNudgeForFalseNoHistory ||
     shouldNudgeForResearch ||
     (!researchSoftBlocks && shouldNudgeForAction) ||
     shouldNudgeAfterTools ||
@@ -128,6 +175,7 @@ export function getAutoContinueNudgeState({
   let reason = "";
   if (want) {
     if (shouldNudgeForMissingExact) reason = "missing_exact_final";
+    else if (shouldNudgeForFalseNoHistory) reason = "false_no_history";
     else if (shouldNudgeForResearch) reason = "research_incomplete";
     else if (shouldNudgeForSchedulingAutomation) reason = "scheduling_automation";
     else if (shouldNudgeForAction) reason = "action_plan";

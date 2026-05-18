@@ -133,6 +133,61 @@ export function createSystemLineTranscriptEvent({ round, text } = {}) {
   };
 }
 
+export function createGoalLoopTranscriptEvent({
+  phase,
+  goal = "",
+  reason = "",
+  continuationsUsed = 0,
+  maxContinuations = 20,
+  round,
+} = {}) {
+  return {
+    type: "goal_loop",
+    critical: false,
+    phase,
+    goal,
+    reason,
+    continuationsUsed,
+    maxContinuations,
+    round,
+  };
+}
+
+export function formatGoalLoopTranscript(
+  event,
+  options?: {
+    style?: ChannelTranscriptStyle;
+  }
+) {
+  const style = options?.style ?? "terminal";
+  const phase = String(event?.phase || "").trim();
+  const goalPreview = stripAnsi(String(event?.goal || "").trim()).slice(0, 220);
+  const reason = stripAnsi(String(event?.reason || "").trim()).slice(0, 180);
+  const used = Number(event?.continuationsUsed ?? 0);
+  const maxC = Number(event?.maxContinuations ?? 20) || 20;
+  let line = "";
+  if (phase === "invoked") {
+    line = goalPreview ? `◇ Plan goal · active — ${goalPreview}` : `◇ Plan goal · active`;
+  } else if (phase === "continue") {
+    line = `◇ Plan goal · continuing (${used}/${maxC})`;
+    if (goalPreview) line += ` — ${goalPreview}`;
+  } else if (phase === "done") {
+    line = `◇ Plan goal · done`;
+    if (reason) line += ` — ${reason}`;
+  } else if (phase === "paused") {
+    line =
+      reason === "budget"
+        ? `◇ Plan goal · paused (continuation budget ${maxC})`
+        : `◇ Plan goal · paused`;
+    if (reason && reason !== "budget") line += ` — ${reason}`;
+  } else {
+    line = `◇ Plan goal · ${phase || "update"}`;
+  }
+  line = stripAnsi(line).trimEnd();
+  if (!line) return "";
+  return style === "telegram" ? line.slice(0, 3800) : line;
+}
+
 export function formatTranscriptEventForChannel(
   event,
   options?: {
@@ -178,6 +233,9 @@ export function formatTranscriptEventForChannel(
   if (kind === "system_line") {
     if (style === "telegram") return "";
     return String(event.text || "").trimEnd();
+  }
+  if (kind === "goal_loop") {
+    return formatGoalLoopTranscript(event, { style });
   }
   return "";
 }

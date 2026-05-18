@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 
 import {
   createAssistantTranscriptEvent,
+  createGoalLoopTranscriptEvent,
   createToolResultTranscriptEvent,
   formatTranscriptEventForChannel,
   formatSkippedToolsTranscript,
@@ -72,6 +73,30 @@ test("telegram channel transcript omits agent name and tool args", () => {
       { style: "telegram" }
     ),
     ""
+  );
+
+  assert.equal(
+    formatTranscriptEventForChannel(
+      createGoalLoopTranscriptEvent({
+        phase: "continue",
+        goal: "Build feature X",
+        continuationsUsed: 3,
+        maxContinuations: 20,
+      }),
+      { style: "telegram" }
+    ).startsWith("◇ Plan goal · continuing (3/20)"),
+    true
+  );
+});
+
+test("goal_loop transcript renders on terminal surfaces", () => {
+  assert.match(
+    formatTranscriptEventForChannel(createGoalLoopTranscriptEvent({
+      phase: "invoked",
+      goal: "Doc refresh",
+      maxContinuations: 20,
+    })),
+    /Plan goal · active/
   );
 });
 

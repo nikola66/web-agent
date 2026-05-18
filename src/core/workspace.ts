@@ -18,6 +18,9 @@ import {
 import { clearCredentials } from "./credential-vault";
 import { isAllowedUploadFile } from "@embed-runtime/tools/upload-allowlist.js";
 import { getActiveNodebox, getNodebox } from "@/runtimes/webcontainer/boot";
+import { WORKSPACE_WEBAGENT_USER_SUBDIRS } from "./workspace-layout";
+
+export * from "./workspace-layout";
 
 export function snapshotPrefix(profileId: string): string {
   return `profiles/${profileId}/snapshot`;
@@ -402,6 +405,14 @@ async function listLiveWorkspaceFiles(profileId: string): Promise<WorkspaceFileE
   const emulator = emulatorOrNull;
   const workspaceDir = `/workspace/${profileId}`;
   const results: WorkspaceFileEntry[] = [];
+
+  try {
+    for (const sub of WORKSPACE_WEBAGENT_USER_SUBDIRS) {
+      await emulator.fs.mkdir(`${workspaceDir}/.webagent/${sub}`, { recursive: true });
+    }
+  } catch {
+    /* best effort */
+  }
 
   async function walk(dirPath: string): Promise<void> {
     let names: string[];

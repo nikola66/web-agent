@@ -13,6 +13,7 @@ import {
   listWorkspaceFiles,
   readWorkspaceFileBuffer,
   readWorkspaceFileText,
+  WORKSPACE_SESSION_MEMORY_REL,
   type WorkspaceFileEntry,
 } from "./workspace";
 
@@ -27,7 +28,6 @@ export type {
 } from "./agent-memory-parsers";
 
 const MEMORY_DB_PATH = "memory/memory.sqlite";
-const SESSION_MEMORY_PATH = ".webagent/session-memory.jsonl";
 const REFLECTIONS_PREFIX = "memory/reflections/";
 const SNAPSHOTS_PREFIX = "memory/snapshots/";
 const CONVERSATIONS_PREFIX = "memory/conversations/";
@@ -321,7 +321,7 @@ export async function loadAgentMemorySnapshot(
 
   let sessionEntries: SessionMemoryEntry[] = [];
   try {
-    const sessionRaw = await readWorkspaceFileText(profileId, SESSION_MEMORY_PATH, {
+    const sessionRaw = await readWorkspaceFileText(profileId, WORKSPACE_SESSION_MEMORY_REL, {
       preferLive: true,
     });
     sessionEntries = parseSessionMemoryJsonl(sessionRaw);

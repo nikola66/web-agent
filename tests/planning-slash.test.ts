@@ -8,6 +8,7 @@ test("buildPlanModeUserPrompt includes plan path, tools, and follow-up", () => {
   const p = buildPlanModeUserPrompt("Add auth flow", fixed);
   assert.ok(p.includes(".webagent/plans/"));
   assert.match(p, /2026-05-14_090807-add-auth-flow\.md/);
+  assert.match(p, /Do \*\*not\*\* call make_dir for this plan path/);
   assert.match(p, /artifact_present/);
   assert.match(p, /Execute the plan/i);
 });

@@ -4,6 +4,7 @@ import { ipcProxyRequest } from "../ipc.js";
 import {
   BROWSER_AGENT_CATALOG_PATH,
   MEMORY_CONVERSATIONS_DIR,
+  MEMORY_RUNS_DIR,
   getWorkspaceRoot,
   workspaceStatePath,
 } from "../constants.js";
@@ -491,6 +492,8 @@ export async function memorySearchTool(args: ToolArgs = {}, ctx) {
 }
 
 const SESSION_SEARCH_CONTEXT = 200;
+const SESSION_SEARCH_RECENCY_QUERY_RE =
+  /\b(last|previous|recent|lately|before)\b[\s\S]{0,80}\b(work|task|project|topic|conversation|chat)\b|\bwhat did we (last|previously)\b|\bwhat we worked on\b/i;
 
 function sessionSearchTokenize(q) {
   return String(q || "")
@@ -516,12 +519,15 @@ export async function sessionSearchTool(args: ToolArgs = {}, _ctx) {
     throw new Error("`query` is required for session_search.");
   }
   const tokens = sessionSearchTokenize(query);
+  const recencyQuery = SESSION_SEARCH_RECENCY_QUERY_RE.test(query);
   if (!tokens.length) {
     throw new Error("`query` must include at least one word with 2+ characters.");
   }
 
   const maxFiles = Math.min(200, Math.max(10, Number(args?.max_files ?? 80) || 80));
   const absDir = memoryPath(MEMORY_CONVERSATIONS_DIR);
+  const absRunsDir = memoryPath(MEMORY_RUNS_DIR);
+  const sessionMemoryPath = workspaceStatePath(".webagent/session-memory.jsonl");
   type SessionSearchHit = {
     score: number;
     id: string;
@@ -530,17 +536,13 @@ export async function sessionSearchTool(args: ToolArgs = {}, _ctx) {
     mtime: number;
   };
   const scored: SessionSearchHit[] = [];
+  const recentCandidates: SessionSearchHit[] = [];
 
-  let dirents;
+  let dirents = [];
   try {
     dirents = await fs.readdir(absDir, { withFileTypes: true });
   } catch {
-    return {
-      ok: true,
-      query,
-      matches: [],
-      note: "No conversation archive found yet (memory/conversations is empty or unavailable).",
-    };
+    /* fall through to run/session-memory fallbacks */
   }
 
   const jsonFiles = dirents.filter((e) => e.isFile() && e.name.endsWith(".json"));
@@ -561,15 +563,27 @@ export async function sessionSearchTool(args: ToolArgs = {}, _ctx) {
     } catch {
       continue;
     }
+    let id = name.replace(/\.json$/i, "");
     const text = raw.replace(/\s+/g, " ").trim();
     const low = text.toLowerCase();
     let score = 0;
     for (const t of tokens) {
       if (low.includes(t)) score += 1;
     }
-    if (score === 0) continue;
+    if (score === 0) {
+      if (recencyQuery) {
+        const recencySnippet = text.slice(0, SESSION_SEARCH_CONTEXT * 2);
+        recentCandidates.push({
+          score: 0,
+          id,
+          snippet: recencySnippet,
+          relPath: `memory/conversations/${name}`,
+          mtime,
+        });
+      }
+      continue;
+    }
 
-    let id = name.replace(/\.json$/i, "");
     try {
       const parsed = JSON.parse(raw);
       if (parsed && typeof parsed === "object" && parsed.id) id = String(parsed.id);
@@ -594,10 +608,220 @@ export async function sessionSearchTool(args: ToolArgs = {}, _ctx) {
       relPath: `memory/conversations/${name}`,
       mtime,
     });
+    if (recencyQuery) {
+      recentCandidates.push({
+        score: 0,
+        id,
+        snippet,
+        relPath: `memory/conversations/${name}`,
+        mtime,
+      });
+    }
+  }
+
+  // Fallback 1: run history snapshots (saved each turn).
+  let runDirents = [];
+  try {
+    runDirents = await fs.readdir(absRunsDir, { withFileTypes: true });
+  } catch {
+    /* absent */
+  }
+  const runFiles = runDirents.filter((e) => e.isFile() && e.name.endsWith(".json"));
+  const runWithMtime = await Promise.all(
+    runFiles.map(async (e) => {
+      const abs = nodePath.join(absRunsDir, e.name);
+      const st = await fs.stat(abs).catch(() => null);
+      return { abs, name: e.name, mtime: st?.mtimeMs || 0 };
+    })
+  );
+  runWithMtime.sort((a, b) => b.mtime - a.mtime);
+  const runToScan = runWithMtime.slice(0, maxFiles);
+
+  for (const { abs, name, mtime } of runToScan) {
+    let raw = "";
+    try {
+      raw = await fs.readFile(abs, "utf8");
+    } catch {
+      continue;
+    }
+    let id = name.replace(/\.json$/i, "");
+    let searchable = "";
+    try {
+      const parsed = JSON.parse(raw);
+      if (parsed && typeof parsed === "object") {
+        if (parsed.id) id = String(parsed.id);
+        const toolNames = Array.isArray(parsed.tool_calls)
+          ? parsed.tool_calls
+              .map((item) =>
+                item && typeof item === "object" && item.name ? String(item.name) : ""
+              )
+              .filter(Boolean)
+              .join(" ")
+          : "";
+        const errors = Array.isArray(parsed.errors)
+          ? parsed.errors.map((v) => String(v || "")).join(" ")
+          : "";
+        searchable = [
+          String(parsed.goal || ""),
+          String(parsed.input || ""),
+          String(parsed.final_visible_assistant_text || ""),
+          toolNames,
+          errors,
+        ]
+          .join(" ")
+          .replace(/\s+/g, " ")
+          .trim();
+      }
+    } catch {
+      searchable = raw.replace(/\s+/g, " ").trim();
+    }
+    if (!searchable) continue;
+    const low = searchable.toLowerCase();
+    let score = 0;
+    for (const t of tokens) {
+      if (low.includes(t)) score += 1;
+    }
+    if (score === 0) {
+      if (recencyQuery) {
+        const offAny = firstTokenOffset(low, tokens);
+        let recencySnippet = searchable.slice(0, SESSION_SEARCH_CONTEXT * 2);
+        if (offAny >= 0) {
+          const start = Math.max(0, offAny - SESSION_SEARCH_CONTEXT);
+          const end = Math.min(searchable.length, offAny + SESSION_SEARCH_CONTEXT);
+          recencySnippet = searchable.slice(start, end);
+          if (start > 0) recencySnippet = "…" + recencySnippet;
+          if (end < searchable.length) recencySnippet = recencySnippet + "…";
+        }
+        recentCandidates.push({
+          score: 0,
+          id,
+          snippet: recencySnippet,
+          relPath: `memory/runs/${name}`,
+          mtime,
+        });
+      }
+      continue;
+    }
+    const off = firstTokenOffset(low, tokens);
+    let snippet = searchable.slice(0, SESSION_SEARCH_CONTEXT * 2);
+    if (off >= 0) {
+      const start = Math.max(0, off - SESSION_SEARCH_CONTEXT);
+      const end = Math.min(searchable.length, off + SESSION_SEARCH_CONTEXT);
+      snippet = searchable.slice(start, end);
+      if (start > 0) snippet = "…" + snippet;
+      if (end < searchable.length) snippet = snippet + "…";
+    }
+    scored.push({
+      score,
+      id,
+      snippet,
+      relPath: `memory/runs/${name}`,
+      mtime,
+    });
+    if (recencyQuery) {
+      recentCandidates.push({
+        score: 0,
+        id,
+        snippet,
+        relPath: `memory/runs/${name}`,
+        mtime,
+      });
+    }
+  }
+
+  // Fallback 2: rolling session-memory notes.
+  try {
+    const [raw, stat] = await Promise.all([
+      fs.readFile(sessionMemoryPath, "utf8"),
+      fs.stat(sessionMemoryPath).catch(() => null),
+    ]);
+    const lines = raw.split("\n").filter((line) => line.trim()).slice(-200);
+    for (const line of lines) {
+      let row;
+      try {
+        row = JSON.parse(line);
+      } catch {
+        continue;
+      }
+      const searchable = [
+        String(row?.kind || ""),
+        String(row?.text || ""),
+        String(row?.ref || ""),
+        String(row?.artifact_path || ""),
+      ]
+        .join(" ")
+        .replace(/\s+/g, " ")
+        .trim();
+      if (!searchable) continue;
+      const low = searchable.toLowerCase();
+      let score = 0;
+      for (const t of tokens) {
+        if (low.includes(t)) score += 1;
+      }
+      if (score === 0) {
+        if (recencyQuery) {
+          const offAny = firstTokenOffset(low, tokens);
+          let recencySnippet = searchable.slice(0, SESSION_SEARCH_CONTEXT * 2);
+          if (offAny >= 0) {
+            const start = Math.max(0, offAny - SESSION_SEARCH_CONTEXT);
+            const end = Math.min(searchable.length, offAny + SESSION_SEARCH_CONTEXT);
+            recencySnippet = searchable.slice(start, end);
+            if (start > 0) recencySnippet = "…" + recencySnippet;
+            if (end < searchable.length) recencySnippet = recencySnippet + "…";
+          }
+          recentCandidates.push({
+            score: 0,
+            id: String(row?.ts || "session-memory"),
+            snippet: recencySnippet,
+            relPath: ".webagent/session-memory.jsonl",
+            mtime: Number.isFinite(rowTs) ? rowTs : stat?.mtimeMs || 0,
+          });
+        }
+        continue;
+      }
+      const off = firstTokenOffset(low, tokens);
+      let snippet = searchable.slice(0, SESSION_SEARCH_CONTEXT * 2);
+      if (off >= 0) {
+        const start = Math.max(0, off - SESSION_SEARCH_CONTEXT);
+        const end = Math.min(searchable.length, off + SESSION_SEARCH_CONTEXT);
+        snippet = searchable.slice(start, end);
+        if (start > 0) snippet = "…" + snippet;
+        if (end < searchable.length) snippet = snippet + "…";
+      }
+      const rowTs = Date.parse(String(row?.ts || ""));
+      scored.push({
+        score,
+        id: String(row?.ts || "session-memory"),
+        snippet,
+        relPath: ".webagent/session-memory.jsonl",
+        mtime: Number.isFinite(rowTs) ? rowTs : stat?.mtimeMs || 0,
+      });
+      if (recencyQuery) {
+        recentCandidates.push({
+          score: 0,
+          id: String(row?.ts || "session-memory"),
+          snippet,
+          relPath: ".webagent/session-memory.jsonl",
+          mtime: Number.isFinite(rowTs) ? rowTs : stat?.mtimeMs || 0,
+        });
+      }
+    }
+  } catch {
+    /* absent */
   }
 
   scored.sort((a, b) => b.score - a.score || b.mtime - a.mtime);
-  const top = scored.slice(0, 3);
+  let top = scored.slice(0, 3);
+  if (top.length === 0 && recencyQuery && recentCandidates.length > 0) {
+    const uniqueByPath = new Map<string, SessionSearchHit>();
+    for (const item of recentCandidates) {
+      const existing = uniqueByPath.get(item.relPath);
+      if (!existing || existing.mtime < item.mtime) uniqueByPath.set(item.relPath, item);
+    }
+    top = [...uniqueByPath.values()]
+      .sort((a, b) => b.mtime - a.mtime)
+      .slice(0, 3);
+  }
 
   await logDebugEvent("session_search", {
     query,
@@ -615,6 +839,11 @@ export async function sessionSearchTool(args: ToolArgs = {}, _ctx) {
       path: m.relPath,
       context: m.snippet,
     })),
+    ...(top.length === 0
+      ? {
+          note: "No matches found in conversation archives, run history, or session memory.",
+        }
+      : {}),
   };
 }
 

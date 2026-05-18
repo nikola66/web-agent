@@ -55,7 +55,7 @@ export interface RuntimeState {
   setError: (profileId: string, message: string | null) => void;
   setAwaitingResponse: (profileId: string, awaiting: boolean) => void;
   enqueueInput: (profileId: string, input: string) => void;
-  dequeueInput: (profileId: string) => string | null;
+  commitQueuedDispatch: (profileId: string) => string | null;
   clearQueuedInputs: (profileId: string) => void;
   setNodeVersion: (version: string) => void;
   setStorageUsed: (bytes: number) => void;
@@ -146,17 +146,28 @@ export const useRuntimeStore = create<RuntimeState>()((set, get) => ({
         },
       };
     }),
-  dequeueInput: (profileId) => {
-    const state = get();
-    const prev = getProfileRuntime(state.profileRuntime, profileId);
-    const [next, ...rest] = prev.queuedInputs;
-    set((s) => ({
-      profileRuntime: {
-        ...s.profileRuntime,
-        [profileId]: { ...getProfileRuntime(s.profileRuntime, profileId), queuedInputs: rest },
-      },
-    }));
-    return next ?? null;
+  commitQueuedDispatch: (profileId) => {
+    let nextInput: string | null = null;
+    set((s) => {
+      const prev = getProfileRuntime(s.profileRuntime, profileId);
+      const [next, ...rest] = prev.queuedInputs;
+      if (!next) {
+        return {
+          profileRuntime: {
+            ...s.profileRuntime,
+            [profileId]: { ...prev, awaitingResponse: false },
+          },
+        };
+      }
+      nextInput = next;
+      return {
+        profileRuntime: {
+          ...s.profileRuntime,
+          [profileId]: { ...prev, queuedInputs: rest, awaitingResponse: true },
+        },
+      };
+    });
+    return nextInput;
   },
   clearQueuedInputs: (profileId) =>
     set((s) => {

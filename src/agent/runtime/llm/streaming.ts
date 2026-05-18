@@ -1,5 +1,5 @@
 import { HIDDEN_STREAM_MARKERS, LLM_REQUEST_TIMEOUT_MS } from "../constants.js";
-import { ipcProxyStreamRequest } from "../ipc.js";
+import { ipcProxyStreamRequest, ipcProxyRequest } from "../ipc.js";
 import { logDebugEvent } from "../logging/debug-log.js";
 
 const STREAM_CHUNK_TIMEOUT_MS = 45_000;
@@ -14,6 +14,37 @@ const HTTP_RETRY_MAX_ATTEMPTS = Math.max(1, Math.min(8, Number(process.env.WEBAG
 const HTTP_RETRY_BASE_MS = Math.max(50, Number(process.env.WEBAGENT_HTTP_RETRY_BASE_MS) || 500);
 const HTTP_RETRY_MAX_MS = Math.max(HTTP_RETRY_BASE_MS, Number(process.env.WEBAGENT_HTTP_RETRY_MAX_MS) || 8000);
 const HTTP_RETRY_JITTER_RATIO = Math.min(0.5, Math.max(0, Number(process.env.WEBAGENT_HTTP_RETRY_JITTER) || 0.2));
+
+/** Retries on initial connect / first response (stream + non-stream), not schema/tool rejections. */
+const TRANSIENT_LLM_HTTP_STATUSES = new Set([429, 500, 502, 503, 504, 524]);
+
+function getLlmInitialHttpMaxAttempts() {
+  return Math.max(1, Math.min(6, Number(process.env.WEBAGENT_STREAM_HTTP_MAX_ATTEMPTS) || 3));
+}
+
+/** Shared heuristics: dropped TLS/socket, fetch failures, IPC proxy errors. */
+function retryableNodeOrFetchError(err, signal) {
+  if (!err || signal?.aborted) return false;
+  if (err?.name === "AbortError") return false;
+  const code = err.code;
+  if (code === "ECONNRESET" || code === "ECONNREFUSED" || code === "ETIMEDOUT" || code === "EPIPE") {
+    return true;
+  }
+  const msg = String(err?.message || err);
+  const fromCause = err?.cause ? String(err.cause?.message || err.cause) : "";
+  const haystack = `${msg} ${fromCause}`;
+  if (/econnreset|econnrefused|etimedout|socket hang up|unexpected end|premature close|network/i.test(haystack)) {
+    return true;
+  }
+  if (/ipc proxy stream|ipc proxy request/i.test(haystack)) return true;
+  return (
+    msg.includes("Forced fetch failure") ||
+    msg.includes("Failed to fetch") ||
+    msg.includes("NetworkError") ||
+    msg.includes("Load failed") ||
+    err?.name === "TypeError"
+  );
+}
 
 /** Mulberry32 PRNG for decorrelated jitter (shared with computeRetryDelay). */
 function mulberry32(seedU32) {
@@ -102,17 +133,7 @@ export async function fetchWithTimeout(url, options = {}, timeoutMs = LLM_REQUES
   let forcedFailuresLeft = Math.max(0, Math.min(32, Math.floor(Number(process.env.WEBAGENT_FORCE_HTTP_FAIL) || 0)));
 
   const isAbortError = (err) => err?.name === "AbortError";
-  const isRetryableNetworkError = (err) => {
-    if (externalSignal?.aborted) return false;
-    const msg = String(err?.message || err);
-    return (
-      msg.includes("Forced fetch failure") ||
-      msg.includes("Failed to fetch") ||
-      msg.includes("NetworkError") ||
-      msg.includes("Load failed") ||
-      err?.name === "TypeError"
-    );
-  };
+  const isRetryableNetworkError = (err) => retryableNodeOrFetchError(err, externalSignal);
 
   async function singleFetch(targetUrl, attemptIndex) {
     if (forcedFailuresLeft > 0) {
@@ -242,14 +263,15 @@ function looksLikeToolParameterRejection(status, bodyText) {
   );
 }
 
-function toolsCapabilityHint(provider, toolCount, status, bodyText) {
+function toolsCapabilityHint(toolCount, status, bodyText) {
   if (!toolCount) return "";
-  const base =
-    ` (${toolCount} tool definition(s) were sent; this runtime requires a chat/completions API that accepts OpenAI-style \`tools\`.)`;
   if (looksLikeToolParameterRejection(status, bodyText)) {
-    return `${base} The response suggests tools/functions are not supported — switch provider/model or fix the gateway.`;
+    return ` (${toolCount} tool definition(s) were sent; this runtime requires a chat/completions API that accepts OpenAI-style \`tools\`. The response suggests tools/functions are not supported — switch provider/model or fix the gateway.)`;
   }
-  return base;
+  if ((status >= 500 && status < 600) || !Number.isFinite(status) || status === 0) {
+    return ` (${toolCount} tools in request; HTTP ${Number.isFinite(status) && status ? status : "?"}. 5xx/empty bodies are usually upstream or network—retry; only 4xx with “tool” errors imply missing tool support.)`;
+  }
+  return ` (${toolCount} tool definition(s) were sent.)`;
 }
 
 function parseOpenAiStreamPayload(payload, toolAcc, onContent) {
@@ -316,8 +338,7 @@ export async function streamOpenAI(messages, cfg, onDelta, tools, options = {}) 
     messageCount: messages.length,
     toolCount: toolList.length,
   });
-  const STREAM_HTTP_MAX_ATTEMPTS = Math.max(1, Math.min(6, Number(process.env.WEBAGENT_STREAM_HTTP_MAX_ATTEMPTS) || 3));
-  const transientStreamStatus = new Set([429, 502, 503, 504, 524]);
+  const STREAM_HTTP_MAX_ATTEMPTS = getLlmInitialHttpMaxAttempts();
   const useIpcStream = shouldUseIpcStream(endpoint);
   let buf = "";
   let full = "";
@@ -358,47 +379,68 @@ export async function streamOpenAI(messages, cfg, onDelta, tools, options = {}) 
       await sleepMs(d);
     }
     /* eslint-disable no-await-in-loop */
-    if (useIpcStream) {
-      let meta = { status: 0, statusText: "", contentType: "" };
-      full = "";
-      sawReasoning = false;
-      toolAcc.clear();
-      buf = "";
-      await ipcProxyStreamRequest(
-        { method: "POST", url: endpoint, headers, body: JSON.stringify(withToolsBody) },
-        {
-          timeoutMs: STREAM_TOTAL_TIMEOUT_MS,
-          signal: options.signal,
-          onStart: (payload) => {
-            meta = {
-              status: Number((payload as { status?: number })?.status ?? 0),
-              statusText: String((payload as { statusText?: string })?.statusText ?? ""),
-              contentType: String((payload as { contentType?: string })?.contentType ?? ""),
-            };
-          },
-          onChunk: consumeTextChunk,
+    try {
+      if (useIpcStream) {
+        let meta = { status: 0, statusText: "", contentType: "" };
+        full = "";
+        sawReasoning = false;
+        toolAcc.clear();
+        buf = "";
+        await ipcProxyStreamRequest(
+          { method: "POST", url: endpoint, headers, body: JSON.stringify(withToolsBody) },
+          {
+            timeoutMs: STREAM_TOTAL_TIMEOUT_MS,
+            signal: options.signal,
+            onStart: (payload) => {
+              meta = {
+                status: Number((payload as { status?: number })?.status ?? 0),
+                statusText: String((payload as { statusText?: string })?.statusText ?? ""),
+                contentType: String((payload as { contentType?: string })?.contentType ?? ""),
+              };
+            },
+            onChunk: consumeTextChunk,
+          }
+        );
+        for (const line of buf.split("\n")) {
+          const s = line.trim();
+          if (!s.startsWith("data:")) continue;
+          parseData(s.slice(5).trim());
         }
-      );
-      for (const line of buf.split("\n")) {
-        const s = line.trim();
-        if (!s.startsWith("data:")) continue;
-        parseData(s.slice(5).trim());
+        res = {
+          ok: meta.status >= 200 && meta.status < 300,
+          status: meta.status,
+          async text() {
+            return full;
+          },
+          body: null,
+        };
+      } else {
+        res = await fetchWithTimeout(
+          endpoint,
+          { method: "POST", headers, body: JSON.stringify(withToolsBody), signal: options.signal },
+          LLM_REQUEST_TIMEOUT_MS,
+          `${cfg.provider} chat request`
+        );
       }
-      res = {
-        ok: meta.status >= 200 && meta.status < 300,
-        status: meta.status,
-        async text() {
-          return full;
-        },
-        body: null,
-      };
-    } else {
-      res = await fetchWithTimeout(
-        endpoint,
-        { method: "POST", headers, body: JSON.stringify(withToolsBody), signal: options.signal },
-        LLM_REQUEST_TIMEOUT_MS,
-        `${cfg.provider} chat request`
-      );
+    } catch (err) {
+      if (options.signal?.aborted) {
+        throw new Error(`${cfg.provider} stream aborted`);
+      }
+      await logDebugEvent("llm_stream_initial_throw", {
+        provider: cfg.provider,
+        httpAttempt,
+        error: String(err?.message || err),
+        willRetry:
+          httpAttempt < STREAM_HTTP_MAX_ATTEMPTS - 1 &&
+          retryableNodeOrFetchError(err, options.signal),
+      }).catch(() => {});
+      if (
+        httpAttempt < STREAM_HTTP_MAX_ATTEMPTS - 1 &&
+        retryableNodeOrFetchError(err, options.signal)
+      ) {
+        continue;
+      }
+      throw err;
     }
     if (res.ok) break;
     firstError = await res.text();
@@ -410,14 +452,14 @@ export async function streamOpenAI(messages, cfg, onDelta, tools, options = {}) 
       error: firstError,
       httpAttempt,
       willRetry:
-        transientStreamStatus.has(res.status) &&
+        TRANSIENT_LLM_HTTP_STATUSES.has(res.status) &&
         !looksLikeToolParameterRejection(res.status, firstError) &&
         httpAttempt < STREAM_HTTP_MAX_ATTEMPTS - 1,
     });
     const retryable =
-      transientStreamStatus.has(res.status) && !looksLikeToolParameterRejection(res.status, firstError);
+      TRANSIENT_LLM_HTTP_STATUSES.has(res.status) && !looksLikeToolParameterRejection(res.status, firstError);
     if (!retryable || httpAttempt === STREAM_HTTP_MAX_ATTEMPTS - 1) {
-      const hint = toolsCapabilityHint(cfg.provider, toolCount, res.status, firstError);
+      const hint = toolsCapabilityHint(toolCount, res.status, firstError);
       throw new Error(`${formatProviderError(cfg.provider, res.status, firstError)}${hint}`);
     }
   }
@@ -514,6 +556,168 @@ export async function streamOpenAI(messages, cfg, onDelta, tools, options = {}) 
     sawReasoning,
   });
   return { text: full, toolCalls, sawReasoning };
+}
+
+function completionMessageText(payload) {
+  const choice = payload?.choices?.[0];
+  const msg = choice?.message || choice;
+  if (!msg || typeof msg !== "object") return "";
+  let text = "";
+  if (typeof msg.content === "string") text = msg.content;
+  else if (Array.isArray(msg.content)) {
+    for (const part of msg.content) {
+      if (typeof part === "string") text += part;
+      else if (part && typeof part === "object") {
+        if (typeof part.text === "string") text += part.text;
+        else if (part.type === "text" && typeof part.text === "string") text += part.text;
+      }
+    }
+  }
+  if (!String(text).trim()) {
+    if (typeof msg.reasoning_content === "string" && msg.reasoning_content.trim()) text = msg.reasoning_content;
+    else if (typeof msg.reasoning === "string" && msg.reasoning.trim()) text = msg.reasoning;
+  }
+  return String(text || "").trim();
+}
+
+function parseIpcProxyCompletionPayload(raw, provider) {
+  if (!raw || typeof raw !== "object") {
+    throw new Error(`${provider || "LLM"} chat completion: empty proxy response`);
+  }
+  if (raw.error != null) throw new Error(String(raw.error));
+  const status = Number(raw.status);
+  const bodyStr = String(raw.body ?? "");
+  if (!Number.isFinite(status) || status < 200 || status >= 300) {
+    throw new Error(formatProviderError(provider, status, bodyStr));
+  }
+  try {
+    return JSON.parse(bodyStr);
+  } catch {
+    throw new Error(`${provider || "LLM"} chat completion: invalid JSON body`);
+  }
+}
+
+export async function completeOpenAiChat(messages, cfg, options = {}) {
+  if (options.signal?.aborted) {
+    throw new Error(`${cfg.provider || "LLM"} chat completion aborted`);
+  }
+  if (!cfg?.baseUrl || !cfg?.model) {
+    throw new Error("missing LLM provider configuration");
+  }
+  const headers = sanitizeHeadersForFetch({
+    "Content-Type": "application/json",
+    ...cfg.extraHeaders,
+  });
+  if (cfg.apiKey) headers.Authorization = `Bearer ${cfg.apiKey}`;
+  const maxTokens = Math.max(16, Number(options?.max_tokens ?? options?.maxTokens) || 384);
+  const body = JSON.stringify({
+    model: cfg.model,
+    messages,
+    stream: false,
+    max_tokens: maxTokens,
+  });
+  const endpoint = `${cfg.baseUrl}/chat/completions`;
+  const label = `${cfg.provider || "LLM"} chat completion`;
+  const maxAttempts = getLlmInitialHttpMaxAttempts();
+
+  let lastErr = null;
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    if (options.signal?.aborted) {
+      throw new Error(`${cfg.provider || "LLM"} chat completion aborted`);
+    }
+    if (attempt > 0) {
+      const delayMs = computeRetryDelay(attempt - 1);
+      await logDebugEvent("llm_completion_http_retry_backoff", {
+        provider: cfg.provider,
+        attempt,
+        delayMs,
+      }).catch(() => {});
+      await sleepMs(delayMs);
+    }
+    try {
+      if (shouldUseIpcStream(endpoint)) {
+        const raw = await ipcProxyRequest({
+          method: "POST",
+          url: endpoint,
+          headers,
+          body,
+        });
+        if (raw?.error) {
+          throw new Error(String(raw.error));
+        }
+        const st = Number(raw.status);
+        const bodyStr = String(raw.body ?? "");
+        if (!Number.isFinite(st) || st < 200 || st >= 300) {
+          const msg = formatProviderError(cfg.provider, st, bodyStr);
+          const hint = toolsCapabilityHint(0, st, bodyStr);
+          if (
+            TRANSIENT_LLM_HTTP_STATUSES.has(st) &&
+            attempt < maxAttempts - 1 &&
+            !looksLikeToolParameterRejection(st, bodyStr)
+          ) {
+            await logDebugEvent("llm_completion_ipc_transient", {
+              provider: cfg.provider,
+              status: st,
+              attempt,
+            }).catch(() => {});
+            lastErr = new Error(`${msg}${hint}`);
+            continue;
+          }
+          throw new Error(`${msg}${hint}`);
+        }
+        const payload = parseIpcProxyCompletionPayload(raw, cfg.provider);
+        return completionMessageText(payload);
+      }
+
+      const res = await fetchWithTimeout(
+        endpoint,
+        { method: "POST", headers, body, signal: options.signal },
+        LLM_REQUEST_TIMEOUT_MS,
+        label
+      );
+      if (!res.ok) {
+        const errText = await res.text().catch(() => "");
+        const msg = formatProviderError(cfg.provider, res.status, errText);
+        const hint = toolsCapabilityHint(0, res.status, errText);
+        if (
+          TRANSIENT_LLM_HTTP_STATUSES.has(res.status) &&
+          attempt < maxAttempts - 1 &&
+          !looksLikeToolParameterRejection(res.status, errText)
+        ) {
+          await logDebugEvent("llm_completion_http_transient", {
+            provider: cfg.provider,
+            status: res.status,
+            attempt,
+          }).catch(() => {});
+          lastErr = new Error(`${msg}${hint}`);
+          continue;
+        }
+        throw new Error(`${msg}${hint}`);
+      }
+      let payload;
+      try {
+        payload = await res.json();
+      } catch {
+        throw new Error(`${label}: malformed JSON response`);
+      }
+      return completionMessageText(payload);
+    } catch (err) {
+      if (options.signal?.aborted) {
+        throw new Error(`${cfg.provider || "LLM"} chat completion aborted`);
+      }
+      lastErr = err;
+      const canRetry = attempt < maxAttempts - 1 && retryableNodeOrFetchError(err, options.signal);
+      await logDebugEvent("llm_completion_throw", {
+        provider: cfg.provider,
+        attempt,
+        error: String(err?.message || err),
+        willRetry: canRetry,
+      }).catch(() => {});
+      if (canRetry) continue;
+      throw err;
+    }
+  }
+  throw lastErr instanceof Error ? lastErr : new Error(String(lastErr || `${label} failed after retries`));
 }
 
 export function stripXmlToolArtifacts(text) {
