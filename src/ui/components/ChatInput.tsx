@@ -154,16 +154,20 @@ export function ChatInput() {
     setValue("");
   };
 
-  const submitPickedSlashCommand = async () => {
-    if (slashQuery === null || commandMatches.length === 0) return false;
-    const idx = Math.min(Math.max(0, selectedCommand), commandMatches.length - 1);
-    const picked = commandMatches[idx];
-    if (!picked) return false;
+  const submitSlashPick = async (picked: { name: string }) => {
     const pid = activeProfileId;
     await submitUserInput(picked.name);
     recordSubmittedLine(picked.name, pid);
     historyBrowseIndexRef.current = null;
     setValue("");
+  };
+
+  const submitPickedSlashCommand = async () => {
+    if (slashQuery === null || commandMatches.length === 0) return false;
+    const idx = Math.min(Math.max(0, selectedCommand), commandMatches.length - 1);
+    const picked = commandMatches[idx];
+    if (!picked) return false;
+    await submitSlashPick(picked);
     return true;
   };
 
@@ -351,7 +355,7 @@ export function ChatInput() {
           }
         />
         {slashQuery !== null && commandMatches.length > 0 && (
-          <div className="pointer-events-none absolute bottom-[calc(100%+0.5rem)] left-0 z-20 w-full border border-[#fb75fc4d] bg-[#05050dd9] p-2 shadow-[0_0_0_1px_rgba(251,117,252,0.16),0_18px_44px_rgba(0,0,0,0.55)] backdrop-blur-sm">
+          <div className="absolute bottom-[calc(100%+0.5rem)] left-0 z-20 w-full border border-[#fb75fc4d] bg-[#05050dd9] p-2 shadow-[0_0_0_1px_rgba(251,117,252,0.16),0_18px_44px_rgba(0,0,0,0.55)] backdrop-blur-sm">
             <p className="px-2 pb-1 text-[10px] uppercase tracking-[0.22em] text-brand-magenta-light">
               slash commands
             </p>
@@ -361,7 +365,12 @@ export function ChatInput() {
                 return (
                   <div
                     key={command.name}
-                    className="px-2 py-1.5"
+                    className="cursor-pointer px-2 py-1.5"
+                    onMouseEnter={() => setSelectedCommand(index)}
+                    onMouseDown={(e) => {
+                      e.preventDefault();
+                      void submitSlashPick(command);
+                    }}
                     style={{
                       background: active
                         ? "linear-gradient(90deg, rgba(251,117,252,0.24), rgba(138,56,245,0.14) 70%, rgba(138,56,245,0.04))"
