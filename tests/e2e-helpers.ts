@@ -31,7 +31,7 @@ export function runningChatInput(page: Page) {
 /** Matches chat input in idle or running states (placeholder changes). */
 export function anyChatInput(page: Page) {
   return page.locator(
-    'input[placeholder="Type message (Enter to send, /stop to interrupt)"], input[placeholder="Launch the agent to start chatting"]'
+    'textarea[placeholder="Type message (Enter to send, /stop to interrupt)"], textarea[placeholder="Launch the agent to start chatting"]'
   );
 }
 

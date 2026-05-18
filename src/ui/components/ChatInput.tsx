@@ -67,7 +67,7 @@ export function ChatInput() {
     modelId,
   } = rt;
   const agentWorking = profileAgentWorking(rt);
-  const inputRef = useRef<HTMLInputElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const inputHistoryRef = useRef<string[]>([]);
   const historyBrowseIndexRef = useRef<number | null>(null);
@@ -92,6 +92,23 @@ export function ChatInput() {
   useLayoutEffect(() => {
     setSelectedCommand(0);
   }, [slashQuery]);
+
+  const AUTOSIZE_MAX_ROWS = 4;
+  useLayoutEffect(() => {
+    const el = inputRef.current;
+    if (!el) return;
+    const cs = getComputedStyle(el);
+    let lineHeight = parseFloat(cs.lineHeight);
+    if (!Number.isFinite(lineHeight) || lineHeight <= 0) {
+      const fontSize = parseFloat(cs.fontSize) || 14;
+      lineHeight = fontSize * 1.25;
+    }
+    const maxH = lineHeight * AUTOSIZE_MAX_ROWS;
+    el.style.height = "0px";
+    const next = Math.min(el.scrollHeight, maxH);
+    el.style.height = `${next}px`;
+    el.style.overflowY = el.scrollHeight > maxH ? "auto" : "hidden";
+  }, [value]);
 
   useEffect(() => {
     const previousStatus = previousRuntimeStatusRef.current;
@@ -245,7 +262,7 @@ export function ChatInput() {
           type="button"
           aria-label="Upload files"
           data-testid="chat-input-upload"
-          className="inline-flex min-h-10 min-w-10 shrink-0 touch-manipulation items-center justify-center text-text-muted transition-colors hover:text-text-primary"
+          className="inline-flex min-h-8 min-w-8 shrink-0 touch-manipulation items-center justify-center rounded-[3px] bg-white/5 text-text-muted transition-colors hover:text-text-primary"
           onClick={() => {
             if (runtimeStatus !== "running" || !activeProfileId) {
               showUploadUnavailable();
@@ -255,7 +272,7 @@ export function ChatInput() {
             fileInputRef.current?.click();
           }}
         >
-          <Plus size={14} />
+          <Plus size={12} />
         </button>
         <input
           ref={fileInputRef}
@@ -269,8 +286,9 @@ export function ChatInput() {
             e.target.value = "";
           }}
         />
-        <input
+        <textarea
           ref={inputRef}
+          rows={1}
           value={value}
           onChange={(e) => {
             historyBrowseIndexRef.current = null;
@@ -347,7 +365,7 @@ export function ChatInput() {
             }
           }}
           disabled={disabled}
-          className="h-10 min-h-10 flex-1 bg-transparent text-sm text-text-primary outline-none placeholder:text-text-muted disabled:cursor-not-allowed disabled:opacity-60 md:h-7 md:min-h-0"
+          className="min-h-10 resize-none overflow-y-hidden flex-1 bg-transparent py-2 text-sm leading-5 text-text-primary outline-none placeholder:text-text-muted disabled:cursor-not-allowed disabled:opacity-60 md:min-h-7 md:py-1.5"
           placeholder={
             runtimeStatus === "running"
               ? "Type message (Enter to send, /stop to interrupt)"
