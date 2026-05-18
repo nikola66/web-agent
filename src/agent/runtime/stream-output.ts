@@ -16,8 +16,17 @@ export function summarizeToolExecutions(exec, snapshotRefs = []) {
       if (resultRef) summary += ` (full error payload spilled: use read_file on "${resultRef}")`;
     } else if (resultRef) {
       summary = `payload_spilled_to_snapshot: full tool result is only in "${resultRef}" — call read_file with that path; the inline body was not included here`;
+      const tr = item?.result;
+      if (tr && typeof tr === "object" && tr.truncated === true) {
+        summary += ` [fetch_truncated: spilled payload may be partial (${tr.truncated_at_chars ?? "?"} char cap) — narrow scope or grep/read within file]`;
+      }
     } else {
-      summary = `result: ${summarizeToolResultPreview(item?.result)}`;
+      const preview = summarizeToolResultPreview(item?.result);
+      summary = `result: ${preview}`;
+      const r = item?.result;
+      if (r && typeof r === "object" && r.truncated === true) {
+        summary += ` [fetch_truncated: partial response only (${r.truncated_at_chars ?? "?"} char cap) — narrow scope, fetch a smaller URL, or search inside spilled/read_file content; do not assume text continues beyond this cut]`;
+      }
     }
     const row = {
       tool: String(item?.tool || "unknown"),

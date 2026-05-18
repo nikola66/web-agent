@@ -25,7 +25,7 @@ export type ClassifiedToolError = {
 
 const RATE_LIMIT_RE = /\b(429|rate\s*limit|too\s+many\s+requests|throttl)/i;
 const AUTH_RE = /\b(401|403|unauthorized|forbidden|invalid\s*api\s*key|auth)/i;
-const TIMEOUT_RE = /\btimeout|timed\s+out|deadline|ETIMEDOUT|abort/i;
+const TIMEOUT_RE = /\btimeout|timed\s+out|deadline|ETIMEDOUT\b/i;
 const CONTEXT_RE = /\b(context|token)\s*(length|limit|overflow|exceeded)|maximum\s+context|too\s+long/i;
 const FORMAT_RE = /\b(invalid|malformed|parse|json|syntax|unexpected\s+token|schema)/i;
 
@@ -51,10 +51,55 @@ function classifyFromMessage(message: string, statusHint: number | null): Omit<C
     return { reason, retryable, shouldCompress, shouldFallback, error_code, hintBase: "User declined this tool execution." };
   }
 
+  if (/run_shell \(nodebox\):\s*no os shell/i.test(message)) {
+    reason = "unknown";
+    retryable = false;
+    shouldFallback = true;
+    error_code = "nodebox_shell_unsupported";
+    return {
+      reason,
+      retryable,
+      shouldCompress,
+      shouldFallback,
+      error_code,
+      hintBase:
+        "Nodebox has no POSIX shell — only `node …`. Use grep, read_file, web_fetch, or node -e; do not retry shell pipelines or external binaries.",
+    };
+  }
+
+  if (/run_shell \(nodebox\):\s*background mode is not supported/i.test(message)) {
+    reason = "unknown";
+    retryable = false;
+    shouldFallback = true;
+    error_code = "nodebox_shell_unsupported";
+    return {
+      reason,
+      retryable,
+      shouldCompress,
+      shouldFallback,
+      error_code,
+      hintBase:
+        "Nodebox run_shell cannot use background mode. Omit `background` or use a full host runtime.",
+    };
+  }
+
+  if (/run_shell aborted/i.test(message)) {
+    reason = "unknown";
+    retryable = false;
+    error_code = "aborted";
+    return {
+      reason,
+      retryable,
+      shouldCompress,
+      shouldFallback,
+      error_code,
+      hintBase: "Shell run was aborted — do not retry unless the user asks.",
+    };
+  }
+
   if (
     TIMEOUT_RE.test(message) ||
-    statusHint === 408 ||
-    m.includes("abort")
+    statusHint === 408
   ) {
     reason = "timeout";
     retryable = true;

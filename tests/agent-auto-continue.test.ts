@@ -14,7 +14,7 @@ import {
   isSchedulingAutomationIntent,
   shouldNudgeIncompleteSchedulingReply,
 } from "../dist/agent-runtime/turn-sequencing.js";
-import { getAutoContinueNudgeState } from "../dist/agent-runtime/auto-continue.js";
+import { getAutoContinueNudgeState, shouldSuppressPostToolNudgeFromExecutions } from "../dist/agent-runtime/auto-continue.js";
 
 const TOOL_NAMES = [
   "make_dir",
@@ -320,6 +320,47 @@ test("strict post-tool continue still skips inline Phase prose without observati
     shouldAutoContinueStrict("Phase 2 is riskier because it touches authentication."),
     false
   );
+});
+
+test("shouldSuppressPostToolNudgeFromExecutions detects nodebox_shell_unsupported", () => {
+  assert.equal(
+    shouldSuppressPostToolNudgeFromExecutions([
+      { tool: "run_shell", error: "x", retryable: false, error_code: "nodebox_shell_unsupported" },
+    ]),
+    true
+  );
+  assert.equal(shouldSuppressPostToolNudgeFromExecutions([]), false);
+  assert.equal(
+    shouldSuppressPostToolNudgeFromExecutions([
+      { tool: "run_shell", error: "x", retryable: true, error_code: "timeout" },
+    ]),
+    false
+  );
+});
+
+test("post-tool auto-continue suppressed after nodebox_shell_unsupported failure", () => {
+  const state = getAutoContinueNudgeState({
+    turnInput: "Extract links",
+    visible: "",
+    executedToolsInTurn: true,
+    autoContinueNudges: 0,
+    maxNudges: 20,
+    toolNames: TOOL_NAMES,
+    originalUserInput: "Extract links",
+    suppressActionPlanNudge: false,
+    webSearchCount: 0,
+    webFetchCount: 0,
+    lastToolExecutions: [
+      {
+        tool: "run_shell",
+        error: "run_shell (Nodebox): no OS shell — only `node …`",
+        retryable: false,
+        error_code: "nodebox_shell_unsupported",
+      },
+    ],
+  });
+  assert.equal(state.want, false);
+  assert.equal(state.shouldNudge, false);
 });
 
 test("research incomplete does not block strict post-tool recovery nudge", () => {

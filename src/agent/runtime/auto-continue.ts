@@ -50,6 +50,17 @@ export function resolveMaxAutoContinueNudges(originalUserInput) {
   return Math.max(base, 30);
 }
 
+/** Suppress post-tool auto-continue when the last batch hit a deterministic Nodebox shell block (avoids retry loops). */
+export function shouldSuppressPostToolNudgeFromExecutions(executions) {
+  if (!Array.isArray(executions) || executions.length === 0) return false;
+  return executions.some(
+    (item) =>
+      item?.error &&
+      item.retryable === false &&
+      item.error_code === "nodebox_shell_unsupported"
+  );
+}
+
 export function getAutoContinueNudgeState({
   turnInput,
   visible,
@@ -61,6 +72,7 @@ export function getAutoContinueNudgeState({
   suppressActionPlanNudge,
   webSearchCount = 0,
   webFetchCount = 0,
+  lastToolExecutions = [],
 }) {
   const researchIntent = isResearchIntent(originalUserInput);
   const exactTokens = extractExactResponseTokens(originalUserInput);
@@ -71,13 +83,16 @@ export function getAutoContinueNudgeState({
     !suppressActionPlanNudge &&
     !isExplicitSequenceCompletion(visible) &&
     shouldAutoContinueActionPlan(turnInput, visible);
+  const suppressPostToolFromErrors = shouldSuppressPostToolNudgeFromExecutions(lastToolExecutions);
   const shouldNudgeAfterTools =
     executedToolsInTurn &&
+    !suppressPostToolFromErrors &&
     !isExplicitSequenceCompletion(visible) &&
     shouldAutoContinueAfterToolUse(visible);
   const shouldNudgeStrictPostTool =
     STRICT_POST_TOOL_CONTINUE &&
     executedToolsInTurn &&
+    !suppressPostToolFromErrors &&
     !shouldNudgeForAction &&
     !shouldNudgeAfterTools &&
     !isExplicitSequenceCompletion(visible) &&

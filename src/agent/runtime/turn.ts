@@ -329,6 +329,7 @@ export async function agentTurn(
   const agentName = process.env.WEBAGENT_AGENT_NAME || process.env.WEBAGENT_PROFILE_NAME || "Agent";
   let turnHeaderPrinted = false;
   const loopGuard = createLoopGuardState();
+  let lastToolExecutions: Array<Record<string, unknown>> = [];
   try {
     while (round < MAX_AGENT_ROUNDS) {
       if (turnController.signal.aborted) {
@@ -523,6 +524,7 @@ export async function agentTurn(
             suppressActionPlanNudge,
             webSearchCount: webSearchCountInTurn,
             webFetchCount: webFetchCountInTurn,
+            lastToolExecutions,
           });
           if (nudgeState.want && !nudgeState.underCap) {
             process.stdout.write(
@@ -629,6 +631,7 @@ export async function agentTurn(
       }
 
       const exec = await runTools(tools, turnCtx, toolCatalog);
+      lastToolExecutions = exec;
       if (exec.length > 0) executedToolsInTurn = true;
       for (let i = 0; i < tools.length; i++) {
         const tname = String(tools[i]?.name || "");

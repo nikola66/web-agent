@@ -276,6 +276,18 @@ function hasProviderApiKey(provider, ctx) {
   return !!String(ctxEnv(ctx)[envVar] || "").trim();
 }
 
+/** Proxy body cap; exported for tests. */
+export const WEB_FETCH_PROXY_BODY_CAP = 100_000;
+
+/** Slice proxy response body to WEB_FETCH_PROXY_BODY_CAP and record truncation (test hook). */
+export function sliceProxyFetchBody(body: unknown, cap = WEB_FETCH_PROXY_BODY_CAP) {
+  const bodyStr = String(body ?? "");
+  if (bodyStr.length <= cap) {
+    return { text: bodyStr, truncated: false as const, truncated_at_chars: undefined as number | undefined };
+  }
+  return { text: bodyStr.slice(0, cap), truncated: true as const, truncated_at_chars: cap };
+}
+
 async function proxyFetch(url, ctx) {
   const { status, body, contentType } = readProxyResponse(await proxyRequest({ method: "GET", url }, ctx));
   if (status < 200 || status >= 300) {
@@ -284,7 +296,15 @@ async function proxyFetch(url, ctx) {
       `Fetch failed (${status}): ${detail || "unknown error"}. Retry web_search with a simpler query, one location code (ae or sa, not "ae, sa"), or check network/API settings.`
     );
   }
-  return { ok: true, url, status, contentType, text: body.slice(0, 100_000) };
+  const sliced = sliceProxyFetchBody(body);
+  return {
+    ok: true,
+    url,
+    status,
+    contentType,
+    text: sliced.text,
+    ...(sliced.truncated ? { truncated: true, truncated_at_chars: sliced.truncated_at_chars } : {}),
+  };
 }
 
 export async function webSearchTool(args: ToolArgs = {}, ctx) {
@@ -323,19 +343,39 @@ export async function webSearchTool(args: ToolArgs = {}, ctx) {
   return { ok: true, query: q, provider: "duckduckgo-fallback", results };
 }
 
+const WEB_FETCH_READABLE_HTML_CAP = 50_000;
+
 async function webFetchReadableFromProxy(url, ctx) {
-  const { text, contentType } = await proxyFetch(url, ctx);
+  const proxy = await proxyFetch(url, ctx);
+  const { text, contentType, truncated: proxyTruncated, truncated_at_chars: proxyTruncCap } = proxy;
   const isHtml = contentType.includes("html") || text.trimStart().startsWith("<");
-  const readable = isHtml
-    ? text
-        .replace(/<script[\s\S]*?<\/script>/gi, "")
-        .replace(/<style[\s\S]*?<\/style>/gi, "")
-        .replace(/<[^>]+>/g, " ")
-        .replace(/\s{2,}/g, " ")
-        .trim()
-        .slice(0, 50_000)
-    : text;
-  return { ok: true, url, provider: "proxy-fallback", text: readable };
+  let readable;
+  let truncated = !!proxyTruncated;
+  let truncated_at_chars = proxyTruncated ? proxyTruncCap : undefined;
+  if (isHtml) {
+    const stripped = text
+      .replace(/<script[\s\S]*?<\/script>/gi, "")
+      .replace(/<style[\s\S]*?<\/style>/gi, "")
+      .replace(/<[^>]+>/g, " ")
+      .replace(/\s{2,}/g, " ")
+      .trim();
+    const overReadable = stripped.length > WEB_FETCH_READABLE_HTML_CAP;
+    readable = overReadable ? stripped.slice(0, WEB_FETCH_READABLE_HTML_CAP) : stripped;
+    if (overReadable) {
+      truncated = true;
+      truncated_at_chars = WEB_FETCH_READABLE_HTML_CAP;
+    }
+  } else {
+    readable = text;
+  }
+  return {
+    ok: true,
+    url,
+    provider: "proxy-fallback",
+    content_type: contentType,
+    text: readable,
+    ...(truncated ? { truncated, truncated_at_chars } : {}),
+  };
 }
 
 const WEB_FETCH_BATCH_MAX = 5;
