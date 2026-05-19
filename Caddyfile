@@ -68,6 +68,16 @@
 		}
 	}
 
+	# Vite hashed chunks: 404 if missing — never SPA-fallback (that returns text/html for .js).
+	@assets path /assets/*
+	handle @assets {
+		root * dist
+		file_server {
+			hide .git
+			hide .env*
+		}
+	}
+
 	# Static SPA (Vite default outDir: dist; override with RAILPACK_SPA_OUTPUT_DIR if needed)
 	handle {
 		root * dist
