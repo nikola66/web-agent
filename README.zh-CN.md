@@ -4,11 +4,11 @@
 
 # Web Agent
 
-**Browser-native AI agent with isolated workspaces, persistent memory, and zero setup friction.**
+**浏览器原生 AI 代理：隔离工作区、持久记忆、零安装摩擦。**
 
-[Live demo](https://webagent.aratech.ae) · [GitHub](https://github.com/nikola66/web-agent) · [Support on Ko-fi](http://ko-fi.com/nikola66) · [Contributing](CONTRIBUTING.md) · [Security](SECURITY.md)
+[在线演示](https://webagent.aratech.ae) · [GitHub](https://github.com/nikola66/web-agent) · [Ko-fi 支持](http://ko-fi.com/nikola66) · [贡献指南](CONTRIBUTING.zh-CN.md) · [安全](SECURITY.zh-CN.md)
 
-**Languages:** [English](README.md) · [简体中文](README.zh-CN.md) · [Español](README.es.md) · [العربية](README.ar.md)
+**语言：** [English](README.md) · [简体中文](README.zh-CN.md) · [Español](README.es.md) · [العربية](README.ar.md)
 
 </div>
 
@@ -22,43 +22,45 @@
   </tr>
 </table>
 
-Web Agent is an open-source AI agent that runs directly in the browser on top of WebContainers. There is nothing to install to use it: no Docker, no VPS, no VM, no Mac mini, no Hostinger box, no local Python stack. Open the app, launch a profile, and start working.
+<!-- i18n-sync: en@8293e87 2026-05-20 -->
 
-It is designed to feel simple for end users and capable for power users: isolated profiles, browser-local persistence, tools, skills, sessions, reflections, learnings, cron jobs, **planning mode** (`/plan`), a **PARA + Obsidian-style knowledge vault** (`wiki_*` tools and `/wiki-*` commands), and a self-improving runtime that stays on the user’s machine.
+Web Agent 是在 WebContainers 上直接在浏览器中运行的开源 AI 代理。终端用户无需安装：无 Docker、无 VPS、无 VM、无 Mac mini、无 Hostinger、无本地 Python 栈。打开应用、启动 profile 即可工作。
 
-## Contents
+面向普通用户简单、面向高级用户强大：隔离 profile、浏览器本地持久化、工具、技能、会话、反思、学习、cron、**规划模式**（`/plan`）、**PARA + Obsidian 风格知识库**（`wiki_*` 工具与 `/wiki-*` 命令），以及留在用户机器上的自改进运行时。
 
-- [Why Web Agent](#why-web-agent)
-- [Highlights](#highlights)
-- [Capability Surface](#capability-surface)
-- [Slash Commands](#slash-commands)
-- [Settings And Providers](#settings-and-providers)
-- [Tooling](#tooling)
-- [Skills](#skills)
-- [Workspace Features](#workspace-features)
-- [How Persistence Works](#how-persistence-works)
-- [Get Started Presets](#get-started-presets)
-- [Quick Start](#quick-start)
-- [Development](#development)
-- [Architecture At A Glance](#architecture-at-a-glance)
-- [Privacy And Security](#privacy-and-security)
-- [Open Source](#open-source)
-- [Support And Sponsorship](#support-and-sponsorship)
-- [Contributing](#contributing)
-- [License](#license)
+## 目录
 
-## Why Web Agent
+- [为什么选择 Web Agent](#为什么选择-web-agent)
+- [亮点](#亮点)
+- [能力概览](#能力概览)
+- [斜杠命令](#斜杠命令)
+- [设置与提供商](#设置与提供商)
+- [工具](#工具)
+- [技能](#技能)
+- [工作区功能](#工作区功能)
+- [持久化如何工作](#持久化如何工作)
+- [入门预设](#入门预设)
+- [快速开始](#快速开始)
+- [开发](#开发)
+- [架构一览](#架构一览)
+- [隐私与安全](#隐私与安全)
+- [开源](#开源)
+- [支持与赞助](#支持与赞助)
+- [贡献](#贡献)
+- [许可证](#许可证)
 
-- **Click and run**. Launch from the browser with no install step for end users.
-- **Isolated by default**. Every profile gets its own workspace, memory, and runtime state.
-- **Self-learning**. Skills, reflections, learnings, facts, session memory, and optional wiki projections help the agent improve over time without losing browser-local control.
-- **Local-first persistence**. Workspaces, memory, sessions, and skills live in browser storage and can be exported or re-imported later.
-- **Hosted without server-side user state**. The hosted demo serves the app, while user files and agent state stay in the browser.
-- **Open source**. Free to use, fork, modify, and distribute under the MIT License.
+## 为什么选择 Web Agent
 
-## Highlights
+- **点开即用**。终端用户浏览器启动，无需安装。
+- **默认隔离**。每个 profile 独立工作区、记忆与运行时状态。
+- **自学习**。技能、反思、学习、事实、会话记忆与可选 wiki 投影，在浏览器本地控制下持续改进。
+- **本地优先持久化**。工作区、记忆、会话、技能存于浏览器存储，可导出/导入。
+- **托管无服务端用户状态**。演示站只提供应用，文件与代理状态留在浏览器。
+- **开源**。MIT 许可，可自由使用、分叉与修改。
 
-- Browser-native Node.js runtime powered by WebContainers
+## 亮点
+
+- 基于 WebContainers 的浏览器原生 Node.js 运行时
 - Isolated profiles with separate workspaces and memories
 - Built-in tools for files, shell, search, fetch, memory, sessions, cron, skills, and **knowledge vault** (`wiki_setup`, `wiki_sync`, `wiki_search`)
 - **`/plan` planning mode**: research the workspace, save a dated markdown plan under `plans/`, present it with `artifact_present`, then execute on a **follow-up** message
@@ -68,11 +70,11 @@ It is designed to feel simple for end users and capable for power users: isolate
 - Encrypted API keys stored locally in the browser
 - Export and import flows for long-lived browser-local workspaces
 - Hosted demo for zero-friction trial usage
-- **Loop Guard** (default on): browser-side MiniLM classifier decides continue / stop / ask_user after each agent step; disable with `VITE_WEBAGENT_LOOP_GUARD=0` (see [docs/agent-notes.md](docs/agent-notes.md))
+- **Loop Guard**（默认开启）：浏览器端 MiniLM 分类器在每步后决定 continue / stop / ask_user；`VITE_WEBAGENT_LOOP_GUARD=0` 可禁用（见 [docs/zh-CN/agent-notes.md](docs/zh-CN/agent-notes.md)）
 
-## Capability Surface
+## 能力概览
 
-Web Agent is not just a chat box. It is a browser-native agent runtime with three layers working together:
+Web Agent 不只是聊天框，而是浏览器原生代理运行时，三层协作：
 
 - `⌨️ Slash commands` for fast operator control
 - `🛠️ Tools` for concrete actions in the workspace and on the web
@@ -183,7 +185,7 @@ For choosing **facts vs session vs skills vs vault**, use the bundled **`/memory
 | `🌐 Remote tools` | Search, fetch, email, vision, YouTube transcript | Web-aware and multimodal task execution |
 | `📚 Skills` | Reusable `SKILL.md` procedures | Higher-level workflows without retraining the model |
 
-## Slash Commands
+## 斜杠命令
 
 These commands make the terminal experience feel like an operator console rather than a plain chatbot. They cover help, interruption, context compaction, **planning mode**, **wiki vault** shortcuts, checkpoint-based recovery, and direct skill invocation.
 
@@ -207,7 +209,7 @@ These commands make the terminal experience feel like an operator console rather
 
 > `📌 Tip:` Natural-language asks like “set up my knowledge vault” or “sync facts to the wiki” map to the same **`wiki_*`** tools as the `/wiki_*` slash commands.
 
-## Settings And Providers
+## 设置与提供商
 
 Web Agent exposes provider configuration in two places: the profile editor for the active chat/model provider, and the Settings sidebar for browser-routed web tools and email delivery.
 
@@ -238,7 +240,7 @@ These power built-in web actions from the Settings panel:
 - `🌐 Custom base URL`: point the custom provider at any OpenAI-compatible endpoint.
 - `✉️ Email delivery`: add Resend credentials for digest or outbound mail flows.
 
-## Tooling
+## 工具
 
 Web Agent ships with a broad native tool belt. The built-ins cover workspace manipulation, search, memory, automation, skill management, and browser-routed remote actions.
 
@@ -303,7 +305,7 @@ Web Agent ships with a broad native tool belt. The built-ins cover workspace man
 
 </details>
 
-## Skills
+## 技能
 
 Skills are reusable procedures stored as `SKILL.md` files. They let Web Agent switch from raw tool usage to structured workflows that can be invoked on demand.
 
@@ -332,7 +334,7 @@ Additional bundled skills appear under `/skills`; the table above highlights com
 - **`memory_*` / `session_*`** hold the canonical structured context the runtime uses.
 - **`wiki_sync`** projects summaries and sync markers into markdown for humans (or Obsidian); treat the vault as a **browseable mirror**, not a second source of truth, unless you intentionally archive prose there.
 
-## Workspace Features
+## 工作区功能
 
 Every profile gets its own isolated workspace rooted in browser storage. The workspace layer is designed to feel like a lightweight project environment, not just an attachment bucket.
 
@@ -355,7 +357,7 @@ Every profile gets its own isolated workspace rooted in browser storage. The wor
 - `Files popup`: browse the live `/workspace`, preview files, and interact with the working tree.
 - `uploads/`: user-uploaded assets are normalized under `uploads/` for safe tool access.
 
-## How Persistence Works
+## 持久化如何工作
 
 Web Agent keeps user state in browser storage on the user’s machine. That includes workspaces, sessions, memory, facts, learnings, skills, todos, cron metadata, saved **`/plan`** markdown under **`plans/`** (legacy `.webagent/plans/` paths remain readable), wiki vault files under **`.webagent/knowledge-vault/`** by default (legacy **`knowledge-vault/`** at the workspace root is automatically moved there when wiki tools run without an explicit `root_path`), and local credentials. Nothing in that persistent agent state is meant to live on the server.
 
@@ -369,11 +371,11 @@ For hosted deployments, the safest framing is:
 
 **Self-hosting (Railpack / Dokploy):** Use the repo `railpack.json` for `deploy.startCommand` (`scripts/start-with-proxy.sh`) and `deploy.aptPackages` (extends defaults with `caddy`). Do not add a `start` script in `package.json` for this: Railpack treats it as a custom start command, skips the built-in static+Caddy image path, and the sidecar setup breaks. The checked-in `Caddyfile` matches **Debian’s apt Caddy (~2.6)** (no `persist_config` or global `trusted_proxies` block). `web_fetch` / `web_search` without TinyFish rely on the small Node listener in `scripts/cors-proxy-server.mjs` (default `127.0.0.1:8799`).
 
-## Get Started Presets
+## 入门预设
 
-Copy-paste starting points. Adjust paths and keys for your machine.
+可复制起点。请按你的机器调整路径与密钥。
 
-### Hosted trial
+### 托管试用
 
 1. Open [webagent.aratech.ae](https://webagent.aratech.ae).
 2. Create or select a profile → add an API key from [OpenRouter](https://openrouter.ai) or [Ollama](https://ollama.com).
@@ -381,7 +383,7 @@ Copy-paste starting points. Adjust paths and keys for your machine.
 
 Recommended model on OpenRouter: **Gemma 4** (good speed, price, and tool calling). Any compatible model works.
 
-### Local development
+### 本地开发
 
 ```bash
 git clone https://github.com/nikola66/web-agent.git
@@ -393,9 +395,9 @@ npm run dev
 
 Open `http://localhost:5173`. Loop Guard env vars are documented in [.env.example](.env.example).
 
-### Operator workflows
+### 操作者工作流
 
-**Planning** — spec first, implement on the next turn:
+**规划** — 先写规格，下一轮再实现：
 
 ```
 /plan Add a /health route and document it in README
@@ -407,7 +409,7 @@ Review the plan under `plans/`, then on the **next** message:
 Execute the plan you just wrote.
 ```
 
-**Knowledge vault** — PARA markdown mirror of memory:
+**知识库** — 记忆的 PARA markdown 镜像：
 
 ```
 /wiki_setup
@@ -417,15 +419,15 @@ Execute the plan you just wrote.
 
 Default vault root: `.webagent/knowledge-vault/`. Legacy `knowledge-vault/` at workspace root migrates automatically.
 
-## Quick Start
+## 快速开始
 
-### Use the hosted demo
+### 使用托管演示
 
 Open [webagent.aratech.ae](https://webagent.aratech.ae), create or select a profile, add a free key from [OpenRouter.ai](https://openrouter.ai) or [Ollama](https://ollama.com), click **Launch**, and start chatting.
 
 For Web Agent, `Gemma4` is the recommended model because it strikes a strong balance between speed, price, and tool-calling support, including images, audio, and video. You can choose any model you prefer.
 
-### Run locally
+### 本地运行
 
 ```bash
 git clone https://github.com/nikola66/web-agent.git
@@ -436,7 +438,7 @@ npm run dev
 
 Open `http://localhost:5173`.
 
-## Development
+## 开发
 
 ```bash
 npm run dev
@@ -445,18 +447,18 @@ npm run test
 npm run test:browser
 ```
 
-Contributor-facing docs:
+贡献者文档：
 
-- [docs/README.md](docs/README.md) — docs hub (English + translations)
-- [CONTRIBUTING.md](CONTRIBUTING.md)
-- [AGENTS.md](AGENTS.md) — rules for AI coding agents
-- [CAPABILITIES.md](CAPABILITIES.md)
-- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — system map, IPC protocol, storage layers
-- [docs/agent-notes.md](docs/agent-notes.md) — Loop Guard, WebContainer, persistence
-- [docs/testing-checklist.md](docs/testing-checklist.md)
+- [docs/zh-CN/README.md](docs/zh-CN/README.md) — 文档索引
+- [CONTRIBUTING.zh-CN.md](CONTRIBUTING.zh-CN.md)
+- [docs/zh-CN/AGENTS.md](docs/zh-CN/AGENTS.md)
+- [docs/zh-CN/CAPABILITIES.md](docs/zh-CN/CAPABILITIES.md)
+- [docs/zh-CN/ARCHITECTURE.md](docs/zh-CN/ARCHITECTURE.md)
+- [docs/zh-CN/agent-notes.md](docs/zh-CN/agent-notes.md)
+- [docs/zh-CN/testing-checklist.md](docs/zh-CN/testing-checklist.md)
 - [docs/GLOSSARY.md](docs/GLOSSARY.md) · [docs/TRANSLATING.md](docs/TRANSLATING.md)
 
-## Architecture At A Glance
+## 架构一览
 
 - **Frontend**: React + Vite + xterm.js
 - **Runtime**: Node.js inside WebContainers
@@ -468,24 +470,24 @@ Contributor-facing docs:
 
 The agent runtime is embedded into the browser app, mounted into a live workspace, and launched inside a terminal-backed Node environment. Profiles keep personalities, settings, workspace state, and memory separated.
 
-## Privacy And Security
+## 隐私与安全
 
 - Workspace files, sessions, memory, skills, and local credentials stay browser-side.
 - API keys are stored locally and encrypted before persistence.
 - Profiles are isolated from each other.
 - Hosted mode should remain transit-only for upstream requests, not a persistence backend for user state.
 
-See [SECURITY.md](SECURITY.md) for reporting and security posture details.
+报告与安全立场见 [SECURITY.zh-CN.md](SECURITY.zh-CN.md)。
 
-## Open Source
+## 开源
 
-Web Agent is an open-source project. You are free to use it, fork it, modify it, and distribute it under the [MIT License](LICENSE).
+Web Agent 是开源项目。 You are free to use it, fork it, modify it, and distribute it under the [MIT License](LICENSE).
 
 Inspired by OpenClaw, [Hermes Agent](https://github.com/NousResearch/hermes-agent), and OpenCrabs.
 
 Special thanks to the Nodebox used technology and the open source project behind it. It is beautiful software and made Web Agent possible.
 
-## Support And Sponsorship
+## 支持与赞助
 
 If Web Agent saves you time or helps your work, support ongoing development on [Ko-fi](http://ko-fi.com/nikola66). Sponsorship helps fund continued maintenance, new capabilities, UI polish, and long-term improvements.
 
@@ -506,10 +508,12 @@ If Web Agent saves you time or helps your work, support ongoing development on [
   </tr>
 </table>
 
-## Contributing
+## 贡献
 
-Issues and pull requests are welcome. Start with [CONTRIBUTING.md](CONTRIBUTING.md), keep changes surgical, and prefer fixes that preserve the project’s browser-native and local-first design.
+欢迎 issue 与 PR。请先阅读 [CONTRIBUTING.zh-CN.md](CONTRIBUTING.zh-CN.md)，保持改动精准，并维护浏览器原生、本地优先设计。
 
-## License
+## 许可证
 
-MIT. See [LICENSE](LICENSE).
+MIT。见 [LICENSE](LICENSE)。
+
+> 完整工具目录、斜杠命令表与能力图见 [英文 README](README.md)。

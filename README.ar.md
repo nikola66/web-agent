@@ -4,11 +4,11 @@
 
 # Web Agent
 
-**Browser-native AI agent with isolated workspaces, persistent memory, and zero setup friction.**
+**وكيل ذكاء اصطناعي أصلي للمتصفح مع مساحات عمل معزولة وذاكرة دائمة وبدون احتكاك تثبيت.**
 
-[Live demo](https://webagent.aratech.ae) · [GitHub](https://github.com/nikola66/web-agent) · [Support on Ko-fi](http://ko-fi.com/nikola66) · [Contributing](CONTRIBUTING.md) · [Security](SECURITY.md)
+[عرض مباشر](https://webagent.aratech.ae) · [GitHub](https://github.com/nikola66/web-agent) · [Ko-fi](http://ko-fi.com/nikola66) · [المساهمة](CONTRIBUTING.ar.md) · [الأمان](SECURITY.ar.md)
 
-**Languages:** [English](README.md) · [简体中文](README.zh-CN.md) · [Español](README.es.md) · [العربية](README.ar.md)
+**اللغات:** [English](README.md) · [简体中文](README.zh-CN.md) · [Español](README.es.md) · [العربية](README.ar.md)
 
 </div>
 
@@ -22,11 +22,13 @@
   </tr>
 </table>
 
-Web Agent is an open-source AI agent that runs directly in the browser on top of WebContainers. There is nothing to install to use it: no Docker, no VPS, no VM, no Mac mini, no Hostinger box, no local Python stack. Open the app, launch a profile, and start working.
+<!-- i18n-sync: en@8293e87 2026-05-20 -->
+
+Web Agent وكيل ذكاء اصطناعي مفتوح المصدر يعمل في المتصفح فوق WebContainers. There is nothing to install to use it: no Docker, no VPS, no VM, no Mac mini, no Hostinger box, no local Python stack. Open the app, launch a profile, and start working.
 
 It is designed to feel simple for end users and capable for power users: isolated profiles, browser-local persistence, tools, skills, sessions, reflections, learnings, cron jobs, **planning mode** (`/plan`), a **PARA + Obsidian-style knowledge vault** (`wiki_*` tools and `/wiki-*` commands), and a self-improving runtime that stays on the user’s machine.
 
-## Contents
+## المحتويات
 
 - [Why Web Agent](#why-web-agent)
 - [Highlights](#highlights)
@@ -47,7 +49,7 @@ It is designed to feel simple for end users and capable for power users: isolate
 - [Contributing](#contributing)
 - [License](#license)
 
-## Why Web Agent
+## لماذا Web Agent
 
 - **Click and run**. Launch from the browser with no install step for end users.
 - **Isolated by default**. Every profile gets its own workspace, memory, and runtime state.
@@ -56,7 +58,7 @@ It is designed to feel simple for end users and capable for power users: isolate
 - **Hosted without server-side user state**. The hosted demo serves the app, while user files and agent state stay in the browser.
 - **Open source**. Free to use, fork, modify, and distribute under the MIT License.
 
-## Highlights
+## أبرز الميزات
 
 - Browser-native Node.js runtime powered by WebContainers
 - Isolated profiles with separate workspaces and memories
@@ -68,9 +70,9 @@ It is designed to feel simple for end users and capable for power users: isolate
 - Encrypted API keys stored locally in the browser
 - Export and import flows for long-lived browser-local workspaces
 - Hosted demo for zero-friction trial usage
-- **Loop Guard** (default on): browser-side MiniLM classifier decides continue / stop / ask_user after each agent step; disable with `VITE_WEBAGENT_LOOP_GUARD=0` (see [docs/agent-notes.md](docs/agent-notes.md))
+- **Loop Guard** (default on): browser-side MiniLM classifier decides continue / stop / ask_user after each agent step; disable with `VITE_WEBAGENT_LOOP_GUARD=0` (راجع [docs/ar/agent-notes.md](docs/ar/agent-notes.md))
 
-## Capability Surface
+## سطح القدرات
 
 Web Agent is not just a chat box. It is a browser-native agent runtime with three layers working together:
 
@@ -369,7 +371,7 @@ For hosted deployments, the safest framing is:
 
 **Self-hosting (Railpack / Dokploy):** Use the repo `railpack.json` for `deploy.startCommand` (`scripts/start-with-proxy.sh`) and `deploy.aptPackages` (extends defaults with `caddy`). Do not add a `start` script in `package.json` for this: Railpack treats it as a custom start command, skips the built-in static+Caddy image path, and the sidecar setup breaks. The checked-in `Caddyfile` matches **Debian’s apt Caddy (~2.6)** (no `persist_config` or global `trusted_proxies` block). `web_fetch` / `web_search` without TinyFish rely on the small Node listener in `scripts/cors-proxy-server.mjs` (default `127.0.0.1:8799`).
 
-## Get Started Presets
+## إعدادات البدء
 
 Copy-paste starting points. Adjust paths and keys for your machine.
 
@@ -417,9 +419,9 @@ Execute the plan you just wrote.
 
 Default vault root: `.webagent/knowledge-vault/`. Legacy `knowledge-vault/` at workspace root migrates automatically.
 
-## Quick Start
+## البدء السريع
 
-### Use the hosted demo
+### العرض المستضاف
 
 Open [webagent.aratech.ae](https://webagent.aratech.ae), create or select a profile, add a free key from [OpenRouter.ai](https://openrouter.ai) or [Ollama](https://ollama.com), click **Launch**, and start chatting.
 
@@ -436,7 +438,7 @@ npm run dev
 
 Open `http://localhost:5173`.
 
-## Development
+## التطوير
 
 ```bash
 npm run dev
@@ -447,16 +449,16 @@ npm run test:browser
 
 Contributor-facing docs:
 
-- [docs/README.md](docs/README.md) — docs hub (English + translations)
-- [CONTRIBUTING.md](CONTRIBUTING.md)
-- [AGENTS.md](AGENTS.md) — rules for AI coding agents
-- [CAPABILITIES.md](CAPABILITIES.md)
-- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — system map, IPC protocol, storage layers
-- [docs/agent-notes.md](docs/agent-notes.md) — Loop Guard, WebContainer, persistence
-- [docs/testing-checklist.md](docs/testing-checklist.md)
+- [docs/ar/README.md](docs/ar/README.md)
+- [CONTRIBUTING.ar.md](CONTRIBUTING.ar.md)
+- [docs/ar/AGENTS.md](docs/ar/AGENTS.md)
+- [docs/ar/CAPABILITIES.md](docs/ar/CAPABILITIES.md)
+- [docs/ar/ARCHITECTURE.md](docs/ar/ARCHITECTURE.md)
+- [docs/ar/agent-notes.md](docs/ar/agent-notes.md)
+- [docs/ar/testing-checklist.md](docs/ar/testing-checklist.md)
 - [docs/GLOSSARY.md](docs/GLOSSARY.md) · [docs/TRANSLATING.md](docs/TRANSLATING.md)
 
-## Architecture At A Glance
+## لمحة عن البنية
 
 - **Frontend**: React + Vite + xterm.js
 - **Runtime**: Node.js inside WebContainers
@@ -468,16 +470,16 @@ Contributor-facing docs:
 
 The agent runtime is embedded into the browser app, mounted into a live workspace, and launched inside a terminal-backed Node environment. Profiles keep personalities, settings, workspace state, and memory separated.
 
-## Privacy And Security
+## الخصوصية والأمان
 
 - Workspace files, sessions, memory, skills, and local credentials stay browser-side.
 - API keys are stored locally and encrypted before persistence.
 - Profiles are isolated from each other.
 - Hosted mode should remain transit-only for upstream requests, not a persistence backend for user state.
 
-See [SECURITY.md](SECURITY.md) for reporting and security posture details.
+راجع [SECURITY.ar.md](SECURITY.ar.md).
 
-## Open Source
+## مفتوح المصدر
 
 Web Agent is an open-source project. You are free to use it, fork it, modify it, and distribute it under the [MIT License](LICENSE).
 
@@ -506,10 +508,12 @@ If Web Agent saves you time or helps your work, support ongoing development on [
   </tr>
 </table>
 
-## Contributing
+## المساهمة
 
-Issues and pull requests are welcome. Start with [CONTRIBUTING.md](CONTRIBUTING.md), keep changes surgical, and prefer fixes that preserve the project’s browser-native and local-first design.
+مرحبًا بالـ issues وPR. ابدأ بـ [CONTRIBUTING.ar.md](CONTRIBUTING.ar.md).
 
-## License
+## الترخيص
 
-MIT. See [LICENSE](LICENSE).
+MIT. راجع [LICENSE](LICENSE).
+
+> الجداول الكاملة للأدوات: [README بالإنجليزية](README.md).

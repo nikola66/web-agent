@@ -34,7 +34,7 @@ npm run test:browser
 
 - verify the change solves a real problem
 - keep the diff focused
-- update docs when behavior changes
+- update docs when behavior changes; if user-facing copy changed, update English and any affected locale files (see [docs/TRANSLATING.md](docs/TRANSLATING.md))
 - add or update tests when the change affects runtime behavior
 - avoid unrelated refactors
 
@@ -61,7 +61,10 @@ For security-sensitive reports, use [SECURITY.md](SECURITY.md) instead of public
 
 ## Contributor Docs
 
-- [README.md](README.md)
+- [README.md](README.md) — [简体中文](README.zh-CN.md) · [Español](README.es.md) · [العربية](README.ar.md)
+- [docs/README.md](docs/README.md) — docs hub and locale folders
 - [CAPABILITIES.md](CAPABILITIES.md)
+- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
 - [docs/agent-notes.md](docs/agent-notes.md)
 - [docs/testing-checklist.md](docs/testing-checklist.md)
+- [docs/GLOSSARY.md](docs/GLOSSARY.md) · [docs/TRANSLATING.md](docs/TRANSLATING.md)

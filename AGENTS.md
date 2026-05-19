@@ -13,7 +13,7 @@ Rules for any AI coding agent (Claude Code, Codex, etc.) working in `web-agent`.
 
 ## Project shape
 
-For architecture context (runtime layout, IPC protocol, storage layers), read `docs/ARCHITECTURE.md`.
+For architecture context (runtime layout, IPC protocol, storage layers), read `docs/ARCHITECTURE.md`. Use English canonical docs unless the user requests a locale (`docs/zh-CN/`, `docs/es/`, `docs/ar/`).
 
 Key entry points:
 - `src/main.tsx` — React root.
