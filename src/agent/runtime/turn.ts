@@ -255,10 +255,10 @@ export async function agentTurn(
       [...safeList].reverse().find((message) => message.role === "user")?.content ||
       ""
   ).trim();
-  const previousUserMessage = getPreviousUserMessageContent(safeList);
+  const previousUserMessage = getPreviousUserMessageContent(safeList) ?? "";
   const approvedPlanGoal = resolveApprovedPlanExecutionGoal({
     currentUserContent: originalUserInput,
-    priorUserContent: previousUserMessage,
+    priorUserContent: previousUserMessage || undefined,
     textOnly: !!turnMeta?.textOnly,
   });
   const toolHint =

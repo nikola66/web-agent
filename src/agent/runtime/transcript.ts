@@ -142,6 +142,15 @@ export function createSystemLineTranscriptEvent({ round, text } = {}) {
   };
 }
 
+export type GoalLoopTranscriptEventInput = {
+  phase?: string;
+  goal?: string;
+  reason?: string;
+  continuationsUsed?: number;
+  maxContinuations?: number;
+  round?: number;
+};
+
 export function createGoalLoopTranscriptEvent({
   phase,
   goal = "",
@@ -149,7 +158,7 @@ export function createGoalLoopTranscriptEvent({
   continuationsUsed = 0,
   maxContinuations = 20,
   round,
-} = {}) {
+}: GoalLoopTranscriptEventInput = {}) {
   return {
     type: "goal_loop",
     critical: false,

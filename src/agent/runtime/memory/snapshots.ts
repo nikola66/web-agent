@@ -277,7 +277,9 @@ export function getMaxTurnInlineChars() {
 }
 
 /** Mutable holder; one per `agentTurn` round for `saveCompressedToolResults`. */
-export function createTurnInlineBudgetState() {
+export type TurnInlineBudgetState = { remaining: number };
+
+export function createTurnInlineBudgetState(): TurnInlineBudgetState {
   return { remaining: getMaxTurnInlineChars() };
 }
 
@@ -300,6 +302,16 @@ export async function saveCompressedToolResults({
   executions,
   inlineCharBudget = 10_000,
   turnInlineBudget = null,
+}: {
+  runId?: string;
+  round?: number;
+  executions?: Array<{
+    tool?: string;
+    result?: Record<string, unknown>;
+    error?: unknown;
+  }>;
+  inlineCharBudget?: number;
+  turnInlineBudget?: TurnInlineBudgetState | null;
 }) {
   const budgetState =
     turnInlineBudget &&
