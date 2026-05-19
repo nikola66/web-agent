@@ -108,7 +108,7 @@ function emitTurnJudgeLine(decision: TurnJudgeDecision) {
       ? ` · model=${label}`
       : "";
   process.stdout.write(
-    dim(`▸ turn judge · ${decision.action} (${decision.source}, ${pct}%) — ${decision.reason}${modelNote}\n`)
+    dim(`▸ turn judge · ${decision.action} (${decision.source}, ${pct}%) — ${decision.reason}${modelNote}\n\n`)
   );
 }
 

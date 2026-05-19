@@ -1,7 +1,7 @@
 {
   "name": "web-agent",
   "private": true,
-  "version": "0.0.9",
+  "version": "1.0.0",
   "type": "module",
   "scripts": {
     "postinstall": "npm --prefix server/turn-judge install --omit=dev",
