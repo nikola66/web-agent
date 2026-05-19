@@ -87,6 +87,13 @@ Only needed if you want to improve or replace the bundled model.
 
 1. **Add examples** to [`data/turn-judge/`](../data/turn-judge/) (`train.jsonl`, `val.jsonl`, `test.jsonl`). Each line is `{"text":"…","label":"CONTINUE"|"STOP"|"ASK_USER"}` using the same `TASK:` / `MESSAGES:` / `TOOL_STATE:` / `RUNTIME_STATE:` shape as existing rows.
 
+### Mid-task CONTINUE vs topic-pivot stops
+
+- **Topic pivot** (`reason: topic_pivot`, `source: safety`) fires when `suppressTopicPivot` is set and no tools ran this turn. It blocks auto-continue on low lexical overlap between user messages.
+- **Immediate execution intent** (e.g. “Starting now.”, “First, I'm going to index…”, “I'll dive into…”) should be labeled **`CONTINUE`**, including when `suppressTopicPivot: true` appears in `RUNTIME_STATE`.
+- Weak pivot acknowledgements without execution intent (e.g. “I'll start by scanning the repo.” after “Instead, …”) stay **`STOP`**.
+- Prefer varied phrasing across rows; duplicate near-copies overfit quickly on this small dataset.
+
 2. **Python venv** (one-time):
    ```bash
    python3 -m venv .venv-turn-judge
@@ -99,7 +106,7 @@ Only needed if you want to improve or replace the bundled model.
    ```
    Overwrites artifacts under `models/turn-judge/` (restart `npm run dev` afterward).
 
-The bundled dataset is a **bootstrap** set (~57 examples). Quality improves as you add real turn traces and retrain.
+The bundled dataset is a **bootstrap** set (growing; see `data/turn-judge/*.jsonl`). Quality improves as you add real turn traces and retrain.
 
 ## Troubleshooting
 

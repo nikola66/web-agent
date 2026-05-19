@@ -49,9 +49,11 @@ function hardSafetyDecision(input: TurnJudgeRequest): TurnJudgeResponse | null {
       latencyMs: 0,
     };
   }
+  const visible = lastAssistantVisible(input);
   if (
     input.runtimeState.suppressTopicPivot &&
-    !input.toolState.executedToolsInTurn
+    !input.toolState.executedToolsInTurn &&
+    !looksLikeImmediateExecutionIntent(visible)
   ) {
     return {
       action: "stop",
@@ -61,7 +63,6 @@ function hardSafetyDecision(input: TurnJudgeRequest): TurnJudgeResponse | null {
       latencyMs: 0,
     };
   }
-  const visible = lastAssistantVisible(input);
   if (assistantAsksUser(visible)) {
     return {
       action: "stop",
@@ -90,10 +91,30 @@ function serializeJudgeInput(input: TurnJudgeRequest): string {
   ].join("\n");
 }
 
-function looksLikeMidTaskContinuation(visible: string): boolean {
+function looksLikeImmediateExecutionIntent(visible: string): boolean {
   const t = String(visible || "").trim();
   if (!t) return false;
   if (/\?\s*$/.test(t)) return false;
+  const lower = t.toLowerCase();
+  if (
+    /\b(done|completed|all set|here are (your )?options|which one|would you like|let me know|your call)\b/.test(
+      lower
+    )
+  ) {
+    return false;
+  }
+  if (/\bstarting now\b/.test(lower)) return true;
+  if (/\bfirst,? i(?:'m| am) going to\b/.test(lower)) return true;
+  if (/\bthen i(?:'ll| will)\b/.test(lower)) return true;
+  if (/\b(?:now,? )?i(?:'m| am) going to\b/.test(lower)) return true;
+  if (/\bi(?:'ll| will) (?:dive|go hunting|index|scan|hunt|map|compare)\b/.test(lower)) return true;
+  return /\blet me (?:dive|index|scan|hunt|begin)\b/.test(lower);
+}
+
+function looksLikeMidTaskContinuation(visible: string): boolean {
+  if (looksLikeImmediateExecutionIntent(visible)) return true;
+  const t = String(visible || "").trim();
+  if (!t || /\?\s*$/.test(t)) return false;
   const lower = t.toLowerCase();
   if (
     /\b(done|completed|all set|here are (your )?options|which one|would you like|let me know|your call)\b/.test(

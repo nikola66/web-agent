@@ -70,6 +70,40 @@ test("topic pivot safety stops before model when suppressTopicPivot set", async 
   assert.equal(r.reason, "topic_pivot");
 });
 
+test("topic pivot does not hard-stop when assistant shows immediate execution intent", async () => {
+  const r = await judgeTurn({
+    messages: [
+      {
+        role: "user",
+        content:
+          "Study HumanoidAgents and compare patterns to web-agent for autonomy gaps.",
+      },
+      {
+        role: "assistant",
+        content:
+          "I'll dive into the HumanoidAgents source to map architecture patterns against web-agent. First, I'm going to index the current state of web-agent so I have a baseline, then I'll go hunting in the other library.\n\nStarting now.",
+      },
+    ],
+    toolState: {
+      executedToolsInTurn: false,
+      lastToolNames: [],
+      lastToolErrorCount: 0,
+      totalToolCallsInTurn: 0,
+    },
+    runtimeState: {
+      round: 1,
+      maxRounds: 64,
+      autoContinueNudges: 0,
+      maxAutoContinueNudges: 20,
+      textOnly: false,
+      planMode: false,
+      suppressTopicPivot: true,
+    },
+  });
+  assert.notEqual(r.reason, "topic_pivot");
+  assert.notEqual(r.source, "safety");
+});
+
 test("fallback continues mid-task narration after tools when classifier unavailable", async () => {
   const r = await judgeTurn({
     messages: [
