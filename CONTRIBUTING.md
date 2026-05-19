@@ -1,6 +1,18 @@
 # Contributing
 
+**Languages:** [English](CONTRIBUTING.md) · [Español](CONTRIBUTING.es.md) · [简体中文](CONTRIBUTING.zh-CN.md) · [Deutsch](CONTRIBUTING.de.md)
+
 Thanks for contributing to Web Agent.
+
+## Contents
+
+- [Principles](#principles)
+- [Development setup](#development-setup)
+- [Useful commands](#useful-commands)
+- [Before opening a pull request](#before-opening-a-pull-request)
+- [Reporting bugs](#reporting-bugs)
+- [Pull request style](#pull-request-style)
+- [Contributor docs](#contributor-docs)
 
 ## Principles
 
@@ -37,7 +49,7 @@ npm run test:browser
 
 - verify the change solves a real problem
 - keep the diff focused
-- update docs when behavior changes
+- update docs when behavior changes (English source first, then localized `*.es.md`, `*.zh-CN.md`, `*.de.md` when user-facing copy changes)
 - add or update tests when the change affects runtime behavior
 - avoid unrelated refactors
 
@@ -66,6 +78,8 @@ For security-sensitive reports, use [SECURITY.md](SECURITY.md) instead of public
 
 - [README.md](README.md)
 - [CAPABILITIES.md](CAPABILITIES.md)
+- [docs/README.md](docs/README.md)
+- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
 - [docs/turn-judge.md](docs/turn-judge.md)
 - [docs/agent-notes.md](docs/agent-notes.md)
 - [docs/testing-checklist.md](docs/testing-checklist.md)

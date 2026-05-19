@@ -61,7 +61,6 @@ import {
   MIN_RESEARCH_FETCHES,
   MIN_RESEARCH_SEARCHES,
   resolveApprovedPlanExecutionGoal,
-  shouldSuppressActionPlanAutoContinue,
 } from "./turn-sequencing.js";
 import { errorMessage } from "./utils.js";
 import { WS } from "./constants.js";
@@ -537,10 +536,6 @@ export async function agentTurn(
           maxRounds: MAX_AGENT_ROUNDS,
           textOnly: !!turnMeta?.textOnly,
           planMode: usedPlanningGate,
-          suppressTopicPivot: shouldSuppressActionPlanAutoContinue(
-            originalUserInput,
-            previousUserMessage
-          ),
           approvedPlanGoal,
           totalToolCallsInTurn: run.tool_calls.length,
         });
@@ -611,10 +606,6 @@ export async function agentTurn(
             maxRounds: MAX_AGENT_ROUNDS,
             textOnly: !!turnMeta?.textOnly,
             planMode: usedPlanningGate,
-            suppressTopicPivot: shouldSuppressActionPlanAutoContinue(
-              originalUserInput,
-              previousUserMessage
-            ),
             approvedPlanGoal,
             totalToolCallsInTurn: run.tool_calls.length,
           });
@@ -648,21 +639,6 @@ export async function agentTurn(
               latencyMs: decision.latencyMs,
             });
             emitTurnJudgeLine(decision);
-
-            if (
-              decision.action === "continue" &&
-              !executedToolsInTurn &&
-              shouldSuppressActionPlanAutoContinue(originalUserInput, previousUserMessage)
-            ) {
-              await logDebugEvent("turn_completed", {
-                round,
-                durationMs: Date.now() - roundStartedAt,
-                continued: false,
-                topicPivotSuppress: true,
-              });
-              emitLoopStopLine("topic_pivot_no_continue");
-              break;
-            }
 
             if (decision.action === "continue") {
               if (approvedPlanGoal) {
@@ -805,36 +781,6 @@ export async function agentTurn(
             });
             emitLoopStopLine("suppressed_post_tool_nudge");
             break;
-          }
-
-          if (
-            executedToolsInTurn &&
-            !visible.trim() &&
-            autoContinueNudges < maxAutoContinueNudges
-          ) {
-            autoContinueNudges += 1;
-            conv.push({
-              role: "user",
-              content: buildGenericContinuationNudge(originalUserInput, {
-                action: "continue",
-                confidence: 1,
-                reason: "empty_after_tools_fallback",
-                source: "disabled",
-              }),
-            });
-            await logDebugEvent("turn_auto_continue_nudge", {
-              round,
-              nudgeIndex: autoContinueNudges,
-              reason: "empty_after_tools_fallback",
-              visiblePreview: String(visible || "").slice(0, 200),
-            });
-            await logDebugEvent("turn_completed", {
-              round,
-              durationMs: Date.now() - roundStartedAt,
-              continued: true,
-              turn_judge_fallback: true,
-            });
-            continue;
           }
 
           if (approvedPlanGoal && String(visible || "").trim()) {

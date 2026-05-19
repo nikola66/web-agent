@@ -1,7 +1,7 @@
 {
   "name": "web-agent",
   "private": true,
-  "version": "1.0.0",
+  "version": "1.0.1",
   "type": "module",
   "scripts": {
     "postinstall": "npm --prefix server/turn-judge install --omit=dev",
@@ -14,6 +14,9 @@
     "judge:dev": "npm --prefix server/turn-judge run dev",
     "judge:build": "npm --prefix server/turn-judge run build",
     "judge:test": "npm --prefix server/turn-judge run test",
+    "judge:ingest": ".venv-turn-judge/bin/python scripts/ingest-turn-judge-data.py",
+    "judge:eval": ".venv-turn-judge/bin/python scripts/eval-turn-judge.py",
+    "judge:check": ".venv-turn-judge/bin/python scripts/test-serialize-golden.py && npm run judge:test",
     "judge:train": ".venv-turn-judge/bin/python scripts/train-turn-judge.py",
     "test": "npm run build:embed-runtime && tsx --test tests/*.test.ts",
     "test:tools": "node scripts/run-tool-smoke.mjs",

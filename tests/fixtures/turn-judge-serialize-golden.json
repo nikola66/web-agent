@@ -1,0 +1,25 @@
+{
+  "input": {
+    "messages": [
+      { "role": "user", "content": "Stop all cron jobs" },
+      { "role": "assistant", "content": "Done. All cron jobs have been stopped." }
+    ],
+    "toolState": {
+      "executedToolsInTurn": true,
+      "lastToolNames": ["cron_register"],
+      "lastToolErrorCount": 0,
+      "totalToolCallsInTurn": 3,
+      "webSearchCount": 0,
+      "webFetchCount": 0
+    },
+    "runtimeState": {
+      "round": 2,
+      "maxRounds": 64,
+      "autoContinueNudges": 0,
+      "maxAutoContinueNudges": 20,
+      "textOnly": false,
+      "planMode": false
+    }
+  },
+  "text": "TASK: Decide whether Web Agent should continue, stop, or ask the user.\n\nMESSAGES:\nUSER: Stop all cron jobs\nASSISTANT: Done. All cron jobs have been stopped.\n\nTOOL_STATE:\n{\"executedToolsInTurn\":true,\"lastToolNames\":[\"cron_register\"],\"lastToolErrorCount\":0,\"totalToolCallsInTurn\":3,\"webSearchCount\":0,\"webFetchCount\":0}\n\nRUNTIME_STATE:\n{\"round\":2,\"maxRounds\":64,\"autoContinueNudges\":0,\"maxAutoContinueNudges\":20,\"textOnly\":false,\"planMode\":false}"
+}

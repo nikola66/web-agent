@@ -1,5 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 
 import Fastify from "fastify";
 import { judgeTurn } from "../src/turn-judge.js";
@@ -21,104 +24,25 @@ test("OPTIONS /judge answers CORS preflight", async () => {
   await app.close();
 });
 
-test("hard safety stops in text-only mode", async () => {
-  const r = await judgeTurn({
-    messages: [{ role: "assistant", content: "Hi" }],
-    toolState: {
-      executedToolsInTurn: false,
-      lastToolNames: [],
-      lastToolErrorCount: 0,
-      totalToolCallsInTurn: 0,
-    },
-    runtimeState: {
-      round: 1,
-      maxRounds: 64,
-      autoContinueNudges: 0,
-      maxAutoContinueNudges: 20,
-      textOnly: true,
-      planMode: false,
-    },
-  });
-  assert.equal(r.action, "stop");
-  assert.equal(r.source, "safety");
-});
-
-test("topic pivot safety stops before model when suppressTopicPivot set", async () => {
+test("model-only judge returns model source when classifier loads", async (t) => {
+  const modelDir = path.resolve(
+    path.dirname(fileURLToPath(import.meta.url)),
+    "../../../models/turn-judge"
+  );
+  if (!fs.existsSync(path.join(modelDir, "turn-judge-int8.onnx"))) {
+    t.skip("ONNX model not present");
+    return;
+  }
   const r = await judgeTurn({
     messages: [
-      { role: "user", content: "Instead, list open issues only." },
-      { role: "assistant", content: "I'll start by scanning the repo." },
-    ],
-    toolState: {
-      executedToolsInTurn: false,
-      lastToolNames: [],
-      lastToolErrorCount: 0,
-      totalToolCallsInTurn: 0,
-    },
-    runtimeState: {
-      round: 1,
-      maxRounds: 64,
-      autoContinueNudges: 0,
-      maxAutoContinueNudges: 20,
-      textOnly: false,
-      planMode: false,
-      suppressTopicPivot: true,
-    },
-  });
-  assert.equal(r.action, "stop");
-  assert.equal(r.source, "safety");
-  assert.equal(r.reason, "topic_pivot");
-});
-
-test("topic pivot does not hard-stop when assistant shows immediate execution intent", async () => {
-  const r = await judgeTurn({
-    messages: [
-      {
-        role: "user",
-        content:
-          "Study HumanoidAgents and compare patterns to web-agent for autonomy gaps.",
-      },
-      {
-        role: "assistant",
-        content:
-          "I'll dive into the HumanoidAgents source to map architecture patterns against web-agent. First, I'm going to index the current state of web-agent so I have a baseline, then I'll go hunting in the other library.\n\nStarting now.",
-      },
-    ],
-    toolState: {
-      executedToolsInTurn: false,
-      lastToolNames: [],
-      lastToolErrorCount: 0,
-      totalToolCallsInTurn: 0,
-    },
-    runtimeState: {
-      round: 1,
-      maxRounds: 64,
-      autoContinueNudges: 0,
-      maxAutoContinueNudges: 20,
-      textOnly: false,
-      planMode: false,
-      suppressTopicPivot: true,
-    },
-  });
-  assert.notEqual(r.reason, "topic_pivot");
-  assert.notEqual(r.source, "safety");
-});
-
-test("fallback continues mid-task narration after tools when classifier unavailable", async () => {
-  const r = await judgeTurn({
-    messages: [
-      { role: "user", content: "Continue the marketing outreach plan" },
-      {
-        role: "assistant",
-        content:
-          "Now that the workspace is ready, I'm drafting the core outreach strategy. I'm creating a strategy.md with the target segments.",
-      },
+      { role: "user", content: "Stop all cron jobs" },
+      { role: "assistant", content: "Done. All cron jobs have been stopped." },
     ],
     toolState: {
       executedToolsInTurn: true,
-      lastToolNames: ["make_dir"],
+      lastToolNames: ["cron_register"],
       lastToolErrorCount: 0,
-      totalToolCallsInTurn: 1,
+      totalToolCallsInTurn: 3,
     },
     runtimeState: {
       round: 2,
@@ -129,61 +53,6 @@ test("fallback continues mid-task narration after tools when classifier unavaila
       planMode: false,
     },
   });
-  assert.equal(r.action, "continue");
-  assert.match(r.reason, /mid_task_continuation/);
-});
-
-test("assistant question stops via safety before model", async () => {
-  const r = await judgeTurn({
-    messages: [
-      { role: "user", content: "continue" },
-      {
-        role: "assistant",
-        content:
-          "I'm on it. Which specific thread are we pulling on? Give me the topic or the last thing we were digging into.",
-      },
-    ],
-    toolState: {
-      executedToolsInTurn: false,
-      lastToolNames: [],
-      lastToolErrorCount: 0,
-      totalToolCallsInTurn: 0,
-    },
-    runtimeState: {
-      round: 1,
-      maxRounds: 64,
-      autoContinueNudges: 0,
-      maxAutoContinueNudges: 20,
-      textOnly: false,
-      planMode: false,
-    },
-  });
-  assert.equal(r.action, "stop");
-  assert.equal(r.source, "safety");
-  assert.equal(r.reason, "assistant_question");
-});
-
-test("fallback continues after tools when assistant visible is empty", async () => {
-  const r = await judgeTurn({
-    messages: [
-      { role: "user", content: "run tools" },
-      { role: "assistant", content: "" },
-    ],
-    toolState: {
-      executedToolsInTurn: true,
-      lastToolNames: ["list_dir"],
-      lastToolErrorCount: 0,
-      totalToolCallsInTurn: 1,
-    },
-    runtimeState: {
-      round: 2,
-      maxRounds: 64,
-      autoContinueNudges: 0,
-      maxAutoContinueNudges: 20,
-      textOnly: false,
-      planMode: false,
-    },
-  });
-  assert.equal(r.action, "continue");
-  assert.equal(r.source, "fallback");
+  assert.equal(r.source, "model");
+  assert.ok(r.confidence > 0);
 });

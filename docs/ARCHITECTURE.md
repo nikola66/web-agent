@@ -1,6 +1,18 @@
 # Architecture
 
-High-level map of `web-agent`. Updated 2026-05-18.
+**Languages:** [English](ARCHITECTURE.md) · [Español](ARCHITECTURE.es.md) · [简体中文](ARCHITECTURE.zh-CN.md) · [Deutsch](ARCHITECTURE.de.md)
+
+High-level map of `web-agent`. Updated 2026-05-19.
+
+## Contents
+
+- [Layers](#layers)
+- [Runtime boundary](#runtime-boundary)
+- [Storage layers](#storage-layers)
+- [Agent loop](#agent-loop)
+- [Tool registry](#tool-registry)
+- [Build pipeline](#build-pipeline)
+- [Where to look first](#where-to-look-first)
 
 ## Layers
 

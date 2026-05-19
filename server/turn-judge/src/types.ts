@@ -32,6 +32,6 @@ export type TurnJudgeResponse = {
   action: TurnJudgeAction;
   confidence: number;
   reason: string;
-  source: "model" | "fallback" | "safety";
+  source: "model" | "fallback" | "safety" | "error";
   latencyMs: number;
 };

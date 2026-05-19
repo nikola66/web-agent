@@ -5,16 +5,22 @@ The turn judge is a small ONNX sidecar that decides whether the agent should **c
 ## What it does
 
 - **Classifier:** MiniLM-based 3-way head (`CONTINUE` / `STOP` / `ASK_USER`) in [`server/turn-judge/`](../server/turn-judge/).
-- **Runtime:** [`src/agent/runtime/turn.ts`](../src/agent/runtime/turn.ts) calls the judge over HTTP; deterministic safety (max rounds, text-only, topic pivot, auto-continue cap) stays in the runtime.
-- **Browser:** The embedded agent uses same-origin `POST /api/turn-judge` (Vite dev proxy or Caddy in production), not `127.0.0.1` directly.
+- **Model-only sidecar:** [`server/turn-judge/src/turn-judge.ts`](../server/turn-judge/src/turn-judge.ts) runs the classifier and returns its decision. No regex or heuristic safety layers in the judge.
+- **Runtime:** [`src/agent/runtime/turn.ts`](../src/agent/runtime/turn.ts) calls the judge over HTTP and trusts the result. Numeric loop guards only (max rounds, plan-goal budget, auto-continue nudge count, loop guardrails).
+- **Browser:** Same-origin `POST /api/turn-judge` (Vite dev proxy or Caddy in production).
 
 ```mermaid
 flowchart LR
-  AgentRuntime["turn.ts in WebContainer"]
-  ViteProxy["/api/turn-judge"]
-  JudgeSidecar["server/turn-judge :8787"]
+  HF["Open HF trajectories"]
+  Ingest["judge:ingest"]
+  Train["judge:train"]
+  Eval["judge:eval"]
   ONNX["models/turn-judge"]
-  AgentRuntime --> ViteProxy --> JudgeSidecar --> ONNX
+  AgentRuntime["turn.ts"]
+  JudgeSidecar["turn-judge sidecar"]
+  HF --> Ingest --> Train --> Eval
+  Eval --> ONNX
+  AgentRuntime --> JudgeSidecar --> ONNX
 ```
 
 ## Default local deploy (no training)
@@ -28,101 +34,64 @@ npm install
 npm run dev
 ```
 
-Open [http://localhost:5173](http://localhost:5173). `npm run dev` starts Vite and the judge sidecar on port **8787** (see root [`package.json`](../package.json)).
-
-Root `npm install` also installs judge sidecar dependencies via `postinstall`.
+Open [http://localhost:5173](http://localhost:5173). `npm run dev` starts Vite and the judge sidecar on port **8787**.
 
 ## Verify the judge
 
-**Health:**
-
 ```bash
 curl -s http://127.0.0.1:8787/health
-```
-
-**Sample decision** (mid-task after a tool; should tend toward `continue`):
-
-```bash
-curl -s -X POST http://127.0.0.1:8787/judge \
-  -H 'content-type: application/json' \
-  -d '{"messages":[{"role":"user","content":"Continue the marketing outreach plan"},{"role":"assistant","content":"Now that the workspace is ready, I'\''m drafting the core outreach strategy. I'\''m creating a strategy.md with the target segments."}],"toolState":{"executedToolsInTurn":true,"lastToolNames":["make_dir"],"lastToolErrorCount":0,"totalToolCallsInTurn":1},"runtimeState":{"round":2,"maxRounds":64,"autoContinueNudges":0,"maxAutoContinueNudges":20,"textOnly":false,"planMode":false}}'
-```
-
-**In the UI:** Relaunch the agent profile after changing judge code or model files. With `VITE_WEBAGENT_DEBUG_LOG=1`, look for dim lines like `▸ turn judge · continue (model, …)` in the terminal panel.
-
-**Sidecar tests:**
-
-```bash
 npm run judge:test
 ```
 
-## Environment variables
+Expect dim lines like `▸ turn judge · stop (model, 98%) — label:STOP` (always `source: model` when ONNX is loaded).
 
-Copy [`.env.example`](../.env.example) to `.env` if you need overrides.
+## Environment variables
 
 | Variable | Default | Purpose |
 |----------|---------|---------|
 | `TURN_JUDGE_PORT` | `8787` | Sidecar listen port |
-| `TURN_JUDGE_URL` | `http://127.0.0.1:8787/judge` | Node-only direct URL |
 | `WEBAGENT_TURN_JUDGE` | on (`1`) | Set `0` to disable judge |
-| `WEBAGENT_TURN_JUDGE_SHADOW` | off | Log decisions when judge disabled |
-| `WEBAGENT_TURN_JUDGE_HOST` | `127.0.0.1` | Caddy upstream host (production) |
-| `VITE_WEBAGENT_DEBUG_LOG` | `0` | Extra JSONL + judge stop lines |
+| `WEBAGENT_TURN_JUDGE_SHADOW` | off | Log judge decisions while disabled |
+| `VITE_WEBAGENT_DEBUG_LOG` | `0` | JSONL debug log |
 
-The browser runtime sets `TURN_JUDGE_URL` to `${origin}/api/turn-judge` when the profile launches ([`src/agent/adapter.ts`](../src/agent/adapter.ts)).
+## Retrain from open data
 
-## Production / self-hosting
+One-time Python venv:
 
-After `npm run build`, [`scripts/start-with-proxy.sh`](../scripts/start-with-proxy.sh) starts:
+```bash
+python3 -m venv .venv-turn-judge
+.venv-turn-judge/bin/pip install torch transformers datasets accelerate onnx onnxruntime onnxscript
+```
 
-1. CORS proxy (`8799`)
-2. Built judge (`server/turn-judge/dist/server.js`)
-3. Caddy (serves `dist/`, proxies `/api/turn-judge` → judge)
+Pipeline:
 
-See [README.md](../README.md) (Railpack / Dokploy) and [`Caddyfile`](../Caddyfile).
+```bash
+# 1) Ingest open trajectories → data/turn-judge/*.jsonl (≤10k rows total)
+npm run judge:ingest
+# Optional: --max_total_rows 10000  |  --seeds_only
 
-## Optional: expand training knowledge
+# 2) Train + export ONNX (runs eval after train by default)
+npm run judge:train
 
-Only needed if you want to improve or replace the bundled model.
+# 3) Gate deploy on held-out metrics
+npm run judge:eval
+```
 
-1. **Add examples** to [`data/turn-judge/`](../data/turn-judge/) (`train.jsonl`, `val.jsonl`, `test.jsonl`). Each line is `{"text":"…","label":"CONTINUE"|"STOP"|"ASK_USER"}` using the same `TASK:` / `MESSAGES:` / `TOOL_STATE:` / `RUNTIME_STATE:` shape as existing rows.
+**Data sources:** primarily [nebius/SWE-agent-trajectories](https://huggingface.co/datasets/nebius/SWE-agent-trajectories) (structural labels: mid-step → `CONTINUE`, terminal step → `STOP`), merged with in-repo seed rows for web-agent phrasing and `ASK_USER`.
 
-### Mid-task CONTINUE vs topic-pivot stops
+**Do not ship a new ONNX** until `judge:eval` passes (default thresholds: accuracy ≥ 0.95, ≥ 99% of correct predictions with confidence ≥ 0.99, false-continue on `STOP` ≤ 2%).
 
-- **Topic pivot** (`reason: topic_pivot`, `source: safety`) fires when `suppressTopicPivot` is set and no tools ran this turn. It blocks auto-continue on low lexical overlap between user messages.
-- **Immediate execution intent** (e.g. “Starting now.”, “First, I'm going to index…”, “I'll dive into…”) should be labeled **`CONTINUE`**, including when `suppressTopicPivot: true` appears in `RUNTIME_STATE`.
-- Weak pivot acknowledgements without execution intent (e.g. “I'll start by scanning the repo.” after “Instead, …”) stay **`STOP`**.
-- Prefer varied phrasing across rows; duplicate near-copies overfit quickly on this small dataset.
-
-2. **Python venv** (one-time):
-   ```bash
-   python3 -m venv .venv-turn-judge
-   .venv-turn-judge/bin/pip install torch transformers datasets accelerate onnx onnxruntime onnxscript
-   ```
-
-3. **Train and export ONNX:**
-   ```bash
-   npm run judge:train
-   ```
-   Overwrites artifacts under `models/turn-judge/` (restart `npm run dev` afterward).
-
-The bundled dataset is a **bootstrap** set (growing; see `data/turn-judge/*.jsonl`). Quality improves as you add real turn traces and retrain.
+Serializer contract: [`server/turn-judge/src/serialize-judge-input.ts`](../server/turn-judge/src/serialize-judge-input.ts) — mirrored in Python ingest; golden fixture at [`tests/fixtures/turn-judge-serialize-golden.json`](../tests/fixtures/turn-judge-serialize-golden.json).
 
 ## Troubleshooting
 
 | Symptom | Likely cause | Fix |
 |---------|----------------|-----|
-| `classifier_unavailable` in judge response | Missing ONNX/tokenizer under `models/turn-judge/` | Run `git lfs pull`; confirm files in [models/turn-judge/README.md](../models/turn-judge/README.md) |
-| Agent stops mid-task after tools | Judge unreachable or low-confidence fallback | Check `curl` health/POST above; restart `npm run dev` |
-| `OPTIONS /judge` 404 | Stale sidecar | Restart dev; ensure latest `server/turn-judge` |
-| Judge works in curl but not in browser | Profile not relaunched, or WebContainer could not reach host | Stop agent, launch profile again; runtime uses IPC proxy for judge in Nodebox |
-| `turn_judge_unavailable` in terminal | Same as above — sandbox `fetch` to `localhost:5173` fails | Relaunch profile after `npm run build:embed-runtime` (IPC bridge fix) |
-| `npm run judge:dev` fails on import | Sidecar deps missing | Run `npm install` at repo root |
-
-If the judge is unreachable, [`turn.ts`](../src/agent/runtime/turn.ts) fails closed to **stop** (see [ARCHITECTURE.md](ARCHITECTURE.md)).
+| `classifier_unavailable` / `source: error` | Missing ONNX | `git lfs pull`; restart dev |
+| `turn_judge_unavailable` | Judge unreachable from WebContainer | Relaunch agent profile |
+| Wrong continue/stop | Stale model | `judge:ingest` → `judge:train` → `judge:eval` |
 
 ## Related docs
 
-- [ARCHITECTURE.md](ARCHITECTURE.md) — agent loop step 7
-- [agent-notes.md](agent-notes.md) — runtime integration notes
-- [testing-checklist.md](testing-checklist.md) — manual judge checks
+- [ARCHITECTURE.md](ARCHITECTURE.md)
+- [testing-checklist.md](testing-checklist.md)

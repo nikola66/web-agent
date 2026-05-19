@@ -24,31 +24,51 @@ function prefixPlainBlock(text, branchBelowName = true) {
   }).join("\n");
 }
 
+export type FormatAssistantTranscriptInput = {
+  agentName?: string;
+  text?: string;
+  renderedText?: string;
+  branchBelowName?: boolean;
+};
+
 export function formatAssistantTranscript({
   agentName,
   text,
   renderedText,
   branchBelowName = true,
-} = {}) {
+}: FormatAssistantTranscriptInput = {}) {
   const name = String(agentName || "Agent").trim() || "Agent";
   const renderedBody = typeof renderedText === "string" ? stripAnsi(renderedText).trimEnd() : "";
   const body = renderedBody || prefixPlainBlock(text, branchBelowName);
   return `${name}\n${body}`.trimEnd();
 }
 
+export type FormatToolStartTranscriptInput = ToolStartTranscriptEventInput & {
+  emoji?: string;
+};
+
 export function formatToolStartTranscript({
   name,
   argsPreview = "{}",
   argsPreviewTruncated = false,
   emoji = "",
-} = {}) {
+}: FormatToolStartTranscriptInput = {}) {
   const toolName = String(name || "unknown").trim() || "unknown";
   const prefix = normalizeToolEmoji(String(emoji || "").trim());
   const label = prefix ? `${prefix} ${toolName}` : toolName;
   return `▸ ${label} ${String(argsPreview || "{}")}${argsPreviewTruncated ? "…" : ""}`;
 }
 
-export function formatToolResultTranscript({ name, status = "ok", error = "", emoji = "" } = {}) {
+export type FormatToolResultTranscriptInput = ToolResultTranscriptEventInput & {
+  emoji?: string;
+};
+
+export function formatToolResultTranscript({
+  name,
+  status = "ok",
+  error = "",
+  emoji = "",
+}: FormatToolResultTranscriptInput = {}) {
   const toolName = String(name || "unknown").trim() || "unknown";
   const prefix = normalizeToolEmoji(String(emoji || "").trim());
   const label = prefix ? `${prefix} ${toolName}` : toolName;
@@ -133,7 +153,12 @@ export function createToolResultTranscriptEvent({
   };
 }
 
-export function createSystemLineTranscriptEvent({ round, text } = {}) {
+export type SystemLineTranscriptEventInput = {
+  round?: number;
+  text?: string;
+};
+
+export function createSystemLineTranscriptEvent({ round, text }: SystemLineTranscriptEventInput = {}) {
   return {
     type: "system_line",
     critical: false,

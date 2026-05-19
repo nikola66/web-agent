@@ -8,6 +8,8 @@
 
 [Live demo](https://webagent.aratech.ae) · [GitHub](https://github.com/nikola66/web-agent) · [Support on Ko-fi](http://ko-fi.com/nikola66) · [Contributing](CONTRIBUTING.md) · [Security](SECURITY.md)
 
+**Languages:** [English](README.md) · [Español](README.es.md) · [简体中文](README.zh-CN.md) · [Deutsch](README.de.md)
+
 </div>
 
 <table>
@@ -23,6 +25,23 @@
 Web Agent is an open-source AI agent that runs directly in the browser on top of WebContainers. There is nothing to install to use it: no Docker, no VPS, no VM, no Mac mini, no Hostinger box, no local Python stack. Open the app, launch a profile, and start working.
 
 It is designed to feel simple for end users and capable for power users: isolated profiles, browser-local persistence, tools, skills, sessions, reflections, learnings, cron jobs, **planning mode** (`/plan`), a **PARA + Obsidian-style knowledge vault** (`wiki_*` tools and `/wiki-*` commands), and a self-improving runtime that stays on the user’s machine.
+
+## Contents
+
+- [Why Web Agent](#why-web-agent)
+- [Quick start](#quick-start)
+- [Highlights](#highlights)
+- [How it works](#how-it-works)
+- [Slash commands](#slash-commands)
+- [Settings and providers](#settings-and-providers)
+- [Tooling](#tooling)
+- [Skills](#skills)
+- [Workspace features](#workspace-features)
+- [Persistence and hosting](#how-persistence-works)
+- [Development](#development)
+- [Architecture at a glance](#architecture-at-a-glance)
+- [Privacy and security](#privacy-and-security)
+- [Contributing](#contributing)
 
 ## Why Web Agent
 
@@ -48,7 +67,35 @@ It is designed to feel simple for end users and capable for power users: isolate
 - Hosted demo for zero-friction trial usage
 - **Turn judge** sidecar (`server/turn-judge`): Fastify + ONNX for stop/continue/ask_user without regex gatekeeping stacks
 
-## Capability Surface
+## Quick Start
+
+Choose one path:
+
+| Path | Best for |
+| --- | --- |
+| [Hosted demo](#use-the-hosted-demo) | Zero install — open the app and add an API key |
+| [Local development](#run-locally) | Contributors, custom builds, or offline use |
+
+### Use the hosted demo
+
+Open [webagent.aratech.ae](https://webagent.aratech.ae), create or select a profile, add a free key from [OpenRouter.ai](https://openrouter.ai) or [Ollama](https://ollama.com), click **Launch**, and start chatting.
+
+`Gemma4` is a strong default on OpenRouter (speed, price, tool calling, multimodal). Any compatible model works.
+
+### Run locally
+
+```bash
+git clone https://github.com/nikola66/web-agent.git
+cd web-agent
+git lfs install
+git lfs pull
+npm install
+npm run dev
+```
+
+Open `http://localhost:5173`. Python is only needed to retrain the turn judge; the bundled ONNX model lives under `models/turn-judge/`. See [docs/turn-judge.md](docs/turn-judge.md).
+
+## How It Works
 
 Web Agent is not just a chat box. It is a browser-native agent runtime with three layers working together:
 
@@ -57,16 +104,36 @@ Web Agent is not just a chat box. It is a browser-native agent runtime with thre
 - `📚 Skills` for reusable procedures and higher-level behavior
 
 ```mermaid
-flowchart LR
-  U[You] --> C[⌨️ Slash Commands]
-  U --> P[💬 Natural Language]
-  C --> S[📚 Skills]
+flowchart TB
+  subgraph input["👤 You"]
+    U(("🧑‍💻 You"))
+  end
+
+  subgraph control["⚡ Control"]
+    C["⌨️ Slash commands"]
+    P["💬 Natural language"]
+  end
+
+  subgraph skills["📚 Orchestration"]
+    S["📚 Skills · SKILL.md"]
+  end
+
+  subgraph execute["🛠️ Execution"]
+    T["🛠️ Tool belt"]
+  end
+
+  subgraph outcomes["✨ Outcomes"]
+    W["📁 Workspace files"]
+    M["🧠 Memory layers"]
+    A["⏱️ Cron · todos"]
+    R["🌐 Web · 👁️ Vision"]
+  end
+
+  U --> C & P
+  C --> S
   P --> S
-  S --> T[🛠️ Tools]
-  T --> W[📁 Workspace Files]
-  T --> M[🧠 Memory Layers]
-  T --> A[⏱️ Cron + Automation]
-  T --> R[🌐 Web + Vision]
+  S --> T
+  T --> W & M & A & R
 ```
 
 ### Planning, wiki vault, and self-learning
@@ -77,34 +144,56 @@ These three loops sit beside the main capability diagram: **planning** produces 
 
 ```mermaid
 flowchart LR
-  P["/plan goal"] --> R[Read-only workspace research]
-  R --> W["write_file → plans/*.md"]
-  W --> A["artifact_present View/Download"]
-  A --> N["Stop — next message: execute or revise"]
+  subgraph planMode["📋 /plan — spec before code"]
+    P["🎯 /plan goal"] --> R["🔍 Read-only research"]
+    R --> W["📝 write_file → plans/*.md"]
+    W --> A["🪄 artifact_present 📥 View"]
+    A --> N["⏸️ Stop → next turn ▶️ execute"]
+  end
 ```
 
 #### Knowledge vault (`wiki_*` / `/wiki_*`)
 
 ```mermaid
-flowchart LR
-  U[wiki_setup] --> V["PARA + KnowledgeVault"]
-  M["memory_* · session_* · learnings"] --> S[wiki_sync]
-  V --> S
-  S --> I["index · log · ops"]
-  Q[wiki_search] --> V
+flowchart TB
+  subgraph setup["🏗️ Scaffold"]
+    U["📓 wiki_setup"] --> V["🗂️ PARA · KnowledgeVault"]
+  end
+
+  subgraph sync["🔄 Project into vault"]
+    M["🧠 memory_* · session_* · learnings"] --> S["🔄 wiki_sync"]
+    V --> S
+    S --> I["📑 index · log · ops"]
+  end
+
+  subgraph browse["🔎 Browse"]
+    Q["🔍 wiki_search"] --> V
+  end
 ```
 
 #### Self-learning loop
 
 ```mermaid
 flowchart TB
-  X[Runs tools & conversation] --> F[memory_* durable facts]
-  X --> SM[session_memory_* rolling notes]
-  X --> SK["skill_* reusable SKILL.md"]
-  X --> RF["reflections · promotable learnings"]
-  RF -.->|hints| F
-  RF -.->|hints| SK
-  F --> W2[Optional wiki_sync projection]
+  subgraph run["🏃 Active turn"]
+    X["⚡ Tools + conversation"]
+  end
+
+  subgraph persist["💾 Memory layers"]
+    F["📌 memory_* facts"]
+    SM["📓 session_memory_*"]
+    SK["📚 skill_* SKILL.md"]
+    RF["💡 reflections · learnings"]
+  end
+
+  subgraph mirror["📓 Optional vault mirror"]
+    W2["🔄 wiki_sync → markdown vault"]
+  end
+
+  X --> F & SM & SK & RF
+  RF -.->|💡 hints| F
+  RF -.->|💡 hints| SK
+  F --> W2
   SM --> W2
 ```
 
@@ -310,27 +399,6 @@ For hosted deployments, the safest framing is:
 **Self-hosting (Railpack / Dokploy):** Use the repo `railpack.json` for `deploy.startCommand` (`scripts/start-with-proxy.sh`) and `deploy.aptPackages` (extends defaults with `caddy`). Do not add a `start` script in `package.json` for this: Railpack treats it as a custom start command, skips the built-in static+Caddy image path, and the sidecar setup breaks. The checked-in `Caddyfile` matches **Debian’s apt Caddy (~2.6)** (no `persist_config` or global `trusted_proxies` block). `web_fetch` / `web_search` without TinyFish rely on the small Node listener in `scripts/cors-proxy-server.mjs` (default `127.0.0.1:8799`).
 
 **Turn judge:** A pre-trained ONNX model ships in `models/turn-judge/` (use `git lfs pull` after clone). `npm run dev` starts the judge with the app (port `8787`). Production `scripts/start-with-proxy.sh` starts the built sidecar after `npm run build`. Set `WEBAGENT_TURN_JUDGE=0` only to disable. Full setup, verification, and optional retraining: [docs/turn-judge.md](docs/turn-judge.md).
-
-## Quick Start
-
-### Use the hosted demo
-
-Open [webagent.aratech.ae](https://webagent.aratech.ae), create or select a profile, add a free key from [OpenRouter.ai](https://openrouter.ai) or [Ollama](https://ollama.com), click **Launch**, and start chatting.
-
-For Web Agent, `Gemma4` is the recommended model because it strikes a strong balance between speed, price, and tool-calling support, including images, audio, and video. You can choose any model you prefer.
-
-### Run locally
-
-```bash
-git clone https://github.com/nikola66/web-agent.git
-cd web-agent
-git lfs install
-git lfs pull
-npm install
-npm run dev
-```
-
-Open `http://localhost:5173`. No Python is required unless you want to retrain the turn judge; the repo includes a bundled ONNX model under `models/turn-judge/`. See [docs/turn-judge.md](docs/turn-judge.md).
 
 ## Development
 
