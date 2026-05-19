@@ -11,6 +11,7 @@ import {
   normalizeLaunchMode,
   sanitizeForLogs,
 } from "./src/agent/runtime/privacy";
+import { transformersOrtAssetsPlugin } from "./vite/transformers-ort-assets";
 
 const PACKAGE_JSON = JSON.parse(
   fs.readFileSync(path.resolve(__dirname, "package.json"), "utf8"),
@@ -385,7 +386,15 @@ export default defineConfig(({ mode }) => {
     define: {
       "import.meta.env.VITE_APP_VERSION": JSON.stringify(PACKAGE_JSON.version),
     },
-    plugins: [rawRuntimeFilesPlugin(), crossOriginIsolationHeaders(), llmProxyGate(), corsProxyGate(), react(), tailwindcss()],
+    plugins: [
+      rawRuntimeFilesPlugin(),
+      transformersOrtAssetsPlugin(__dirname),
+      crossOriginIsolationHeaders(),
+      llmProxyGate(),
+      corsProxyGate(),
+      react(),
+      tailwindcss(),
+    ],
     resolve: {
       alias: {
         "@": path.resolve(__dirname, "./src"),
@@ -394,6 +403,9 @@ export default defineConfig(({ mode }) => {
     },
     worker: {
       format: "es",
+    },
+    optimizeDeps: {
+      exclude: ["@huggingface/transformers"],
     },
     build: {
       emptyOutDir: false,

@@ -28,7 +28,7 @@ import {
 } from "@/core/workspace";
 import { SearchableSelect } from "./SearchableSelect";
 import { MemoryTab } from "./MemoryTab";
-import { terminalTheme } from "../theme";
+import { terminalFontFamily, terminalTheme } from "../theme";
 import { formatBytes } from "../utils/format";
 
 const DEBUG_LOG_VIEWER_ENABLED =
@@ -84,12 +84,32 @@ function parseJsonl(content: string): DebugLogEvent[] {
   return parsed;
 }
 
+function isAbsenceOfFailure(value: unknown): boolean {
+  if (value === 0 || value === false || value === null || value === undefined) return true;
+  if (typeof value === "string") {
+    const trimmed = value.trim().toLowerCase();
+    return (
+      trimmed === "" ||
+      trimmed === "0" ||
+      trimmed === "false" ||
+      trimmed === "ok" ||
+      trimmed === "success" ||
+      trimmed === "none"
+    );
+  }
+  if (Array.isArray(value) && value.length === 0) return true;
+  return false;
+}
+
 function isLikelyDebugError(entry: DebugLogEvent): boolean {
   const marker = `${entry.event || ""} ${entry.source || ""}`.toLowerCase();
-  if (/error|fail|timeout/.test(marker)) return true;
+  if (/\b(errors?|fail(?:ed|ure)?|timeout)\b/.test(marker)) return true;
   const payload = entry.payload;
   if (!payload || typeof payload !== "object") return false;
-  return Object.keys(payload).some((key) => /error|fail|timeout/.test(key.toLowerCase()));
+  return Object.entries(payload).some(([key, value]) => {
+    if (!/\b(errors?|fail(?:ed|ure)?|timeout)\b/.test(key.toLowerCase())) return false;
+    return !isAbsenceOfFailure(value);
+  });
 }
 
 function formatEventTime(ts?: string): string {
@@ -467,7 +487,7 @@ export function FilesPopup({
 
     const terminal = new XTerm({
       theme: terminalTheme,
-      fontFamily: "'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace",
+      fontFamily: terminalFontFamily,
       fontSize: 12,
       lineHeight: 1.25,
       letterSpacing: 0.1,

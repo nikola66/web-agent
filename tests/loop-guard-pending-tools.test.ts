@@ -6,7 +6,7 @@ import { shouldRejectPendingToolsFromLoopGuard } from "../dist/agent-runtime/loo
 const blogRequest =
   "Research 1bit LLMs topic and write me a blog article about it (Bitnet by Microsoft) check their Github repo";
 
-test("does not reject pending tools after one web_search on blog task", () => {
+test("rejects pending tools when NLI says stop with visible prose", () => {
   assert.equal(
     shouldRejectPendingToolsFromLoopGuard(
       { decision: "stop", scores: { continue: 0.45, stop: 0.7, ask_user: 0.2 } },
@@ -18,7 +18,7 @@ test("does not reject pending tools after one web_search on blog task", () => {
         pendingToolNames: ["web_fetch"],
       }
     ),
-    false
+    true
   );
 });
 
@@ -49,6 +49,20 @@ test("does not reject when model only queued tools with no prose", () => {
         webFetchCount: 0,
         visible: "",
         pendingToolNames: ["web_fetch", "read_file"],
+      }
+    ),
+    false
+  );
+});
+
+test("does not reject when NLI says continue", () => {
+  assert.equal(
+    shouldRejectPendingToolsFromLoopGuard(
+      { decision: "continue", scores: { continue: 0.8, stop: 0.2, ask_user: 0.1 } },
+      {
+        userRequest: blogRequest,
+        visible: "Continuing research.",
+        pendingToolNames: ["web_fetch"],
       }
     ),
     false

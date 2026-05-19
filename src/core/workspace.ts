@@ -20,6 +20,7 @@ import { isAllowedUploadFile } from "@embed-runtime/tools/upload-allowlist.js";
 import { getActiveNodebox, getNodebox } from "@/runtimes/webcontainer/boot";
 import {
   WORKSPACE_PLANS_DIR_REL,
+  WORKSPACE_WEBAGENT_USER_FILES,
   WORKSPACE_WEBAGENT_USER_SUBDIRS,
 } from "./workspace-layout";
 
@@ -402,6 +403,28 @@ function splitUploadName(name: string): { stem: string; ext: string } {
   return { stem: name.slice(0, dot), ext: name.slice(dot) };
 }
 
+const LIVE_WORKSPACE_LIST_TIMEOUT_MS = 8_000;
+
+function workspaceRelativePath(workspaceDir: string, abs: string): string {
+  const prefix = `${workspaceDir}/`;
+  return abs.startsWith(prefix)
+    ? abs.slice(prefix.length)
+    : normalizeSnapshotRelativePath(abs.replace(/^\/+/, ""));
+}
+
+function nodeboxStatSize(stat: { size?: number }): number {
+  return typeof stat.size === "number" && Number.isFinite(stat.size) ? stat.size : 0;
+}
+
+function liveListWithTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<T>((_, reject) => {
+      setTimeout(() => reject(new Error("Live workspace listing timed out")), ms);
+    }),
+  ]);
+}
+
 async function listLiveWorkspaceFiles(profileId: string): Promise<WorkspaceFileEntry[]> {
   const emulatorOrNull = getActiveNodebox();
   if (!emulatorOrNull) return [];
@@ -418,6 +441,24 @@ async function listLiveWorkspaceFiles(profileId: string): Promise<WorkspaceFileE
     /* best effort */
   }
 
+  const addDir = (abs: string) => {
+    if (abs === workspaceDir) return;
+    const rel = workspaceRelativePath(workspaceDir, abs);
+    if (rel) results.push({ path: `${rel}/`, size: 0 });
+  };
+
+  const addFile = async (abs: string): Promise<void> => {
+    const rel = workspaceRelativePath(workspaceDir, abs);
+    if (!rel) return;
+    let size = 0;
+    try {
+      size = nodeboxStatSize(await emulator.fs.stat(abs));
+    } catch {
+      /* best effort */
+    }
+    results.push({ path: rel, size });
+  };
+
   async function walk(dirPath: string): Promise<void> {
     let names: string[];
     try {
@@ -426,6 +467,7 @@ async function listLiveWorkspaceFiles(profileId: string): Promise<WorkspaceFileE
       return;
     }
     for (const name of names) {
+      if (name === "node_modules") continue;
       const abs = `${dirPath}/${name}`;
       let isDir = false;
       try {
@@ -435,30 +477,22 @@ async function listLiveWorkspaceFiles(profileId: string): Promise<WorkspaceFileE
         continue;
       }
       if (isDir) {
-        if (abs !== workspaceDir) {
-          const prefix = `${workspaceDir}/`;
-          const rel =
-            abs.startsWith(prefix)
-              ? abs.slice(prefix.length)
-              : normalizeSnapshotRelativePath(abs.replace(/^\/+/, ""));
-          if (rel) results.push({ path: `${rel}/`, size: 0 });
+        if (abs === `${workspaceDir}/.webagent`) {
+          addDir(abs);
+          for (const sub of WORKSPACE_WEBAGENT_USER_SUBDIRS) {
+            await walk(`${abs}/${sub}`);
+          }
+          for (const rel of WORKSPACE_WEBAGENT_USER_FILES) {
+            await addFile(`${workspaceDir}/${rel}`);
+          }
+          continue;
         }
+        if (abs === `${workspaceDir}/memory/snapshots`) continue;
+        addDir(abs);
         await walk(abs);
         continue;
       }
-      const prefix = `${workspaceDir}/`;
-      const rel =
-        abs.startsWith(prefix)
-          ? abs.slice(prefix.length)
-          : normalizeSnapshotRelativePath(abs.replace(/^\/+/, ""));
-      let size = 0;
-      try {
-        const raw = await emulator.fs.readFile(abs);
-        size = raw.byteLength;
-      } catch {
-        /* best effort */
-      }
-      results.push({ path: rel, size });
+      await addFile(abs);
     }
   }
 
@@ -467,6 +501,50 @@ async function listLiveWorkspaceFiles(profileId: string): Promise<WorkspaceFileE
   } catch {
     return [];
   }
+  results.sort((a, b) => a.path.localeCompare(b.path));
+  return results;
+}
+
+async function listSnapshotWorkspaceFiles(profileId: string): Promise<WorkspaceFileEntry[]> {
+  const root = snapshotPrefix(profileId);
+  const results: WorkspaceFileEntry[] = [];
+
+  async function walk(dirPath: string): Promise<void> {
+    let entries: FileEntry[] = [];
+    try {
+      entries = await listDir(dirPath);
+    } catch {
+      return;
+    }
+    for (const entry of entries) {
+      if (entry.kind === "directory") {
+        const relativePath = entry.path.startsWith(`${root}/`)
+          ? entry.path.slice(root.length + 1)
+          : basename(entry.path);
+        const normalizedPath = normalizeSnapshotRelativePath(relativePath);
+        if (normalizedPath && normalizedPath !== ".") {
+          results.push({
+            path: normalizedPath.endsWith("/") ? normalizedPath : `${normalizedPath}/`,
+            size: 0,
+            lastModified: entry.lastModified,
+          });
+        }
+        await walk(entry.path);
+        continue;
+      }
+      const relativePath = entry.path.startsWith(`${root}/`)
+        ? entry.path.slice(root.length + 1)
+        : basename(entry.path);
+      const normalizedPath = normalizeSnapshotRelativePath(relativePath);
+      results.push({
+        path: normalizedPath,
+        size: entry.size ?? 0,
+        lastModified: entry.lastModified,
+      });
+    }
+  }
+
+  await walk(root);
   results.sort((a, b) => a.path.localeCompare(b.path));
   return results;
 }
@@ -522,49 +600,18 @@ export async function listWorkspaceFiles(
 ): Promise<WorkspaceFileEntry[]> {
   if (options.preferLive) {
     const emulatorOrNull = getActiveNodebox();
-    if (emulatorOrNull) return listLiveWorkspaceFiles(profileId);
-  }
-  const root = snapshotPrefix(profileId);
-  const results: WorkspaceFileEntry[] = [];
-
-  async function walk(dirPath: string): Promise<void> {
-    let entries: FileEntry[] = [];
-    try {
-      entries = await listDir(dirPath);
-    } catch {
-      return;
-    }
-    for (const entry of entries) {
-      if (entry.kind === "directory") {
-        const relativePath = entry.path.startsWith(`${root}/`)
-          ? entry.path.slice(root.length + 1)
-          : basename(entry.path);
-        const normalizedPath = normalizeSnapshotRelativePath(relativePath);
-        if (normalizedPath && normalizedPath !== ".") {
-          results.push({
-            path: normalizedPath.endsWith("/") ? normalizedPath : `${normalizedPath}/`,
-            size: 0,
-            lastModified: entry.lastModified,
-          });
-        }
-        await walk(entry.path);
-        continue;
+    if (emulatorOrNull) {
+      try {
+        return await liveListWithTimeout(
+          listLiveWorkspaceFiles(profileId),
+          LIVE_WORKSPACE_LIST_TIMEOUT_MS
+        );
+      } catch {
+        /* fall back to OPFS snapshot when live Nodebox FS is slow or contended */
       }
-      const relativePath = entry.path.startsWith(`${root}/`)
-        ? entry.path.slice(root.length + 1)
-        : basename(entry.path);
-      const normalizedPath = normalizeSnapshotRelativePath(relativePath);
-      results.push({
-        path: normalizedPath,
-        size: entry.size ?? 0,
-        lastModified: entry.lastModified,
-      });
     }
   }
-
-  await walk(root);
-  results.sort((a, b) => a.path.localeCompare(b.path));
-  return results;
+  return listSnapshotWorkspaceFiles(profileId);
 }
 
 /** Read a workspace file as UTF-8 text (for preview) */

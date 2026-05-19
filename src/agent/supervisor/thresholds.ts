@@ -10,6 +10,7 @@ export type SupervisorResult = {
   decision: AgentDecision;
   scores: SupervisorScores;
   reason?: string;
+  error?: string;
 };
 
 export type LoopGuardThresholds = {

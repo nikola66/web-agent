@@ -38,7 +38,7 @@ WebContainer 使用分层虚拟文件系统。宿主页面挂载（`wc.mount`）
 
 ## Loop Guard
 
-本地 **continue / stop / ask_user** 决策取代旧版正则 auto-continue。每步助手回复后，Nodebox 运行时请求浏览器适配器用 `MoritzLaurer/MiniLM-L6-mnli-binary`（Transformers.js）对最近消息打分。首次打分会在浏览器缓存中下载模型权重。
+本地 **continue / stop / ask_user** 决策是唯一的运行时循环机制（旧版正则 auto-continue 已移除）。每步助手回复后，Nodebox 运行时请求浏览器适配器用 vendored MobileBERT MNLI 分类器（Transformers.js ONNX）对最近消息打分。ORT WASM 由 `/transformers-ort/` 提供；模型权重为 `/models/loop-guard/` 静态文件（`public/models/loop-guard/`，刷新：`npm run download:loop-guard-model`）。
 
 本地开发用 [`.env.local`](../../.env.local)（gitignore；Vite 自动加载）。[`.env.example`](../../.env.example) 记录生产式默认值。Loop Guard 旋钮使用 `VITE_WEBAGENT_*` 前缀；`buildEnv()` 镜像为嵌入式运行时的 `WEBAGENT_*`。
 
@@ -56,7 +56,7 @@ WebContainer 使用分层虚拟文件系统。宿主页面挂载（`wc.mount`）
 
 调试：`VITE_WEBAGENT_DEBUG_LOG=1`，在会话 JSONL 中查找 `turn_loop_guard` / `turn_loop_guard_nudge`。
 
-**与 Loop Guard 分离：** `loop-guardrails.ts` 仍会在单轮内因重复相同工具失败而停止（确定性 streak）。
+**与 Loop Guard 分离：** `tool-failure-streak.ts` 会在单轮内因重复相同工具失败而停止（确定性 streak）。
 
 ## 开放网络研究（Hermes 风格）
 

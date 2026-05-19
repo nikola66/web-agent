@@ -23,10 +23,10 @@ import {
   runTools,
 } from "./tools/registry.js";
 import {
-  createLoopGuardState,
+  createToolFailureStreakState,
   guardBeforeToolBatch,
-  updateLoopGuardAfterResults,
-} from "./tools/loop-guardrails.js";
+  updateToolFailureStreakAfterResults,
+} from "./tools/tool-failure-streak.js";
 import { createToolContext, type CreateToolContextInput } from "./tools/context.js";
 import {
   emitContextUpdate,
@@ -82,6 +82,7 @@ import {
   shouldSuppressPostToolNudgeFromExecutions,
   getSkillSelfImproveNudgeState,
   emitLoopStopLine,
+  emitLoopGuardDecisionLine,
   resolveMaxAutoContinueNudges,
   LOOP_GUARD_CONTINUE_NUDGE,
 } from "./loop-guard.js";
@@ -379,7 +380,7 @@ export async function agentTurn(
 
   const agentName = process.env.WEBAGENT_AGENT_NAME || process.env.WEBAGENT_PROFILE_NAME || "Agent";
   let turnHeaderPrinted = false;
-  const loopGuard = createLoopGuardState();
+  const toolFailureStreak = createToolFailureStreakState();
   let lastToolExecutions: Array<Record<string, unknown>> = [];
   try {
     let planGoalContinuationsUsed = 0;
@@ -553,31 +554,35 @@ export async function agentTurn(
       };
 
       if (tools.length && executedToolsInTurn) {
+        const pendingToolNames = tools.map((t) => t.name);
         const postToolGuard = await requestLoopGuardDecision(conv, {
           ...loopGuardCtx,
-          pendingToolNames: tools.map((t) => t.name),
+          pendingToolNames,
           visible,
         });
+        const postToolRejectCtx = {
+          ...loopGuardCtx,
+          visible,
+          pendingToolNames,
+        };
+        const rejectPending = shouldRejectPendingToolsFromLoopGuard(postToolGuard, postToolRejectCtx);
         await logDebugEvent("turn_loop_guard", {
           round,
           phase: "post_tool_stale_calls",
           decision: postToolGuard.decision,
           scores: postToolGuard.scores,
           reason: postToolGuard.reason,
-          pendingTools: tools.map((t) => t.name),
-          rejectPending: shouldRejectPendingToolsFromLoopGuard(postToolGuard, {
-            ...loopGuardCtx,
-            visible,
-            pendingToolNames: tools.map((t) => t.name),
-          }),
+          pendingTools: pendingToolNames,
+          rejectPending,
         });
-        if (
-          shouldRejectPendingToolsFromLoopGuard(postToolGuard, {
-            ...loopGuardCtx,
-            visible,
-            pendingToolNames: tools.map((t) => t.name),
-          })
-        ) {
+        emitLoopGuardDecisionLine({
+          round,
+          phase: "post_tool_stale_calls",
+          result: postToolGuard,
+          rejectPending,
+          pendingTools: pendingToolNames,
+        });
+        if (rejectPending) {
           run.rejected_tool_calls.push(
             ...tools.map((tool) => ({
               name: tool.name,
@@ -614,6 +619,11 @@ export async function agentTurn(
             scores: loopGuard.scores,
             reason: loopGuard.reason,
           });
+          emitLoopGuardDecisionLine({
+            round,
+            phase: "no_tools",
+            result: loopGuard,
+          });
           const wantsContinue = shouldContinueFromLoopGuard(loopGuard);
           if (wantsContinue && autoContinueNudges >= maxAutoContinueNudges) {
             process.stdout.write(
@@ -633,6 +643,12 @@ export async function agentTurn(
           if (wantsContinue) {
             autoContinueNudges += 1;
             conv.push({ role: "user", content: LOOP_GUARD_CONTINUE_NUDGE });
+            emitLoopGuardDecisionLine({
+              round,
+              phase: "no_tools",
+              result: loopGuard,
+              action: `nudge ${autoContinueNudges}/${maxAutoContinueNudges}`,
+            });
             await logDebugEvent("turn_loop_guard_nudge", {
               round,
               nudgeIndex: autoContinueNudges,
@@ -793,7 +809,7 @@ export async function agentTurn(
         break;
       }
 
-      const guardCheck = guardBeforeToolBatch(loopGuard, tools);
+      const guardCheck = guardBeforeToolBatch(toolFailureStreak, tools);
       if (!guardCheck.ok) {
         run.errors.push(guardCheck.reason);
         process.stdout.write(dim(`▸ ${guardCheck.reason}\n`));
@@ -820,7 +836,7 @@ export async function agentTurn(
           if (/^skill_(save|manage|bulk_save)$/.test(tname)) skillMutatingCalledInTurn = true;
         }
       }
-      const guardWarn = updateLoopGuardAfterResults(loopGuard, tools, exec);
+      const guardWarn = updateToolFailureStreakAfterResults(toolFailureStreak, tools, exec);
       if (guardWarn) {
         process.stdout.write(dim(`${guardWarn}\n`));
       }

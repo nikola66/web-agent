@@ -3,7 +3,7 @@ import { Terminal as XTerm } from "@xterm/xterm";
 import type { IUnicodeVersionProvider } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { Unicode11Addon } from "@xterm/addon-unicode11";
-import { terminalTheme } from "../theme";
+import { terminalFontFamily, terminalTheme } from "../theme";
 import { attachProfileTerminal, detachTerminal, notifyAgentTerminalResized, switchToProfile } from "@/core/orchestrator";
 import { fitTerminalForViewport } from "@/core/xterm-fit-viewport";
 import { useRuntimeStore } from "../stores/runtime-store";
@@ -66,8 +66,8 @@ function propertyWidth(properties: number): 0 | 1 | 2 {
   return ((properties >> 1) & 3) as 0 | 1 | 2;
 }
 
-function isEmojiPresentation(codepoint: number): boolean {
-  return /\p{Emoji_Presentation}/u.test(String.fromCodePoint(codepoint));
+function isWideEmoji(codepoint: number): boolean {
+  return /\p{Extended_Pictographic}/u.test(String.fromCodePoint(codepoint));
 }
 
 function createEmojiUnicodeProvider(): IUnicodeVersionProvider {
@@ -76,10 +76,10 @@ function createEmojiUnicodeProvider(): IUnicodeVersionProvider {
   const provider = base!;
   return {
     version: "webagent-emoji",
-    wcwidth: (codepoint) => isEmojiPresentation(codepoint) ? 2 : provider.wcwidth(codepoint),
+    wcwidth: (codepoint) => (isWideEmoji(codepoint) ? 2 : provider.wcwidth(codepoint)),
     charProperties: (codepoint, preceding) => {
       if (codepoint === 0xfe0f && propertyWidth(preceding) > 0) return charProperties(2, true);
-      if (isEmojiPresentation(codepoint)) return charProperties(2);
+      if (isWideEmoji(codepoint)) return charProperties(2);
       return provider.charProperties(codepoint, preceding);
     },
   };
@@ -131,7 +131,7 @@ export function Terminal() {
     // Create xterm instance
     const terminal = new XTerm({
       theme: terminalTheme,
-      fontFamily: "'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace",
+      fontFamily: terminalFontFamily,
       fontSize: 14,
       lineHeight: 1.35,
       letterSpacing: 0.1,

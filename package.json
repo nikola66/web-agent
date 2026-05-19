@@ -1,7 +1,7 @@
 {
   "name": "web-agent",
   "private": true,
-  "version": "0.0.9",
+  "version": "0.0.10",
   "type": "module",
   "scripts": {
     "build:embed-runtime": "node scripts/build-embed-runtime.mjs",
@@ -14,7 +14,8 @@
     "test:tools": "node scripts/run-tool-smoke.mjs",
     "test:tools:network": "node scripts/run-tool-smoke.mjs --network",
     "test:browser": "PLAYWRIGHT_BROWSERS_PATH=0 playwright test",
-    "test:browser:headed": "PLAYWRIGHT_BROWSERS_PATH=0 playwright test --headed"
+    "test:browser:headed": "PLAYWRIGHT_BROWSERS_PATH=0 playwright test --headed",
+    "download:loop-guard-model": "node scripts/download-loop-guard-model.mjs"
   },
   "dependencies": {
     "@codesandbox/nodebox": "^0.1.9",

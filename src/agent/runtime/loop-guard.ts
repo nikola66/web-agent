@@ -4,14 +4,7 @@
 
 import { isDebugLogEnabled } from "./logging/debug-log.js";
 import { dim } from "./terminal-format.js";
-import {
-  isResearchIntent,
-  MIN_RESEARCH_FETCHES,
-  MIN_RESEARCH_SEARCHES,
-} from "./turn-sequencing.js";
-
-const STOP_THRESHOLD = 0.62;
-const CONTINUE_THRESHOLD = 0.58;
+import { isResearchIntent } from "./turn-sequencing.js";
 import { ipcLoopGuardRequest } from "./ipc.js";
 
 export type AgentDecision = "continue" | "stop" | "ask_user";
@@ -33,6 +26,51 @@ const STOP_RESULT: SupervisorResult = {
   scores: { continue: 0, stop: 1, ask_user: 0 },
   reason: "disabled",
 };
+
+const SCORING_UNAVAILABLE_RESULT: SupervisorResult = {
+  decision: "continue",
+  scores: { continue: 0, stop: 0, ask_user: 0 },
+  reason: "scoring_unavailable",
+};
+
+export function isLoopGuardScoringUnavailable(result) {
+  const reason = String(result?.reason ?? "");
+  if (
+    reason === "scoring_unavailable" ||
+    reason === "ipc_error" ||
+    reason === "invalid_response" ||
+    reason.startsWith("scoring_unavailable:")
+  ) {
+    return true;
+  }
+  if (
+    result?.decision === "stop" &&
+    result?.scores?.stop === 1 &&
+    result?.scores?.continue === 0 &&
+    reason &&
+    reason !== "disabled" &&
+    /could not locate|failed to fetch|network|onnx|model/i.test(reason)
+  ) {
+    return true;
+  }
+  return false;
+}
+
+export function normalizeLoopGuardResult(result) {
+  if (!result || typeof result !== "object") return { ...SCORING_UNAVAILABLE_RESULT, reason: "invalid_response" };
+  if (!isLoopGuardScoringUnavailable(result)) return result as SupervisorResult;
+  const detail = String(result.reason ?? "scoring_unavailable");
+  const normalizedReason =
+    detail === "scoring_unavailable" || detail === "ipc_error" || detail === "invalid_response"
+      ? detail
+      : `scoring_unavailable: ${detail}`;
+  return {
+    decision: "continue",
+    scores: { continue: 0, stop: 0, ask_user: 0 },
+    reason: normalizedReason,
+    error: result.error,
+  };
+}
 
 export function isLoopGuardEnabled() {
   const raw = String(
@@ -85,7 +123,7 @@ function convToSupervisorMessages(conv) {
           ? JSON.stringify(row.content)
           : "";
     if (!content.trim()) continue;
-    out.push({ role, content: content.slice(0, 4000) });
+    out.push({ role, content });
   }
   return out;
 }
@@ -105,66 +143,27 @@ export async function requestLoopGuardDecision(conv, ctx = {}) {
       },
     });
     if (!result || typeof result !== "object" || !result.decision) {
-      return { ...STOP_RESULT, reason: "invalid_response" };
+      return normalizeLoopGuardResult({ ...STOP_RESULT, reason: "invalid_response" });
     }
-    return result as SupervisorResult;
+    return normalizeLoopGuardResult(result as SupervisorResult);
   } catch {
-    return { ...STOP_RESULT, reason: "ipc_error" };
+    return normalizeLoopGuardResult({ ...SCORING_UNAVAILABLE_RESULT, reason: "ipc_error" });
   }
 }
 
 export function shouldContinueFromLoopGuard(result) {
+  if (isLoopGuardScoringUnavailable(result)) return false;
   return result?.decision === "continue";
 }
 
-export function shouldStopFromLoopGuard(result) {
-  const d = result?.decision;
-  return d === "stop" || d === "ask_user";
-}
-
-/** User asked for a multi-step deliverable (article, implementation, etc.), not a one-shot answer. */
-export function isMultiStepDeliverableIntent(input) {
-  return /\b(write|draft|blog|article|report|research|investigate|analyze|implement|build|create|compile|summarize|summarise)\b/i.test(
-    String(input || "")
-  );
-}
-
-/**
- * When the model attached tool calls after already running tools, only treat text as
- * "final" if stop clearly beats continue. Avoids halting research/blog tasks after one search.
- */
+/** When the model attached tool calls after prose, trust NLI stop to drop stale pending tools. */
 export function shouldRejectPendingToolsFromLoopGuard(result, ctx = {}) {
+  if (isLoopGuardScoringUnavailable(result)) return false;
   if (!result || result.decision !== "stop") return false;
 
-  const scores = result.scores ?? { continue: 0, stop: 0, ask_user: 0 };
   const visible = String(ctx.visible ?? "").trim();
   const pending = Array.isArray(ctx.pendingToolNames) ? ctx.pendingToolNames : [];
-
-  if (!pending.length) return false;
-
-  // Tool-only continuation — no prose to treat as a final answer.
-  if (!visible) return false;
-
-  if (scores.continue >= scores.stop - 0.08) return false;
-  if (scores.continue >= CONTINUE_THRESHOLD) return false;
-  if (scores.stop - scores.continue < 0.12) return false;
-  if (scores.stop < STOP_THRESHOLD) return false;
-
-  const userRequest = String(ctx.userRequest ?? "");
-  const webSearchCount = Number(ctx.webSearchCount) || 0;
-  const webFetchCount = Number(ctx.webFetchCount) || 0;
-
-  if (isResearchIntent(userRequest)) {
-    if (webSearchCount < MIN_RESEARCH_SEARCHES || webFetchCount < MIN_RESEARCH_FETCHES) {
-      return false;
-    }
-  }
-
-  if (isMultiStepDeliverableIntent(userRequest)) {
-    if (webSearchCount < 2 || webFetchCount < 1) return false;
-    if (visible.length < 120) return false;
-  }
-
+  if (!pending.length || !visible) return false;
   return true;
 }
 
@@ -201,5 +200,36 @@ export function getSkillSelfImproveNudgeState({
 
 export function emitLoopStopLine(message) {
   if (!isDebugLogEnabled()) return;
-  process.stdout.write(dim(`▸ stopped: ${message}`));
+  process.stdout.write(dim(`▸ stopped: ${message}\n\n`));
+}
+
+function formatLoopGuardScore(n) {
+  return typeof n === "number" && Number.isFinite(n) ? n.toFixed(2) : "?";
+}
+
+export function formatLoopGuardScores(scores) {
+  const s = scores ?? { continue: 0, stop: 0, ask_user: 0 };
+  return `continue=${formatLoopGuardScore(s.continue)} stop=${formatLoopGuardScore(s.stop)} ask_user=${formatLoopGuardScore(s.ask_user)}`;
+}
+
+export function emitLoopGuardDecisionLine({
+  round,
+  phase,
+  result,
+  rejectPending,
+  pendingTools,
+  action,
+}) {
+  if (!isDebugLogEnabled()) return;
+  const unavailable = isLoopGuardScoringUnavailable(result);
+  const decision = unavailable ? "unavailable" : String(result?.decision ?? "?");
+  let line = `▸ loop guard · r${round ?? "?"} · ${phase} · ${decision} · ${formatLoopGuardScores(result?.scores)}`;
+  if (result?.reason) line += ` · reason=${result.reason}`;
+  if (result?.error) line += ` · error=${String(result.error).slice(0, 120)}`;
+  if (rejectPending) line += " · reject pending tools";
+  if (Array.isArray(pendingTools) && pendingTools.length) {
+    line += ` · pending=[${pendingTools.join(", ")}]`;
+  }
+  if (action) line += ` · ${action}`;
+  process.stdout.write(dim(`${line}\n`));
 }
