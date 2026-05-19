@@ -116,6 +116,50 @@ test("unwrapSnapshotReadFileExecutions leaves other tools unchanged", () => {
   assert.deepEqual(unwrapSnapshotReadFileExecutions(executions), executions);
 });
 
+test("unwrapSnapshotReadFileExecutions inlines list_dir entries from spilled snapshot", () => {
+  const inner = {
+    entries: [
+      { path: "projects/demo", kind: "dir" },
+      { path: "tmp/scratch.txt", kind: "file" },
+    ],
+    scanned: 42,
+    truncated: false,
+  };
+  const executions = [
+    {
+      tool: "read_file",
+      result: {
+        ok: true,
+        path: "memory/snapshots/run_list_r1_0.json",
+        content: snapshotFileContent(inner, "list_dir"),
+      },
+    },
+  ];
+  const out = unwrapSnapshotReadFileExecutions(executions);
+  assert.equal(out[0].result.from_snapshot, true);
+  assert.match(out[0].result.content, /projects\/demo \[dir\]/);
+  assert.match(out[0].result.content, /tmp\/scratch\.txt \[file\]/);
+  assert.equal(out[0].result.content.includes('"payload"'), false);
+});
+
+test("unwrapSnapshotReadFileExecutions inlines find_files paths from spilled snapshot", () => {
+  const inner = { files: ["src/a.ts", "src/b.ts"], scanned: 2, truncated: false };
+  const executions = [
+    {
+      tool: "read_file",
+      result: {
+        ok: true,
+        path: "memory/snapshots/run_find_r1_0.json",
+        content: snapshotFileContent(inner, "find_files"),
+      },
+    },
+  ];
+  const out = unwrapSnapshotReadFileExecutions(executions);
+  assert.equal(out[0].result.from_snapshot, true);
+  assert.match(out[0].result.content, /src\/a\.ts/);
+  assert.match(out[0].result.content, /src\/b\.ts/);
+});
+
 test("from_snapshot read_file gets spill budget large enough for unwrapped JSON", () => {
   const text = '"'.repeat(56_000);
   const item = {

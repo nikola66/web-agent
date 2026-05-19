@@ -2,14 +2,13 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 import {
-  assistantSignalsTaskCompleteForSkillCapture,
   estimateTaskComplexity,
   isPlanningModePrompt,
   extractPlanningGoalFromPrompt,
   resolveApprovedPlanExecutionGoal,
   parsePlanGoalJudgeJson,
 } from "../dist/agent-runtime/turn-sequencing.js";
-import { getSkillSelfImproveNudgeState } from "../dist/agent-runtime/auto-continue.js";
+import { getSkillSelfImproveNudgeState } from "../dist/agent-runtime/loop-guard.js";
 import { buildPlanModeUserPrompt } from "../dist/agent-runtime/planning-slash.js";
 
 test("estimateTaskComplexity is simple for short asks", () => {
@@ -155,17 +154,9 @@ test("parsePlanGoalJudgeJson requires strict JSON one-liner semantics", () => {
   assert.equal(parsePlanGoalJudgeJson('\uFEFF{"done":false,"reason":"x"}').ok, true);
 });
 
-test("assistantSignalsTaskCompleteForSkillCapture accepts Done", () => {
-  assert.equal(assistantSignalsTaskCompleteForSkillCapture("Done."), true);
-});
-
-test("assistantSignalsTaskCompleteForSkillCapture rejects trailing Next:", () => {
-  assert.equal(assistantSignalsTaskCompleteForSkillCapture("Next:"), false);
-});
-
-test("getSkillSelfImproveNudgeState fires when todo used and assistant signals complete", () => {
+test("getSkillSelfImproveNudgeState fires when todo used and loop guard says stop", () => {
   const s = getSkillSelfImproveNudgeState({
-    visible: "All tasks complete.",
+    loopGuardDecision: "stop",
     executedToolsInTurn: true,
     usedTodoWrite: true,
     usedPlanningGate: false,
@@ -179,7 +170,7 @@ test("getSkillSelfImproveNudgeState fires when todo used and assistant signals c
 
 test("getSkillSelfImproveNudgeState skips when skill mutating tool already ran", () => {
   const s = getSkillSelfImproveNudgeState({
-    visible: "Done.",
+    loopGuardDecision: "stop",
     executedToolsInTurn: true,
     usedTodoWrite: true,
     usedPlanningGate: false,
@@ -191,9 +182,23 @@ test("getSkillSelfImproveNudgeState skips when skill mutating tool already ran",
   assert.equal(s.shouldNudge, false);
 });
 
-test("getSkillSelfImproveNudgeState fires when planning gate used and assistant signals complete", () => {
+test("getSkillSelfImproveNudgeState skips when loop guard says continue", () => {
   const s = getSkillSelfImproveNudgeState({
-    visible: "Migration finished.",
+    loopGuardDecision: "continue",
+    executedToolsInTurn: true,
+    usedTodoWrite: true,
+    usedPlanningGate: false,
+    estimatedStepsOverSix: false,
+    skillMutatingCalled: false,
+    autoContinueNudges: 0,
+    maxNudges: 20,
+  });
+  assert.equal(s.shouldNudge, false);
+});
+
+test("getSkillSelfImproveNudgeState fires when planning gate used and loop guard says stop", () => {
+  const s = getSkillSelfImproveNudgeState({
+    loopGuardDecision: "stop",
     executedToolsInTurn: true,
     usedTodoWrite: false,
     usedPlanningGate: true,
@@ -205,9 +210,9 @@ test("getSkillSelfImproveNudgeState fires when planning gate used and assistant 
   assert.equal(s.shouldNudge, true);
 });
 
-test("getSkillSelfImproveNudgeState fires when estimated steps over six and assistant signals complete", () => {
+test("getSkillSelfImproveNudgeState fires when estimated steps over six and loop guard says stop", () => {
   const s = getSkillSelfImproveNudgeState({
-    visible: "All set.",
+    loopGuardDecision: "stop",
     executedToolsInTurn: true,
     usedTodoWrite: false,
     usedPlanningGate: false,
@@ -221,7 +226,7 @@ test("getSkillSelfImproveNudgeState fires when estimated steps over six and assi
 
 test("getSkillSelfImproveNudgeState skips when no tools executed this turn", () => {
   const s = getSkillSelfImproveNudgeState({
-    visible: "Done.",
+    loopGuardDecision: "stop",
     executedToolsInTurn: false,
     usedTodoWrite: true,
     usedPlanningGate: false,

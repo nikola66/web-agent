@@ -58,11 +58,8 @@ import { createReflectionFromRun, derivePromotableLearning } from "./reflection.
 import {
   estimateTaskComplexity,
   isPlanningModePrompt,
-  isToolSequenceIntent,
   extractExactResponseTokens,
   repairExactResponseText,
-  shouldTreatPostToolTextAsFinal,
-  shouldSuppressActionPlanAutoContinue,
   isResearchIntent,
   MIN_RESEARCH_FETCHES,
   MIN_RESEARCH_SEARCHES,
@@ -79,11 +76,15 @@ import {
 } from "./transcript.js";
 import { emitTranscriptEvent } from "./transcript-delivery.js";
 import {
-  getAutoContinueNudgeState,
+  requestLoopGuardDecision,
+  shouldContinueFromLoopGuard,
+  shouldRejectPendingToolsFromLoopGuard,
+  shouldSuppressPostToolNudgeFromExecutions,
   getSkillSelfImproveNudgeState,
   emitLoopStopLine,
   resolveMaxAutoContinueNudges,
-} from "./auto-continue.js";
+  LOOP_GUARD_CONTINUE_NUDGE,
+} from "./loop-guard.js";
 import {
   summarizeToolExecutions,
   writeStdoutSmoothed,
@@ -274,10 +275,6 @@ export async function agentTurn(
       ""
   ).trim();
   const previousUserMessage = getPreviousUserMessageContent(safeList);
-  const suppressActionPlanNudge = shouldSuppressActionPlanAutoContinue(
-    originalUserInput,
-    previousUserMessage
-  );
   const approvedPlanGoal = resolveApprovedPlanExecutionGoal({
     currentUserContent: originalUserInput,
     priorUserContent: previousUserMessage,
@@ -548,98 +545,104 @@ export async function agentTurn(
         );
       }
 
-      if (
-        tools.length &&
-        executedToolsInTurn &&
-        !isToolSequenceIntent(originalUserInput) &&
-        shouldTreatPostToolTextAsFinal(visible, {
-          researchIntent,
-          webSearchCount: webSearchCountInTurn,
-          webFetchCount: webFetchCountInTurn,
-        })
-      ) {
-        run.rejected_tool_calls.push(
-          ...tools.map((tool) => ({
-            name: tool.name,
-            reason: "post_tool_final_answer",
-          }))
-        );
-        await logDebugEvent("skipped_post_final_tool_calls", {
-          round,
-          toolCount: tools.length,
-          toolNames: tools.map((tool) => tool.name),
-          visiblePreview: String(visible || "").slice(0, 200),
+      const loopGuardCtx = {
+        userRequest: originalUserInput,
+        webSearchCount: webSearchCountInTurn,
+        webFetchCount: webFetchCountInTurn,
+        toolsExecutedInTurn: executedToolsInTurn,
+      };
+
+      if (tools.length && executedToolsInTurn) {
+        const postToolGuard = await requestLoopGuardDecision(conv, {
+          ...loopGuardCtx,
+          pendingToolNames: tools.map((t) => t.name),
+          visible,
         });
-        await logDebugEvent("turn_completed", {
+        await logDebugEvent("turn_loop_guard", {
           round,
-          durationMs: Date.now() - roundStartedAt,
-          continued: false,
-          skippedPostFinalTools: tools.length,
+          phase: "post_tool_stale_calls",
+          decision: postToolGuard.decision,
+          scores: postToolGuard.scores,
+          reason: postToolGuard.reason,
+          pendingTools: tools.map((t) => t.name),
+          rejectPending: shouldRejectPendingToolsFromLoopGuard(postToolGuard, {
+            ...loopGuardCtx,
+            visible,
+            pendingToolNames: tools.map((t) => t.name),
+          }),
         });
-        emitLoopStopLine("post_tool_final_answer_skipped_tools");
-        break;
+        if (
+          shouldRejectPendingToolsFromLoopGuard(postToolGuard, {
+            ...loopGuardCtx,
+            visible,
+            pendingToolNames: tools.map((t) => t.name),
+          })
+        ) {
+          run.rejected_tool_calls.push(
+            ...tools.map((tool) => ({
+              name: tool.name,
+              reason: "post_tool_final_answer",
+            }))
+          );
+          await logDebugEvent("skipped_post_final_tool_calls", {
+            round,
+            toolCount: tools.length,
+            toolNames: tools.map((tool) => tool.name),
+            visiblePreview: String(visible || "").slice(0, 200),
+          });
+          await logDebugEvent("turn_completed", {
+            round,
+            durationMs: Date.now() - roundStartedAt,
+            continued: false,
+            skippedPostFinalTools: tools.length,
+          });
+          emitLoopStopLine("post_tool_final_answer_skipped_tools");
+          break;
+        }
       }
 
       if (!tools.length) {
         if (!turnMeta?.textOnly) {
-          const nudgeState = getAutoContinueNudgeState({
-            turnInput: originalUserInput,
-            visible,
-            executedToolsInTurn,
-            autoContinueNudges,
-            maxNudges: maxAutoContinueNudges,
-            toolNames,
-            originalUserInput,
-            suppressActionPlanNudge,
-            webSearchCount: webSearchCountInTurn,
-            webFetchCount: webFetchCountInTurn,
-            lastToolExecutions,
+          const suppressFromShell = shouldSuppressPostToolNudgeFromExecutions(lastToolExecutions);
+          const loopGuard = suppressFromShell
+            ? { decision: "stop", scores: { continue: 0, stop: 1, ask_user: 0 }, reason: "nodebox_shell" }
+            : await requestLoopGuardDecision(conv, loopGuardCtx);
+          await logDebugEvent("turn_loop_guard", {
+            round,
+            phase: "no_tools",
+            decision: loopGuard.decision,
+            scores: loopGuard.scores,
+            reason: loopGuard.reason,
           });
-          if (nudgeState.want && !nudgeState.underCap) {
+          const wantsContinue = shouldContinueFromLoopGuard(loopGuard);
+          if (wantsContinue && autoContinueNudges >= maxAutoContinueNudges) {
             process.stdout.write(
               dim(
-                `▸ auto-continue cap reached (${autoContinueNudges}/${nudgeState.maxNudges} nudges); stopping. Increase WEBAGENT_MAX_AUTO_CONTINUE_NUDGES to allow more recovery nudges.\n`
+                `▸ Loop Guard cap reached (${autoContinueNudges}/${maxAutoContinueNudges} nudges); stopping. Increase WEBAGENT_MAX_AUTO_CONTINUE_NUDGES to allow more recovery nudges.\n`
               )
             );
-            emitLoopStopLine(`auto_continue_cap (${nudgeState.reason})`);
+            emitLoopStopLine("loop_guard_cap");
             await logDebugEvent("turn_completed", {
               round,
               durationMs: Date.now() - roundStartedAt,
               continued: false,
               autoContinueCap: true,
-              capReason: nudgeState.reason,
             });
             break;
           }
-          if (nudgeState.shouldNudge) {
+          if (wantsContinue) {
             autoContinueNudges += 1;
-            const exactTokens = extractExactResponseTokens(originalUserInput);
-            const nudge =
-              nudgeState.reason === "missing_exact_final"
-                ? `The task is not complete because the requested exact final text is missing. Continue now, using tools if needed, and finish with the exact requested text: ${exactTokens.join(", ")}`
-                : nudgeState.reason === "false_no_history"
-                  ? "You already retrieved prior-work evidence from tools in this turn. Do not claim a clean slate. Continue by summarizing concrete recent work from those results (tasks, files, or decisions) and cite what was found."
-                : nudgeState.reason === "tool_sequence"
-                  ? "Continue the same testing sequence now. Emit the next tool call immediately with valid arguments, then keep going step-by-step."
-                  : nudgeState.reason === "scheduling_automation"
-                    ? "The user asked for recurring or scheduled work (heartbeat cron). Continue now with native tool calls: use cron_list if helpful, then cron_register with id, delivery (silent | terminal | email — confirm with the user), everyMinutes, steps or tool/arguments; if delivery is terminal, optional notifyChannel (e.g. telegram:<chatId>); if delivery is email, deliveryEmailTo (and optional deliveryEmailSubject). Host crontab/run_shell crontab are unavailable — only .cronjobs.json via cron_register."
-                    : nudgeState.reason === "research_incomplete"
-                      ? `Open-web research is incomplete (${webSearchCountInTurn} web_search, ${webFetchCountInTurn} web_fetch). Continue: fan out more web_search (topic × region × platform), web_fetch top URLs, then answer with confirmed/likely labels. Do not conclude nothing exists until at least ${MIN_RESEARCH_SEARCHES} searches and ${MIN_RESEARCH_FETCHES} fetches.`
-                      : `Stay aligned ONLY with the user's latest request: ${JSON.stringify(
-                        originalUserInput
-                      )}. Continue immediately with the next concrete action now. Emit the tool call right away with valid arguments, then proceed until that request is complete. If it is genuinely finished, reply with a single sentence stating the final answer; otherwise do not reply with prose only.`;
-            conv.push({ role: "user", content: nudge });
-            await logDebugEvent("turn_auto_continue_nudge", {
+            conv.push({ role: "user", content: LOOP_GUARD_CONTINUE_NUDGE });
+            await logDebugEvent("turn_loop_guard_nudge", {
               round,
               nudgeIndex: autoContinueNudges,
-              reason: nudgeState.reason,
               visiblePreview: String(visible || "").slice(0, 200),
             });
             continue;
           }
 
           const skillState = getSkillSelfImproveNudgeState({
-            visible,
+            loopGuardDecision: loopGuard.decision,
             executedToolsInTurn,
             usedTodoWrite: usedTodoWriteInTurn,
             usedPlanningGate: usedPlanningGateForSkill,
@@ -651,7 +654,7 @@ export async function agentTurn(
           if (skillState.want && !skillState.underCap) {
             process.stdout.write(
               dim(
-                `▸ skill self-improve nudge skipped (auto-continue cap ${autoContinueNudges}/${skillState.maxNudges})\n`
+                `▸ skill self-improve nudge skipped (Loop Guard cap ${autoContinueNudges}/${skillState.maxNudges})\n`
               )
             );
           } else if (skillState.shouldNudge && !skillImproveNudgeSent) {

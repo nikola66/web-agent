@@ -30,6 +30,7 @@ import {
 import { CAPABILITY_RUNTIME_FILES, CAPABILITY_SUMMARY_JSON } from "@/capabilities";
 import { CHANNEL_CATALOG_JSON, CHANNELS } from "@/core/channels";
 import { DEFAULT_PROVIDER_ID, PROVIDER_CATALOG_JSON, PROVIDERS } from "@/core/providers";
+import { loopGuardEnvForRuntime, readLoopGuardThresholds } from "./loop-guard-config.js";
 import heartbeatSource from "./runtime/HEARTBEAT.md?raw";
 import soulSource from "./runtime/SOUL.md?raw";
 import { TOOL_CATALOG_JSON } from "./tool-catalog";
@@ -41,7 +42,7 @@ import runtimeUtilsSource from "../../dist/agent-runtime/utils.js?raw";
 import runtimeBootstrapSource from "../../dist/agent-runtime/bootstrap.js?raw";
 import runtimeTurnSource from "../../dist/agent-runtime/turn.js?raw";
 import runtimeStreamOutputSource from "../../dist/agent-runtime/stream-output.js?raw";
-import runtimeAutoContinueSource from "../../dist/agent-runtime/auto-continue.js?raw";
+import runtimeLoopGuardSource from "../../dist/agent-runtime/loop-guard.js?raw";
 import runtimeContextCompressionSource from "../../dist/agent-runtime/context-compression.js?raw";
 import runtimePlanningSlashSource from "../../dist/agent-runtime/planning-slash.js?raw";
 import runtimeWikiSlashSource from "../../dist/agent-runtime/wiki-slash.js?raw";
@@ -160,6 +161,10 @@ const SPAWN_REQ_PREFIX = "<<<WEBAGENT_SPAWN_REQ:";
 const SPAWN_REQ_END = "<<<END_WEBAGENT_SPAWN_REQ>>>";
 const SPAWN_RESP_PREFIX = "<<<WEBAGENT_SPAWN_RESP:";
 const SPAWN_RESP_END = "<<<END_WEBAGENT_SPAWN_RESP>>>";
+const LOOP_GUARD_REQ_PREFIX = "<<<WEBAGENT_LOOP_GUARD_REQ:";
+const LOOP_GUARD_REQ_END = "<<<END_WEBAGENT_LOOP_GUARD_REQ>>>";
+const LOOP_GUARD_RESP_PREFIX = "<<<WEBAGENT_LOOP_GUARD_RESP:";
+const LOOP_GUARD_RESP_END = "<<<END_WEBAGENT_LOOP_GUARD_RESP>>>";
 /** Emitted by agent runtime before exit(1); parsed so the terminal can show the message. */
 const FATAL_ERROR_START = "<<<WEBAGENT_FATAL_ERROR>>>";
 const FATAL_ERROR_END = "<<<END_WEBAGENT_FATAL_ERROR>>>";
@@ -383,7 +388,7 @@ async function writeRuntimeSources(profileId: string): Promise<void> {
   await emulator.fs.writeFile(`${webagentDir}/bootstrap.js`, runtimeBootstrapSource);
   await emulator.fs.writeFile(`${webagentDir}/turn.js`, runtimeTurnSource);
   await emulator.fs.writeFile(`${webagentDir}/stream-output.js`, runtimeStreamOutputSource);
-  await emulator.fs.writeFile(`${webagentDir}/auto-continue.js`, runtimeAutoContinueSource);
+  await emulator.fs.writeFile(`${webagentDir}/loop-guard.js`, runtimeLoopGuardSource);
   await emulator.fs.writeFile(`${webagentDir}/context-compression.js`, runtimeContextCompressionSource);
   await emulator.fs.writeFile(`${webagentDir}/planning-slash.js`, runtimePlanningSlashSource);
   await emulator.fs.writeFile(`${webagentDir}/wiki-slash.js`, runtimeWikiSlashSource);
@@ -495,6 +500,7 @@ function buildEnv(profileId: string, profile: Profile, apiKeys: Record<string, s
     WEBAGENT_MEMORY_ROOT: "memory",
     WEBAGENT_DEBUG_LOG: VITE_DEBUG_LOG_ENABLED ? "1" : "0",
     WEBAGENT_DEBUG_LOG_DIR: RUNTIME_DEBUG_LOG_DIR,
+    ...loopGuardEnvForRuntime(import.meta.env),
   };
   const personalityLabel = getPersonalityDisplayLabelForPrompt(profile.personality);
   if (personalityLabel) env.WEBAGENT_PERSONALITY_LABEL = personalityLabel;
@@ -832,6 +838,7 @@ export async function startWebAgent(options: AgentStartOptions): Promise<void> {
       const proxyReqStart = agentOutputBuffer.indexOf(PROXY_REQ_PREFIX);
       const proxyStreamReqStart = agentOutputBuffer.indexOf(PROXY_STREAM_REQ_PREFIX);
       const spawnReqStart = agentOutputBuffer.indexOf(SPAWN_REQ_PREFIX);
+      const loopGuardReqStart = agentOutputBuffer.indexOf(LOOP_GUARD_REQ_PREFIX);
       const fatalStart = agentOutputBuffer.indexOf(FATAL_ERROR_START);
       const nextStartCandidates = [
         profileStart,
@@ -845,6 +852,7 @@ export async function startWebAgent(options: AgentStartOptions): Promise<void> {
         proxyReqStart,
         proxyStreamReqStart,
         spawnReqStart,
+        loopGuardReqStart,
         fatalStart,
       ].filter((v) => v >= 0);
       if (nextStartCandidates.length === 0) {
@@ -1195,6 +1203,61 @@ export async function startWebAgent(options: AgentStartOptions): Promise<void> {
             });
           }
           await agentProcess.write(`${SPAWN_RESP_PREFIX}${reqId}>>>${respPayload}${SPAWN_RESP_END}`);
+        })();
+        continue;
+      }
+
+      if (agentOutputBuffer.startsWith(LOOP_GUARD_REQ_PREFIX)) {
+        const idEnd = agentOutputBuffer.indexOf(">>>", LOOP_GUARD_REQ_PREFIX.length);
+        if (idEnd < 0) break;
+        const reqId = agentOutputBuffer.slice(LOOP_GUARD_REQ_PREFIX.length, idEnd);
+        const bodyStart = idEnd + 3;
+        const bodyEnd = agentOutputBuffer.indexOf(LOOP_GUARD_REQ_END, bodyStart);
+        if (bodyEnd < 0) break;
+        const reqBody = agentOutputBuffer.slice(bodyStart, bodyEnd);
+        agentOutputBuffer = agentOutputBuffer.slice(bodyEnd + LOOP_GUARD_REQ_END.length);
+        void (async () => {
+          let respPayload: string;
+          try {
+            const req = JSON.parse(reqBody) as {
+              messages?: Array<{ role?: string; content?: string }>;
+              meta?: Record<string, unknown>;
+            };
+            const { decide } = await import("./supervisor/index.js");
+            const thresholds = readLoopGuardThresholds(import.meta.env);
+            const result = await decide({
+              messages: (req.messages || []).map((m) => ({
+                role: String(m.role || ""),
+                content: String(m.content || ""),
+              })),
+              maxMessages: thresholds.maxMessages,
+              thresholds,
+              meta: {
+                userRequest: req.meta?.userRequest != null ? String(req.meta.userRequest) : undefined,
+                webSearchCount:
+                  typeof req.meta?.webSearchCount === "number" ? req.meta.webSearchCount : undefined,
+                webFetchCount:
+                  typeof req.meta?.webFetchCount === "number" ? req.meta.webFetchCount : undefined,
+                toolsExecutedInTurn:
+                  typeof req.meta?.toolsExecutedInTurn === "boolean"
+                    ? req.meta.toolsExecutedInTurn
+                    : undefined,
+                pendingToolCalls: Array.isArray(req.meta?.pendingToolCalls)
+                  ? req.meta.pendingToolCalls.map((n) => String(n))
+                  : undefined,
+              },
+            });
+            respPayload = JSON.stringify(result);
+          } catch (e) {
+            respPayload = JSON.stringify({
+              decision: "stop",
+              scores: { continue: 0, stop: 1, ask_user: 0 },
+              reason: String((e as Error)?.message ?? e),
+            });
+          }
+          await agentProcess.write(
+            `${LOOP_GUARD_RESP_PREFIX}${reqId}>>>${respPayload}${LOOP_GUARD_RESP_END}`
+          );
         })();
         continue;
       }

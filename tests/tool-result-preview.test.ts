@@ -56,6 +56,30 @@ test("summarizeToolResultPreview surfaces youtube_transcribe transcript body", (
   assert.match(s, /Opening remarks from the speaker/);
 });
 
+test("summarizeToolResultPreview surfaces list_dir entries as paths", () => {
+  const s = summarizeToolResultPreview({
+    entries: [
+      { path: "memory/snapshots", kind: "dir" },
+      { path: "AGENT.md", kind: "file" },
+    ],
+    scanned: 10,
+    truncated: false,
+  });
+  assert.match(s, /^entries \(\d+ chars\):/);
+  assert.match(s, /memory\/snapshots/);
+  assert.match(s, /AGENT\.md/);
+});
+
+test("summarizeToolResultPreview surfaces find_files paths", () => {
+  const s = summarizeToolResultPreview({
+    files: ["src/foo.ts", "src/bar.ts"],
+    scanned: 2,
+    truncated: true,
+  });
+  assert.match(s, /^files \(\d+ chars\):/);
+  assert.match(s, /src\/foo\.ts/);
+});
+
 test("tool result body fields stay visible in compact previews", () => {
   const fields = [
     { field: "text", sample: "Hello from web_fetch. ".repeat(20) },

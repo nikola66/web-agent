@@ -12,6 +12,7 @@ import {
   memoryPath,
   safeWriteJson,
 } from "./sql.js";
+import { extractToolResultBodyText } from "../tool-result-preview.js";
 
 /** Same prefix as agent/context-compaction tool-result injection (must match exactly). */
 export const TOOL_RESULTS_COMPACT_PREFIX = "Tool results (compact JSON):\n";
@@ -195,27 +196,6 @@ export async function cleanupSnapshotsNotReferenced(historyMessages, snapshotsDi
   );
 }
 
-function extractTextFromNestedToolResult(inner) {
-  if (!inner || typeof inner !== "object") return null;
-  if (typeof inner.text === "string" && inner.text.trim()) return inner.text;
-  if (typeof inner.markdown === "string" && inner.markdown.trim()) return inner.markdown;
-  if (typeof inner.transcript === "string" && inner.transcript.trim()) return inner.transcript;
-  if (typeof inner.content === "string" && inner.content.trim()) {
-    const c = inner.content;
-    if (c.startsWith("{") && c.includes('"payload"')) {
-      try {
-        const nested = JSON.parse(c);
-        const pl = nested?.payload;
-        if (pl?.result) return extractTextFromNestedToolResult(pl.result);
-      } catch {
-        /* use raw content string */
-      }
-    }
-    return c;
-  }
-  return null;
-}
-
 /**
  * Shrink read_file results for spill JSON so the model gets real page text in one hop, not nested snapshots.
  */
@@ -241,7 +221,7 @@ function unwrapSnapshotReadFileExecution(item) {
   const execPayload = parsed?.payload;
   if (!execPayload || typeof execPayload !== "object") return item;
 
-  const extracted = extractTextFromNestedToolResult(execPayload.result);
+  const extracted = extractToolResultBodyText(execPayload.result);
   if (extracted == null) return item;
 
   let text = extracted;

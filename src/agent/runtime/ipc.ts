@@ -28,6 +28,11 @@ export const IPC_SPAWN_REQ_END = "<<<END_WEBAGENT_SPAWN_REQ>>>";
 export const IPC_SPAWN_RESP_PREFIX = "<<<WEBAGENT_SPAWN_RESP:";
 export const IPC_SPAWN_RESP_END = "<<<END_WEBAGENT_SPAWN_RESP>>>";
 
+export const IPC_LOOP_GUARD_REQ_PREFIX = "<<<WEBAGENT_LOOP_GUARD_REQ:";
+export const IPC_LOOP_GUARD_REQ_END = "<<<END_WEBAGENT_LOOP_GUARD_REQ>>>";
+export const IPC_LOOP_GUARD_RESP_PREFIX = "<<<WEBAGENT_LOOP_GUARD_RESP:";
+export const IPC_LOOP_GUARD_RESP_END = "<<<END_WEBAGENT_LOOP_GUARD_RESP>>>";
+
 let _nextId = 0;
 const _pending = new Map(); // id → { resolve, reject, timer }
 let _streamNextId = 0;
@@ -36,12 +41,35 @@ const _streamPending = new Map(); // id → { resolve, reject, onStart, onChunk,
 let _spawnNextId = 0;
 const _spawnPending = new Map(); // id → { resolve, reject, timer }
 
+let _loopGuardNextId = 0;
+const _loopGuardPending = new Map(); // id → { resolve, reject, timer }
+
 function encodePayload(payload) {
   return Buffer.from(JSON.stringify(payload), "utf8").toString("base64");
 }
 
 function decodePayload(payload) {
   return JSON.parse(Buffer.from(String(payload || ""), "base64").toString("utf8"));
+}
+
+function stripLoopGuardResponses(text) {
+  const re = new RegExp(
+    IPC_LOOP_GUARD_RESP_PREFIX.replace(/</g, "<") + "([^>]+)>>>" + "([\\s\\S]*?)" + IPC_LOOP_GUARD_RESP_END,
+    "g"
+  );
+  return text.replace(re, (_, id, payload) => {
+    const entry = _loopGuardPending.get(id);
+    if (entry) {
+      clearTimeout(entry.timer);
+      _loopGuardPending.delete(id);
+      try {
+        entry.resolve(JSON.parse(payload));
+      } catch (e) {
+        entry.reject(new Error(`IPC loop guard response parse error: ${e?.message || e}`));
+      }
+    }
+    return "";
+  });
 }
 
 function stripSpawnResponses(text) {
@@ -128,7 +156,8 @@ function stripStreamResponses(text) {
  * Called from agent.js stdin data handler.
  */
 export function processStdinChunk(text) {
-  let out = stripSpawnResponses(text);
+  let out = stripLoopGuardResponses(text);
+  out = stripSpawnResponses(out);
   out = stripStreamResponses(out);
   out = stripProxyResponses(out);
   return out;
@@ -211,6 +240,22 @@ export function ipcProxyStreamRequest(
  * Run a subprocess via the browser adapter using Nodebox shell (same as agent spawn).
  * Only used when `WEBAGENT_RUNTIME=nodebox` — child_process.spawn is unreliable there.
  */
+export function ipcLoopGuardRequest(payload) {
+  return new Promise((resolve, reject) => {
+    const id = String(++_loopGuardNextId);
+    const timer = setTimeout(() => {
+      if (_loopGuardPending.has(id)) {
+        _loopGuardPending.delete(id);
+        reject(new Error("IPC loop guard request timed out after 90s."));
+      }
+    }, 90_000);
+    _loopGuardPending.set(id, { resolve, reject, timer });
+    process.stdout.write(
+      `${IPC_LOOP_GUARD_REQ_PREFIX}${id}>>>${JSON.stringify(payload)}${IPC_LOOP_GUARD_REQ_END}`
+    );
+  });
+}
+
 export function ipcSpawnRequest(payload) {
   return new Promise((resolve, reject) => {
     const id = String(++_spawnNextId);

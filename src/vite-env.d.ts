@@ -2,6 +2,13 @@
 
 interface ImportMetaEnv {
   readonly VITE_APP_VERSION: string;
+  readonly VITE_WEBAGENT_LOOP_GUARD?: string;
+  readonly VITE_WEBAGENT_MAX_AUTO_CONTINUE_NUDGES?: string;
+  readonly VITE_WEBAGENT_RESEARCH_MAX_AUTO_CONTINUE_NUDGES?: string;
+  readonly VITE_WEBAGENT_LOOP_GUARD_MAX_MESSAGES?: string;
+  readonly VITE_WEBAGENT_LOOP_GUARD_STOP_THRESHOLD?: string;
+  readonly VITE_WEBAGENT_LOOP_GUARD_ASK_USER_THRESHOLD?: string;
+  readonly VITE_WEBAGENT_LOOP_GUARD_CONTINUE_THRESHOLD?: string;
 }
 
 interface ImportMeta {
