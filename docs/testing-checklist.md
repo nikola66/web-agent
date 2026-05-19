@@ -15,6 +15,15 @@
 - [ ] **Stop** terminates the process; status bar returns to Stopped.
 - [ ] Resize terminal; layout remains usable (PTY resize does not freeze the tab).
 
+## Turn judge
+
+Requires `npm run dev` (judge on port 8787) and `git lfs pull` so `models/turn-judge/` is present. See [turn-judge.md](turn-judge.md).
+
+- [ ] `curl -s http://127.0.0.1:8787/health` returns OK.
+- [ ] After `make_dir`, assistant says it will create a follow-up file (e.g. strategy doc) — agent **continues** instead of stopping.
+- [ ] Assistant asks a direct choice question ("Which do you prefer?") — turn **stops** without endless auto-continue.
+- [ ] With `VITE_WEBAGENT_DEBUG_LOG=1`, dim `▸ turn judge · …` lines appear in the terminal after a turn boundary.
+
 ## Tools (smoke)
 
 From the running agent, ask it to:

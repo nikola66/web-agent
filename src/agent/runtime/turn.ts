@@ -1,5 +1,5 @@
 /**
- * Agent turn execution: main LLM loop with tool calls, streaming, and auto-continuation.
+ * Agent turn execution: main LLM loop with tool calls, streaming, and turn-judge continuation.
  */
 
 import * as memoryServices from "./memory/index.js";
@@ -44,7 +44,6 @@ import {
   normalizeToolCalls,
   sanitizeAssistantVisibleText,
   streamOpenAI,
-  completeOpenAiChat,
 } from "./llm/streaming.js";
 import {
   bold,
@@ -58,16 +57,11 @@ import { createReflectionFromRun, derivePromotableLearning } from "./reflection.
 import {
   estimateTaskComplexity,
   isPlanningModePrompt,
-  isToolSequenceIntent,
-  extractExactResponseTokens,
   repairExactResponseText,
-  shouldTreatPostToolTextAsFinal,
-  shouldSuppressActionPlanAutoContinue,
-  isResearchIntent,
   MIN_RESEARCH_FETCHES,
   MIN_RESEARCH_SEARCHES,
   resolveApprovedPlanExecutionGoal,
-  parsePlanGoalJudgeJson,
+  shouldSuppressActionPlanAutoContinue,
 } from "./turn-sequencing.js";
 import { errorMessage } from "./utils.js";
 import { WS } from "./constants.js";
@@ -79,11 +73,17 @@ import {
 } from "./transcript.js";
 import { emitTranscriptEvent } from "./transcript-delivery.js";
 import {
-  getAutoContinueNudgeState,
-  getSkillSelfImproveNudgeState,
   emitLoopStopLine,
   resolveMaxAutoContinueNudges,
-} from "./auto-continue.js";
+  shouldSuppressPostToolNudgeFromExecutions,
+} from "./turn-budget.js";
+import {
+  fetchTurnJudgeDecisionForShadow,
+  judgeTurnState,
+  resolveTurnJudgeRuntimeFlags,
+  type TurnJudgeDecision,
+} from "./turn-judge-client.js";
+import { buildGenericContinuationNudge, buildTurnJudgePayload } from "./turn-judge-payload.js";
 import {
   summarizeToolExecutions,
   writeStdoutSmoothed,
@@ -93,42 +93,24 @@ import {
 } from "./stream-output.js";
 import { buildPlanModeUserPrompt } from "./planning-slash.js";
 
-const PLAN_GOAL_JUDGE_SYSTEM =
-  'You judge whether work toward APPROVED_PLAN_GOAL is complete enough for the user. Reply ONLY with one JSON object, no prose: {"done":true|false,"reason":"brief"}';
-
-async function judgeApprovedPlanGoalComplete(cfg, signal, goal, assistantVisible) {
-  const abortedResult = () => ({ aborted: true, done: false, reason: "aborted" });
-  if (signal?.aborted) return abortedResult();
-  const snippet = String(assistantVisible || "").slice(0, 12_000);
-  const messages = [
-    { role: "system", content: PLAN_GOAL_JUDGE_SYSTEM },
-    {
-      role: "user",
-      content: `APPROVED_PLAN_GOAL:\n${goal}\n\nASSISTANT_LAST_REPLY:\n${snippet}`,
-    },
-  ];
-  try {
-    const rawText = await completeOpenAiChat(messages, cfg, { signal, maxTokens: 256 });
-    if (signal?.aborted) return abortedResult();
-    const parsed = parsePlanGoalJudgeJson(rawText);
-    if (!parsed.ok) return { aborted: false, done: false, reason: parsed.reason };
-    return { aborted: false, done: parsed.done, reason: parsed.reason };
-  } catch (e) {
-    if (signal?.aborted || e?.name === "AbortError") return abortedResult();
-    const msg = errorMessage(e);
-    if (/chat completion aborted|proxy stream aborted|IPC proxy stream aborted/i.test(msg)) {
-      return abortedResult();
-    }
-    return { aborted: false, done: false, reason: "judge_error" };
-  }
-}
-
 const MAX_AGENT_ROUNDS = Math.max(1, Number(typeof process !== "undefined" ? process.env?.WEBAGENT_MAX_AGENT_ROUNDS : undefined) || 64);
 const MAX_PLAN_GOAL_CONTINUATIONS = 20;
 const MAX_TOOL_RESULT_INLINE_CHARS = Math.max(
   200,
   Number(process.env.WEBAGENT_MAX_TOOL_RESULT_INLINE_CHARS) || 10_000
 );
+
+function emitTurnJudgeLine(decision: TurnJudgeDecision) {
+  const pct = Math.round(decision.confidence * 100);
+  const label = /label:(\w+)/i.exec(decision.reason)?.[1];
+  const modelNote =
+    label && decision.source === "fallback" && label.toUpperCase() !== decision.action.toUpperCase()
+      ? ` · model=${label}`
+      : "";
+  process.stdout.write(
+    dim(`▸ turn judge · ${decision.action} (${decision.source}, ${pct}%) — ${decision.reason}${modelNote}\n`)
+  );
+}
 
 let _cachedSystemPrompt: string | null = null;
 let _cachedToolNames: string[] | null = null;
@@ -274,10 +256,6 @@ export async function agentTurn(
       ""
   ).trim();
   const previousUserMessage = getPreviousUserMessageContent(safeList);
-  const suppressActionPlanNudge = shouldSuppressActionPlanAutoContinue(
-    originalUserInput,
-    previousUserMessage
-  );
   const approvedPlanGoal = resolveApprovedPlanExecutionGoal({
     currentUserContent: originalUserInput,
     priorUserContent: previousUserMessage,
@@ -332,7 +310,6 @@ export async function agentTurn(
   let executedToolsInTurn = false;
   let webSearchCountInTurn = 0;
   let webFetchCountInTurn = 0;
-  const researchIntent = isResearchIntent(originalUserInput);
   const maxAutoContinueNudges = resolveMaxAutoContinueNudges(originalUserInput);
   const successfulToolKeysInTurn = new Set<string>();
   let conv = [...fullMessages];
@@ -362,8 +339,7 @@ export async function agentTurn(
       }
     }
   }
-  const usedPlanningGateForSkill =
-    injectedPlanningGate || isPlanningModePrompt(originalUserInput);
+  const usedPlanningGate = injectedPlanningGate || isPlanningModePrompt(originalUserInput);
   const fallbackApprovedPlanGoalActive =
     !!approvedPlanGoal &&
     (/^Execute approved plan at /.test(approvedPlanGoal) ||
@@ -376,15 +352,14 @@ export async function agentTurn(
     });
   }
 
-  let usedTodoWriteInTurn = false;
-  let skillMutatingCalledInTurn = false;
-  let skillImproveNudgeSent = false;
-
   const agentName = process.env.WEBAGENT_AGENT_NAME || process.env.WEBAGENT_PROFILE_NAME || "Agent";
   let turnHeaderPrinted = false;
   const loopGuard = createLoopGuardState();
   let lastToolExecutions: Array<Record<string, unknown>> = [];
   try {
+    const { enabled: turnJudgeEnabled, shadowOnly: turnJudgeShadowOnly } =
+      resolveTurnJudgeRuntimeFlags();
+
     let planGoalContinuationsUsed = 0;
     if (approvedPlanGoal) {
       const preview =
@@ -489,7 +464,7 @@ export async function agentTurn(
       visible = repairExactResponseText(originalUserInput, visible);
       if (visible.trim()) {
         run.final_visible_assistant_text = visible;
-        const rendered = renderMarkdownToAnsi(visible);
+        const rendered = renderMarkdownToAnsi(visible, { toolCatalog });
         let branchBelowName = false;
         if (!turnHeaderPrinted) {
           if (round > 1) process.stdout.write("\n");
@@ -548,231 +523,376 @@ export async function agentTurn(
         );
       }
 
-      if (
-        tools.length &&
-        executedToolsInTurn &&
-        !isToolSequenceIntent(originalUserInput) &&
-        shouldTreatPostToolTextAsFinal(visible, {
-          researchIntent,
-          webSearchCount: webSearchCountInTurn,
-          webFetchCount: webFetchCountInTurn,
-        })
-      ) {
-        run.rejected_tool_calls.push(
-          ...tools.map((tool) => ({
-            name: tool.name,
-            reason: "post_tool_final_answer",
-          }))
-        );
-        await logDebugEvent("skipped_post_final_tool_calls", {
+      if (tools.length && executedToolsInTurn && visible.trim().length > 0) {
+        const stalePayload = buildTurnJudgePayload({
+          conv,
+          executedToolsInTurn,
+          autoContinueNudges,
+          maxAutoContinueNudges,
+          webSearchCountInTurn,
+          webFetchCountInTurn,
+          lastToolExecutions,
+          pendingToolNames: tools.map((t) => t.name),
           round,
-          toolCount: tools.length,
-          toolNames: tools.map((tool) => tool.name),
-          visiblePreview: String(visible || "").slice(0, 200),
+          maxRounds: MAX_AGENT_ROUNDS,
+          textOnly: !!turnMeta?.textOnly,
+          planMode: usedPlanningGate,
+          suppressTopicPivot: shouldSuppressActionPlanAutoContinue(
+            originalUserInput,
+            previousUserMessage
+          ),
+          approvedPlanGoal,
+          totalToolCallsInTurn: run.tool_calls.length,
         });
-        await logDebugEvent("turn_completed", {
-          round,
-          durationMs: Date.now() - roundStartedAt,
-          continued: false,
-          skippedPostFinalTools: tools.length,
-        });
-        emitLoopStopLine("post_tool_final_answer_skipped_tools");
-        break;
+        if (turnJudgeShadowOnly) {
+          const shadowDecision = await fetchTurnJudgeDecisionForShadow(
+            stalePayload,
+            turnController.signal
+          );
+          if (shadowDecision) {
+            await logDebugEvent("turn_judge_decision_shadow", {
+              round,
+              phase: "post_tool_stale",
+              action: shadowDecision.action,
+              confidence: shadowDecision.confidence,
+              reason: shadowDecision.reason,
+              latencyMs: shadowDecision.latencyMs,
+            });
+          }
+        }
+        if (turnJudgeEnabled) {
+          const decision = await judgeTurnState(stalePayload, turnController.signal);
+          await logDebugEvent("turn_judge_decision", {
+            round,
+            phase: "post_tool_stale",
+            action: decision.action,
+            confidence: decision.confidence,
+            reason: decision.reason,
+            source: decision.source,
+            latencyMs: decision.latencyMs,
+          });
+          emitTurnJudgeLine(decision);
+          if (decision.action === "stop" || decision.action === "ask_user") {
+            run.rejected_tool_calls.push(
+              ...tools.map((tool) => ({
+                name: tool.name,
+                reason: "turn_judge_final_answer",
+              }))
+            );
+            await logDebugEvent("skipped_post_final_tool_calls", {
+              round,
+              toolCount: tools.length,
+              toolNames: tools.map((tool) => tool.name),
+              visiblePreview: String(visible || "").slice(0, 200),
+            });
+            await logDebugEvent("turn_completed", {
+              round,
+              durationMs: Date.now() - roundStartedAt,
+              continued: false,
+              skippedPostFinalTools: tools.length,
+            });
+            emitLoopStopLine("post_tool_turn_judge_skipped_tools");
+            break;
+          }
+        }
       }
 
       if (!tools.length) {
         if (!turnMeta?.textOnly) {
-          const nudgeState = getAutoContinueNudgeState({
-            turnInput: originalUserInput,
-            visible,
+          const loopPayload = buildTurnJudgePayload({
+            conv,
             executedToolsInTurn,
             autoContinueNudges,
-            maxNudges: maxAutoContinueNudges,
-            toolNames,
-            originalUserInput,
-            suppressActionPlanNudge,
-            webSearchCount: webSearchCountInTurn,
-            webFetchCount: webFetchCountInTurn,
+            maxAutoContinueNudges,
+            webSearchCountInTurn,
+            webFetchCountInTurn,
             lastToolExecutions,
+            round,
+            maxRounds: MAX_AGENT_ROUNDS,
+            textOnly: !!turnMeta?.textOnly,
+            planMode: usedPlanningGate,
+            suppressTopicPivot: shouldSuppressActionPlanAutoContinue(
+              originalUserInput,
+              previousUserMessage
+            ),
+            approvedPlanGoal,
+            totalToolCallsInTurn: run.tool_calls.length,
           });
-          if (nudgeState.want && !nudgeState.underCap) {
-            process.stdout.write(
-              dim(
-                `▸ auto-continue cap reached (${autoContinueNudges}/${nudgeState.maxNudges} nudges); stopping. Increase WEBAGENT_MAX_AUTO_CONTINUE_NUDGES to allow more recovery nudges.\n`
-              )
+
+          if (turnJudgeShadowOnly) {
+            const shadowDecision = await fetchTurnJudgeDecisionForShadow(
+              loopPayload,
+              turnController.signal
             );
-            emitLoopStopLine(`auto_continue_cap (${nudgeState.reason})`);
+            if (shadowDecision) {
+              await logDebugEvent("turn_judge_decision_shadow", {
+                round,
+                phase: "no_tool",
+                action: shadowDecision.action,
+                confidence: shadowDecision.confidence,
+                reason: shadowDecision.reason,
+                latencyMs: shadowDecision.latencyMs,
+              });
+            }
+          }
+
+          if (turnJudgeEnabled) {
+            const decision = await judgeTurnState(loopPayload, turnController.signal);
+            await logDebugEvent("turn_judge_decision", {
+              round,
+              phase: "no_tool",
+              action: decision.action,
+              confidence: decision.confidence,
+              reason: decision.reason,
+              source: decision.source,
+              latencyMs: decision.latencyMs,
+            });
+            emitTurnJudgeLine(decision);
+
+            if (
+              decision.action === "continue" &&
+              !executedToolsInTurn &&
+              shouldSuppressActionPlanAutoContinue(originalUserInput, previousUserMessage)
+            ) {
+              await logDebugEvent("turn_completed", {
+                round,
+                durationMs: Date.now() - roundStartedAt,
+                continued: false,
+                topicPivotSuppress: true,
+              });
+              emitLoopStopLine("topic_pivot_no_continue");
+              break;
+            }
+
+            if (decision.action === "continue") {
+              if (approvedPlanGoal) {
+                planGoalContinuationsUsed += 1;
+                if (planGoalContinuationsUsed > MAX_PLAN_GOAL_CONTINUATIONS) {
+                  process.stdout.write(
+                    dim(`◇ Plan goal · paused — continuation budget (${MAX_PLAN_GOAL_CONTINUATIONS})\n`)
+                  );
+                  await emitTranscriptEvent(
+                    turnMeta,
+                    createGoalLoopTranscriptEvent({
+                      phase: "paused",
+                      goal: approvedPlanGoal,
+                      reason: "budget",
+                      continuationsUsed: planGoalContinuationsUsed,
+                      maxContinuations: MAX_PLAN_GOAL_CONTINUATIONS,
+                      round,
+                    }),
+                    { round }
+                  );
+                  await logDebugEvent("turn_completed", {
+                    round,
+                    durationMs: Date.now() - roundStartedAt,
+                    continued: false,
+                    plan_goal_loop_stop: "budget",
+                  });
+                  emitLoopStopLine("plan_goal_budget");
+                  break;
+                }
+                process.stdout.write(
+                  dim(`◇ Plan goal · continuing (${planGoalContinuationsUsed}/${MAX_PLAN_GOAL_CONTINUATIONS})\n`)
+                );
+                await emitTranscriptEvent(
+                  turnMeta,
+                  createGoalLoopTranscriptEvent({
+                    phase: "continue",
+                    goal: approvedPlanGoal,
+                    continuationsUsed: planGoalContinuationsUsed,
+                    maxContinuations: MAX_PLAN_GOAL_CONTINUATIONS,
+                    round,
+                  }),
+                  { round }
+                );
+                conv.push({
+                  role: "user",
+                  content:
+                    `[Continuing toward approved plan goal] Goal: ${approvedPlanGoal}\n\nTake the next concrete step now. Prefer tools where needed and keep working until this goal is fully satisfied.`,
+                });
+                await logDebugEvent("turn_auto_continue_nudge", {
+                  round,
+                  nudgeIndex: planGoalContinuationsUsed,
+                  reason: decision.reason,
+                  visiblePreview: String(visible || "").slice(0, 200),
+                });
+                await logDebugEvent("turn_completed", {
+                  round,
+                  durationMs: Date.now() - roundStartedAt,
+                  continued: true,
+                  plan_goal_loop: "continue",
+                  turn_judge: decision.action,
+                });
+                continue;
+              }
+
+              if (autoContinueNudges >= maxAutoContinueNudges) {
+                process.stdout.write(
+                  dim(
+                    `▸ auto-continue cap reached (${autoContinueNudges}/${maxAutoContinueNudges} nudges); stopping. Increase WEBAGENT_MAX_AUTO_CONTINUE_NUDGES to allow more recovery nudges.\n`
+                  )
+                );
+                emitLoopStopLine("auto_continue_cap");
+                await logDebugEvent("turn_completed", {
+                  round,
+                  durationMs: Date.now() - roundStartedAt,
+                  continued: false,
+                  autoContinueCap: true,
+                });
+                break;
+              }
+
+              autoContinueNudges += 1;
+              conv.push({
+                role: "user",
+                content: buildGenericContinuationNudge(originalUserInput, decision),
+              });
+              await logDebugEvent("turn_auto_continue_nudge", {
+                round,
+                nudgeIndex: autoContinueNudges,
+                reason: decision.reason,
+                visiblePreview: String(visible || "").slice(0, 200),
+              });
+              await logDebugEvent("turn_completed", {
+                round,
+                durationMs: Date.now() - roundStartedAt,
+                continued: true,
+                turn_judge: decision.action,
+              });
+              continue;
+            }
+
+            if (approvedPlanGoal && decision.action === "stop") {
+              process.stdout.write(
+                dim(`◇ Plan goal · done — ${String(decision.reason).slice(0, 200)}\n`)
+              );
+              await emitTranscriptEvent(
+                turnMeta,
+                createGoalLoopTranscriptEvent({
+                  phase: "done",
+                  goal: approvedPlanGoal,
+                  reason: decision.reason || "",
+                  continuationsUsed: planGoalContinuationsUsed,
+                  maxContinuations: MAX_PLAN_GOAL_CONTINUATIONS,
+                  round,
+                }),
+                { round }
+              );
+            }
+
             await logDebugEvent("turn_completed", {
               round,
               durationMs: Date.now() - roundStartedAt,
               continued: false,
-              autoContinueCap: true,
-              capReason: nudgeState.reason,
             });
+            emitLoopStopLine(
+              decision.action === "ask_user"
+                ? "ask_user"
+                : executedToolsInTurn
+                  ? "post_tool_no_continue"
+                  : "no_tools_no_continue"
+            );
             break;
           }
-          if (nudgeState.shouldNudge) {
+
+          if (shouldSuppressPostToolNudgeFromExecutions(lastToolExecutions)) {
+            await logDebugEvent("turn_completed", {
+              round,
+              durationMs: Date.now() - roundStartedAt,
+              continued: false,
+              suppressedPostToolNudge: true,
+            });
+            emitLoopStopLine("suppressed_post_tool_nudge");
+            break;
+          }
+
+          if (
+            executedToolsInTurn &&
+            !visible.trim() &&
+            autoContinueNudges < maxAutoContinueNudges
+          ) {
             autoContinueNudges += 1;
-            const exactTokens = extractExactResponseTokens(originalUserInput);
-            const nudge =
-              nudgeState.reason === "missing_exact_final"
-                ? `The task is not complete because the requested exact final text is missing. Continue now, using tools if needed, and finish with the exact requested text: ${exactTokens.join(", ")}`
-                : nudgeState.reason === "false_no_history"
-                  ? "You already retrieved prior-work evidence from tools in this turn. Do not claim a clean slate. Continue by summarizing concrete recent work from those results (tasks, files, or decisions) and cite what was found."
-                : nudgeState.reason === "tool_sequence"
-                  ? "Continue the same testing sequence now. Emit the next tool call immediately with valid arguments, then keep going step-by-step."
-                  : nudgeState.reason === "scheduling_automation"
-                    ? "The user asked for recurring or scheduled work (heartbeat cron). Continue now with native tool calls: use cron_list if helpful, then cron_register with id, delivery (silent | terminal | email — confirm with the user), everyMinutes, steps or tool/arguments; if delivery is terminal, optional notifyChannel (e.g. telegram:<chatId>); if delivery is email, deliveryEmailTo (and optional deliveryEmailSubject). Host crontab/run_shell crontab are unavailable — only .cronjobs.json via cron_register."
-                    : nudgeState.reason === "research_incomplete"
-                      ? `Open-web research is incomplete (${webSearchCountInTurn} web_search, ${webFetchCountInTurn} web_fetch). Continue: fan out more web_search (topic × region × platform), web_fetch top URLs, then answer with confirmed/likely labels. Do not conclude nothing exists until at least ${MIN_RESEARCH_SEARCHES} searches and ${MIN_RESEARCH_FETCHES} fetches.`
-                      : `Stay aligned ONLY with the user's latest request: ${JSON.stringify(
-                        originalUserInput
-                      )}. Continue immediately with the next concrete action now. Emit the tool call right away with valid arguments, then proceed until that request is complete. If it is genuinely finished, reply with a single sentence stating the final answer; otherwise do not reply with prose only.`;
-            conv.push({ role: "user", content: nudge });
+            conv.push({
+              role: "user",
+              content: buildGenericContinuationNudge(originalUserInput, {
+                action: "continue",
+                confidence: 1,
+                reason: "empty_after_tools_fallback",
+                source: "disabled",
+              }),
+            });
             await logDebugEvent("turn_auto_continue_nudge", {
               round,
               nudgeIndex: autoContinueNudges,
-              reason: nudgeState.reason,
+              reason: "empty_after_tools_fallback",
               visiblePreview: String(visible || "").slice(0, 200),
+            });
+            await logDebugEvent("turn_completed", {
+              round,
+              durationMs: Date.now() - roundStartedAt,
+              continued: true,
+              turn_judge_fallback: true,
             });
             continue;
           }
 
-          const skillState = getSkillSelfImproveNudgeState({
-            visible,
-            executedToolsInTurn,
-            usedTodoWrite: usedTodoWriteInTurn,
-            usedPlanningGate: usedPlanningGateForSkill,
-            estimatedStepsOverSix: complexityEstimate.estimatedSteps > 6,
-            skillMutatingCalled: skillMutatingCalledInTurn,
-            autoContinueNudges,
-            maxNudges: maxAutoContinueNudges,
-          });
-          if (skillState.want && !skillState.underCap) {
+          if (approvedPlanGoal && String(visible || "").trim()) {
+            if (planGoalContinuationsUsed >= MAX_PLAN_GOAL_CONTINUATIONS) {
+              process.stdout.write(
+                dim(`◇ Plan goal · paused — continuation budget (${MAX_PLAN_GOAL_CONTINUATIONS})\n`)
+              );
+              await emitTranscriptEvent(
+                turnMeta,
+                createGoalLoopTranscriptEvent({
+                  phase: "paused",
+                  goal: approvedPlanGoal,
+                  reason: "budget",
+                  continuationsUsed: planGoalContinuationsUsed,
+                  maxContinuations: MAX_PLAN_GOAL_CONTINUATIONS,
+                  round,
+                }),
+                { round }
+              );
+              await logDebugEvent("turn_completed", {
+                round,
+                durationMs: Date.now() - roundStartedAt,
+                continued: false,
+                plan_goal_loop_stop: "budget",
+              });
+              emitLoopStopLine("plan_goal_budget");
+              break;
+            }
+            planGoalContinuationsUsed += 1;
             process.stdout.write(
-              dim(
-                `▸ skill self-improve nudge skipped (auto-continue cap ${autoContinueNudges}/${skillState.maxNudges})\n`
-              )
+              dim(`◇ Plan goal · continuing (${planGoalContinuationsUsed}/${MAX_PLAN_GOAL_CONTINUATIONS})\n`)
             );
-          } else if (skillState.shouldNudge && !skillImproveNudgeSent) {
-            autoContinueNudges += 1;
-            skillImproveNudgeSent = true;
+            await emitTranscriptEvent(
+              turnMeta,
+              createGoalLoopTranscriptEvent({
+                phase: "continue",
+                goal: approvedPlanGoal,
+                continuationsUsed: planGoalContinuationsUsed,
+                maxContinuations: MAX_PLAN_GOAL_CONTINUATIONS,
+                round,
+              }),
+              { round }
+            );
             conv.push({
               role: "user",
               content:
-                "Hermes self-improve (one shot): If this turn produced a repeatable checklist, recovery, or shortcut worth reusing next time, call skill_save or skill_manage once with a compact procedural SKILL.md body (name + bullets). If nothing is reusable, reply one sentence: no skill warranted.",
+                `[Continuing toward approved plan goal] Goal: ${approvedPlanGoal}\n\nTake the next concrete step now. Prefer tools where needed and keep working until this goal is fully satisfied.`,
             });
-            await logDebugEvent("turn_skill_self_improve_nudge", {
+            await logDebugEvent("turn_completed", {
               round,
-              nudgeIndex: autoContinueNudges,
-              visiblePreview: String(visible || "").slice(0, 200),
+              durationMs: Date.now() - roundStartedAt,
+              continued: true,
+              plan_goal_loop: "continue_fallback",
             });
             continue;
           }
         }
-        if (
-          approvedPlanGoal &&
-          !turnMeta?.textOnly &&
-          String(visible || "").trim()
-        ) {
-          const verdict = await judgeApprovedPlanGoalComplete(
-            cfg,
-            turnController.signal,
-            approvedPlanGoal,
-            visible
-          );
-          if (verdict.aborted) {
-            run.errors.push("turn aborted");
-            await logDebugEvent("plan_goal_judge_abort", { round }).catch(() => {});
-            emitLoopStopLine("turn_aborted");
-            break;
-          }
-          await logDebugEvent("plan_goal_judge", {
-            round,
-            judgeDone: verdict.done,
-            reason: verdict.reason,
-            continuationsUsed: planGoalContinuationsUsed,
-          });
-          if (verdict.done) {
-            process.stdout.write(
-              dim(
-                `◇ Plan goal · done${verdict.reason ? ` — ${String(verdict.reason).slice(0, 200)}` : ""}\n`
-              )
-            );
-            await emitTranscriptEvent(
-              turnMeta,
-              createGoalLoopTranscriptEvent({
-                phase: "done",
-                goal: approvedPlanGoal,
-                reason: verdict.reason || "",
-                continuationsUsed: planGoalContinuationsUsed,
-                maxContinuations: MAX_PLAN_GOAL_CONTINUATIONS,
-                round,
-              }),
-              { round }
-            );
-            await logDebugEvent("turn_completed", {
-              round,
-              durationMs: Date.now() - roundStartedAt,
-              continued: false,
-              plan_goal_loop_stop: "done",
-            });
-            emitLoopStopLine("plan_goal_done");
-            break;
-          }
-          planGoalContinuationsUsed += 1;
-          if (planGoalContinuationsUsed >= MAX_PLAN_GOAL_CONTINUATIONS) {
-            process.stdout.write(
-              dim(`◇ Plan goal · paused — continuation budget (${MAX_PLAN_GOAL_CONTINUATIONS})\n`)
-            );
-            await emitTranscriptEvent(
-              turnMeta,
-              createGoalLoopTranscriptEvent({
-                phase: "paused",
-                goal: approvedPlanGoal,
-                reason: "budget",
-                continuationsUsed: planGoalContinuationsUsed,
-                maxContinuations: MAX_PLAN_GOAL_CONTINUATIONS,
-                round,
-              }),
-              { round }
-            );
-            await logDebugEvent("turn_completed", {
-              round,
-              durationMs: Date.now() - roundStartedAt,
-              continued: false,
-              plan_goal_loop_stop: "budget",
-            });
-            emitLoopStopLine("plan_goal_budget");
-            break;
-          }
-          process.stdout.write(
-            dim(`◇ Plan goal · continuing (${planGoalContinuationsUsed}/${MAX_PLAN_GOAL_CONTINUATIONS})\n`)
-          );
-          await emitTranscriptEvent(
-            turnMeta,
-            createGoalLoopTranscriptEvent({
-              phase: "continue",
-              goal: approvedPlanGoal,
-              continuationsUsed: planGoalContinuationsUsed,
-              maxContinuations: MAX_PLAN_GOAL_CONTINUATIONS,
-              round,
-            }),
-            { round }
-          );
-          conv.push({
-            role: "user",
-            content:
-              `[Continuing toward approved plan goal] Goal: ${approvedPlanGoal}\n\nTake the next concrete step now. Prefer tools where needed and keep working until this goal is fully satisfied.`,
-          });
-          await logDebugEvent("turn_completed", {
-            round,
-            durationMs: Date.now() - roundStartedAt,
-            continued: true,
-            plan_goal_loop: "continue",
-          });
-          continue;
-        }
+
         await logDebugEvent("turn_completed", {
           round,
           durationMs: Date.now() - roundStartedAt,
@@ -813,8 +933,6 @@ export async function agentTurn(
           successfulToolKeysInTurn.add(toolExecutionKey(tools[i]));
           if (tname === "web_search") webSearchCountInTurn += 1;
           if (tname === "web_fetch") webFetchCountInTurn += 1;
-          if (tname === "todo_write") usedTodoWriteInTurn = true;
-          if (/^skill_(save|manage|bulk_save)$/.test(tname)) skillMutatingCalledInTurn = true;
         }
       }
       const guardWarn = updateLoopGuardAfterResults(loopGuard, tools, exec);
@@ -852,18 +970,6 @@ export async function agentTurn(
         role: "user",
         content: "Tool results (compact JSON):\n" + JSON.stringify(summarized, null, 2),
       });
-      if (
-        researchIntent &&
-        webFetchCountInTurn < MIN_RESEARCH_FETCHES &&
-        tools.length > 0 &&
-        tools.every((tool) => tool.name === "web_search")
-      ) {
-        conv.push({
-          role: "user",
-          content:
-            "Research reminder: your last step was search-only. Run web_fetch on at least two URLs from those results (YouTube channel or video pages first) before concluding.",
-        });
-      }
       await logDebugEvent("turn_completed", {
         round,
         durationMs: Date.now() - roundStartedAt,

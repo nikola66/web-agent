@@ -56,6 +56,14 @@
 		}
 	}
 
+	# Turn-state judge (browser runtime uses same-origin /api/turn-judge).
+	handle /api/turn-judge {
+		uri replace /api/turn-judge /judge
+		reverse_proxy http://{$WEBAGENT_TURN_JUDGE_HOST:127.0.0.1}:{$WEBAGENT_TURN_JUDGE_PORT:8787} {
+			flush_interval -1
+		}
+	}
+
 	# WASM (sql.js): skip gzip/zstd — some stacks return 502 or bad bodies for compressed wasm.
 	@wasm {
 		path_regexp wasm \.wasm$

@@ -96,9 +96,32 @@ export function normalizeEmojiSpacing(input: unknown) {
   );
 }
 
+function normalizeLatexSymbols(input: string) {
+  return String(input || "")
+    .replace(/\$\\rightarrow\$/g, "→")
+    .replace(/\$\\leftarrow\$/g, "←")
+    .replace(/\$\\leftrightarrow\$/g, "↔");
+}
+
+export function enrichToolNamesWithEmoji(
+  input: unknown,
+  catalog: Record<string, { emoji?: string } | undefined> | undefined
+) {
+  let out = normalizeLatexSymbols(String(input || ""));
+  const names = Object.keys(catalog || {}).sort((a, b) => b.length - a.length);
+  for (const name of names) {
+    const emoji = normalizeEmojiSpacing(String(catalog?.[name]?.emoji || "").trim());
+    if (!emoji) continue;
+    if (new RegExp(`[\\p{Extended_Pictographic}\\uFE0F]\\s*\\b${name}\\b`, "u").test(out)) continue;
+    const re = new RegExp(`(?<![\\p{Extended_Pictographic}\\uFE0F])\\b${name}\\b`, "gu");
+    out = out.replace(re, `${emoji} ${name}`);
+  }
+  return out;
+}
+
 export function styleInlineMarkdown(input: unknown) {
   if (!input) return "";
-  let out = normalizeEmojiSpacing(input);
+  let out = normalizeEmojiSpacing(normalizeLatexSymbols(String(input || "")));
   out = out.replace(/`([^`\n]+)`/g, (_m, code) => amber(code));
   out = out.replace(/\*\*([^*\n]+)\*\*/g, (_m, text) => bold(text));
   out = out.replace(/(^|[^\w])__([^_\n]+)__([^\w]|$)/g, (_m, pre, text, post) => `${pre}${bold(text)}${post}`);
@@ -382,8 +405,12 @@ function renderTableBlockAnsi(header: string[], bodyRows: string[][]) {
   return out.join("\n");
 }
 
-export function renderMarkdownToAnsi(markdown: unknown) {
-  const lines = String(markdown || "").replace(/\r\n/g, "\n").split("\n");
+export function renderMarkdownToAnsi(
+  markdown: unknown,
+  options: { toolCatalog?: Record<string, { emoji?: string } | undefined> } = {}
+) {
+  const enriched = enrichToolNamesWithEmoji(String(markdown || ""), options.toolCatalog);
+  const lines = enriched.replace(/\r\n/g, "\n").split("\n");
   const out: string[] = [];
   let inFence = false;
   let i = 0;

@@ -31,6 +31,7 @@ It is designed to feel simple for end users and capable for power users: isolate
 - **Self-learning**. Skills, reflections, learnings, facts, session memory, and optional wiki projections help the agent improve over time without losing browser-local control.
 - **Local-first persistence**. Workspaces, memory, sessions, and skills live in browser storage and can be exported or re-imported later.
 - **Hosted without server-side user state**. The hosted demo serves the app, while user files and agent state stay in the browser.
+- **Tiny turn-state judge**. A lightweight ONNX sidecar classifies continue/stop/ask_user so the runtime avoids brittle regex orchestration; deterministic safety stays in `turn.ts`.
 - **Open source**. Free to use, fork, modify, and distribute under the MIT License.
 
 ## Highlights
@@ -45,6 +46,7 @@ It is designed to feel simple for end users and capable for power users: isolate
 - Encrypted API keys stored locally in the browser
 - Export and import flows for long-lived browser-local workspaces
 - Hosted demo for zero-friction trial usage
+- **Turn judge** sidecar (`server/turn-judge`): Fastify + ONNX for stop/continue/ask_user without regex gatekeeping stacks
 
 ## Capability Surface
 
@@ -307,6 +309,8 @@ For hosted deployments, the safest framing is:
 
 **Self-hosting (Railpack / Dokploy):** Use the repo `railpack.json` for `deploy.startCommand` (`scripts/start-with-proxy.sh`) and `deploy.aptPackages` (extends defaults with `caddy`). Do not add a `start` script in `package.json` for this: Railpack treats it as a custom start command, skips the built-in static+Caddy image path, and the sidecar setup breaks. The checked-in `Caddyfile` matches **Debian’s apt Caddy (~2.6)** (no `persist_config` or global `trusted_proxies` block). `web_fetch` / `web_search` without TinyFish rely on the small Node listener in `scripts/cors-proxy-server.mjs` (default `127.0.0.1:8799`).
 
+**Turn judge:** A pre-trained ONNX model ships in `models/turn-judge/` (use `git lfs pull` after clone). `npm run dev` starts the judge with the app (port `8787`). Production `scripts/start-with-proxy.sh` starts the built sidecar after `npm run build`. Set `WEBAGENT_TURN_JUDGE=0` only to disable. Full setup, verification, and optional retraining: [docs/turn-judge.md](docs/turn-judge.md).
+
 ## Quick Start
 
 ### Use the hosted demo
@@ -320,11 +324,13 @@ For Web Agent, `Gemma4` is the recommended model because it strikes a strong bal
 ```bash
 git clone https://github.com/nikola66/web-agent.git
 cd web-agent
+git lfs install
+git lfs pull
 npm install
 npm run dev
 ```
 
-Open `http://localhost:5173`.
+Open `http://localhost:5173`. No Python is required unless you want to retrain the turn judge; the repo includes a bundled ONNX model under `models/turn-judge/`. See [docs/turn-judge.md](docs/turn-judge.md).
 
 ## Development
 
@@ -332,8 +338,11 @@ Open `http://localhost:5173`.
 npm run dev
 npm run build
 npm run test
+npm run judge:test
 npm run test:browser
 ```
+
+Turn judge (optional retrain): edit `data/turn-judge/*.jsonl`, then `npm run judge:train`.
 
 Contributor-facing docs:
 
@@ -341,6 +350,7 @@ Contributor-facing docs:
 - [AGENTS.md](AGENTS.md) — rules for AI coding agents
 - [CAPABILITIES.md](CAPABILITIES.md)
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — system map, IPC protocol, storage layers
+- [docs/turn-judge.md](docs/turn-judge.md) — judge sidecar deploy, verify, retrain
 - [docs/agent-notes.md](docs/agent-notes.md)
 - [docs/testing-checklist.md](docs/testing-checklist.md)
 
@@ -351,7 +361,8 @@ Contributor-facing docs:
 - **Persistence**: IndexedDB + OPFS in the browser
 - **Isolation**: profile-scoped workspaces and runtime state
 - **Model access**: OpenRouter or OpenAI-compatible providers
-- **Plans & vault**: timestamped plans under `plans/` (legacy `.webagent/plans/` readable); optional PARA wiki tree (default `.webagent/knowledge-vault/`) synchronized via `wiki_*` tools
+- **Turn judge**: `server/turn-judge` ONNX classifier for continue/stop/ask_user (deterministic safety remains in `turn.ts`)
+- **Plans & vault**: timestamped plans under `plans/` (legacy `.webagent/plans/` readable); PARA wiki tree (default `.webagent/knowledge-vault/`) synchronized via `wiki_*` tools
 
 The agent runtime is embedded into the browser app, mounted into a live workspace, and launched inside a terminal-backed Node environment. Profiles keep personalities, settings, workspace state, and memory separated.
 

@@ -41,7 +41,9 @@ import runtimeUtilsSource from "../../dist/agent-runtime/utils.js?raw";
 import runtimeBootstrapSource from "../../dist/agent-runtime/bootstrap.js?raw";
 import runtimeTurnSource from "../../dist/agent-runtime/turn.js?raw";
 import runtimeStreamOutputSource from "../../dist/agent-runtime/stream-output.js?raw";
-import runtimeAutoContinueSource from "../../dist/agent-runtime/auto-continue.js?raw";
+import runtimeTurnJudgeClientSource from "../../dist/agent-runtime/turn-judge-client.js?raw";
+import runtimeTurnBudgetSource from "../../dist/agent-runtime/turn-budget.js?raw";
+import runtimeTurnJudgePayloadSource from "../../dist/agent-runtime/turn-judge-payload.js?raw";
 import runtimeContextCompressionSource from "../../dist/agent-runtime/context-compression.js?raw";
 import runtimePlanningSlashSource from "../../dist/agent-runtime/planning-slash.js?raw";
 import runtimeWikiSlashSource from "../../dist/agent-runtime/wiki-slash.js?raw";
@@ -384,7 +386,9 @@ async function writeRuntimeSources(profileId: string): Promise<void> {
   await emulator.fs.writeFile(`${webagentDir}/bootstrap.js`, runtimeBootstrapSource);
   await emulator.fs.writeFile(`${webagentDir}/turn.js`, runtimeTurnSource);
   await emulator.fs.writeFile(`${webagentDir}/stream-output.js`, runtimeStreamOutputSource);
-  await emulator.fs.writeFile(`${webagentDir}/auto-continue.js`, runtimeAutoContinueSource);
+  await emulator.fs.writeFile(`${webagentDir}/turn-judge-client.js`, runtimeTurnJudgeClientSource);
+  await emulator.fs.writeFile(`${webagentDir}/turn-judge-payload.js`, runtimeTurnJudgePayloadSource);
+  await emulator.fs.writeFile(`${webagentDir}/turn-budget.js`, runtimeTurnBudgetSource);
   await emulator.fs.writeFile(`${webagentDir}/context-compression.js`, runtimeContextCompressionSource);
   await emulator.fs.writeFile(`${webagentDir}/planning-slash.js`, runtimePlanningSlashSource);
   await emulator.fs.writeFile(`${webagentDir}/wiki-slash.js`, runtimeWikiSlashSource);
@@ -487,6 +491,10 @@ function buildEnv(profileId: string, profile: Profile, apiKeys: Record<string, s
     WEBAGENT_RUNTIME: "nodebox",
     WEBAGENT_APP_ORIGIN:
       typeof window !== "undefined" ? window.location.origin : "",
+    TURN_JUDGE_URL:
+      typeof window !== "undefined"
+        ? `${window.location.origin}/api/turn-judge`
+        : String(process.env.TURN_JUDGE_URL || "http://127.0.0.1:8787/judge").trim(),
     WEBAGENT_PROFILE_NAME: profile.name,
     WEBAGENT_USER_NAME: profile.userName,
     WEBAGENT_PERSONALITY: profile.personality,

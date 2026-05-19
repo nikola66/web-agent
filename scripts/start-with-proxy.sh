@@ -7,6 +7,12 @@ cd "$ROOT"
 
 node "$ROOT/scripts/cors-proxy-server.mjs" &
 
+if [ -f "$ROOT/server/turn-judge/dist/server.js" ]; then
+	node "$ROOT/server/turn-judge/dist/server.js" &
+else
+	echo "start-with-proxy: turn-judge dist missing; run npm run judge:build" >&2
+fi
+
 if [ -f /Caddyfile ]; then
 	CADDY_CFG=/Caddyfile
 elif [ -f "$ROOT/Caddyfile" ]; then

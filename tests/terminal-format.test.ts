@@ -6,6 +6,7 @@ import {
   renderMarkdownToAnsi,
   renderTerminalTable,
   terminalColumnCount,
+  enrichToolNamesWithEmoji,
 } from "../dist/agent-runtime/terminal-format.js";
 import { stripAnsi } from "../dist/agent-runtime/utils.js";
 
@@ -40,6 +41,30 @@ test("renderMarkdownToAnsi preserves a single authored space after emoji", () =>
   assert.equal(stripAnsi(renderMarkdownToAnsi("⌨️ Commands")), "⌨️ Commands");
   assert.equal(stripAnsi(renderMarkdownToAnsi("✍️ Write")), "✍️ Write");
   assert.equal(stripAnsi(renderMarkdownToAnsi("🫡 Profile")), "🫡 Profile");
+});
+
+test("renderMarkdownToAnsi converts latex arrows and enriches tool names", () => {
+  const catalog = {
+    web_search: { emoji: "🔍" },
+    wiki_sync: { emoji: "🔁" },
+    artifact_present: { emoji: "🪄" },
+  };
+  const md =
+    "The Research Loop: /plan $\\rightarrow$ web_search $\\rightarrow$ wiki_sync $\\rightarrow$ artifact_present.";
+  const plain = stripAnsi(renderMarkdownToAnsi(md, { toolCatalog: catalog }));
+  assert.match(plain, /→/);
+  assert.doesNotMatch(plain, /\$\\rightarrow\$/);
+  assert.match(plain, /🔍 web_search/);
+  assert.match(plain, /🔁 wiki_sync/);
+  assert.match(plain, /🪄 artifact_present/);
+});
+
+test("enrichToolNamesWithEmoji skips names already prefixed by emoji", () => {
+  const catalog = { web_search: { emoji: "🔍" } };
+  assert.equal(
+    enrichToolNamesWithEmoji("🔍 web_search already labeled", catalog),
+    "🔍 web_search already labeled"
+  );
 });
 
 test("renderMarkdownToAnsi draws GFM table with box Unicode", () => {

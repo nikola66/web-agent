@@ -20,10 +20,33 @@ test("transcript formatter mirrors terminal tool lines", () => {
     }),
     "▸ web_search {\"query\":\"UAE Iran\"}"
   );
+  assert.equal(
+    formatToolStartTranscript({
+      name: "web_search",
+      argsPreview: "{\"query\":\"UAE Iran\"}",
+      emoji: "🔍",
+    }),
+    "▸ 🔍 web_search {\"query\":\"UAE Iran\"}"
+  );
   assert.equal(formatToolResultTranscript({ name: "web_search", status: "ok" }), "✓ web_search");
+  assert.equal(
+    formatToolResultTranscript({ name: "web_search", status: "ok", emoji: "🔍" }),
+    "✓ 🔍 web_search"
+  );
   assert.equal(
     formatToolResultTranscript({ name: "read_file", status: "error", error: "Path not found" }),
     "✗ read_file: Path not found"
+  );
+});
+
+test("channel transcript formatter includes tool emoji on terminal surfaces", () => {
+  const cat = { web_search: { emoji: "🔍" } };
+  assert.equal(
+    formatTranscriptEventForChannel(
+      { type: "tool_start", name: "web_search", argsPreview: '{"q":1}' },
+      { style: "terminal", toolCatalog: cat }
+    ),
+    "▸ 🔍 web_search {\"q\":1}"
   );
 });
 

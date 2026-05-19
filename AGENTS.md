@@ -21,6 +21,7 @@ Key entry points:
 - `src/agent/adapter.ts` — bridges browser UI to the embedded Node-in-browser agent runtime.
 - `src/agent/runtime/turn.ts` — main LLM loop.
 - `src/agent/runtime/tools/registry.ts` — built-in + capability tool loading.
+- `server/turn-judge/` — ONNX continue/stop sidecar; weights in `models/turn-judge/` (see `docs/turn-judge.md`).
 
 The `src/agent/runtime` tree is **excluded from `tsc`** (see `tsconfig.json`). Edits there are not type-checked at build time; rely on tests and runtime checks.
 

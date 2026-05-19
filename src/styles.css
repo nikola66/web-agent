@@ -118,6 +118,13 @@ body,
 }
 
 /* xterm.js overrides for aratech theme */
+.xterm,
+.xterm .xterm-rows {
+  font-family:
+    "JetBrains Mono", "Fira Code", "Cascadia Code", monospace, "Apple Color Emoji",
+    "Segoe UI Emoji", "Noto Color Emoji", emoji;
+}
+
 .xterm {
   /* keep side breathing room, remove top/bottom gap */
   padding: 0 16px;

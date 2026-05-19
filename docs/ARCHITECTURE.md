@@ -75,7 +75,7 @@ The same framing is used for streaming LLM responses (`ipcProxyStreamRequest` in
 4. Streamed chunks parsed → tool calls extracted.
 5. `runTools()` (registry.ts) executes built-ins or capability tools.
 6. Result spillover > 10 KB → written to workspace file (inline cap `MAX_TOOL_RESULT_INLINE_CHARS`).
-7. `turn-sequencing.ts` decides whether to auto-continue.
+7. **Turn judge** sidecar ([`server/turn-judge`](../server/turn-judge)) loads bundled ONNX from [`models/turn-judge/`](../models/turn-judge/) and classifies `continue` / `stop` / `ask_user`. The browser calls same-origin `POST /api/turn-judge` (Vite or Caddy → `127.0.0.1:8787/judge`). Disable with `WEBAGENT_TURN_JUDGE=0`. On unreachable judge or low model confidence, `turn.ts` fails closed to `stop` and applies conservative fallbacks (empty-after-tools, mid-task narration). Deploy and verify: [turn-judge.md](turn-judge.md).
 8. Max 64 rounds per turn (`WEBAGENT_MAX_AGENT_ROUNDS`).
 
 `AbortController` per turn; `/stop` triggers `abortCurrentTurn()`.
@@ -115,6 +115,7 @@ Heavy panels (`FilesPopup`, `MemoryTab`, `ProfileEditor`) are loaded via `React.
 | Add a tool                    | `src/agent/runtime/tools/builtins/`              |
 | Add a capability skill        | `src/capabilities/skills/<id>/SKILL.md`          |
 | Modify the agent loop         | `src/agent/runtime/turn.ts`                      |
+| Turn judge / continue-stop    | `server/turn-judge/`, `models/turn-judge/`       |
 | Add a channel (Telegram, …)   | `src/capabilities/channels/<id>/`                |
 | New LLM provider              | `src/core/providers/<id>.json` + manifest        |
 | UI panel                      | `src/ui/components/`                             |

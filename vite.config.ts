@@ -425,11 +425,21 @@ export default defineConfig(({ mode }) => {
     server: {
       proxy: {
         ...LLM_PROXIES,
+        "/api/turn-judge": {
+          target: "http://127.0.0.1:8787",
+          changeOrigin: true,
+          rewrite: () => "/judge",
+        },
       },
     },
     preview: {
       proxy: {
         ...LLM_PROXIES,
+        "/api/turn-judge": {
+          target: "http://127.0.0.1:8787",
+          changeOrigin: true,
+          rewrite: () => "/judge",
+        },
       },
     },
   };

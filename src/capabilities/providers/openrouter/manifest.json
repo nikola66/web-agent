@@ -5,7 +5,7 @@
   "order": 1,
   "kind": "openai",
   "requiresUserApiKey": true,
-  "model": "google/gemma-4-26b-a4b-it",
+  "model": "google/gemma-4-31b-it",
   "apiKey": {
     "settingKey": "openrouter",
     "envVar": "OPENROUTER_API_KEY",

@@ -252,8 +252,7 @@ export function createChannelInboundHandler(deps) {
       const runId = createRunId();
       const stopTyping = typeof startTyping === "function" ? startTyping(chatId) : null;
       const transcriptStyle = channel === "telegram" ? "telegram" : "terminal";
-      const toolCatalog =
-        transcriptStyle === "telegram" ? await loadToolCatalog() : undefined;
+      const toolCatalog = await loadToolCatalog();
       const transcriptSender = createTranscriptSender({
         channel,
         chatId,

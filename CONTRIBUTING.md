@@ -15,11 +15,13 @@ Thanks for contributing to Web Agent.
 ```bash
 git clone https://github.com/nikola66/web-agent.git
 cd web-agent
+git lfs install
+git lfs pull
 npm install
 npm run dev
 ```
 
-Open `http://localhost:5173`.
+Open `http://localhost:5173`. Root `npm install` installs judge sidecar dependencies via `postinstall`. The turn judge ONNX model is bundled under `models/turn-judge/` — see [docs/turn-judge.md](docs/turn-judge.md).
 
 ## Useful Commands
 
@@ -27,6 +29,7 @@ Open `http://localhost:5173`.
 npm run dev
 npm run build
 npm run test
+npm run judge:test
 npm run test:browser
 ```
 
@@ -63,5 +66,6 @@ For security-sensitive reports, use [SECURITY.md](SECURITY.md) instead of public
 
 - [README.md](README.md)
 - [CAPABILITIES.md](CAPABILITIES.md)
+- [docs/turn-judge.md](docs/turn-judge.md)
 - [docs/agent-notes.md](docs/agent-notes.md)
 - [docs/testing-checklist.md](docs/testing-checklist.md)

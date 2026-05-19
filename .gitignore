@@ -1,5 +1,11 @@
 # Dependencies
 node_modules/
+.venv-turn-judge/
+models/turn-judge/hf_ckpt/
+models/turn-judge/hf_final/
+models/turn-judge/model.onnx
+server/turn-judge/node_modules/
+server/turn-judge/dist/
 
 # Build output
 dist/
@@ -44,7 +50,6 @@ docs/references/
 npm-debug.log*
 playwright-report/
 test-results/
-marketing/
 
 # Editor temp files
 *.swp

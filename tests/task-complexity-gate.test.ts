@@ -2,14 +2,11 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 import {
-  assistantSignalsTaskCompleteForSkillCapture,
   estimateTaskComplexity,
   isPlanningModePrompt,
   extractPlanningGoalFromPrompt,
   resolveApprovedPlanExecutionGoal,
-  parsePlanGoalJudgeJson,
 } from "../dist/agent-runtime/turn-sequencing.js";
-import { getSkillSelfImproveNudgeState } from "../dist/agent-runtime/auto-continue.js";
 import { buildPlanModeUserPrompt } from "../dist/agent-runtime/planning-slash.js";
 
 test("estimateTaskComplexity is simple for short asks", () => {
@@ -136,99 +133,3 @@ test("resolveApprovedPlanExecutionGoal uses explicit plans/ path when present", 
   );
 });
 
-test("parsePlanGoalJudgeJson requires strict JSON one-liner semantics", () => {
-  assert.deepEqual(parsePlanGoalJudgeJson('{"done":true,"reason":"ok"}'), {
-    ok: true,
-    done: true,
-    reason: "ok",
-  });
-  assert.deepEqual(parsePlanGoalJudgeJson('{"done":true}'), {
-    ok: true,
-    done: true,
-    reason: "",
-  });
-  const fence = parsePlanGoalJudgeJson('```json\n{"done":false,"reason":"need more"}\n```');
-  assert.equal(fence.ok, true);
-  assert.equal(fence.done, false);
-  assert.deepEqual(parsePlanGoalJudgeJson("not json").ok, false);
-  assert.equal(parsePlanGoalJudgeJson('{"reason":"only reason"}').ok, false);
-  assert.equal(parsePlanGoalJudgeJson('\uFEFF{"done":false,"reason":"x"}').ok, true);
-});
-
-test("assistantSignalsTaskCompleteForSkillCapture accepts Done", () => {
-  assert.equal(assistantSignalsTaskCompleteForSkillCapture("Done."), true);
-});
-
-test("assistantSignalsTaskCompleteForSkillCapture rejects trailing Next:", () => {
-  assert.equal(assistantSignalsTaskCompleteForSkillCapture("Next:"), false);
-});
-
-test("getSkillSelfImproveNudgeState fires when todo used and assistant signals complete", () => {
-  const s = getSkillSelfImproveNudgeState({
-    visible: "All tasks complete.",
-    executedToolsInTurn: true,
-    usedTodoWrite: true,
-    usedPlanningGate: false,
-    estimatedStepsOverSix: false,
-    skillMutatingCalled: false,
-    autoContinueNudges: 0,
-    maxNudges: 20,
-  });
-  assert.equal(s.shouldNudge, true);
-});
-
-test("getSkillSelfImproveNudgeState skips when skill mutating tool already ran", () => {
-  const s = getSkillSelfImproveNudgeState({
-    visible: "Done.",
-    executedToolsInTurn: true,
-    usedTodoWrite: true,
-    usedPlanningGate: false,
-    estimatedStepsOverSix: false,
-    skillMutatingCalled: true,
-    autoContinueNudges: 0,
-    maxNudges: 20,
-  });
-  assert.equal(s.shouldNudge, false);
-});
-
-test("getSkillSelfImproveNudgeState fires when planning gate used and assistant signals complete", () => {
-  const s = getSkillSelfImproveNudgeState({
-    visible: "Migration finished.",
-    executedToolsInTurn: true,
-    usedTodoWrite: false,
-    usedPlanningGate: true,
-    estimatedStepsOverSix: false,
-    skillMutatingCalled: false,
-    autoContinueNudges: 0,
-    maxNudges: 20,
-  });
-  assert.equal(s.shouldNudge, true);
-});
-
-test("getSkillSelfImproveNudgeState fires when estimated steps over six and assistant signals complete", () => {
-  const s = getSkillSelfImproveNudgeState({
-    visible: "All set.",
-    executedToolsInTurn: true,
-    usedTodoWrite: false,
-    usedPlanningGate: false,
-    estimatedStepsOverSix: true,
-    skillMutatingCalled: false,
-    autoContinueNudges: 0,
-    maxNudges: 20,
-  });
-  assert.equal(s.shouldNudge, true);
-});
-
-test("getSkillSelfImproveNudgeState skips when no tools executed this turn", () => {
-  const s = getSkillSelfImproveNudgeState({
-    visible: "Done.",
-    executedToolsInTurn: false,
-    usedTodoWrite: true,
-    usedPlanningGate: false,
-    estimatedStepsOverSix: false,
-    skillMutatingCalled: false,
-    autoContinueNudges: 0,
-    maxNudges: 20,
-  });
-  assert.equal(s.shouldNudge, false);
-});
