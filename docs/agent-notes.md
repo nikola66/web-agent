@@ -36,7 +36,7 @@ Legacy `snapshots/openclaw` and `snapshots/hermes` trees are removed once by `ru
 
 ## Loop Guard
 
-Local **continue / stop / ask_user** decisions replace the old regex auto-continue stack. After each assistant step, the Nodebox runtime asks the browser adapter to score the last few messages with `MoritzLaurer/MiniLM-L6-mnli-binary` (Transformers.js). The first scored turn downloads model weights into the browser cache.
+Local **continue / stop / ask_user** decisions are the sole runtime loop mechanism (the old regex auto-continue stack is removed). After each assistant step, the Nodebox runtime asks the browser adapter to score the last few messages with a vendored MobileBERT MNLI classifier (Transformers.js ONNX, sourced from `Xenova/mobilebert-uncased-mnli`). ORT WASM is served from `/transformers-ort/`; model weights are static files at `/models/loop-guard/` (`public/models/loop-guard/`, refresh with `npm run download:loop-guard-model`).
 
 Use [`.env.local`](../.env.local) for machine-specific local dev (gitignored; Vite loads it automatically). [`.env.example`](../.env.example) documents production-style defaults. All Loop Guard knobs use the `VITE_WEBAGENT_*` prefix so Vite exposes them to the adapter; `buildEnv()` mirrors them into `WEBAGENT_*` for the embedded runtime.
 
@@ -52,9 +52,9 @@ Use [`.env.local`](../.env.local) for machine-specific local dev (gitignored; Vi
 
 Threshold order: stop → ask_user → continue; if none clear the bar, decision is **stop** (safe default).
 
-Debug: set `VITE_WEBAGENT_DEBUG_LOG=1` and look for `turn_loop_guard` / `turn_loop_guard_nudge` in the session JSONL.
+Debug: set `VITE_WEBAGENT_DEBUG_LOG=1` and look for `turn_loop_guard` / `turn_loop_guard_nudge` in the session JSONL, or dim `▸ loop guard · …` lines in the terminal.
 
-**Separate from Loop Guard:** `loop-guardrails.ts` still halts repeated identical tool failures inside one turn (deterministic streak counter).
+**Separate from Loop Guard:** `tool-failure-streak.ts` halts repeated identical tool failures inside one turn (deterministic streak counter).
 
 ## Open-web research (Hermes-style)
 

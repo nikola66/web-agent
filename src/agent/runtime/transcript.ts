@@ -15,6 +15,14 @@ function toolEmojiFromCatalog(
   return normalizeToolEmoji(String(raw || "").trim());
 }
 
+function formatToolLabel(
+  toolName: string,
+  catalog?: Record<string, { emoji?: string } | undefined>
+) {
+  const em = toolEmojiFromCatalog(catalog, toolName);
+  return em ? `${em} ${toolName}` : toolName;
+}
+
 function prefixPlainBlock(text, branchBelowName = true) {
   const lines = String(text || "").trimEnd().split("\n");
   const firstPrefix = branchBelowName ? " ⎿ " : BLOCK_CONTINUATION_PREFIX;
@@ -40,20 +48,31 @@ export function formatToolStartTranscript({
   name,
   argsPreview = "{}",
   argsPreviewTruncated = false,
+  toolCatalog,
+  omitArgsPreview = false,
 }: ToolStartTranscriptEventInput = {}) {
   const toolName = String(name || "unknown").trim() || "unknown";
-  return `▸ ${toolName} ${String(argsPreview || "{}")}${argsPreviewTruncated ? "…" : ""}`;
+  const label = formatToolLabel(toolName, toolCatalog);
+  if (omitArgsPreview) return `▸ ${label}`;
+  return `▸ ${label} ${String(argsPreview || "{}")}${argsPreviewTruncated ? "…" : ""}`;
 }
 
 export function formatToolResultTranscript({
   name,
   status = "ok",
   error = "",
+  toolCatalog,
+  maxErrorLength,
 }: ToolResultTranscriptEventInput = {}) {
   const toolName = String(name || "unknown").trim() || "unknown";
-  if (status === "denied") return `⊘ ${toolName} denied by user`;
-  if (status === "error") return `✗ ${toolName}: ${String(error || "error")}`;
-  return `✓ ${toolName}`;
+  const label = formatToolLabel(toolName, toolCatalog);
+  if (status === "denied") return `⊘ ${label} denied by user`;
+  if (status === "error") {
+    let msg = String(error || "error");
+    if (maxErrorLength && msg.length > maxErrorLength) msg = msg.slice(0, maxErrorLength);
+    return `✗ ${label}: ${msg}`;
+  }
+  return `✓ ${label}`;
 }
 
 export function formatSkippedToolsTranscript(
@@ -96,6 +115,8 @@ export type ToolStartTranscriptEventInput = {
   name?: string;
   argsPreview?: string;
   argsPreviewTruncated?: boolean;
+  toolCatalog?: Record<string, { emoji?: string } | undefined>;
+  omitArgsPreview?: boolean;
 };
 
 export function createToolStartTranscriptEvent({
@@ -116,6 +137,8 @@ export type ToolResultTranscriptEventInput = {
   name?: string;
   status?: string;
   error?: string;
+  toolCatalog?: Record<string, { emoji?: string } | undefined>;
+  maxErrorLength?: number;
 };
 
 export function createToolResultTranscriptEvent({
@@ -235,25 +258,22 @@ export function formatTranscriptEventForChannel(
     });
   }
   if (kind === "tool_start") {
-    if (style === "telegram") {
-      const toolName = String(event?.name || "unknown").trim() || "unknown";
-      const em = toolEmojiFromCatalog(catalog, toolName);
-      return em ? `▸ ${em} ${toolName}` : `▸ ${toolName}`;
-    }
-    return formatToolStartTranscript(event);
+    return formatToolStartTranscript({
+      name: event?.name,
+      argsPreview: event?.argsPreview,
+      argsPreviewTruncated: event?.argsPreviewTruncated,
+      toolCatalog: catalog,
+      omitArgsPreview: style === "telegram",
+    });
   }
   if (kind === "tool_result") {
-    if (style === "telegram") {
-      const toolName = String(event?.name || "unknown").trim() || "unknown";
-      const em = toolEmojiFromCatalog(catalog, toolName);
-      const prefix = em ? `${em} ` : "";
-      const status = String(event?.status || "ok");
-      if (status === "denied") return `⊘ ${prefix}${toolName}`;
-      if (status === "error")
-        return `✗ ${prefix}${toolName}: ${String(event?.error || "error").slice(0, 200)}`;
-      return `✓ ${prefix}${toolName}`;
-    }
-    return formatToolResultTranscript(event);
+    return formatToolResultTranscript({
+      name: event?.name,
+      status: event?.status,
+      error: event?.error,
+      toolCatalog: catalog,
+      maxErrorLength: style === "telegram" ? 200 : undefined,
+    });
   }
   if (kind === "system_line") {
     if (style === "telegram") return "";

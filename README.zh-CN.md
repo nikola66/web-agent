@@ -70,7 +70,7 @@ Web Agent 是在 WebContainers 上直接在浏览器中运行的开源 AI 代理
 - Encrypted API keys stored locally in the browser
 - Export and import flows for long-lived browser-local workspaces
 - Hosted demo for zero-friction trial usage
-- **Loop Guard**（默认开启）：浏览器端 MiniLM 分类器在每步后决定 continue / stop / ask_user；`VITE_WEBAGENT_LOOP_GUARD=0` 可禁用（见 [docs/zh-CN/agent-notes.md](docs/zh-CN/agent-notes.md)）
+- **Loop Guard**（默认开启）：浏览器端 MobileBERT MNLI 分类器在每步后决定 continue / stop / ask_user；`VITE_WEBAGENT_LOOP_GUARD=0` 可禁用（见 [docs/zh-CN/agent-notes.md](docs/zh-CN/agent-notes.md)）
 
 ## 能力概览
 
@@ -466,7 +466,7 @@ npm run test:browser
 - **Isolation**: profile-scoped workspaces and runtime state
 - **Model access**: OpenRouter or OpenAI-compatible providers
 - **Plans & vault**: timestamped plans under `plans/` (legacy `.webagent/plans/` readable); optional PARA wiki tree (default `.webagent/knowledge-vault/`) synchronized via `wiki_*` tools
-- **Loop Guard**: after each assistant step, the embedded runtime asks the browser adapter to score recent messages (MiniLM NLI via Transformers.js) and choose continue, stop, or ask_user; thresholds in `.env.example`
+- **Loop Guard**: after each assistant step, the embedded runtime asks the browser adapter to score recent messages (local MobileBERT MNLI via Transformers.js) and choose continue, stop, or ask_user; thresholds in `.env.example`
 
 The agent runtime is embedded into the browser app, mounted into a live workspace, and launched inside a terminal-backed Node environment. Profiles keep personalities, settings, workspace state, and memory separated.
 

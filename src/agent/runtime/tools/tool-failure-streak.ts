@@ -8,14 +8,14 @@ import { stableStringify } from "../stream-output.js";
 const WARN_THRESHOLD = 3;
 const HALT_THRESHOLD = 5;
 
-export type LoopGuardState = {
+export type ToolFailureStreakState = {
   /** sha1(toolName + argsStreakKey) → consecutive failures for that signature */
   failureKeyCounts: Map<string, number>;
   /** toolName → consecutive failures (any args) */
   toolFailureStreak: Map<string, number>;
 };
 
-export function createLoopGuardState(): LoopGuardState {
+export function createToolFailureStreakState(): ToolFailureStreakState {
   return { failureKeyCounts: new Map(), toolFailureStreak: new Map() };
 }
 
@@ -32,7 +32,10 @@ export type GuardCheckResult =
 /**
  * Abort before executing if we already exhausted failure budget for planned calls.
  */
-export function guardBeforeToolBatch(state: LoopGuardState, tools: Array<{ name: string; arguments?: unknown }>): GuardCheckResult {
+export function guardBeforeToolBatch(
+  state: ToolFailureStreakState,
+  tools: Array<{ name: string; arguments?: unknown }>
+): GuardCheckResult {
   for (const t of tools) {
     const name = String(t?.name || "").trim() || "unknown";
     const fp = compactFailureFingerprint(name, t.arguments);
@@ -59,8 +62,8 @@ export function guardBeforeToolBatch(state: LoopGuardState, tools: Array<{ name:
 /**
  * Update streak maps after executions; optionally return a console warning near thresholds.
  */
-export function updateLoopGuardAfterResults(
-  state: LoopGuardState,
+export function updateToolFailureStreakAfterResults(
+  state: ToolFailureStreakState,
   tools: Array<{ name: string; arguments?: unknown }>,
   executions: Array<Record<string, unknown>>
 ): string | undefined {
@@ -89,7 +92,7 @@ export function updateLoopGuardAfterResults(
 
     if (kf === WARN_THRESHOLD || kt === WARN_THRESHOLD) {
       warnMsg =
-        `[loop guard] repeated failures (${name}); identical-arg streak=${kf}, tool streak=${kt}. Change approach soon.`;
+        `[tool streak] repeated failures (${name}); identical-arg streak=${kf}, tool streak=${kt}. Change approach soon.`;
     }
   }
 

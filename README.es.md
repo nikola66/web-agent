@@ -70,7 +70,7 @@ It is designed to feel simple for end users and capable for power users: isolate
 - Encrypted API keys stored locally in the browser
 - Export and import flows for long-lived browser-local workspaces
 - Hosted demo for zero-friction trial usage
-- **Loop Guard** (default on): browser-side MiniLM classifier decides continue / stop / ask_user after each agent step; disable with `VITE_WEBAGENT_LOOP_GUARD=0` (véase [docs/es/agent-notes.md](docs/es/agent-notes.md))
+- **Loop Guard** (default on): browser-side MobileBERT MNLI classifier decides continue / stop / ask_user after each agent step; disable with `VITE_WEBAGENT_LOOP_GUARD=0` (véase [docs/es/agent-notes.md](docs/es/agent-notes.md))
 
 ## Superficie de capacidades
 
@@ -466,7 +466,7 @@ Contributor-facing docs:
 - **Isolation**: profile-scoped workspaces and runtime state
 - **Model access**: OpenRouter or OpenAI-compatible providers
 - **Plans & vault**: timestamped plans under `plans/` (legacy `.webagent/plans/` readable); optional PARA wiki tree (default `.webagent/knowledge-vault/`) synchronized via `wiki_*` tools
-- **Loop Guard**: after each assistant step, the embedded runtime asks the browser adapter to score recent messages (MiniLM NLI via Transformers.js) and choose continue, stop, or ask_user; thresholds in `.env.example`
+- **Loop Guard**: after each assistant step, the embedded runtime asks the browser adapter to score recent messages (local MobileBERT MNLI via Transformers.js) and choose continue, stop, or ask_user; thresholds in `.env.example`
 
 The agent runtime is embedded into the browser app, mounted into a live workspace, and launched inside a terminal-backed Node environment. Profiles keep personalities, settings, workspace state, and memory separated.
 

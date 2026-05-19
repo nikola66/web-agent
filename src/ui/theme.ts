@@ -49,6 +49,10 @@ export const motion = {
   slow: "250ms",
 } as const;
 
+/** xterm font stack: mono first, system emoji fonts for tool/catalog glyphs. */
+export const terminalFontFamily =
+  "'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace, 'Apple Color Emoji', 'Segoe UI Emoji', 'Noto Color Emoji'";
+
 /** xterm.js theme matching aratech */
 export const terminalTheme = {
   background: colors.bg.primary,

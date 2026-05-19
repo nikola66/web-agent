@@ -5,7 +5,7 @@ import {
   isLoopGuardEnabled,
   requestLoopGuardDecision,
   shouldContinueFromLoopGuard,
-  shouldStopFromLoopGuard,
+  formatLoopGuardScores,
 } from "../dist/agent-runtime/loop-guard.js";
 
 const originalEnv = { ...process.env };
@@ -31,9 +31,34 @@ test("requestLoopGuardDecision returns stop when disabled", async () => {
   assert.equal(result.reason, "disabled");
 });
 
-test("shouldContinueFromLoopGuard and shouldStopFromLoopGuard", () => {
+test("shouldContinueFromLoopGuard", () => {
   assert.equal(shouldContinueFromLoopGuard({ decision: "continue", scores: { continue: 1, stop: 0, ask_user: 0 } }), true);
-  assert.equal(shouldStopFromLoopGuard({ decision: "stop", scores: { continue: 0, stop: 1, ask_user: 0 } }), true);
-  assert.equal(shouldStopFromLoopGuard({ decision: "ask_user", scores: { continue: 0, stop: 0, ask_user: 1 } }), true);
   assert.equal(shouldContinueFromLoopGuard({ decision: "stop", scores: { continue: 0, stop: 1, ask_user: 0 } }), false);
+});
+
+test("formatLoopGuardScores renders fixed decimals", () => {
+  assert.equal(
+    formatLoopGuardScores({ continue: 0.5812, stop: 0.7123, ask_user: 0.1901 }),
+    "continue=0.58 stop=0.71 ask_user=0.19"
+  );
+});
+
+test("isLoopGuardScoringUnavailable detects model load failures", async () => {
+  const { isLoopGuardScoringUnavailable, normalizeLoopGuardResult, shouldRejectPendingToolsFromLoopGuard, shouldContinueFromLoopGuard } =
+    await import("../dist/agent-runtime/loop-guard.js");
+
+  const legacyFailure = {
+    decision: "stop",
+    scores: { continue: 0, stop: 1, ask_user: 0 },
+    reason: 'Could not locate file: "https://huggingface.co/example/onnx/model_quantized.onnx".',
+  };
+  assert.equal(isLoopGuardScoringUnavailable(legacyFailure), true);
+  assert.equal(shouldContinueFromLoopGuard(normalizeLoopGuardResult(legacyFailure)), false);
+  assert.equal(
+    shouldRejectPendingToolsFromLoopGuard(normalizeLoopGuardResult(legacyFailure), {
+      visible: "Done.",
+      pendingToolNames: ["web_search"],
+    }),
+    false
+  );
 });

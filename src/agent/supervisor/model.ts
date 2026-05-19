@@ -1,7 +1,8 @@
 import { LOOP_GUARD_HYPOTHESES } from "./prompts.js";
 import type { SupervisorScores } from "./thresholds.js";
+import { ensureTransformersEnv, LOOP_GUARD_MODEL_PATH } from "./transformers-env.js";
 
-const MODEL_ID = "MoritzLaurer/MiniLM-L6-mnli-binary";
+const MODEL_ID = LOOP_GUARD_MODEL_PATH;
 
 type ZeroShotClassifier = (
   text: string,
@@ -14,10 +15,14 @@ let classifierPromise: Promise<ZeroShotClassifier> | null = null;
 async function getClassifier(): Promise<ZeroShotClassifier> {
   if (!classifierPromise) {
     classifierPromise = (async () => {
+      await ensureTransformersEnv();
       const { pipeline } = await import("@huggingface/transformers");
       const pipe = await pipeline("zero-shot-classification", MODEL_ID);
       return pipe as unknown as ZeroShotClassifier;
-    })();
+    })().catch((err) => {
+      classifierPromise = null;
+      throw err;
+    });
   }
   return classifierPromise;
 }

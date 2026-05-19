@@ -19,6 +19,11 @@ export type LoopGuardMeta = {
   pendingToolCalls?: string[];
 };
 
+/** MobileBERT max_position_embeddings=512; zero-shot pairs each hypothesis with the premise. */
+export const LOOP_GUARD_PREMISE_MAX_CHARS = 1800;
+export const LOOP_GUARD_MESSAGE_TAIL_CHARS = 400;
+export const LOOP_GUARD_USER_REQUEST_TAIL_CHARS = 200;
+
 function formatRole(role: string): string {
   const r = String(role || "").toLowerCase();
   if (r === "assistant") return "Agent";
@@ -32,10 +37,24 @@ function messageContent(content: unknown): string {
   if (typeof content === "string") return content.trim();
   if (content == null) return "";
   try {
-    return JSON.stringify(content).slice(0, 4000);
+    return JSON.stringify(content);
   } catch {
-    return String(content).slice(0, 4000);
+    return String(content);
   }
+}
+
+export function tailText(text: string, maxChars: number): string {
+  const trimmed = String(text ?? "").trim();
+  if (maxChars <= 0 || trimmed.length <= maxChars) return trimmed;
+  return `…${trimmed.slice(-maxChars)}`;
+}
+
+function joinPremise(messageLines: string[], metaLines: string[]): string {
+  return [
+    "Last messages:",
+    ...messageLines,
+    ...(metaLines.length ? ["", "Turn context:", ...metaLines] : []),
+  ].join("\n");
 }
 
 export function buildSupervisorPremise(
@@ -44,10 +63,15 @@ export function buildSupervisorPremise(
   meta: LoopGuardMeta = {}
 ): string {
   const recent = messages.slice(-maxMessages);
-  const lines = recent.map((m) => `${formatRole(m.role)}: ${messageContent(m.content)}`);
+  let messageLines = recent.map(
+    (m) =>
+      `${formatRole(m.role)}: ${tailText(messageContent(m.content), LOOP_GUARD_MESSAGE_TAIL_CHARS)}`
+  );
   const metaLines: string[] = [];
   if (meta.userRequest) {
-    metaLines.push(`user_request: ${String(meta.userRequest).slice(0, 500)}`);
+    metaLines.push(
+      `user_request: ${tailText(String(meta.userRequest), LOOP_GUARD_USER_REQUEST_TAIL_CHARS)}`
+    );
   }
   if (typeof meta.webSearchCount === "number") {
     metaLines.push(`web_search_count: ${meta.webSearchCount}`);
@@ -61,8 +85,14 @@ export function buildSupervisorPremise(
   if (Array.isArray(meta.pendingToolCalls) && meta.pendingToolCalls.length) {
     metaLines.push(`pending_tool_calls: ${meta.pendingToolCalls.join(", ")}`);
   }
-  const body = ["Last messages:", ...lines, ...(metaLines.length ? ["", "Turn context:", ...metaLines] : [])].join(
-    "\n"
-  );
+
+  while (messageLines.length > 1 && joinPremise(messageLines, metaLines).length > LOOP_GUARD_PREMISE_MAX_CHARS) {
+    messageLines.shift();
+  }
+
+  let body = joinPremise(messageLines, metaLines);
+  if (body.length > LOOP_GUARD_PREMISE_MAX_CHARS) {
+    body = tailText(body, LOOP_GUARD_PREMISE_MAX_CHARS);
+  }
   return body.trim();
 }

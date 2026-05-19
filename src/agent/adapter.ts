@@ -1218,12 +1218,13 @@ export async function startWebAgent(options: AgentStartOptions): Promise<void> {
         agentOutputBuffer = agentOutputBuffer.slice(bodyEnd + LOOP_GUARD_REQ_END.length);
         void (async () => {
           let respPayload: string;
+          const { decide } = await import("./supervisor/index.js");
+          const { formatTransformersError } = await import("./supervisor/transformers-env.js");
           try {
             const req = JSON.parse(reqBody) as {
               messages?: Array<{ role?: string; content?: string }>;
               meta?: Record<string, unknown>;
             };
-            const { decide } = await import("./supervisor/index.js");
             const thresholds = readLoopGuardThresholds(import.meta.env);
             const result = await decide({
               messages: (req.messages || []).map((m) => ({
@@ -1250,9 +1251,10 @@ export async function startWebAgent(options: AgentStartOptions): Promise<void> {
             respPayload = JSON.stringify(result);
           } catch (e) {
             respPayload = JSON.stringify({
-              decision: "stop",
-              scores: { continue: 0, stop: 1, ask_user: 0 },
-              reason: String((e as Error)?.message ?? e),
+              decision: "continue",
+              scores: { continue: 0, stop: 0, ask_user: 0 },
+              reason: "scoring_unavailable",
+              error: formatTransformersError(e),
             });
           }
           await agentProcess.write(

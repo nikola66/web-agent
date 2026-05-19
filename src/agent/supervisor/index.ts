@@ -5,6 +5,7 @@ import {
   type SupervisorMessage,
 } from "./prompts.js";
 import { scoreHypotheses } from "./model.js";
+import { formatTransformersError } from "./transformers-env.js";
 import {
   decideFromScores,
   LOOP_GUARD_DEFAULTS,
@@ -31,8 +32,18 @@ export async function decide({
   thresholds: thresholdOverrides = {},
 }: DecideInput): Promise<SupervisorResult> {
   const thresholds = { ...LOOP_GUARD_DEFAULTS, ...thresholdOverrides };
-  const premise = buildSupervisorPremise(messages, maxMessages, meta);
-  const scores = await scoreHypotheses(premise);
-  const decision = decideFromScores(scores, thresholds);
-  return { decision, scores };
+  try {
+    const premise = buildSupervisorPremise(messages, maxMessages, meta);
+    const scores = await scoreHypotheses(premise);
+    const decision = decideFromScores(scores, thresholds);
+    return { decision, scores };
+  } catch (e) {
+    const message = formatTransformersError(e);
+    return {
+      decision: "continue",
+      scores: { continue: 0, stop: 0, ask_user: 0 },
+      reason: "scoring_unavailable",
+      error: message,
+    };
+  }
 }
