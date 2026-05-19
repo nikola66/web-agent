@@ -1,6 +1,9 @@
 # Dependencies
 node_modules/
 
+# Vendored third-party trees (install separately; not part of web-agent)
+/vendor/
+
 # Build output
 dist/
 .vite/
@@ -44,7 +47,6 @@ docs/references/
 npm-debug.log*
 playwright-report/
 test-results/
-marketing/
 
 # Editor temp files
 *.swp
