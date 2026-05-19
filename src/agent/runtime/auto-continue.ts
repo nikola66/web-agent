@@ -105,6 +105,20 @@ export function shouldSuppressPostToolNudgeFromExecutions(executions) {
   );
 }
 
+type AutoContinueNudgeStateInput = {
+  turnInput?: string;
+  visible?: string;
+  executedToolsInTurn?: boolean;
+  autoContinueNudges?: number;
+  maxNudges?: number;
+  toolNames?: string[];
+  originalUserInput?: string;
+  suppressActionPlanNudge?: boolean;
+  webSearchCount?: number;
+  webFetchCount?: number;
+  lastToolExecutions?: Array<Record<string, unknown>>;
+};
+
 export function getAutoContinueNudgeState({
   turnInput,
   visible,
@@ -117,7 +131,7 @@ export function getAutoContinueNudgeState({
   webSearchCount = 0,
   webFetchCount = 0,
   lastToolExecutions = [],
-}) {
+}: AutoContinueNudgeStateInput = {}) {
   const researchIntent = isResearchIntent(originalUserInput);
   const exactTokens = extractExactResponseTokens(originalUserInput);
   const shouldNudgeForSequence =

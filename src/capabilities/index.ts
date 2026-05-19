@@ -75,12 +75,8 @@ function sortedValues<T extends { id: string; order?: number }>(values: T[]): T[
     .sort((a, b) => (a.order ?? Number.MAX_SAFE_INTEGER) - (b.order ?? Number.MAX_SAFE_INTEGER));
 }
 
-export const CAPABILITY_TOOLS: readonly ToolManifest[] = sortedValues(
+const CAPABILITY_TOOLS: readonly ToolManifest[] = sortedValues(
   Object.values(toolManifestModules).map((module) => module.default)
-);
-
-export const CAPABILITY_TOOL_CATALOG: Record<string, ToolManifest> = Object.fromEntries(
-  CAPABILITY_TOOLS.map((tool) => [tool.id, tool])
 );
 
 export const CAPABILITY_PROVIDERS: readonly ProviderManifest[] = sortedValues(

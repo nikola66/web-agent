@@ -14,10 +14,7 @@
     "test:tools": "node scripts/run-tool-smoke.mjs",
     "test:tools:network": "node scripts/run-tool-smoke.mjs --network",
     "test:browser": "PLAYWRIGHT_BROWSERS_PATH=0 playwright test",
-    "test:browser:headed": "PLAYWRIGHT_BROWSERS_PATH=0 playwright test --headed",
-    "marketing:generate": "node scripts/generate-x-post-queue.js",
-    "marketing:dry-run": "LIVE_POSTING=false node scripts/run-daily-x-post.js",
-    "marketing:post": "node scripts/run-daily-x-post.js"
+    "test:browser:headed": "PLAYWRIGHT_BROWSERS_PATH=0 playwright test --headed"
   },
   "dependencies": {
     "@codesandbox/nodebox": "^0.1.9",
@@ -27,7 +24,6 @@
     "idb-keyval": "^6.2.1",
     "lucide-react": "^0.474.0",
     "markdown-it": "^14.1.1",
-    "oauth-1.0a": "^2.2.6",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
     "sql.js": "^1.12.0",

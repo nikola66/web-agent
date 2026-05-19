@@ -9,14 +9,7 @@ import {
 } from "@/core/workspace";
 import { useProfileStore } from "../stores/profile-store";
 import { useActiveProfileRuntime, useRuntimeStore } from "../stores/runtime-store";
-
-function formatBytes(bytes: number): string {
-  if (bytes === 0) return "0 B";
-  const k = 1024;
-  const sizes = ["B", "KB", "MB", "GB"];
-  const i = Math.floor(Math.log(bytes) / Math.log(k));
-  return `${parseFloat((bytes / Math.pow(k, i)).toFixed(1))} ${sizes[i]}`;
-}
+import { formatBytes } from "../utils/format";
 
 export function WorkspacePanel() {
   const { activeProfileId, profiles } = useProfileStore();

@@ -29,19 +29,27 @@ export function formatAssistantTranscript({
   text,
   renderedText,
   branchBelowName = true,
-} = {}) {
+}: AssistantTranscriptEventInput = {}) {
   const name = String(agentName || "Agent").trim() || "Agent";
   const renderedBody = typeof renderedText === "string" ? stripAnsi(renderedText).trimEnd() : "";
   const body = renderedBody || prefixPlainBlock(text, branchBelowName);
   return `${name}\n${body}`.trimEnd();
 }
 
-export function formatToolStartTranscript({ name, argsPreview = "{}", argsPreviewTruncated = false } = {}) {
+export function formatToolStartTranscript({
+  name,
+  argsPreview = "{}",
+  argsPreviewTruncated = false,
+}: ToolStartTranscriptEventInput = {}) {
   const toolName = String(name || "unknown").trim() || "unknown";
   return `▸ ${toolName} ${String(argsPreview || "{}")}${argsPreviewTruncated ? "…" : ""}`;
 }
 
-export function formatToolResultTranscript({ name, status = "ok", error = "" } = {}) {
+export function formatToolResultTranscript({
+  name,
+  status = "ok",
+  error = "",
+}: ToolResultTranscriptEventInput = {}) {
   const toolName = String(name || "unknown").trim() || "unknown";
   if (status === "denied") return `⊘ ${toolName} denied by user`;
   if (status === "error") return `✗ ${toolName}: ${String(error || "error")}`;
@@ -124,7 +132,10 @@ export function createToolResultTranscriptEvent({
   };
 }
 
-export function createSystemLineTranscriptEvent({ round, text } = {}) {
+export function createSystemLineTranscriptEvent({
+  round,
+  text,
+}: SystemLineTranscriptEventInput = {}) {
   return {
     type: "system_line",
     critical: false,
@@ -133,6 +144,20 @@ export function createSystemLineTranscriptEvent({ round, text } = {}) {
   };
 }
 
+export type SystemLineTranscriptEventInput = {
+  round?: number;
+  text?: string;
+};
+
+export type GoalLoopTranscriptEventInput = {
+  phase?: string;
+  goal?: string;
+  reason?: string;
+  continuationsUsed?: number;
+  maxContinuations?: number;
+  round?: number;
+};
+
 export function createGoalLoopTranscriptEvent({
   phase,
   goal = "",
@@ -140,7 +165,7 @@ export function createGoalLoopTranscriptEvent({
   continuationsUsed = 0,
   maxContinuations = 20,
   round,
-} = {}) {
+}: GoalLoopTranscriptEventInput = {}) {
   return {
     type: "goal_loop",
     critical: false,

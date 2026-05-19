@@ -34,7 +34,6 @@ interface OrchestratorAgentState {
   agentReadyForInput: boolean;
   onboardingActive: boolean;
   onboardingField: "agent" | "user";
-  noAgentTerminalHintShown: boolean;
   // Serialise stop/start for this profile so rapid switches don't leave agents running
   lifecycleMutex: Promise<void>;
 }
@@ -83,15 +82,10 @@ function getOrCreateAgentState(profileId: string): OrchestratorAgentState {
       agentReadyForInput: false,
       onboardingActive: false,
       onboardingField: "agent",
-      noAgentTerminalHintShown: false,
       lifecycleMutex: Promise.resolve(),
     });
   }
   return agentStates.get(profileId)!;
-}
-
-function resetAgentTerminalHint(profileId: string): void {
-  getOrCreateAgentState(profileId).noAgentTerminalHintShown = false;
 }
 
 function getTerminal(profileId: string | null): Terminal | null {
@@ -127,24 +121,10 @@ export async function switchToProfile(profileId: string): Promise<void> {
   }
 }
 
-/** Legacy: attach single terminal (for backward compat, maps to profile terminal) */
-export function attachTerminal(term: Terminal): void {
-  if (activeProfileId) {
-    attachProfileTerminal(activeProfileId, term);
-  }
-}
-
 export function detachTerminal(): void {
   if (activeProfileId) {
     profileTerminals.delete(activeProfileId);
   }
-}
-
-/** Send raw terminal input to the running agent process - kept for compatibility */
-export async function sendTerminalInput(data: string): Promise<void> {
-  // Deprecated: Input should go through submitUserInput via ChatInput
-  console.warn("sendTerminalInput is deprecated, use submitUserInput instead");
-  await handleTerminalInput(data);
 }
 
 function write(data: string): void {
@@ -203,29 +183,6 @@ export function notifyAgentTerminalResized(): void {
     resizeAgentPty(profileId, getPtySizeForProfile(profileId));
   });
 }
-
-async function handleTerminalInput(data: string): Promise<void> {
-   const state = activeProfileId ? getOrCreateAgentState(activeProfileId) : null;
-   // Deprecated: Input should go through submitUserInput via ChatInput
-   // Show warning once per session
-   if (data.trim() && state && !state.noAgentTerminalHintShown) {
-     state.noAgentTerminalHintShown = true;
-     write(
-       "\r\n\x1b[90mTerminal input is deprecated. Use the chat input at the bottom instead.\x1b[0m\r\n"
-     );
-   }
-
-   if (!activeProfileId || !runningProfileIds.has(activeProfileId)) {
-     if (data && state && !state.noAgentTerminalHintShown) {
-       state.noAgentTerminalHintShown = true;
-       write(
-         "\r\n\x1b[90mNo agent running — use Launch in the sidebar first.\x1b[0m\r\n"
-       );
-     }
-     return;
-   }
-   await writeToWebAgent(activeProfileId, data);
- }
 
 async function dispatchQueuedInputIfReady(profileId: string): Promise<void> {
   if (!runningProfileIds.has(profileId)) return;
@@ -518,7 +475,6 @@ export async function startAgent(profileId?: string): Promise<void> {
             agentState.agentReadyForInput = false;
             agentState.onboardingActive = false;
             agentState.onboardingField = "agent";
-            resetAgentTerminalHint(profile.id);
           } else if (status === "error") {
             s.setError(profile.id, "Web Agent runtime error");
             s.setProfileRunning(profile.id, false);
@@ -548,7 +504,6 @@ export async function startAgent(profileId?: string): Promise<void> {
       agentState.agentReadyForInput = false;
       agentState.onboardingActive = false;
       agentState.onboardingField = "agent";
-      resetAgentTerminalHint(profile.id);
     }
   } finally {
     resolveOwnSlot();
@@ -564,7 +519,6 @@ async function _stopAgentUnsafe(profileId: string): Promise<void> {
   await stopWebAgent(id);
   flushTerminalTypewriter(id, getTerminal);
   const state = getOrCreateAgentState(id);
-  resetAgentTerminalHint(id);
   const rt = useRuntimeStore.getState();
   rt.setRuntimeStatus(id, "stopped");
   rt.setProfileRunning(id, false);
@@ -630,11 +584,4 @@ function startStorageMonitoring(): void {
 
   check();
   storageCheckInterval = setInterval(check, 30_000);
-}
-
-export function stopStorageMonitoring(): void {
-  if (storageCheckInterval) {
-    clearInterval(storageCheckInterval);
-    storageCheckInterval = null;
-  }
 }

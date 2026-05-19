@@ -61,7 +61,6 @@ import runtimePrivacySource from "../../dist/agent-runtime/privacy.js?raw";
 import { normalizeLaunchMode, sanitizeForLogs } from "./runtime/privacy";
 import runtimeMemorySource from "../../dist/agent-runtime/memory/index.js?raw";
 import runtimeMemorySqlSource from "../../dist/agent-runtime/memory/sql.js?raw";
-import runtimeMemoryConversationSource from "../../dist/agent-runtime/memory/conversation.js?raw";
 import runtimeMemoryRunsSource from "../../dist/agent-runtime/memory/runs.js?raw";
 import runtimeMemoryJobsSource from "../../dist/agent-runtime/memory/jobs.js?raw";
 import runtimeMemorySnapshotsSource from "../../dist/agent-runtime/memory/snapshots.js?raw";
@@ -403,7 +402,6 @@ async function writeRuntimeSources(profileId: string): Promise<void> {
   await emulator.fs.writeFile(`${webagentDir}/logging/debug-log.js`, runtimeDebugLogSource);
   await emulator.fs.writeFile(`${webagentDir}/memory/index.js`, runtimeMemorySource);
   await emulator.fs.writeFile(`${webagentDir}/memory/sql.js`, runtimeMemorySqlSource);
-  await emulator.fs.writeFile(`${webagentDir}/memory/conversation.js`, runtimeMemoryConversationSource);
   await emulator.fs.writeFile(`${webagentDir}/memory/runs.js`, runtimeMemoryRunsSource);
   await emulator.fs.writeFile(`${webagentDir}/memory/jobs.js`, runtimeMemoryJobsSource);
   await emulator.fs.writeFile(`${webagentDir}/memory/snapshots.js`, runtimeMemorySnapshotsSource);

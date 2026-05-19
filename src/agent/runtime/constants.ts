@@ -41,7 +41,6 @@ export function memoryStatePath(relativePath: string): string {
 }
 
 export const HISTORY_PATH = `${WS}/.history.json`;
-export const TODOS_PATH = `${WS}/.todos.json`;
 export const AGENT_MD = `${WS}/AGENT.md`;
 export const USER_MD = `${WS}/USER.md`;
 export const HEARTBEAT_MD = `${WS}/HEARTBEAT.md`;

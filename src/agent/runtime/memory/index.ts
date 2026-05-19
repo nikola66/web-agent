@@ -16,17 +16,9 @@ export {
   readJsonFilesNewestFirst,
 } from "./sql.js";
 
-// Conversation persistence
-export {
-  saveConversation,
-  loadRecentConversations,
-  MEMORY_RECENT_CONVERSATION_LIMIT,
-} from "./conversation.js";
-
 // Run history
 export {
   saveRun,
-  getRun,
 } from "./runs.js";
 
 // Background job management
@@ -45,7 +37,6 @@ export {
   sanitizeMessagesMissingSnapshotRefs,
   collectReferencedSnapshotBasenames,
   cleanupSnapshotsNotReferenced,
-  cleanupOldSnapshots,
   unwrapSnapshotReadFileExecutions,
   spillInlineCharBudgetForToolResultItem,
   saveCompressedToolResults,

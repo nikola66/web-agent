@@ -29,10 +29,6 @@ export const SLASH_COMMANDS = [
   { name: "/exit", description: "Exit the active terminal agent session." },
 ];
 
-export function buildCommandSpec() {
-  return SLASH_COMMANDS.map((command) => `- ${command.name}: ${command.description}`).join("\n");
-}
-
 export function buildTelegramBotCommands() {
   return SLASH_COMMANDS.filter((command) => /^\/[A-Za-z0-9_]+(?:\s|$)/.test(command.name || "")).map((command) => {
     const nameWithoutSlash = String(command.name || "").replace(/^\//, "");

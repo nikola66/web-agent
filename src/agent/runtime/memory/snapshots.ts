@@ -195,11 +195,6 @@ export async function cleanupSnapshotsNotReferenced(historyMessages, snapshotsDi
   );
 }
 
-/** @deprecated Prefer `cleanupSnapshotsNotReferenced([])` — deletes every snapshot JSON. */
-export async function cleanupOldSnapshots() {
-  return cleanupSnapshotsNotReferenced([]);
-}
-
 function extractTextFromNestedToolResult(inner) {
   if (!inner || typeof inner !== "object") return null;
   if (typeof inner.text === "string" && inner.text.trim()) return inner.text;
@@ -281,6 +276,10 @@ export function createTurnInlineBudgetState() {
   return { remaining: getMaxTurnInlineChars() };
 }
 
+export type TurnInlineBudgetState = {
+  remaining: number;
+};
+
 /**
  * Per-execution spill threshold for saveCompressedToolResults.
  * Unwrapped snapshot reads carry long `content`; the default inline cap would re-spill every round without a boosted budget below.
@@ -300,7 +299,13 @@ export async function saveCompressedToolResults({
   executions,
   inlineCharBudget = 10_000,
   turnInlineBudget = null,
-}) {
+}: {
+  runId?: string;
+  round?: number;
+  executions?: Array<Record<string, unknown>>;
+  inlineCharBudget?: number;
+  turnInlineBudget?: TurnInlineBudgetState | null;
+} = {}) {
   const budgetState =
     turnInlineBudget &&
     typeof turnInlineBudget === "object" &&
