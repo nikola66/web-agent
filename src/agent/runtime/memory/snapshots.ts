@@ -218,6 +218,19 @@ function extractTextFromNestedToolResult(inner) {
     }
     return c;
   }
+  if (Array.isArray(inner.documents) && inner.documents.length) {
+    const chunks = [];
+    for (const doc of inner.documents) {
+      const body = extractTextFromNestedToolResult(doc);
+      if (body) {
+        const url = typeof doc?.url === "string" && doc.url.trim() ? doc.url.trim() : null;
+        chunks.push(url ? `# ${url}\n\n${body}` : body);
+      } else if (doc?.error) {
+        chunks.push(`[${doc?.url || "?"}] error: ${String(doc.error)}`);
+      }
+    }
+    if (chunks.length) return chunks.join("\n\n---\n\n");
+  }
   return null;
 }
 
@@ -327,9 +340,12 @@ export async function saveCompressedToolResults({
     const itemBudget = spillInlineCharBudgetForToolResultItem(item, inlineCharBudget);
     const serialized = JSON.stringify(item?.result ?? item?.error ?? null, null, 2);
     const fitsItemCap = serialized.length <= itemBudget;
-    const fitsTurnCap = fitsItemCap && serialized.length <= budgetState.remaining;
+    const fromSnapshotRead =
+      item?.tool === "read_file" && item?.result?.from_snapshot === true;
+    const fitsTurnCap =
+      fitsItemCap && (fromSnapshotRead || serialized.length <= budgetState.remaining);
     if (fitsTurnCap) {
-      budgetState.remaining -= serialized.length;
+      if (!fromSnapshotRead) budgetState.remaining -= serialized.length;
       refs.push(null);
       continue;
     }

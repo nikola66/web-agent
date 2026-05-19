@@ -2,6 +2,8 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 import {
+  createTurnInlineBudgetState,
+  saveCompressedToolResults,
   unwrapSnapshotReadFileExecutions,
   spillInlineCharBudgetForToolResultItem,
 } from "../dist/agent-runtime/memory/index.js";
@@ -142,4 +144,65 @@ test("non-snapshot read_file keeps default small spill budget", () => {
     result: { ok: true, path: "src/a.txt", content: "x".repeat(5000) },
   };
   assert.equal(spillInlineCharBudgetForToolResultItem(item, 1200), 1200);
+});
+
+test("unwrapSnapshotReadFileExecutions inlines batch web_fetch documents from snapshot", () => {
+  const inner = {
+    ok: true,
+    count: 2,
+    documents: [
+      {
+        ok: true,
+        url: "https://raw.githubusercontent.com/org/repo/main/run_simulation_server.py",
+        text: "def main():\n    pass\n",
+      },
+      {
+        ok: true,
+        url: "https://raw.githubusercontent.com/org/repo/main/humanoid_agent.py",
+        text: "class HumanoidAgent:\n    ...\n",
+      },
+    ],
+  };
+  const executions = [
+    {
+      tool: "read_file",
+      result: {
+        ok: true,
+        path: "memory/snapshots/run_batch_r13_0.json",
+        content: snapshotFileContent(inner),
+      },
+    },
+  ];
+  const out = unwrapSnapshotReadFileExecutions(executions);
+  assert.equal(out[0].result.from_snapshot, true);
+  assert.match(out[0].result.content, /def main\(\)/);
+  assert.match(out[0].result.content, /class HumanoidAgent/);
+  assert.match(out[0].result.content, /run_simulation_server\.py/);
+  assert.equal(out[0].result.content.includes('"documents"'), false);
+});
+
+test("saveCompressedToolResults inlines from_snapshot read_file even when turn budget is exhausted", async () => {
+  const content = "import os\n".repeat(4000);
+  const executions = [
+    {
+      tool: "read_file",
+      result: {
+        ok: true,
+        path: "memory/snapshots/run_x_r13_0.json",
+        from_snapshot: true,
+        bytes: content.length,
+        content,
+      },
+    },
+  ];
+  const turnInlineBudget = createTurnInlineBudgetState();
+  turnInlineBudget.remaining = 500;
+  const refs = await saveCompressedToolResults({
+    runId: "run_test",
+    round: 13,
+    executions,
+    inlineCharBudget: 10_000,
+    turnInlineBudget,
+  });
+  assert.deepEqual(refs, [null]);
 });
