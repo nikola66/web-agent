@@ -5,10 +5,11 @@
 import fs from "node:fs/promises";
 import nodePath from "node:path";
 import {
+  globMatch,
   resolveWorkspacePath,
+  shouldSkipDir,
   toWorkspaceRelative,
 } from "../../workspace-paths.js";
-import { shouldSkipDir, globMatch } from "./path-utils.js";
 
 export async function listDirTool(
   {

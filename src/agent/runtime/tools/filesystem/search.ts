@@ -6,9 +6,9 @@ import fs from "node:fs/promises";
 import nodePath from "node:path";
 import {
   resolveWorkspacePath,
+  shouldSkipDir,
   toWorkspaceRelative,
 } from "../../workspace-paths.js";
-import { shouldSkipDir } from "./path-utils.js";
 
 export async function grepTool(
   { pattern, root = ".", regex = false, maxResults = 200, maxFilesScanned = 5000 } = {},

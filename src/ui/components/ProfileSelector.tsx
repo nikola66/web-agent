@@ -1,4 +1,5 @@
 import { lazy, Suspense, useEffect, useState } from "react";
+import { useShallow } from "zustand/react/shallow";
 import { Square, Plus, Pencil, Trash2 } from "lucide-react";
 import { useProfileStore } from "../stores/profile-store";
 import { useRuntimeStore } from "../stores/runtime-store";
@@ -61,7 +62,13 @@ export function ProfileSelector() {
   } = useProfileStore();
   const apiKeys = useSettingsStore((s) => s.apiKeys);
   const runningProfileIds = useRuntimeStore((s) => s.runningProfileIds);
-  const profileRuntime = useRuntimeStore((s) => s.profileRuntime);
+  const runtimeStatusByProfile = useRuntimeStore(
+    useShallow((s) =>
+      Object.fromEntries(
+        profiles.map((p) => [p.id, s.profileRuntime[p.id]?.runtimeStatus ?? "idle"]),
+      ),
+    ),
+  );
   const [editorOpen, setEditorOpen] = useState(false);
   const [editing, setEditing] = useState<Profile | null>(null);
   const [hoveredProfileId, setHoveredProfileId] = useState<string | null>(null);
@@ -176,7 +183,7 @@ export function ProfileSelector() {
       </div>
 
       {profiles.map((p) => {
-        const runtimeStatus = profileRuntime[p.id]?.runtimeStatus ?? "idle";
+        const runtimeStatus = runtimeStatusByProfile[p.id] ?? "idle";
         const isActive = activeProfileId === p.id;
         const isThisRunning = runningProfileIds.includes(p.id);
         const anyBusy = runtimeStatus === "booting" || runtimeStatus === "installing";

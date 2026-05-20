@@ -1,6 +1,6 @@
 import { OPENROUTER_FREE_DEFAULT_CONTEXT_WINDOW, LLM_REQUEST_TIMEOUT_MS } from "./constants.js";
 import { logDebugEvent } from "./logging/debug-log.js";
-import { estimateMessagesTokens, fetchWithTimeout } from "./llm/streaming.js";
+import { estimateMessageTokens, estimateMessagesTokens, fetchWithTimeout } from "./llm/streaming.js";
 import { errorMessage } from "./utils.js";
 
 export const CONTEXT_COMPACTION_PREFIX = "[CONTEXT COMPACTION]";
@@ -85,7 +85,7 @@ function tailStartIndex(nonSystemMessages, headCount, thresholdTokens) {
     const tailCount = nonSystemMessages.length - start;
     if (tailCount >= minTail && tailTokens >= tailBudgetTokens) break;
     start -= 1;
-    tailTokens += estimateMessagesTokens([nonSystemMessages[start]]);
+    tailTokens += estimateMessageTokens(nonSystemMessages[start]);
   }
   return start;
 }

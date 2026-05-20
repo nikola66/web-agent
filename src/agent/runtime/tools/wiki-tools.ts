@@ -11,9 +11,9 @@ import {
   ensureParentDir,
   normalizeWorkspaceRelativePath,
   resolveWorkspacePath,
+  shouldSkipDir,
   toWorkspaceRelative,
 } from "../workspace-paths.js";
-import { shouldSkipDir } from "./filesystem/path-utils.js";
 import * as memoryModule from "../memory/index.js";
 
 type ToolCtx = { cwd?: string; services?: { memory?: typeof memoryModule } };

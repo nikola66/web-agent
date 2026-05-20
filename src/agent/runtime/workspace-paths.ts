@@ -178,6 +178,29 @@ export async function ensureParentDir(abs) {
   await fs.mkdir(dir, { recursive: true });
 }
 
+export const DEFAULT_IGNORED_DIRS = new Set([
+  ".git",
+  ".idea",
+  ".vscode",
+  "node_modules",
+  "dist",
+  "build",
+  ".next",
+  ".cache",
+  "coverage",
+  "tmp",
+  "temp",
+]);
+
+export function shouldSkipDir(name, ignoredDirs = DEFAULT_IGNORED_DIRS) {
+  return ignoredDirs.has(String(name || ""));
+}
+
+export function globMatch(name, pattern) {
+  const esc = pattern.replace(/[.+^${}()|[\]\\]/g, "\\$&").replace(/\*/g, ".*");
+  return new RegExp(`^${esc}$`).test(name);
+}
+
 export function shellCwd(cwd) {
   const c = String(cwd ?? WORKSPACE_LABEL).trim();
   if (c === "." || c === WS || c === WORKSPACE_LABEL) return WS;

@@ -11,6 +11,15 @@ import { useProfileStore } from "../stores/profile-store";
 import { useActiveProfileRuntime, useRuntimeStore } from "../stores/runtime-store";
 import { formatBytes } from "../utils/format";
 
+const STORAGE_PANEL_STYLE = {
+  borderRadius: "var(--radius-sm)",
+  border: "1px solid var(--color-border-subtle)",
+} as const;
+
+const STORAGE_BAR_TRACK_STYLE = {
+  background: "var(--color-border-subtle)",
+} as const;
+
 export function WorkspacePanel() {
   const { activeProfileId, profiles } = useProfileStore();
   const runtimeStatus = useActiveProfileRuntime().runtimeStatus;
@@ -123,10 +132,7 @@ export function WorkspacePanel() {
 
       <div
         className="mt-2 flex flex-col gap-1.5 rounded p-3"
-        style={{
-          borderRadius: "var(--radius-sm)",
-          border: "1px solid var(--color-border-subtle)",
-        }}
+        style={STORAGE_PANEL_STYLE}
       >
         <p className="text-[10px] text-text-muted">
           Browser storage used:{" "}
@@ -142,7 +148,7 @@ export function WorkspacePanel() {
           <div className="mt-1">
             <div
               className="h-1 overflow-hidden rounded-full"
-              style={{ background: "var(--color-border-subtle)" }}
+              style={STORAGE_BAR_TRACK_STYLE}
             >
               <div
                 className="h-full rounded-full transition-all"
