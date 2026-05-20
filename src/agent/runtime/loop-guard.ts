@@ -128,6 +128,13 @@ export function shouldSuppressPostToolNudgeFromExecutions(
   );
 }
 
+function isSyntheticLoopNudge(content: string): boolean {
+  const t = content.trim();
+  if (t === LOOP_GUARD_CONTINUE_NUDGE) return true;
+  if (t.startsWith("[Continuing toward approved plan goal]")) return true;
+  return false;
+}
+
 function convToSupervisorMessages(conv: ConvRow[] | null | undefined): SupervisorMessage[] {
   const out: SupervisorMessage[] = [];
   for (const row of conv || []) {
@@ -140,7 +147,7 @@ function convToSupervisorMessages(conv: ConvRow[] | null | undefined): Superviso
         : row.content != null
           ? JSON.stringify(row.content)
           : "";
-    if (!content.trim()) continue;
+    if (!content.trim() || isSyntheticLoopNudge(content)) continue;
     out.push({ role, content });
   }
   return out;
@@ -179,6 +186,19 @@ export async function requestLoopGuardDecision(
 /** Matches default VITE_WEBAGENT_LOOP_GUARD_CONTINUE_THRESHOLD (see thresholds.ts). */
 const CONTINUE_SCORE_THRESHOLD = 0.58;
 
+function isShortNonTaskPivot(userRequest: unknown): boolean {
+  const t = String(userRequest ?? "").trim();
+  if (!t || t.length >= 80) return false;
+  if (
+    /\b(execute|implement|fix|refactor|migrate|install|test|run|build|create|update|research|fetch|write|read|delete|add|remove)\b/i.test(
+      t
+    )
+  ) {
+    return false;
+  }
+  return true;
+}
+
 /** When ONNX/IPC scoring fails, avoid nudging after a clear final answer. */
 export function looksLikeTaskCompleteReply(visible: unknown): boolean {
   const v = String(visible ?? "").trim();
@@ -209,6 +229,7 @@ export function shouldContinueFromLoopGuard(
   if (isLoopGuardScoringUnavailable(result)) {
     if (!ctx.toolsExecutedInTurn) return false;
     if (looksLikeTaskCompleteReply(ctx.visible)) return false;
+    if (isShortNonTaskPivot(ctx.userRequest)) return false;
     return true;
   }
   if (result?.decision === "continue") return true;

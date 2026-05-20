@@ -5,8 +5,8 @@ import {
   estimateTaskComplexity,
   isPlanningModePrompt,
   extractPlanningGoalFromPrompt,
-  resolveApprovedPlanExecutionGoal,
-  parsePlanGoalJudgeJson,
+  isExplicitPlanExecutionRequest,
+  buildPlanExecutionContextPrefix,
 } from "../dist/agent-runtime/turn-sequencing.js";
 import { getSkillSelfImproveNudgeState } from "../dist/agent-runtime/loop-guard.js";
 import { buildPlanModeUserPrompt } from "../dist/agent-runtime/planning-slash.js";
@@ -76,82 +76,38 @@ test("extractPlanningGoalFromPrompt parses **Goal:** from synthetic prompt", () 
   assert.equal(extractPlanningGoalFromPrompt(p), "Ship auth");
 });
 
-test("resolveApprovedPlanExecutionGoal activates after planning prompt turn", () => {
+test("isExplicitPlanExecutionRequest ignores follow-up after planning prompt", () => {
   const plan = buildPlanModeUserPrompt("Migrate DB");
-  assert.equal(resolveApprovedPlanExecutionGoal({
-    textOnly: true,
-    priorUserContent: plan,
-    currentUserContent: "Proceed",
-  }), null);
-  assert.equal(resolveApprovedPlanExecutionGoal({
-    textOnly: false,
-    priorUserContent: plan,
-    currentUserContent: "Proceed",
-  }), "Migrate DB");
-  assert.equal(resolveApprovedPlanExecutionGoal({
-    textOnly: false,
-    priorUserContent: plan,
-    currentUserContent: plan,
-  }), null);
-  assert.equal(resolveApprovedPlanExecutionGoal({
-    textOnly: false,
-    priorUserContent: "something else",
-    currentUserContent: "Proceed",
-  }), null);
+  assert.equal(isExplicitPlanExecutionRequest("Proceed"), false);
+  assert.equal(isExplicitPlanExecutionRequest(plan), false);
+  assert.equal(isExplicitPlanExecutionRequest("List them here in a nice way"), false);
 });
 
-test("resolveApprovedPlanExecutionGoal activates from explicit plan-approval phrasing", () => {
+test("isExplicitPlanExecutionRequest detects explicit plan-approval phrasing", () => {
+  assert.equal(isExplicitPlanExecutionRequest("PLan is approved, execute it"), true);
+});
+
+test("isExplicitPlanExecutionRequest detects plan file paths in current message", () => {
   assert.equal(
-    resolveApprovedPlanExecutionGoal({
-      textOnly: false,
-      priorUserContent: "",
-      currentUserContent: "PLan is approved, execute it",
-    }),
-    "Execute the most recent approved plan in plans/."
+    isExplicitPlanExecutionRequest(
+      "Run it: plans/2026-05-18_204842-create-a-comprehensive-plan-for-youtube-creators.md"
+    ),
+    true
+  );
+  assert.equal(
+    isExplicitPlanExecutionRequest(
+      "It's here: .webagent/plans/2026-05-18_204842-create-a-comprehensive-plan-for-youtube-creators.md"
+    ),
+    true
   );
 });
 
-test("resolveApprovedPlanExecutionGoal uses explicit legacy plan file path when present", () => {
-  assert.equal(
-    resolveApprovedPlanExecutionGoal({
-      textOnly: false,
-      priorUserContent: "Plan is approved, execute it",
-      currentUserContent:
-        "It's here: .webagent/plans/2026-05-18_204842-create-a-comprehensive-plan-for-youtube-creators.md",
-    }),
-    "Execute approved plan at .webagent/plans/2026-05-18_204842-create-a-comprehensive-plan-for-youtube-creators.md."
+test("buildPlanExecutionContextPrefix returns prefix only for explicit execution", () => {
+  assert.equal(buildPlanExecutionContextPrefix("hello"), null);
+  assert.match(
+    buildPlanExecutionContextPrefix("execute the plan") ?? "",
+    /\[Approved plan execution context\]/
   );
-});
-
-test("resolveApprovedPlanExecutionGoal uses explicit plans/ path when present", () => {
-  assert.equal(
-    resolveApprovedPlanExecutionGoal({
-      textOnly: false,
-      priorUserContent: "",
-      currentUserContent:
-        "Run it: plans/2026-05-18_204842-create-a-comprehensive-plan-for-youtube-creators.md",
-    }),
-    "Execute approved plan at plans/2026-05-18_204842-create-a-comprehensive-plan-for-youtube-creators.md."
-  );
-});
-
-test("parsePlanGoalJudgeJson requires strict JSON one-liner semantics", () => {
-  assert.deepEqual(parsePlanGoalJudgeJson('{"done":true,"reason":"ok"}'), {
-    ok: true,
-    done: true,
-    reason: "ok",
-  });
-  assert.deepEqual(parsePlanGoalJudgeJson('{"done":true}'), {
-    ok: true,
-    done: true,
-    reason: "",
-  });
-  const fence = parsePlanGoalJudgeJson('```json\n{"done":false,"reason":"need more"}\n```');
-  assert.equal(fence.ok, true);
-  assert.equal(fence.done, false);
-  assert.deepEqual(parsePlanGoalJudgeJson("not json").ok, false);
-  assert.equal(parsePlanGoalJudgeJson('{"reason":"only reason"}').ok, false);
-  assert.equal(parsePlanGoalJudgeJson('\uFEFF{"done":false,"reason":"x"}').ok, true);
 });
 
 test("getSkillSelfImproveNudgeState fires when todo used and loop guard says stop", () => {
