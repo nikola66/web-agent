@@ -1,14 +1,17 @@
 ---
 name: Open Web Research
-description: Fan-out web discovery for people, products, creators, and niche topics—search, verify, then synthesize with confidence labels.
+description: Use when the user wants to find, list, or discover people, creators, companies, or content on the open web—search many queries, fetch URLs, then synthesize.
 version: 1.1.0
 category: bundled
-tags: [research, web, search, discovery, creators, influencers]
+tags: [research, web, search, discovery, creators, influencers, competitors, list]
+triggers: [find youtubers, list creators, who posts about, discover, search for, competitors, influencers, channels about, posting about]
 ---
 
 ## When to Use
 
-Use for open-web discovery: find people, channels, companies, communities, or content about a topic in a region or platform. Not for academic papers (use `research-pack`).
+- Open-web discovery: find people, channels, companies, communities, or content about a topic in a region or platform.
+- "Who makes videos about…", list creators, competitors, or niche communities—not academic papers (use `research-pack`).
+- User asks to search the web for entities, profiles, or regional lists before concluding.
 
 ## Intent vs evidence
 
@@ -67,7 +70,7 @@ Use `web_search` `location` (e.g. `ae`, `sa`) and `language` when the provider s
 |---------|----------|------|-------------|
 ```
 
-Prefer pipe tables. Include direct links. State clearly when KSA/UAE YouTube coverage is thin but Instagram/social exists.
+Prefer pipe tables. Include direct links. State clearly when KSA/UAE YouTube coverage is thin but Instagram/social exists. For row-shaping, dedup, or JSON output, defer to **`structured-extraction`**.
 
 ## Stop Rules
 

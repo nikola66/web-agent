@@ -270,7 +270,7 @@ export function createChannelInboundHandler(deps) {
           const elapsedMin = Math.floor((Date.now() - turnStartedAt) / 60_000);
           void sendReply(
             chatId,
-            `⏳ Still researching… (${elapsedMin} min elapsed)`
+            `⏳ Still working… (${elapsedMin} min elapsed)`
           ).catch(() => {});
         }, RESEARCH_PROGRESS_MS);
       }

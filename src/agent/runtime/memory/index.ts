@@ -85,6 +85,7 @@ export {
   bulkSaveSkills,
   manageSkill,
   buildSkillsContextBlock,
+  invalidateSkillsContextCache,
 } from "./skills.js";
 
 // Context blocks

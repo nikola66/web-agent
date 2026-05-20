@@ -1,9 +1,10 @@
 ---
 name: Memory Layers
-description: When to use durable facts, rolling session notes, and skills—without duplicating the web-agent maintainer skill.
+description: Use when the user says remember this, save a preference, or you must pick memory_save vs session notes vs skill_save.
 version: 1.0.0
 category: bundled
-tags: [memory, session, skills, facts, context]
+tags: [memory, session, skills, facts, context, remember, preference]
+triggers: [remember this, save preference, memory_save, session note, store fact, recall later, what do we remember, persistent note]
 ---
 
 ## Canonical scope
@@ -12,9 +13,9 @@ This skill is the **single guide** for choosing among durable facts, rolling ses
 
 ## When to Use
 
-- User asks "remember this" vs "save a reusable workflow."
+- User asks "remember this" vs "save a reusable workflow" or "for next session."
 - Deciding between `memory_save`, `session_memory_append`, and `skill_save`.
-- Reducing duplicate or contradictory stored context.
+- Reducing duplicate or contradictory stored context; wiki_sync vs facts.
 
 ## Layers (user-facing)
 
@@ -23,7 +24,7 @@ This skill is the **single guide** for choosing among durable facts, rolling ses
 | **Facts** | `memory_save`, `memory_recall`, `memory_search` | Stable preferences (timezone, stack choices, env constraints that stay true). |
 | **Session** | `session_memory_append`, `session_memory_list`, `session_search` | Rolling investigation notes, temporary decisions, pointers to artifacts this session. |
 | **Skills** | `skill_view`, `skill_list`, `skill_save`, `skill_manage`, `skill_bulk_save`, `skill_delete`, `skill_recall` | Repeatable **procedures** with a clear trigger — not one-off facts. |
-| **Knowledge vault** | `wiki_setup`, `wiki_sync`, `wiki_search` | PARA-shaped markdown vault in the workspace (Obsidian-friendly). Use `wiki_sync` to **project** facts/session/learnings into vault notes for browsing; canonical structured facts stay in memory tools unless you intentionally archive prose there. |
+| **Knowledge vault** | `wiki_setup`, `wiki_sync`, `wiki_search` | PARA-shaped markdown vault in the workspace (Obsidian-friendly). Use `wiki_sync` to **project** facts/session/learnings into vault notes for browsing; canonical structured facts stay in memory tools unless you intentionally archive prose there. Procedural detail in **`knowledge-vault`**. |
 
 ## Heuristics
 

@@ -1,14 +1,16 @@
 ---
 name: Clarify
-description: When intent is ambiguous, emit one structured clarification block so the UI can show choice buttons instead of guessing.
+description: Use when the user’s request is ambiguous, conflicting, or has multiple valid paths—emit one structured choice block instead of guessing.
 version: 1.0.0
 category: bundled
-tags: [ux, ambiguity, clarification, dialog]
+tags: [ux, ambiguity, clarification, dialog, choices, requirements]
+triggers: [which should I, pick one, either/or, not sure, ambiguous, conflicting requirements, what do you mean, unclear scope]
 ---
 
 ## When to Use
 
 - Requirements conflict, scope is fuzzy, or multiple valid interpretations exist.
+- User asks "which should I…", "pick one", or gives either/or options without choosing.
 - One sharp question resolves the fork faster than parallel tool guesses.
 - UI can render options (browser host parses `<<<CLARIFY>>>` markers).
 

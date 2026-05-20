@@ -130,6 +130,7 @@ export async function emailTool(args = {}, ctx) {
       summary: summarizeToolApproval(`email:${action}`, enrichedArgs),
       args: enrichedArgs,
       risky: true,
+      toolEmoji: "✉️",
     });
     if (!ok) throw new Error("user_denied");
   }

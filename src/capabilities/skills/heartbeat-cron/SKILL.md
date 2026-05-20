@@ -1,16 +1,18 @@
 ---
 name: Heartbeat Cron
-description: Author recurring jobs in .cronjobs.json via cron_register/cron_list—heartbeat-gated timing, tab must stay open, Nodebox-safe steps.
+description: Use when the user wants scheduled jobs, daily digests, recurring reminders, or cron_register—not host crontab or shell pipelines.
 version: 1.0.0
 category: bundled
-tags: [cron, schedule, heartbeat, automation, telegram, email]
+tags: [cron, schedule, heartbeat, automation, telegram, email, recurring, digest]
+triggers: [schedule, cron, daily digest, recurring, every day, reminder job, cron_register, periodic, automate daily]
 ---
 
 ## When to Use
 
 - User wants digest, reminders, periodic search, or multi-step automation inside Web Agent.
-- Explaining why a job did not run at an exact wall-clock time.
-- Choosing `delivery` and avoiding invalid step shapes.
+- "Run this every morning", recurring checks, or Telegram/email delivery for jobs.
+- Explaining why a job did not run at an exact wall-clock time (tab must stay open).
+- Choosing `delivery` and avoiding invalid step shapes on Nodebox.
 
 ## Facts (non-negotiable)
 
@@ -24,7 +26,7 @@ tags: [cron, schedule, heartbeat, automation, telegram, email]
 
 1. Use **`cron_register`** (or edit `.cronjobs.json` carefully) with `id`, `everyMinutes` (≥1), and `delivery` (confirm email vs terminal with the user).
 2. Prefer **`web_search`**, **`write_file`**, memory tools — **not** `run_shell` in steps on Nodebox (no real POSIX shell). The **canonical** tool decision table is **`browser-runtime-map`**; this skill only adds cron/heartbeat/delivery rules.
-3. For Telegram side-channel: `delivery: terminal` plus `notifyChannel: telegram:<chatId>` when Telegram is configured; `silent`/`email` do not use `notifyChannel`.
+3. For Telegram side-channel: `delivery: terminal` plus `notifyChannel: telegram:<chatId>` when Telegram is configured; `silent`/`email` do not use `notifyChannel`. Ad-hoc (non-cron) delivery formatting lives in **`artifact-delivery`**.
 4. Multi-step: ordered `steps` with shape `{"tool":"…","arguments":{…}}` (legacy `action` aliases to `tool`).
 
 ## Pitfalls

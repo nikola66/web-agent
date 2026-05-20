@@ -349,6 +349,41 @@ export function renderTerminalNote(text: string) {
     .join("\n");
 }
 
+function padBorderCell(content: string, innerWidth: number) {
+  const pad = Math.max(0, innerWidth - ansiDisplayWidth(content));
+  return ` ${content}${" ".repeat(pad)} `;
+}
+
+/** Violet box for short multi-line terminal notices (permission gates, etc.). */
+export function renderTerminalBorderedBlock(lines: string[]) {
+  const cap = Math.max(20, terminalColumnCount() - 4);
+  const expanded: string[] = [];
+  for (const raw of lines) {
+    const line = String(raw ?? "");
+    if (!line) {
+      expanded.push("");
+      continue;
+    }
+    const plainWidth = Math.max(8, cap - 4);
+    if (ansiDisplayWidth(line) <= plainWidth) {
+      expanded.push(line);
+      continue;
+    }
+    expanded.push(...wrapPlainText(stripAnsi(line), plainWidth));
+  }
+  const innerWidth = Math.min(
+    cap,
+    Math.max(1, ...expanded.map((line) => (line ? ansiDisplayWidth(line) : 0)))
+  );
+  const top = violet(`┌${"─".repeat(innerWidth + 2)}┐`);
+  const bot = violet(`└${"─".repeat(innerWidth + 2)}┘`);
+  const body = expanded.map((line) => {
+    if (!line) return violet(`│${" ".repeat(innerWidth + 2)}│`);
+    return violet("│") + padBorderCell(line, innerWidth) + violet("│");
+  });
+  return [top, ...body, bot].join("\n");
+}
+
 function renderTableBlockAnsi(header: string[], bodyRows: string[][]) {
   const nCols = header.length;
   const styledHead = header.map((c) => cyan(bold(styleInlineMarkdown(c))));

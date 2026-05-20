@@ -1,9 +1,10 @@
 ---
 name: Workspace Safety
-description: Export, checkpoints, and isolation before risky edits—pair with project-scaffold for new scratch trees.
+description: Use when the user wants backup, export, checkpoint, or before bulk deletes, rm -rf, or wide refactors.
 version: 1.0.0
 category: bundled
-tags: [backup, export, checkpoint, safety, destructive]
+tags: [backup, export, checkpoint, safety, destructive, rollback, isolate]
+triggers: [backup, export profile, checkpoint, rollback, before delete, rm -rf, wipe workspace, risky refactor, save state]
 ---
 
 ## Canonical scope
@@ -13,8 +14,9 @@ This skill owns **backup, checkpoint, export, and risk isolation** before destru
 ## When to Use
 
 - Before bulk deletes, wide `run_shell` refactors, or experiments that could break the tree.
-- User wants portability across machines or browser profiles.
-- Recovering from a bad turn without losing everything.
+- User wants portability across machines or browser profiles (export/import).
+- Recovering from a bad turn without losing everything (`/checkpoint`, `/rollback`).
+- "Delete everything", mass file removal, or irreversible migration.
 
 ## Checklist
 

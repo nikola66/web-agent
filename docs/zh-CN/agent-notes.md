@@ -64,7 +64,7 @@ WebContainer 使用分层虚拟文件系统。宿主页面挂载（`wc.mount`）
 - 安全并行工具（`web_search`、`web_fetch`、`grep`、`read_file` 等）在同一助手轮中并发（上限 6）。
 - 研究轮使用更高 Loop Guard nudge 上限（`VITE_WEBAGENT_RESEARCH_MAX_AUTO_CONTINUE_NUDGES`，默认 30）。
 - 可选：`WEBAGENT_MAX_AGENT_ROUNDS=90` 用于长探索；在 Settings 配置浏览器代理搜索 API key — DuckDuckGo 回退对冷门查询较弱。
-- Telegram 在频道轮活跃时每 90s 发送 `Still researching…`。
+- Telegram 在频道轮活跃时每 90s 发送 `Still working…`。
 
 ## Profile
 

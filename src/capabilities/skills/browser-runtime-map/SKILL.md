@@ -1,9 +1,10 @@
 ---
 name: Browser Runtime Map
-description: Pick the right tool in Web Agent—Nodebox vs host shell, filesystem vs HTTP, no fake shell pipelines in the browser runtime.
+description: Use when shell commands fail, npx/curl/git won’t run, or you must choose run_shell vs web_fetch vs file tools in Nodebox vs host.
 version: 1.0.0
 category: bundled
-tags: [nodebox, shell, runtime, tools, webcontainer]
+tags: [nodebox, shell, runtime, tools, webcontainer, run_shell, command-failed]
+triggers: [shell failed, command failed, npx, curl, git clone, nodebox, run_shell error, no such file, not found in path, webcontainer]
 ---
 
 ## Canonical scope
@@ -12,9 +13,10 @@ This skill is the **single quick-reference** for choosing tools in Web Agent (fi
 
 ## When to Use
 
-- User hits "shell" or command errors in the browser agent.
+- User hits "shell" or command errors in the browser agent (`npx`, `curl`, `git`, pipes).
 - Choosing between `run_shell`, `web_fetch`, built-in file tools, or `cron_register`.
-- Explaining why `npx`, `curl`, or `git` fail in chat.
+- Explaining why POSIX tutorials or OpenClaw-style terminal steps fail in chat.
+- Any "run this command" request—check surface before defaulting to shell.
 
 ## Surfaces
 

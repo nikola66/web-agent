@@ -1,14 +1,18 @@
 ---
 name: Web Agent Skill
-description: Evolve Web Agent safely using its live runtime, memory layers, cron, bundled skills, and current repository truth.
+description: Use when fixing or extending Web Agent itself—runtime, bundled skills, capabilities, adapter, or self-evolution of this repo.
 version: 1.1.0
 category: bundled
-tags: [web-agent, self-evolution, maintenance, skills, memory, cron]
+tags: [web-agent, self-evolution, maintenance, skills, memory, cron, capability]
+triggers: [web agent, this agent, bundled skill, capability folder, fix runtime, self-evolution, improve skill, web-agent repo]
 ---
 
 ## When to Use
 
-Use this skill when the work is about Web Agent itself: understanding current capabilities, debugging runtime behavior, fixing bugs, improving procedural knowledge, adapting outside agent systems into Web Agent-native workflows, or turning a repeated lesson into a better bundled or local skill.
+- Work is about **Web Agent itself**: capabilities, runtime tools, bundled skills, adapter, UI, or this repository.
+- Debugging runtime behavior, improving procedural knowledge, or adapting external agent packs into Web Agent.
+- User asks for self-maintenance, skill improvement, or installing remote `SKILL.md` URLs correctly.
+- Not for everyday user tasks—use sibling skills (`memory-layers`, `browser-runtime-map`, etc.) unless maintainer scope applies. For multi-step goal decomposition use **`task-planning`**; for diagnosis loops use **`systematic-debugging`**.
 
 This skill is for self-maintenance. It is not a static tool catalog and it does not grant new permissions.
 

@@ -12,6 +12,7 @@ import {
 import { errorMessage } from "../utils.js";
 
 const SKILLS_CONTEXT_CHAR_BUDGET = 6_000;
+const SKILL_INDEX_TRIGGERS_MAX_CHARS = 160;
 const SKILL_FILE_NAME = "SKILL.md";
 
 let _skillsContextBlockCache: string | null = null;
@@ -26,7 +27,29 @@ const BUNDLED_SKILLS_DIR = nodePath.join(CAPABILITIES_DIR, "skills");
 const SOURCE_BUNDLED_SKILLS_DIR = nodePath.join(WS, "src", "capabilities", "skills");
 const MAX_BULK_SKILL_ITEMS = 75;
 
-function skillSlug(name) {
+type SkillMeta = Record<string, unknown>;
+
+interface SkillRecord {
+  slug: string;
+  name: string;
+  description: string;
+  tags: string[];
+  triggers: string[];
+  version: string;
+  category: string;
+  platforms: string[];
+  allowedTools: string[];
+  path: string;
+  dir: string;
+  skillPath: string;
+  source: string;
+  body: string;
+  raw: string;
+}
+
+type SkillListEntry = Omit<SkillRecord, "dir" | "skillPath" | "body" | "raw">;
+
+function skillSlug(name: unknown): string {
   return String(name || "")
     .trim()
     .toLowerCase()
@@ -34,11 +57,11 @@ function skillSlug(name) {
     .replace(/^-+|-+$/g, "");
 }
 
-function skillCategorySlug(category) {
+function skillCategorySlug(category: unknown): string {
   return skillSlug(category) || DEFAULT_SKILL_CATEGORY;
 }
 
-function parseInlineList(value) {
+function parseInlineList(value: unknown): string[] {
   const raw = String(value || "").trim();
   if (!raw) return [];
   if (raw.startsWith("[") && raw.endsWith("]")) {
@@ -54,10 +77,10 @@ function parseInlineList(value) {
     .filter(Boolean);
 }
 
-function parseSkillFrontmatter(raw) {
+function parseSkillFrontmatter(raw: string): { meta: SkillMeta; body: string } {
   const match = raw.match(/^---\n([\s\S]*?)\n---\n?([\s\S]*)$/);
   if (!match) return { meta: {}, body: raw };
-  const meta = {};
+  const meta: SkillMeta = {};
   const lines = match[1].split("\n");
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
@@ -66,20 +89,20 @@ function parseSkillFrontmatter(raw) {
     const [, k, rawValue = ""] = kv;
     const v = rawValue.trim();
     if (v === "|" || v === ">") {
-      const block = [];
+      const block: string[] = [];
       while (i + 1 < lines.length && /^\s+/.test(lines[i + 1])) {
         i += 1;
         block.push(lines[i].replace(/^\s{2,}/, ""));
       }
       meta[k] = v === ">" ? block.join(" ").trim() : block.join("\n").trim();
     } else if (v === "") {
-      const list = [];
+      const list: string[] = [];
       while (i + 1 < lines.length && /^\s*-\s+/.test(lines[i + 1])) {
         i += 1;
         list.push(lines[i].replace(/^\s*-\s+/, "").trim());
       }
       meta[k] = list.length ? list : "";
-    } else if (["tags", "allowed-tools", "platforms", "required_environment_variables"].includes(k)) {
+    } else if (["tags", "triggers", "allowed-tools", "platforms", "required_environment_variables"].includes(k)) {
       meta[k] = parseInlineList(v);
     } else {
       meta[k] = v.replace(/^["']|["']$/g, "").trim();
@@ -95,8 +118,16 @@ function buildSkillFileContent({
   tags = [],
   category = DEFAULT_SKILL_CATEGORY,
   content,
-}) {
-  const tagsLine = tags.length ? `[${tags.join(", ")}]` : "[]";
+}: {
+  name: unknown;
+  description: unknown;
+  version?: unknown;
+  tags?: string[];
+  category?: unknown;
+  content: unknown;
+}): string {
+  const tagList = Array.isArray(tags) ? tags : [];
+  const tagsLine = tagList.length ? `[${tagList.join(", ")}]` : "[]";
   const frontmatter = [
     "---",
     `name: ${name}`,
@@ -106,10 +137,10 @@ function buildSkillFileContent({
     `tags: ${tagsLine}`,
     "---",
   ].join("\n");
-  return `${frontmatter}\n\n${content.trim()}\n`;
+  return `${frontmatter}\n\n${String(content).trim()}\n`;
 }
 
-function validateSkillDocument(raw) {
+function validateSkillDocument(raw: string): { meta: SkillMeta; body: string; slug: string } {
   const { meta, body } = parseSkillFrontmatter(String(raw || ""));
   const name = String(meta.name || "").trim();
   const description = String(meta.description || "").trim();
@@ -121,6 +152,21 @@ function validateSkillDocument(raw) {
   const slug = skillSlug(name);
   if (!slug) throw new Error("skill: `name` must contain letters or digits.");
   return { meta, body, slug };
+}
+
+function normalizeSkillTriggers(meta: SkillMeta): string[] {
+  const raw = meta.triggers;
+  if (Array.isArray(raw)) return raw.map(String).map((t) => t.trim()).filter(Boolean);
+  if (typeof raw === "string" && raw.trim()) return parseInlineList(raw);
+  return [];
+}
+
+function formatTriggersForIndex(triggers: string[]): string {
+  const text = triggers.join(", ");
+  if (!text) return "";
+  if (text.length <= SKILL_INDEX_TRIGGERS_MAX_CHARS) return text;
+  const cut = text.slice(0, SKILL_INDEX_TRIGGERS_MAX_CHARS - 1).replace(/, [^,]*$/, "");
+  return `${cut || text.slice(0, SKILL_INDEX_TRIGGERS_MAX_CHARS - 1)}…`;
 }
 
 function isSafeSkillRelativePath(filePath, { allowSkillMd = false } = {}) {
@@ -179,10 +225,10 @@ async function migrateLegacySkillFiles() {
   }
 }
 
-async function collectSkillRecords() {
+async function collectSkillRecords(): Promise<SkillRecord[]> {
   await migrateLegacySkillFiles();
-  const records = [];
-  const seen = new Set();
+  const records: SkillRecord[] = [];
+  const seen = new Set<string>();
   const walk = async (dir, source = "local") => {
     const entries = await fs.readdir(dir, { withFileTypes: true }).catch(() => []);
     for (const entry of entries) {
@@ -204,7 +250,8 @@ async function collectSkillRecords() {
             slug,
             name: String(meta.name || slug),
             description: String(meta.description || ""),
-            tags: Array.isArray(meta.tags) ? meta.tags : [],
+            tags: Array.isArray(meta.tags) ? meta.tags.map(String) : [],
+            triggers: normalizeSkillTriggers(meta),
             version: String(meta.version || "1.0.0"),
             category,
             platforms: Array.isArray(meta.platforms) ? meta.platforms : [],
@@ -230,7 +277,7 @@ async function collectSkillRecords() {
   return records.sort((a, b) => a.name.localeCompare(b.name));
 }
 
-async function findSkillRecord(name) {
+async function findSkillRecord(name: string): Promise<SkillRecord | null> {
   const slug = skillSlug(name);
   if (!slug) throw new Error("skill: `name` is required.");
   const records = await collectSkillRecords();
@@ -239,10 +286,24 @@ async function findSkillRecord(name) {
   return records.find((record) => skillSlug(record.name) === slug) || null;
 }
 
-export async function saveSkill({ name, description, version, tags, category, content }) {
+export async function saveSkill({
+  name,
+  description,
+  version,
+  tags,
+  category,
+  content,
+}: {
+  name: unknown;
+  description?: unknown;
+  version?: unknown;
+  tags?: unknown;
+  category?: unknown;
+  content: unknown;
+}) {
   const slug = skillSlug(name);
   if (!slug) throw new Error("skill_save: `name` is required.");
-  if (!content?.trim()) throw new Error("skill_save: `content` is required.");
+  if (!String(content || "").trim()) throw new Error("skill_save: `content` is required.");
   const raw = String(content || "").trim().startsWith("---")
     ? String(content || "").trim()
     : buildSkillFileContent({
@@ -269,7 +330,7 @@ export async function saveSkill({ name, description, version, tags, category, co
   };
 }
 
-export async function listSkills(filter = {}) {
+export async function listSkills(filter: { query?: string; category?: string } = {}): Promise<SkillListEntry[]> {
   try {
     const query = String(filter?.query || "").trim().toLowerCase();
     const category = filter?.category ? skillCategorySlug(filter.category) : "";
@@ -283,12 +344,13 @@ export async function listSkills(filter = {}) {
           skill.description,
           skill.category,
           ...(skill.tags || []),
+          ...(skill.triggers || []),
         ]
           .join(" ")
           .toLowerCase();
         return haystack.includes(query);
       })
-      .map(({ body, raw, dir, skillPath, ...skill }) => skill);
+      .map(({ body: _body, raw: _raw, dir: _dir, skillPath: _skillPath, ...skill }) => skill);
   } catch {
     return [];
   }
@@ -300,8 +362,10 @@ export async function loadSkill(name) {
   return record.raw;
 }
 
-export async function viewSkill({ name, file_path } = {}) {
-  const record = await findSkillRecord(name);
+export async function viewSkill({ name, file_path }: { name?: string; file_path?: string } = {}) {
+  const skillName = String(name || "").trim();
+  if (!skillName) throw new Error("skill_view: `name` is required.");
+  const record = await findSkillRecord(skillName);
   if (!record) throw new Error(`skill_view: skill "${name}" not found.`);
   const requestedPath = String(file_path || SKILL_FILE_NAME).trim();
   if (!isSafeSkillRelativePath(requestedPath, { allowSkillMd: true })) {
@@ -336,11 +400,14 @@ export async function deleteSkill(name) {
   return { ok: true, name: record.name, slug: record.slug, category: record.category };
 }
 
-function scanSkillContent(raw, files = []) {
-  const warnings = [];
-  const dangerous = [];
+function scanSkillContent(
+  raw: string,
+  files: { path?: string; content?: string }[] = []
+): { ok: boolean; dangerous: string[]; warnings: string[] } {
+  const warnings: string[] = [];
+  const dangerous: string[] = [];
   const text = [raw, ...files.map((file) => file.content || "")].join("\n");
-  const patterns = [
+  const patterns: [RegExp, string][] = [
     [/rm\s+-rf\s+(\/|\$HOME|~|\*)/, "destructive rm command"],
     [/curl\s+[^|;\n]+\|\s*(sh|bash)/, "curl pipe to shell"],
     [/wget\s+[^|;\n]+\|\s*(sh|bash)/, "wget pipe to shell"],
@@ -390,11 +457,11 @@ async function installSkillFromUrl({ url, category }) {
     };
   }
   const result = await saveSkill({
-    name: validation.meta.name,
-    description: validation.meta.description,
-    version: validation.meta.version,
-    tags: validation.meta.tags,
-    category: category || validation.meta.category || "imported",
+    name: String(validation.meta.name ?? ""),
+    description: String(validation.meta.description ?? ""),
+    version: String(validation.meta.version ?? "1.0.0"),
+    tags: Array.isArray(validation.meta.tags) ? validation.meta.tags.map(String) : [],
+    category: String(category || validation.meta.category || "imported"),
     content: raw,
   });
   const hubDir = nodePath.join(SKILLS_DIR, ".hub");
@@ -427,8 +494,7 @@ export async function bulkSaveSkills(items) {
     throw new Error(`skill_bulk_save: at most ${MAX_BULK_SKILL_ITEMS} items per call.`);
   }
 
-  /** @type {Record<string, unknown>[]} */
-  const results = [];
+  const results: Record<string, unknown>[] = [];
   let saved = 0;
   let failed = 0;
   let blocked = 0;
@@ -471,7 +537,7 @@ export async function bulkSaveSkills(items) {
           });
         } else {
           saved += 1;
-          results.push({ index, kind: "url", ok: true, ...out });
+          results.push({ index, kind: "url", ...out });
         }
       } catch (e) {
         failed += 1;
@@ -510,7 +576,7 @@ export async function bulkSaveSkills(items) {
         content,
       });
       saved += 1;
-      results.push({ index, kind: "inline", ok: true, ...out });
+      results.push({ index, kind: "inline", ...out });
     } catch (e) {
       failed += 1;
       results.push({
@@ -535,18 +601,31 @@ export async function bulkSaveSkills(items) {
   };
 }
 
-export async function manageSkill(args = {}) {
+export async function manageSkill(args: Record<string, unknown> = {}) {
   const action = String(args?.action || "").trim();
   if (!action) throw new Error("skill_manage: `action` is required.");
 
-  if (action === "create") return saveSkill(args);
-  if (action === "install_url" || action === "import_url") {
-    return installSkillFromUrl({ url: args.url, category: args.category });
+  if (action === "create") {
+    return saveSkill({
+      name: args.name,
+      description: args.description,
+      version: args.version,
+      tags: args.tags,
+      category: args.category,
+      content: args.content,
+    });
   }
-  if (action === "delete") return deleteSkill(args.name);
+  if (action === "install_url" || action === "import_url") {
+    return installSkillFromUrl({
+      url: String(args.url || ""),
+      category: typeof args.category === "string" ? args.category : undefined,
+    });
+  }
+  if (action === "delete") return deleteSkill(String(args.name || ""));
 
-  const record = await findSkillRecord(args.name);
-  if (!record) throw new Error(`skill_manage: skill "${args.name}" not found.`);
+  const manageName = String(args.name || "").trim();
+  const record = await findSkillRecord(manageName);
+  if (!record) throw new Error(`skill_manage: skill "${manageName}" not found.`);
 
   if (action === "edit") {
     const content = String(args.content || "");
@@ -619,12 +698,15 @@ export async function buildSkillsContextBlock() {
     if (!skills.length) return "";
     const lines = [
       "Available skills (procedural knowledge, compact index):",
-      "Use `skill_view` before relying on full skill instructions. `skill_save` and `skill_manage` apply create/patch/import changes immediately without a confirmation prompt. Use `skill_delete` or `skill_bulk_save` when the user must confirm removal or batched installs (each shows one approval gate). Prefer `skill_bulk_save` when adding many skills in one request.",
+      "Match the user's latest message to each skill's description and triggers; call `skill_view` on the best slug before acting. Full procedures load only via `skill_view`. `skill_save` and `skill_manage` apply create/patch/import changes immediately without a confirmation prompt. Use `skill_delete` or `skill_bulk_save` when the user must confirm removal or batched installs (each shows one approval gate). Prefer `skill_bulk_save` when adding many skills in one request.",
     ];
     let budget = SKILLS_CONTEXT_CHAR_BUDGET;
     for (const skill of skills) {
       const tagText = skill.tags?.length ? ` tags=${skill.tags.join(",")}` : "";
-      const line = `- ${skill.name} (slug: ${skill.slug}, category: ${skill.category}${tagText}): ${skill.description}`;
+      const triggerText = skill.triggers?.length
+        ? ` | triggers: ${formatTriggersForIndex(skill.triggers)}`
+        : "";
+      const line = `- ${skill.name} (slug: ${skill.slug}, category: ${skill.category}${tagText}): ${skill.description}${triggerText}`;
       if (line.length > budget) {
         lines.push("- [more skills omitted from prompt; call skill_list to search]");
         break;
