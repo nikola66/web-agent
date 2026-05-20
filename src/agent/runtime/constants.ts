@@ -111,6 +111,6 @@ export const HIDDEN_STREAM_MARKERS = [
 // these are quick fallbacks for the bundled defaults.
 export const MODEL_CONTEXT_WINDOWS = {
   "gpt-4o-mini": 128000,
-  "google/gemma-4-26b-a4b-it": 262144,
+  "google/gemma-4-31b-it": 262144,
   "stepfun/step-3.5-flash": 262144,
 };

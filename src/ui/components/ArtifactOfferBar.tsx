@@ -1,10 +1,28 @@
 import MarkdownIt from "markdown-it";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Download, Eye, X } from "lucide-react";
 import { useProfileStore } from "../stores/profile-store";
 import { useRuntimeStore } from "../stores/runtime-store";
 
 const md = new MarkdownIt({ html: false, linkify: true, breaks: true });
+
+/**
+ * Custom fence renderer: when the info-string is `mermaid`, emit a
+ * placeholder div that we render into via the `mermaid` library on mount.
+ * Other languages keep the default `<pre><code>` rendering.
+ */
+const defaultFence = md.renderer.rules.fence?.bind(md.renderer.rules);
+md.renderer.rules.fence = (tokens, idx, options, env, self) => {
+  const token = tokens[idx];
+  const info = (token.info || "").trim().toLowerCase();
+  if (info === "mermaid") {
+    const encoded = encodeURIComponent(token.content);
+    return `<div class="mermaid-block" data-code="${encoded}"><pre class="mermaid-source">${md.utils.escapeHtml(token.content)}</pre></div>`;
+  }
+  return defaultFence
+    ? defaultFence(tokens, idx, options, env, self)
+    : self.renderToken(tokens, idx, options);
+};
 
 export function ArtifactOfferBar() {
   const activeProfileId = useProfileStore((s) => s.activeProfileId);
@@ -18,6 +36,46 @@ export function ArtifactOfferBar() {
     if (!artifactOffer) return "";
     return md.render(artifactOffer.markdown);
   }, [artifactOffer]);
+  const previewRef = useRef<HTMLElement | null>(null);
+
+  useEffect(() => {
+    if (!modalOpen) return;
+    const host = previewRef.current;
+    if (!host) return;
+    const blocks = Array.from(host.querySelectorAll<HTMLElement>(".mermaid-block"));
+    if (blocks.length === 0) return;
+
+    let cancelled = false;
+    (async () => {
+      try {
+        const { default: mermaid } = await import("mermaid");
+        mermaid.initialize({ startOnLoad: false, theme: "dark", securityLevel: "strict" });
+        for (let i = 0; i < blocks.length; i++) {
+          if (cancelled) return;
+          const block = blocks[i];
+          const code = decodeURIComponent(block.dataset.code || "");
+          if (!code.trim()) continue;
+          try {
+            const id = `mermaid-${Date.now()}-${i}`;
+            const { svg } = await mermaid.render(id, code);
+            if (cancelled) return;
+            block.innerHTML = svg;
+            block.classList.add("mermaid-rendered");
+          } catch (err) {
+            block.classList.add("mermaid-error");
+            const message = err instanceof Error ? err.message : String(err);
+            block.innerHTML = `<pre class="mermaid-source">${message}\n\n${code}</pre>`;
+          }
+        }
+      } catch {
+        /* mermaid load failed — leave source pre blocks intact */
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [modalOpen, rendered]);
 
   if (!activeProfileId || !artifactOffer) {
     return null;
@@ -158,7 +216,11 @@ export function ArtifactOfferBar() {
                   "[&_code]:rounded-sm [&_code]:bg-black/35 [&_code]:px-1.5 [&_code]:py-0.5 [&_code]:text-[0.92em]",
                   "[&_pre]:my-4 [&_pre]:overflow-x-auto [&_pre]:rounded-md [&_pre]:border [&_pre]:border-white/10 [&_pre]:bg-black/40 [&_pre]:p-3",
                   "[&_pre_code]:bg-transparent [&_pre_code]:p-0",
+                  "[&_.mermaid-block]:my-4 [&_.mermaid-block]:flex [&_.mermaid-block]:justify-center",
+                  "[&_.mermaid-block_svg]:max-w-full [&_.mermaid-block_svg]:h-auto",
+                  "[&_.mermaid-source]:whitespace-pre-wrap [&_.mermaid-source]:rounded-md [&_.mermaid-source]:border [&_.mermaid-source]:border-white/10 [&_.mermaid-source]:bg-black/40 [&_.mermaid-source]:p-3 [&_.mermaid-source]:text-[12px]",
                 ].join(" ")}
+                ref={previewRef as React.RefObject<HTMLElement>}
                 dangerouslySetInnerHTML={{ __html: rendered }}
               />
             </div>

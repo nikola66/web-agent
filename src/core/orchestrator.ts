@@ -27,6 +27,14 @@ import {
   enqueueTerminalTypewriter,
   flushTerminalTypewriter,
 } from "./terminal-typewriter";
+import {
+  cancelVoicePlayback,
+  flushVoiceBuffer,
+  primeVoiceEngine,
+  pushVoiceChunk,
+  speakConfirmation,
+} from "./voice-playback";
+import { isVoiceEnabled, useVoiceStore } from "@/ui/stores/voice-store";
 import { snapXtermViewportToLatest } from "./terminal-viewport-sync";
 import { fitTerminalForViewport } from "./xterm-fit-viewport";
 
@@ -137,6 +145,7 @@ function write(data: string): void {
 function writeToProfile(profileId: string, data: string): void {
   appendBrowserTranscript(profileId, data, "agent");
   enqueueTerminalTypewriter(profileId, data, getTerminal);
+  pushVoiceChunk(profileId, data, isVoiceEnabled);
 }
 
 function appendBrowserTranscript(
@@ -199,6 +208,7 @@ async function onAgentPromptReady(profileId: string): Promise<void> {
   if (promptReadyInFlight.has(profileId)) return;
   promptReadyInFlight.add(profileId);
   try {
+    flushVoiceBuffer(profileId, isVoiceEnabled);
     const state = getOrCreateAgentState(profileId);
     state.agentReadyForInput = true;
     const rt = useRuntimeStore.getState();
@@ -222,6 +232,7 @@ export async function submitUserInput(raw: string): Promise<void> {
   const acceptsBlankOnboardingInput = state.onboardingActive;
   if (!trimmed && !acceptsBlankOnboardingInput) return;
 
+  cancelVoicePlayback(targetProfileId);
   scrollProfileTerminalToBottom(targetProfileId);
   const input = acceptsBlankOnboardingInput ? raw : trimmed;
   if (trimmed === "/stop") {
@@ -234,6 +245,34 @@ export async function submitUserInput(raw: string): Promise<void> {
   if (trimmed === "/help") {
     const helpText = renderHelpView(SLASH_COMMANDS, buildToolRowsFromCatalog(TOOL_CATALOG));
     write(`\r\n${helpText.replace(/\n/g, "\r\n")}`);
+    return;
+  }
+
+  if (trimmed === "/voice" || trimmed.startsWith("/voice ")) {
+    const arg = trimmed.slice("/voice".length).trim().toLowerCase();
+    const voice = useVoiceStore.getState();
+    if (arg === "on") {
+      voice.setEnabled(true);
+      primeVoiceEngine();
+      speakConfirmation("Voice mode on.");
+      write("\r\n\x1b[32m▸ Voice mode ON — agent replies will be spoken via your OS voice (local, no network).\x1b[0m\r\n");
+    } else if (arg === "off") {
+      voice.setEnabled(false);
+      cancelVoicePlayback();
+      write("\r\n\x1b[90m▸ Voice mode OFF.\x1b[0m\r\n");
+    } else if (arg === "" || arg === "status") {
+      const state = voice.enabled ? "ON" : "OFF";
+      const supports =
+        typeof window !== "undefined" && !!window.speechSynthesis
+          ? "speech-synthesis available"
+          : "speech-synthesis NOT available in this browser";
+      write(
+        `\r\n\x1b[36m▸ Voice mode: ${state}\x1b[0m\r\n` +
+          `\x1b[90m  ${supports}. Toggle with /voice on or /voice off, or the mic button next to Files.\x1b[0m\r\n`
+      );
+    } else {
+      write(`\r\n\x1b[33mUnknown /voice argument "${arg}". Use /voice on | /voice off | /voice.\x1b[0m\r\n`);
+    }
     return;
   }
 
@@ -322,6 +361,8 @@ export async function initialize(): Promise<void> {
   useSettingsStore.subscribe(async (state) => {
     await saveApiKeys(state.apiKeys);
   });
+
+  if (isVoiceEnabled()) primeVoiceEngine();
 }
 
 /** Start the Web Agent for a profile (or currently selected if not specified) */

@@ -71,6 +71,13 @@ function resolveBuiltInBaseUrl(selectedProvider, customBaseUrl, directBaseUrl) {
   return trimmedDirect;
 }
 
+/** Disable provider-native thinking/reasoning on chat/completions requests. */
+export function reasoningDisableExtras(providerId) {
+  const id = String(providerId || "").trim().toLowerCase();
+  if (id === "openrouter") return { reasoning: { enabled: false } };
+  return { reasoning_effort: "none" };
+}
+
 export async function resolveLlm() {
   const catalog = await loadProviderCatalog();
   const forced = (process.env.WEBAGENT_PROVIDER || "auto").toLowerCase();

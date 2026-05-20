@@ -69,6 +69,16 @@ test("shouldContinueFromLoopGuard nudges misclassified ask_user mid-task", () =>
   );
 });
 
+test("shouldContinueFromLoopGuard nudges misclassified ask_user on first no-tools step", () => {
+  const scores = { continue: 0.08, stop: 0.06, ask_user: 0.93 };
+  const visible =
+    "I will output these as a structured artifact so you can use them as a teleprompter. Generating scripts now...";
+  assert.equal(
+    shouldContinueFromLoopGuard({ decision: "ask_user", scores }, { toolsExecutedInTurn: false, visible }),
+    true
+  );
+});
+
 test("formatLoopGuardScores renders fixed decimals", () => {
   assert.equal(
     formatLoopGuardScores({ continue: 0.5812, stop: 0.7123, ask_user: 0.1901 }),

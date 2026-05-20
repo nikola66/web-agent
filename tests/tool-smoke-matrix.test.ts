@@ -22,6 +22,7 @@ import {
 const SMOKE_TIERS = {
   apply_patch: "local-setup",
   artifact_present: "local",
+  audio_analyze: "manual",
   cron_list: "local",
   cron_register: "local",
   delete_file: "local-setup",
@@ -478,6 +479,7 @@ test("smoke tier manifest documents manual and proxy-only tools", () => {
     .map(([name]) => name)
     .sort();
   assert.deepEqual(manual, [
+    "audio_analyze",
     "skill_bulk_save",
     "skill_delete",
     "skill_manage",

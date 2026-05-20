@@ -1,6 +1,8 @@
 import { Suspense, useEffect, useMemo, useRef, useState } from "react";
-import { Folder } from "lucide-react";
+import { Folder, Volume2, VolumeX } from "lucide-react";
 import { profileAgentWorking, useActiveProfileRuntime, useRuntimeStore } from "../stores/runtime-store";
+import { useVoiceStore } from "../stores/voice-store";
+import { cancelVoicePlayback, primeVoiceEngine, speakConfirmation } from "@/core/voice-playback";
 import { useProfileStore } from "../stores/profile-store";
 import { TOOL_CATALOG } from "@/agent/tool-catalog";
 import { ErrorBoundary } from "./ErrorBoundary";
@@ -140,6 +142,8 @@ export function StatusBar() {
         <span className="text-[11px] text-text-muted">{formatBytes(storageUsed)}</span>
       )}
 
+      <VoiceToggleButton />
+
       <div className="relative" ref={filesRootRef}>
         <button
           type="button"
@@ -193,5 +197,51 @@ export function StatusBar() {
         </span>
       )}
     </div>
+  );
+}
+
+function VoiceToggleButton() {
+  const enabled = useVoiceStore((s) => s.enabled);
+  const setEnabled = useVoiceStore((s) => s.setEnabled);
+  const supported =
+    typeof window !== "undefined" && typeof window.speechSynthesis !== "undefined";
+
+  const onClick = () => {
+    const next = !enabled;
+    setEnabled(next);
+    if (next) {
+      primeVoiceEngine();
+      // One-shot confirmation lets the user verify TTS works AND satisfies
+      // any browser-level autoplay heuristic that needs a gesture-linked
+      // speak() call before background utterances are accepted.
+      speakConfirmation("Voice mode on.");
+    } else {
+      cancelVoicePlayback();
+    }
+  };
+
+  const label = !supported
+    ? "Voice unavailable (no SpeechSynthesis in this browser)"
+    : enabled
+      ? "Voice mode: ON — agent replies spoken aloud. Click to disable."
+      : "Voice mode: OFF — click to enable spoken replies (local OS voice).";
+
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={!supported}
+      className={[
+        "inline-flex h-4 w-4 items-center justify-center transition-colors disabled:cursor-not-allowed disabled:opacity-40",
+        enabled
+          ? "text-brand-magenta-light hover:text-text-primary"
+          : "text-text-muted hover:text-text-primary",
+      ].join(" ")}
+      aria-pressed={enabled}
+      aria-label={label}
+      title={label}
+    >
+      {enabled ? <Volume2 size={12} strokeWidth={1.7} /> : <VolumeX size={12} strokeWidth={1.7} />}
+    </button>
   );
 }

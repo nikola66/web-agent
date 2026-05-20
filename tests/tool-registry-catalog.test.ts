@@ -6,6 +6,7 @@ import nodePath from "node:path";
 const EXPECTED_TOOLS = [
   "apply_patch",
   "artifact_present",
+  "audio_analyze",
   "cron_list",
   "cron_register",
   "delete_file",

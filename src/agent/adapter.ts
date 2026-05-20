@@ -83,6 +83,8 @@ import runtimeMigrationsNotifySource from "../../dist/agent-runtime/migrations/n
 import runtimeChannelDispatcherSource from "../../dist/agent-runtime/channels/dispatcher.js?raw";
 import runtimeChannelIndexSource from "../../dist/agent-runtime/channels/index.js?raw";
 import runtimeChannelTelegramSource from "../../dist/agent-runtime/channels/telegram.js?raw";
+import runtimeTelegramVoiceSource from "../../dist/agent-runtime/voice/telegram-voice.js?raw";
+import runtimeSynthesizeSource from "../../dist/agent-runtime/voice/synthesize.js?raw";
 import runtimeIpcSource from "../../dist/agent-runtime/ipc.js?raw";
 import runtimeUserInputFramingSource from "../../dist/agent-runtime/user-input-framing.js?raw";
 import sqlWasmRuntimeSource from "sql.js/dist/sql-wasm.js?raw";
@@ -93,6 +95,22 @@ const runtimeToolSources = import.meta.glob("../../dist/agent-runtime/tools/**/*
   query: "?raw",
   import: "default",
 }) as Record<string, string>;
+
+/**
+ * Kokoro-82M TTS files mirrored into the Nodebox FS at boot for the
+ * outbound voice-reply pipeline. q8f16 quantization (~85 MB) is the
+ * smallest production-quality variant.
+ *
+ * Inbound speech-to-text runs in the browser via vendored whisper-tiny.en;
+ * the agent reaches it through IPC (`audio_analyze` tool).
+ */
+const KOKORO_NODEBOX_FILES = [
+  "config.json",
+  "tokenizer.json",
+  "tokenizer_config.json",
+  "onnx/model_q8f16.onnx",
+  "voices/af_bella.bin",
+] as const;
 
 export type OutputHandler = (data: string) => void;
 
@@ -173,6 +191,10 @@ const LOOP_GUARD_REQ_PREFIX = "<<<WEBAGENT_LOOP_GUARD_REQ:";
 const LOOP_GUARD_REQ_END = "<<<END_WEBAGENT_LOOP_GUARD_REQ>>>";
 const LOOP_GUARD_RESP_PREFIX = "<<<WEBAGENT_LOOP_GUARD_RESP:";
 const LOOP_GUARD_RESP_END = "<<<END_WEBAGENT_LOOP_GUARD_RESP>>>";
+const STT_REQ_PREFIX = "<<<WEBAGENT_STT_REQ:";
+const STT_REQ_END = "<<<END_WEBAGENT_STT_REQ>>>";
+const STT_RESP_PREFIX = "<<<WEBAGENT_STT_RESP:";
+const STT_RESP_END = "<<<END_WEBAGENT_STT_RESP>>>";
 /** Emitted by agent runtime before exit(1); parsed so the terminal can show the message. */
 const FATAL_ERROR_START = "<<<WEBAGENT_FATAL_ERROR>>>";
 const FATAL_ERROR_END = "<<<END_WEBAGENT_FATAL_ERROR>>>";
@@ -381,6 +403,7 @@ async function writeRuntimeSources(profileId: string): Promise<void> {
   await emulator.fs.mkdir(`${webagentDir}/state`, { recursive: true });
   await emulator.fs.mkdir(`${webagentDir}/tools`, { recursive: true });
   await emulator.fs.mkdir(`${webagentDir}/channels`, { recursive: true });
+  await emulator.fs.mkdir(`${webagentDir}/voice`, { recursive: true });
   await emulator.fs.mkdir(`${webagentDir}/capabilities`, { recursive: true });
   await emulator.fs.mkdir(`${webagentDir}/vendor`, { recursive: true });
 
@@ -445,6 +468,8 @@ async function writeRuntimeSources(profileId: string): Promise<void> {
   await emulator.fs.writeFile(`${webagentDir}/channels/telegram.js`, runtimeChannelTelegramSource);
   await emulator.fs.writeFile(`${webagentDir}/channels/dispatcher.js`, runtimeChannelDispatcherSource);
   await emulator.fs.writeFile(`${webagentDir}/channels/index.js`, runtimeChannelIndexSource);
+  await emulator.fs.writeFile(`${webagentDir}/voice/telegram-voice.js`, runtimeTelegramVoiceSource);
+  await emulator.fs.writeFile(`${webagentDir}/voice/synthesize.js`, runtimeSynthesizeSource);
   await emulator.fs.writeFile(`${webagentDir}/vendor/sql-wasm.cjs`, sqlWasmRuntimeSource);
 
   const sqlWasmResponse = await fetch(sqlWasmUrl);
@@ -455,6 +480,43 @@ async function writeRuntimeSources(profileId: string): Promise<void> {
     `${webagentDir}/vendor/sql-wasm.wasm`,
     new Uint8Array(await sqlWasmResponse.arrayBuffer())
   );
+}
+
+/**
+ * Mirror Kokoro TTS weights into the Nodebox FS for Telegram outbound voice.
+ * Whisper STT loads in the browser worker from `/models/whisper-tiny-en/` (not mirrored here).
+ */
+async function writeModelAssets(profileId: string): Promise<void> {
+  const emulator = await getNodebox();
+
+  const mirror = async (repoSlug: string, files: readonly string[]) => {
+    const base = `/workspace/${profileId}/.webagent/models/${repoSlug}`;
+    await emulator.fs.mkdir(base, { recursive: true });
+    for (const rel of files) {
+      if (rel.includes("/")) {
+        await emulator.fs.mkdir(`${base}/${rel.split("/").slice(0, -1).join("/")}`, {
+          recursive: true,
+        });
+      }
+      const target = `${base}/${rel}`;
+      try {
+        await emulator.fs.readFile(target);
+        continue;
+      } catch {
+        /* fall through */
+      }
+      const sourceUrl = `/models/${repoSlug}/${rel}`;
+      const res = await fetch(sourceUrl);
+      if (!res.ok) {
+        if (res.status === 404 && /(added_tokens|normalizer|special_tokens_map)\.json$/.test(rel)) continue;
+        throw new Error(`Failed to mirror model file ${repoSlug}/${rel}: HTTP ${res.status}`);
+      }
+      const bytes = new Uint8Array(await res.arrayBuffer());
+      await emulator.fs.writeFile(target, bytes);
+    }
+  };
+
+  await mirror("onnx-community/Kokoro-82M-v1.0-ONNX", KOKORO_NODEBOX_FILES);
 }
 
 async function writeCapabilitySources(profileId: string): Promise<void> {
@@ -699,6 +761,7 @@ export async function startWebAgent(options: AgentStartOptions): Promise<void> {
       await emulator.fs.mkdir(profileWorkspaceDir, { recursive: true });
       await writeRuntimeSources(profile.id);
       await writeCapabilitySources(profile.id);
+      await writeModelAssets(profile.id);
       await emulator.fs.writeFile(`${profileWorkspaceDir}/.webagent/tools.json`, TOOL_CATALOG_JSON);
       await emulator.fs.writeFile(`${profileWorkspaceDir}/.webagent/providers.json`, PROVIDER_CATALOG_JSON);
       await emulator.fs.writeFile(
@@ -753,6 +816,15 @@ export async function startWebAgent(options: AgentStartOptions): Promise<void> {
         const { formatTransformersError } = await import("./supervisor/transformers-env.js");
         console.warn(
           "[loop-guard] prefetch failed — scoring may be unavailable until reload:",
+          formatTransformersError(e)
+        );
+      });
+    void import("@/core/voice/stt-client.js")
+      .then((mod) => mod.prefetchStt())
+      .catch(async (e) => {
+        const { formatTransformersError } = await import("./supervisor/transformers-env.js");
+        console.warn(
+          "[stt] prefetch failed — voice transcription may be slow until reload:",
           formatTransformersError(e)
         );
       });
@@ -884,6 +956,7 @@ export async function startWebAgent(options: AgentStartOptions): Promise<void> {
       const proxyStreamReqStart = agentOutputBuffer.indexOf(PROXY_STREAM_REQ_PREFIX);
       const spawnReqStart = agentOutputBuffer.indexOf(SPAWN_REQ_PREFIX);
       const loopGuardReqStart = agentOutputBuffer.indexOf(LOOP_GUARD_REQ_PREFIX);
+      const sttReqStart = agentOutputBuffer.indexOf(STT_REQ_PREFIX);
       const fatalStart = agentOutputBuffer.indexOf(FATAL_ERROR_START);
       const nextStartCandidates = [
         profileStart,
@@ -898,6 +971,7 @@ export async function startWebAgent(options: AgentStartOptions): Promise<void> {
         proxyStreamReqStart,
         spawnReqStart,
         loopGuardReqStart,
+        sttReqStart,
         fatalStart,
       ].filter((v) => v >= 0);
       if (nextStartCandidates.length === 0) {
@@ -1110,7 +1184,12 @@ export async function startWebAgent(options: AgentStartOptions): Promise<void> {
             const res = await fetch("/api/proxy", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ method: req.method ?? "GET", url: req.url, headers: req.headers ?? {}, body: req.body ?? null }),
+              body: JSON.stringify({
+                method: req.method ?? "GET",
+                url: req.url,
+                headers: req.headers ?? {},
+                body: req.body ?? null,
+              }),
             });
             const data = await res.json();
             respPayload = JSON.stringify({
@@ -1252,6 +1331,39 @@ export async function startWebAgent(options: AgentStartOptions): Promise<void> {
         continue;
       }
 
+      if (agentOutputBuffer.startsWith(STT_REQ_PREFIX)) {
+        const idEnd = agentOutputBuffer.indexOf(">>>", STT_REQ_PREFIX.length);
+        if (idEnd < 0) break;
+        const reqId = agentOutputBuffer.slice(STT_REQ_PREFIX.length, idEnd);
+        const bodyStart = idEnd + 3;
+        const bodyEnd = agentOutputBuffer.indexOf(STT_REQ_END, bodyStart);
+        if (bodyEnd < 0) break;
+        const reqBody = agentOutputBuffer.slice(bodyStart, bodyEnd);
+        agentOutputBuffer = agentOutputBuffer.slice(bodyEnd + STT_REQ_END.length);
+        void (async () => {
+          let respPayload: string;
+          const { formatTransformersError } = await import("./supervisor/transformers-env.js");
+          try {
+            const req = JSON.parse(reqBody) as { audioBase64?: string; mime?: string };
+            const b64 = String(req.audioBase64 ?? "");
+            if (!b64) throw new Error("STT request missing audioBase64.");
+            const binary = atob(b64);
+            const bytes = new Uint8Array(binary.length);
+            for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+            const { transcribeBytes } = await import("@/core/voice/stt-client.js");
+            const text = await transcribeBytes(bytes, req.mime || "audio/wav");
+            respPayload = JSON.stringify({ ok: true, text });
+          } catch (e) {
+            respPayload = JSON.stringify({
+              ok: false,
+              error: formatTransformersError(e),
+            });
+          }
+          await agentProcess.write(`${STT_RESP_PREFIX}${reqId}>>>${respPayload}${STT_RESP_END}`);
+        })();
+        continue;
+      }
+
       if (agentOutputBuffer.startsWith(LOOP_GUARD_REQ_PREFIX)) {
         const idEnd = agentOutputBuffer.indexOf(">>>", LOOP_GUARD_REQ_PREFIX.length);
         if (idEnd < 0) break;
@@ -1291,6 +1403,23 @@ export async function startWebAgent(options: AgentStartOptions): Promise<void> {
                 pendingToolCalls: Array.isArray(req.meta?.pendingToolCalls)
                   ? req.meta.pendingToolCalls.map((n) => String(n))
                   : undefined,
+                round:
+                  typeof req.meta?.round === "number" && Number.isFinite(req.meta.round)
+                    ? req.meta.round
+                    : undefined,
+                loopPhase:
+                  req.meta?.loopPhase === "no_tools" || req.meta?.loopPhase === "post_tool_stale_calls"
+                    ? req.meta.loopPhase
+                    : undefined,
+                lastReplyHadToolCalls:
+                  typeof req.meta?.lastReplyHadToolCalls === "boolean"
+                    ? req.meta.lastReplyHadToolCalls
+                    : undefined,
+                autoContinueNudges:
+                  typeof req.meta?.autoContinueNudges === "number" &&
+                  Number.isFinite(req.meta.autoContinueNudges)
+                    ? req.meta.autoContinueNudges
+                    : undefined,
               },
             });
             respPayload = JSON.stringify(result);

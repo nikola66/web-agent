@@ -5,7 +5,7 @@
 import { LLM_REQUEST_TIMEOUT_MS } from "../constants.js";
 import { extractNonStreamAssistantText } from "../context-compression.js";
 import { fetchWithTimeout } from "../llm/streaming.js";
-import { resolveLlm } from "../llm/provider-config.js";
+import { reasoningDisableExtras, resolveLlm } from "../llm/provider-config.js";
 import fs from "node:fs/promises";
 import { normalizeWorkspaceRelativePath, resolveWorkspacePath, toWorkspaceRelative } from "../workspace-paths.js";
 
@@ -152,6 +152,7 @@ export async function visionAnalyzeTool(args: Record<string, unknown>, ctx?: { s
       },
     ],
     max_tokens: 2048,
+    ...reasoningDisableExtras(cfg.provider),
   };
 
   const res = await fetchWithTimeout(

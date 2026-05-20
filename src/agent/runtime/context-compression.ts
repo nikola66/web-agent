@@ -1,5 +1,6 @@
 import { OPENROUTER_FREE_DEFAULT_CONTEXT_WINDOW, LLM_REQUEST_TIMEOUT_MS } from "./constants.js";
 import { logDebugEvent } from "./logging/debug-log.js";
+import { reasoningDisableExtras } from "./llm/provider-config.js";
 import { estimateMessageTokens, estimateMessagesTokens, fetchWithTimeout } from "./llm/streaming.js";
 import { errorMessage } from "./utils.js";
 
@@ -198,6 +199,7 @@ async function summarizeWithOpenAICompatibleProvider({ cfg, messages, previousSu
     ],
     stream: false,
     max_tokens: 2048,
+    ...reasoningDisableExtras(cfg.provider),
   };
   const res = await fetchWithTimeout(
     `${String(cfg.baseUrl).replace(/\/$/, "")}/chat/completions`,

@@ -252,7 +252,7 @@ export async function agentTurn(
     `\n\nResearch discipline: for find/discover/list/who posts about requests, call \`skill_view\` with \`open-web-research\` first. Fan out many \`web_search\` queries (topic × region × platform) and \`web_fetch\` top URLs before synthesizing. After any \`web_search\` batch, the next tools must be \`web_fetch\` on at least two result URLs (YouTube channel/video pages first). Never state that none exist without at least two \`web_fetch\` calls on URLs from results. Treat sparse niche-keyword hits as inconclusive—not proof nothing exists. Do not ask the user what to do next until at least ${MIN_RESEARCH_SEARCHES} searches and ${MIN_RESEARCH_FETCHES} fetches are done.` +
     "\n\nSkill discipline: skills are procedural knowledge, separate from memory facts. The prompt contains only a compact skills index; call skill_view before relying on detailed skill instructions. After a repeatable workflow, errors you recovered from, or a user saying \"remember this\", draft and save with `skill_save` or `skill_manage` as soon as the content is ready—no separate approval step unless the user declined. Use skill_delete when removing a saved skill (confirmation required) and skill_bulk_save when installing or creating two or more skills in one request (one confirmation for the batch). For **remote SKILL.md installation** only: use `skill_bulk_save` with HTTPS URLs (top-level `url`, `urls`, or `items: [{ url }]`) or `skill_manage` with `action: install_url` / `import_url` for a single URL—never `run_shell`, `npx`, `git clone`, or workspace writes to mimic a skill installer. GitHub repo home pages are not fetchable as skills; discover per-file raw HTTPS `SKILL.md` URLs (e.g. `web_fetch` on the GitHub tree API), then `skill_bulk_save` with `urls`, at most 75 URLs per call (repeat if needed)." +
     "\n\n`run_shell` discipline: **not** a catch-all executor—use dedicated tools first (`grep`, `read_file`, `list_dir`, `find_files`, `web_fetch`, `web_search`, `system_info`, skill/memory tools, etc.). Do not use `run_shell` for skill installs, arbitrary downloads, package managers (`npx`/`npm`/`pip`) when another tool or the user's local terminal is appropriate, or git workflows unless the user explicitly needs a host command you cannot replace. **Nodebox** (`WEBAGENT_RUNTIME=nodebox`): there is **no** POSIX shell—only invocations that start with `node ` (no `sh -c`, pipes, or external binaries); failures here usually mean you picked the wrong tool. **Host** shell: `sh -c` applies; host scheduling via `crontab`/`at` is blocked—use `cron_register`." +
-    "\n\nDeliverable discipline: prefer GitHub-flavored Markdown pipe tables over Unicode box-drawing tables in assistant-visible text. When you call `artifact_present`, do not dump the entire document body again in chat afterward — a one-line summary plus a pointer to the artifact/download is enough." +
+    "\n\nDeliverable discipline: prefer GitHub-flavored Markdown pipe tables over Unicode box-drawing tables in assistant-visible text. When you call `artifact_present`, do not dump the entire document body again in chat afterward — a one-line summary plus a pointer to the artifact/download is enough. When drafting any markdown deliverable (plan, report, RFC, vault page), **default to including at least one Mermaid diagram** (fence info-string `mermaid`) when a flow, sequence, state machine, hierarchy, or comparison is described in prose — the artifact preview renders SVG. See `skill_view` `chart` for diagram-type picker and rules." +
     "\n\nWiki vault discipline: use `wiki_setup` to create the PARA + Obsidian scaffold (default `.webagent/knowledge-vault/`). Legacy `knowledge-vault/` folders migrate automatically when `root_path` is omitted. Use `wiki_sync` to push runtime facts/session/learnings into `Resources/KnowledgeVault/` after setup. Use `wiki_search` when the user asks to search the vault or when `memory_search`/`memory_recall` are insufficient. Natural-language equivalents for `/wiki_setup`, `/wiki_sync`, `/wiki_search` should trigger the same tools." +
     "\n\nWorkspace layout: for multi-file greenfield work, new demos, spikes, or test harnesses, `make_dir` under `projects/<purpose-slug>/` (keep) or `work/<purpose-slug>/` (scratch) **before** adding files—then keep all new paths under that tree. For new isolated efforts, call `skill_view` with `project-scaffold` first when layout is unclear. Also put exports, scraped data, and ad-hoc outputs there—not loose files at the workspace root." +
     "\n\nScheduling & cron: recurring jobs and daily digests must use `cron_register` (writes `.webagent/cronjobs.json`; heartbeat-driven). Always ask how the user wants results delivered and set `delivery`: `silent` (minimal logs only), `terminal` (agent terminal / optional `notifyChannel` for Telegram), or `email` (digest via Resend — needs `deliveryEmailTo`). Do not use `run_shell` with host `crontab`/`at` — they are blocked in this environment." +
@@ -492,12 +492,16 @@ export async function agentTurn(
         webFetchCount: webFetchCountInTurn,
         toolsExecutedInTurn: executedToolsInTurn,
         visible,
+        round,
+        autoContinueNudges,
+        lastReplyHadToolCalls: tools.length > 0,
       };
 
       if (tools.length && executedToolsInTurn) {
         const pendingToolNames = tools.map((t) => t.name);
         const postToolGuard = await requestLoopGuardDecision(conv, {
           ...loopGuardCtx,
+          loopPhase: "post_tool_stale_calls",
           pendingToolNames,
           visible,
         });
@@ -552,7 +556,7 @@ export async function agentTurn(
           const suppressFromShell = shouldSuppressPostToolNudgeFromExecutions(lastToolExecutions);
           const loopGuard = suppressFromShell
             ? { decision: "stop", scores: { continue: 0, stop: 1, ask_user: 0 }, reason: "nodebox_shell" }
-            : await requestLoopGuardDecision(conv, loopGuardCtx);
+            : await requestLoopGuardDecision(conv, { ...loopGuardCtx, loopPhase: "no_tools" });
           await logDebugEvent("turn_loop_guard", {
             round,
             phase: "no_tools",

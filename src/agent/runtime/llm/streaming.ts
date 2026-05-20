@@ -1,6 +1,7 @@
 import { HIDDEN_STREAM_MARKERS, LLM_REQUEST_TIMEOUT_MS } from "../constants.js";
 import { ipcProxyStreamRequest, ipcProxyRequest } from "../ipc.js";
 import { logDebugEvent } from "../logging/debug-log.js";
+import { reasoningDisableExtras } from "./provider-config.js";
 
 const STREAM_CHUNK_TIMEOUT_MS = 45_000;
 /** Never treat sub-second read waits as an idle stall (avoids bogus "0s" near total deadline). */
@@ -310,6 +311,7 @@ export async function streamOpenAI(messages, cfg, onDelta, tools, options = {}) 
   });
   if (cfg.apiKey) headers.Authorization = `Bearer ${cfg.apiKey}`;
   const toolList = Array.isArray(tools) ? tools : [];
+  const reasoningOff = reasoningDisableExtras(cfg.provider);
   const withToolsBody =
     toolList.length > 0
       ? {
@@ -320,6 +322,7 @@ export async function streamOpenAI(messages, cfg, onDelta, tools, options = {}) 
           tools: toolList,
           tool_choice: "auto",
           stream_options: { include_usage: true },
+          ...reasoningOff,
         }
       : {
           model: cfg.model,
@@ -327,6 +330,7 @@ export async function streamOpenAI(messages, cfg, onDelta, tools, options = {}) 
           stream: true,
           max_tokens: 8192,
           stream_options: { include_usage: true },
+          ...reasoningOff,
         };
   const endpoint = `${cfg.baseUrl}/chat/completions`;
   const startedAt = Date.now();
@@ -618,6 +622,7 @@ export async function completeOpenAiChat(messages, cfg, options = {}) {
     messages,
     stream: false,
     max_tokens: maxTokens,
+    ...reasoningDisableExtras(cfg.provider),
   });
   const endpoint = `${cfg.baseUrl}/chat/completions`;
   const label = `${cfg.provider || "LLM"} chat completion`;

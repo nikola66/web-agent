@@ -1,6 +1,6 @@
 {
   "id": "telegram",
-  "name": "Telegram Bot API",
+  "name": "Telegram Bot Token",
   "isDefault": true,
   "order": 1,
   "docsUrl": "https://core.telegram.org/bots/tutorial",

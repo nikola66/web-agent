@@ -40,3 +40,7 @@ Then:
 
 - Durable demo: `projects/invoice-demo/`
 - Scratch spike: `work/gpt-parse-spike/`
+
+## Show the structure
+
+When the new tree has ≥3 files or non-trivial layering, embed a Mermaid `flowchart` of the folder shape via **`chart`** in the project README — new readers grasp the layout instantly.

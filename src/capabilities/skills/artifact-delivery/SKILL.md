@@ -26,6 +26,8 @@ Owns choice between inline reply, **`artifact_present`**, **`email`**, and cron 
 | Send to mailbox | `email` (subject + body), redact via **`credential-hygiene`** |
 | Side-channel chat | Telegram via configured channel |
 | Recurring job output | see **`heartbeat-cron`** (`delivery` + `notifyChannel`) |
+| Multi-step run report | `work/task-execution/<slug>/report.md` via **`task-execution`** |
+| Visual diagram (flow/sequence/state/etc.) | Mermaid fence inside the artifact markdown — see **`chart`** (preview modal renders SVG) |
 
 ## Procedure
 

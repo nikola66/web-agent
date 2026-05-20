@@ -21,6 +21,14 @@ import { buildToolRowsFromCatalog } from "../slash-command-views.js";
 import { loadToolCatalog } from "../tools/registry.js";
 import { buildPlanModeUserPrompt } from "../planning-slash.js";
 import { rewriteWikiSlashUserMessage } from "../wiki-slash.js";
+import {
+  downloadTelegramVoice,
+  isVoiceChatEnabled,
+  sendTelegramAudio,
+  setVoiceChatEnabled,
+} from "../voice/telegram-voice.js";
+import { synthesizeMp3 } from "../voice/synthesize.js";
+import { toWorkspaceRelative } from "../workspace-paths.js";
 
 function safeSegment(value) {
   return String(value || "").replace(/[^\w\-]/g, "_") || "_";
@@ -146,7 +154,16 @@ export function createChannelInboundHandler(deps) {
   return function handleChannelInbound(msg) {
     const channel = String(msg?.channel ?? "").trim();
     const chatId = String(msg?.chatId ?? "").trim();
-    const text = typeof msg?.text === "string" ? msg.text : "";
+    let text = typeof msg?.text === "string" ? msg.text : "";
+    const voice =
+      msg?.voice && typeof msg.voice === "object" && typeof msg.voice.fileId === "string"
+        ? (msg.voice as { fileId: string; duration?: number; mimeType?: string; fileSize?: number })
+        : null;
+
+    if (voice && !text.trim() && channel === "telegram") {
+      // Will be replaced inside the queued task once the file is downloaded.
+      text = `[Telegram voice note received — file_id ${voice.fileId.slice(0, 12)}…, ~${Math.max(0, Math.round(voice.duration || 0))}s]`;
+    }
     const trimmed = text.trim();
     if (!channel || !chatId || !trimmed) return Promise.resolve();
 
@@ -221,8 +238,76 @@ export function createChannelInboundHandler(deps) {
         await runSkillsSlashCommand(trimmed, surface, (msg) => sendReply(chatId, msg));
         return;
       }
+      if (trimmed === "/voice" || trimmed.startsWith("/voice ")) {
+        const arg = trimmed.slice("/voice".length).trim().toLowerCase();
+        if (channel === "telegram" && (arg === "on" || arg === "off")) {
+          const { chatIds } = await setVoiceChatEnabled(chatId, arg === "on");
+          const stateLine =
+            arg === "on"
+              ? "✅ Voice mode is ON for this chat. Send a voice note — the agent transcribes it locally and can reply with spoken audio."
+              : "Voice mode is OFF for this chat. Voice notes will still be received but no longer flagged for voice-aware handling.";
+          await sendReply(
+            chatId,
+            `${stateLine}\nTotal voice-enabled chats: ${chatIds.length}.`
+          );
+          return;
+        }
+        const onForThisChat =
+          channel === "telegram" ? await isVoiceChatEnabled(chatId) : false;
+        const status =
+          channel === "telegram"
+            ? `Voice mode for this chat: ${onForThisChat ? "ON" : "OFF"}. Use /voice on or /voice off. Inbound voice uses local Whisper STT; outbound replies use Kokoro TTS (see src/agent/runtime/voice/README.md).`
+            : "Voice mode is a browser-session feature on this channel: toggle with /voice on or /voice off, or the mic button in the bottom-right (next to Files).";
+        await sendReply(chatId, status);
+        return;
+      }
+      let voiceUserPrompt: string | null = null;
+      if (voice && channel === "telegram") {
+        const token = String(process.env.WEBAGENT_TELEGRAM_BOT_TOKEN || "").trim();
+        const voiceModeOn = await isVoiceChatEnabled(chatId);
+        if (token) {
+          try {
+            const downloaded = await downloadTelegramVoice(token, voice.fileId);
+            if (downloaded) {
+              let relPath = downloaded.savedPath;
+              try {
+                relPath = toWorkspaceRelative(downloaded.savedPath);
+              } catch {
+                /* fall back to absolute path */
+              }
+              const durationLabel = Math.max(0, Math.round(voice.duration || 0));
+              voiceUserPrompt =
+                `The user sent a Telegram voice note (~${durationLabel}s, ${downloaded.byteLength.toLocaleString()} bytes, ${voice.mimeType || "audio/ogg"}). ` +
+                `Saved at \`${relPath}\`. ` +
+                `Call \`audio_analyze\` with \`workspace_relative_audio_path: "${relPath}"\` to transcribe it locally, then reply to what the user said. ` +
+                `Voice mode is ${voiceModeOn ? "ON" : "OFF"} for this chat${voiceModeOn ? " — your reply will also be sent back as a spoken audio note" : ""}.`;
+              await logDebugEvent("telegram_voice_received", {
+                chatId,
+                durationSec: durationLabel,
+                bytes: downloaded.byteLength,
+                savedPath: relPath,
+              });
+            } else {
+              voiceUserPrompt =
+                "The user sent a Telegram voice note but the file could not be downloaded (Telegram getFile failed — see debug log). Ask them to try again or send text.";
+            }
+          } catch (err) {
+            await logDebugEvent("telegram_voice_handle_failed", {
+              chatId,
+              error: err instanceof Error ? err.message : String(err),
+            });
+            voiceUserPrompt =
+              "The user sent a Telegram voice note but the runtime hit an error while downloading it. Ask them to send text or try again.";
+          }
+        } else {
+          voiceUserPrompt =
+            "A Telegram voice note arrived but WEBAGENT_TELEGRAM_BOT_TOKEN is not set in the runtime env — cannot fetch the audio. Reply in text and ask the user to retry once the token is configured.";
+        }
+      }
+
       const wikiRewrite = rewriteWikiSlashUserMessage(trimmed);
       let userContent =
+        voiceUserPrompt ??
         wikiRewrite ??
         (trimmed === "/plan" || trimmed.startsWith("/plan ")
           ? buildPlanModeUserPrompt(
@@ -292,6 +377,42 @@ export function createChannelInboundHandler(deps) {
         for (const m of tailMessages) history.push(m);
         history = await sanitizeMessagesMissingSnapshotRefs(history);
         await saveChannelHistory(channel, chatId, history);
+
+        if (channel === "telegram" && (await isVoiceChatEnabled(chatId))) {
+          const token = String(process.env.WEBAGENT_TELEGRAM_BOT_TOKEN || "").trim();
+          const lastAssistant = [...tailMessages]
+            .reverse()
+            .find((m) => m?.role === "assistant" && typeof m.content === "string" && m.content.trim());
+          const replyText = lastAssistant ? String(lastAssistant.content) : "";
+          if (token && replyText) {
+            try {
+              const synth = await synthesizeMp3(replyText);
+              if (synth.mp3.byteLength > 0) {
+                await sendTelegramAudio(token, chatId, synth.mp3, {
+                  filename: "reply.mp3",
+                  mimeType: "audio/mpeg",
+                  durationSec: synth.durationSec,
+                  title: "Voice reply",
+                  performer: "Web Agent",
+                });
+                await logDebugEvent("telegram_voice_reply_sent", {
+                  chatId,
+                  durationSec: synth.durationSec,
+                  synthMs: synth.synthMs,
+                  encodeMs: synth.encodeMs,
+                  mp3Bytes: synth.mp3.byteLength,
+                  textChars: replyText.length,
+                  voice: synth.voice,
+                });
+              }
+            } catch (err) {
+              await logDebugEvent("telegram_voice_reply_failed", {
+                chatId,
+                error: err instanceof Error ? err.message : String(err),
+              });
+            }
+          }
+        }
 
         await logDebugEvent("channel_outbound_ok", {
           channel,

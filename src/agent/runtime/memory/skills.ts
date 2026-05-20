@@ -11,7 +11,7 @@ import {
 } from "../constants.js";
 import { errorMessage } from "../utils.js";
 
-const SKILLS_CONTEXT_CHAR_BUDGET = 6_000;
+const SKILLS_CONTEXT_CHAR_BUDGET = 8_000;
 const SKILL_INDEX_TRIGGERS_MAX_CHARS = 160;
 const SKILL_FILE_NAME = "SKILL.md";
 
