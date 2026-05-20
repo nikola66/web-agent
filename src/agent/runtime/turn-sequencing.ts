@@ -144,47 +144,15 @@ function extractPlanFilePath(text) {
   return modern ? String(modern[2] || "").trim() : "";
 }
 
-/** Any follow-up user turn after planning mode activates the goal loop (`/plan` or auto gate). */
-export function resolveApprovedPlanExecutionGoal(opts = {}) {
-  if (opts.textOnly) return null;
-  const cur = String(opts.currentUserContent || "").trim();
-  const prev = opts.priorUserContent != null ? String(opts.priorUserContent || "").trim() : "";
-  if (!cur || isPlanningModePrompt(cur)) return null;
-  if (prev && isPlanningModePrompt(prev)) {
-    const goal = extractPlanningGoalFromPrompt(prev).trim();
-    if (goal) return goal;
-  }
-
-  const hasExplicitPlanExecution =
-    PLAN_APPROVAL_EXECUTION_RE.test(cur) || PLAN_APPROVAL_EXECUTION_RE.test(prev);
-  const explicitPlanPath = extractPlanFilePath(cur) || extractPlanFilePath(prev);
-  if (explicitPlanPath) {
-    return `Execute approved plan at ${explicitPlanPath}.`;
-  }
-  if (hasExplicitPlanExecution) {
-    return "Execute the most recent approved plan in plans/.";
-  }
-  return null;
+/** Current-turn only: user explicitly asked to run an approved plan (not bleed from prior `/plan`). */
+export function isExplicitPlanExecutionRequest(content) {
+  const cur = String(content || "").trim();
+  if (!cur || isPlanningModePrompt(cur)) return false;
+  return PLAN_APPROVAL_EXECUTION_RE.test(cur) || !!extractPlanFilePath(cur);
 }
 
-export function parsePlanGoalJudgeJson(rawText) {
-  const stripped = String(rawText || "")
-    .trim()
-    .replace(/^\uFEFF/, "")
-    .replace(/^```[^\n]*\n?/, "")
-    .replace(/```$/m, "")
-    .trim();
-  const iOpen = stripped.indexOf("{");
-  const iClose = stripped.lastIndexOf("}");
-  if (iOpen < 0 || iClose <= iOpen) return { ok: false, done: false, reason: "bad_json" };
-  try {
-    const j = JSON.parse(stripped.slice(iOpen, iClose + 1));
-    if (!j || typeof j !== "object" || typeof j.done !== "boolean") {
-      return { ok: false, done: false, reason: "bad_json" };
-    }
-    const reason = String(j.reason ?? "").slice(0, 220);
-    return { ok: true, done: j.done, reason };
-  } catch {
-    return { ok: false, done: false, reason: "parse_fail" };
-  }
+/** One-shot context prefix when the user explicitly approves plan execution this turn. */
+export function buildPlanExecutionContextPrefix(content) {
+  if (!isExplicitPlanExecutionRequest(content)) return null;
+  return "[Approved plan execution context] The user already approved execution of an existing plan. Do not ask them to restate or paste the plan again. If the user message includes `plans/*.md` or legacy `.webagent/plans/*.md`, read that file first. Otherwise list `plans/`, pick the newest markdown plan file; if none, check `.webagent/plans/`, then execute.";
 }

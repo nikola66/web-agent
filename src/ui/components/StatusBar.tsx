@@ -1,12 +1,13 @@
-import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { Folder } from "lucide-react";
 import { profileAgentWorking, useActiveProfileRuntime, useRuntimeStore } from "../stores/runtime-store";
 import { useProfileStore } from "../stores/profile-store";
 import { TOOL_CATALOG } from "@/agent/tool-catalog";
 import { ErrorBoundary } from "./ErrorBoundary";
+import { lazyWithRetry } from "../lazy-with-retry";
 import { formatBytes } from "../utils/format";
 
-const FilesPopup = lazy(() => import("./FilesPopup").then((m) => ({ default: m.FilesPopup })));
+const FilesPopup = lazyWithRetry(() => import("./FilesPopup").then((m) => ({ default: m.FilesPopup })));
 
 const STATUS_COLORS: Record<string, string> = {
   idle: "#666666",

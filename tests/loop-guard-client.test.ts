@@ -9,6 +9,7 @@ import {
   looksLikeTaskCompleteReply,
   normalizeLoopGuardResult,
   isLoopGuardScoringUnavailable,
+  LOOP_GUARD_CONTINUE_NUDGE,
 } from "../dist/agent-runtime/loop-guard.js";
 
 const originalEnv = { ...process.env };
@@ -103,6 +104,39 @@ test("shouldContinueFromLoopGuard fail-open when scoring unavailable mid-turn", 
     false
   );
   assert.equal(shouldContinueFromLoopGuard(unavailable, { toolsExecutedInTurn: false }), false);
+});
+
+test("shouldContinueFromLoopGuard stops on scoring unavailable for short casual pivots", () => {
+  const unavailable = normalizeLoopGuardResult({
+    decision: "continue",
+    scores: { continue: 0, stop: 0, ask_user: 0 },
+    reason: "scoring_unavailable",
+    error: "ONNX Runtime Web error 66250952",
+  });
+  assert.equal(
+    shouldContinueFromLoopGuard(unavailable, {
+      toolsExecutedInTurn: true,
+      userRequest: "List them here in a nice way",
+      visible: "Here is the layout of your workspace:",
+    }),
+    false
+  );
+});
+
+test("requestLoopGuardDecision omits synthetic loop nudges from IPC payload", async () => {
+  process.env.WEBAGENT_LOOP_GUARD = "0";
+  const conv = [
+    { role: "user", content: "do work" },
+    { role: "assistant", content: "ok" },
+    { role: "user", content: LOOP_GUARD_CONTINUE_NUDGE },
+    { role: "assistant", content: "still going" },
+    {
+      role: "user",
+      content: "[Continuing toward approved plan goal] Goal: x\n\nTake the next step.",
+    },
+  ];
+  const result = await requestLoopGuardDecision(conv, { userRequest: "do work" });
+  assert.equal(result.decision, "stop");
 });
 
 test("isLoopGuardScoringUnavailable detects model load failures", async () => {

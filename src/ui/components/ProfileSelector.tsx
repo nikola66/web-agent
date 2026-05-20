@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useShallow } from "zustand/react/shallow";
 import { Square, Plus, Pencil, Trash2 } from "lucide-react";
 import { useProfileStore } from "../stores/profile-store";
@@ -7,8 +7,9 @@ import { useSettingsStore, LLM_PROVIDERS } from "../stores/settings-store";
 import { refreshStorageUsage, startAgent, stopAgent } from "@/core/orchestrator";
 import type { Profile } from "@/core/profiles";
 import { ErrorBoundary } from "./ErrorBoundary";
+import { lazyWithRetry } from "../lazy-with-retry";
 
-const ProfileEditor = lazy(() =>
+const ProfileEditor = lazyWithRetry(() =>
   import("./ProfileEditor").then((m) => ({ default: m.ProfileEditor })),
 );
 import { mascotForAccentColor } from "../mascots";

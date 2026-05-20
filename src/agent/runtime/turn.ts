@@ -44,7 +44,6 @@ import {
   normalizeToolCalls,
   sanitizeAssistantVisibleText,
   streamOpenAI,
-  completeOpenAiChat,
 } from "./llm/streaming.js";
 import {
   bold,
@@ -63,13 +62,11 @@ import {
   isResearchIntent,
   MIN_RESEARCH_FETCHES,
   MIN_RESEARCH_SEARCHES,
-  resolveApprovedPlanExecutionGoal,
-  parsePlanGoalJudgeJson,
+  buildPlanExecutionContextPrefix,
 } from "./turn-sequencing.js";
 import { errorMessage } from "./utils.js";
 import { WS } from "./constants.js";
 import {
-  createGoalLoopTranscriptEvent,
   createAssistantTranscriptEvent,
   createSystemLineTranscriptEvent,
   formatSkippedToolsTranscript,
@@ -91,42 +88,10 @@ import {
   writeStdoutSmoothed,
   createRunId,
   toolExecutionKey,
-  getPreviousUserMessageContent,
 } from "./stream-output.js";
 import { buildPlanModeUserPrompt } from "./planning-slash.js";
 
-const PLAN_GOAL_JUDGE_SYSTEM =
-  'You judge whether work toward APPROVED_PLAN_GOAL is complete enough for the user. Reply ONLY with one JSON object, no prose: {"done":true|false,"reason":"brief"}';
-
-async function judgeApprovedPlanGoalComplete(cfg, signal, goal, assistantVisible) {
-  const abortedResult = () => ({ aborted: true, done: false, reason: "aborted" });
-  if (signal?.aborted) return abortedResult();
-  const snippet = String(assistantVisible || "").slice(0, 12_000);
-  const messages = [
-    { role: "system", content: PLAN_GOAL_JUDGE_SYSTEM },
-    {
-      role: "user",
-      content: `APPROVED_PLAN_GOAL:\n${goal}\n\nASSISTANT_LAST_REPLY:\n${snippet}`,
-    },
-  ];
-  try {
-    const rawText = await completeOpenAiChat(messages, cfg, { signal, maxTokens: 256 });
-    if (signal?.aborted) return abortedResult();
-    const parsed = parsePlanGoalJudgeJson(rawText);
-    if (!parsed.ok) return { aborted: false, done: false, reason: parsed.reason };
-    return { aborted: false, done: parsed.done, reason: parsed.reason };
-  } catch (e) {
-    if (signal?.aborted || e?.name === "AbortError") return abortedResult();
-    const msg = errorMessage(e);
-    if (/chat completion aborted|proxy stream aborted|IPC proxy stream aborted/i.test(msg)) {
-      return abortedResult();
-    }
-    return { aborted: false, done: false, reason: "judge_error" };
-  }
-}
-
 const MAX_AGENT_ROUNDS = Math.max(1, Number(typeof process !== "undefined" ? process.env?.WEBAGENT_MAX_AGENT_ROUNDS : undefined) || 64);
-const MAX_PLAN_GOAL_CONTINUATIONS = 20;
 const MAX_TOOL_RESULT_INLINE_CHARS = Math.max(
   200,
   Number(process.env.WEBAGENT_MAX_TOOL_RESULT_INLINE_CHARS) || 10_000
@@ -275,12 +240,10 @@ export async function agentTurn(
       [...safeList].reverse().find((message) => message.role === "user")?.content ||
       ""
   ).trim();
-  const previousUserMessage = getPreviousUserMessageContent(safeList);
-  const approvedPlanGoal = resolveApprovedPlanExecutionGoal({
-    currentUserContent: originalUserInput,
-    priorUserContent: previousUserMessage,
-    textOnly: !!turnMeta?.textOnly,
-  });
+  const planExecutionPrefix =
+    !turnMeta?.textOnly && originalUserInput
+      ? buildPlanExecutionContextPrefix(originalUserInput)
+      : null;
   const toolHint =
     "\n\nTools: prefer native tool calls and respect each tool's schema (especially `required` fields). For files/URLs/shell/external/memory data, use tools first, then answer. Never copy terminal status lines (e.g. lines starting with ✓ or parenthetical summaries) into tool arguments—use real paths, URLs, and queries only. When the user asks for a sequence (for example, testing tools one by one), continue step-by-step without waiting for another user nudge: after you announce a step, immediately emit the corresponding tool call. No fake <tool_call> markup. Text fallback: <<<TOOL>>>{\"name\":\"read_file\",\"arguments\":{\"path\":\"relative/path\"}}<<<END>>>. Memory example: <<<TOOL>>>{\"name\":\"memory_save\",\"arguments\":{\"key\":\"user_timezone\",\"value\":\"America/New_York\"}}<<<END>>> — never call memory_save without both `key` and `value`. Tool results (compact JSON batches): each entry may contain `result` (full inlined payload when it stayed under the size cap — read this first) or `result_ref` (workspace-relative spill file such as \"memory/snapshots/run_xxx_r0_0.json\" when the payload was too large — call read_file on that exact path only). Never call read_file on memory/snapshots/run_* paths when `result` is already present or when no `result_ref` was supplied. If read_file fails or snapshot files disappeared, rerun the originating tool (`web_fetch`, etc.)." +
     "\n\nExact text discipline: when the user asks for an exact string, token, filename, identifier, code symbol, JSON key, or command output, copy it byte-for-byte. Preserve underscores, hyphens, slashes, capitalization, digits, punctuation, and spacing. Never normalize or prettify exact tokens such as FOO_BAR_TOKEN." +
@@ -362,16 +325,8 @@ export async function agentTurn(
   }
   const usedPlanningGateForSkill =
     injectedPlanningGate || isPlanningModePrompt(originalUserInput);
-  const fallbackApprovedPlanGoalActive =
-    !!approvedPlanGoal &&
-    (/^Execute approved plan at /.test(approvedPlanGoal) ||
-      /^Execute the most recent approved plan in /.test(approvedPlanGoal));
-  if (fallbackApprovedPlanGoalActive) {
-    conv.push({
-      role: "user",
-      content:
-        "[Approved plan execution context] The user already approved execution of an existing plan. Do not ask them to restate or paste the plan again. If the user message includes `plans/*.md` or legacy `.webagent/plans/*.md`, read that file first. Otherwise list `plans/`, pick the newest markdown plan file; if none, check `.webagent/plans/`, then execute.",
-    });
+  if (planExecutionPrefix) {
+    conv.push({ role: "user", content: planExecutionPrefix });
   }
 
   let usedTodoWriteInTurn = false;
@@ -383,21 +338,6 @@ export async function agentTurn(
   const toolFailureStreak = createToolFailureStreakState();
   let lastToolExecutions: Array<Record<string, unknown>> = [];
   try {
-    let planGoalContinuationsUsed = 0;
-    if (approvedPlanGoal) {
-      const preview =
-        approvedPlanGoal.length > 140 ? `${approvedPlanGoal.slice(0, 140)}…` : approvedPlanGoal;
-      process.stdout.write(dim(`◇ Plan goal · active — ${preview}\n`));
-      await emitTranscriptEvent(
-        turnMeta,
-        createGoalLoopTranscriptEvent({
-          phase: "invoked",
-          goal: approvedPlanGoal,
-          maxContinuations: MAX_PLAN_GOAL_CONTINUATIONS,
-        }),
-        {}
-      );
-    }
     while (round < MAX_AGENT_ROUNDS) {
       if (turnController.signal.aborted) {
         run.errors.push("turn aborted");
@@ -689,109 +629,6 @@ export async function agentTurn(
             });
             continue;
           }
-        }
-        if (
-          approvedPlanGoal &&
-          !turnMeta?.textOnly &&
-          String(visible || "").trim()
-        ) {
-          const verdict = await judgeApprovedPlanGoalComplete(
-            cfg,
-            turnController.signal,
-            approvedPlanGoal,
-            visible
-          );
-          if (verdict.aborted) {
-            run.errors.push("turn aborted");
-            await logDebugEvent("plan_goal_judge_abort", { round }).catch(() => {});
-            emitLoopStopLine("turn_aborted");
-            break;
-          }
-          await logDebugEvent("plan_goal_judge", {
-            round,
-            judgeDone: verdict.done,
-            reason: verdict.reason,
-            continuationsUsed: planGoalContinuationsUsed,
-          });
-          if (verdict.done) {
-            process.stdout.write(
-              dim(
-                `◇ Plan goal · done${verdict.reason ? ` — ${String(verdict.reason).slice(0, 200)}` : ""}\n`
-              )
-            );
-            await emitTranscriptEvent(
-              turnMeta,
-              createGoalLoopTranscriptEvent({
-                phase: "done",
-                goal: approvedPlanGoal,
-                reason: verdict.reason || "",
-                continuationsUsed: planGoalContinuationsUsed,
-                maxContinuations: MAX_PLAN_GOAL_CONTINUATIONS,
-                round,
-              }),
-              { round }
-            );
-            await logDebugEvent("turn_completed", {
-              round,
-              durationMs: Date.now() - roundStartedAt,
-              continued: false,
-              plan_goal_loop_stop: "done",
-            });
-            emitLoopStopLine("plan_goal_done");
-            break;
-          }
-          planGoalContinuationsUsed += 1;
-          if (planGoalContinuationsUsed >= MAX_PLAN_GOAL_CONTINUATIONS) {
-            process.stdout.write(
-              dim(`◇ Plan goal · paused — continuation budget (${MAX_PLAN_GOAL_CONTINUATIONS})\n`)
-            );
-            await emitTranscriptEvent(
-              turnMeta,
-              createGoalLoopTranscriptEvent({
-                phase: "paused",
-                goal: approvedPlanGoal,
-                reason: "budget",
-                continuationsUsed: planGoalContinuationsUsed,
-                maxContinuations: MAX_PLAN_GOAL_CONTINUATIONS,
-                round,
-              }),
-              { round }
-            );
-            await logDebugEvent("turn_completed", {
-              round,
-              durationMs: Date.now() - roundStartedAt,
-              continued: false,
-              plan_goal_loop_stop: "budget",
-            });
-            emitLoopStopLine("plan_goal_budget");
-            break;
-          }
-          process.stdout.write(
-            dim(`◇ Plan goal · continuing (${planGoalContinuationsUsed}/${MAX_PLAN_GOAL_CONTINUATIONS})\n`)
-          );
-          await emitTranscriptEvent(
-            turnMeta,
-            createGoalLoopTranscriptEvent({
-              phase: "continue",
-              goal: approvedPlanGoal,
-              continuationsUsed: planGoalContinuationsUsed,
-              maxContinuations: MAX_PLAN_GOAL_CONTINUATIONS,
-              round,
-            }),
-            { round }
-          );
-          conv.push({
-            role: "user",
-            content:
-              `[Continuing toward approved plan goal] Goal: ${approvedPlanGoal}\n\nTake the next concrete step now. Prefer tools where needed and keep working until this goal is fully satisfied.`,
-          });
-          await logDebugEvent("turn_completed", {
-            round,
-            durationMs: Date.now() - roundStartedAt,
-            continued: true,
-            plan_goal_loop: "continue",
-          });
-          continue;
         }
         await logDebugEvent("turn_completed", {
           round,

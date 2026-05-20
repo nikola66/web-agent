@@ -47,8 +47,11 @@ test("skills use canonical directories, compact prompt index, and on-demand view
 
   const context = await buildSkillsContextBlock();
   assert.match(context, /Available skills/);
-  assert.match(context, new RegExp(slug));
   assert.doesNotMatch(context, /1\. Say hello/);
+  assert.ok(
+    (await listSkills({ query: slug })).some((skill) => skill.slug === slug),
+    "saved skill is discoverable via listSkills even when prompt index is capped"
+  );
 
   const viewed = await viewSkill({ name: slug });
   assert.match(viewed.content, /## Procedure/);

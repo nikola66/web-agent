@@ -111,6 +111,29 @@ async function ensureReady(): Promise<void> {
   return readyPromise;
 }
 
+export async function resetLoopGuardClassifier(): Promise<void> {
+  await ensureReady();
+  return new Promise<void>((resolve, reject) => {
+    const timer = setTimeout(() => {
+      worker?.removeEventListener("message", onMsg);
+      reject(new Error("loop-guard worker reset timed out"));
+    }, SCORE_TIMEOUT_MS);
+    const onMsg = (ev: MessageEvent<WorkerOut>) => {
+      if (ev.data.type === "reset_done") {
+        worker?.removeEventListener("message", onMsg);
+        clearTimeout(timer);
+        resolve();
+      } else if (ev.data.type === "error" && !ev.data.requestId) {
+        worker?.removeEventListener("message", onMsg);
+        clearTimeout(timer);
+        reject(new Error(ev.data.error));
+      }
+    };
+    worker!.addEventListener("message", onMsg);
+    post({ type: "reset" });
+  });
+}
+
 export async function restartLoopGuardWorker(): Promise<void> {
   terminateWorker();
   await ensureReady();
