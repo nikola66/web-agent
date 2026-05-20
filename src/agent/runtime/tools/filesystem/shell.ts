@@ -55,7 +55,7 @@ function shouldEmitWatchMatch(jobId) {
 function hostSchedulingBlockedReason(command) {
   const c = String(command || "");
   if (/\bcrontab\b/i.test(c)) {
-    return "Host crontab is unavailable in WebContainer. Register jobs with cron_register (writes .cronjobs.json); see HEARTBEAT.md.";
+    return "Host crontab is unavailable in WebContainer. Register jobs with cron_register (writes .webagent/cronjobs.json); see HEARTBEAT.md.";
   }
   if (/(?:^|[|;&\n])\s*at\s+(?:now|midnight|noon|teatime|[\+\d])/i.test(c)) {
     return "The at(1) scheduler is unavailable in WebContainer. Use cron_register and heartbeat-driven jobs instead.";

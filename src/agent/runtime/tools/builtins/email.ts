@@ -12,7 +12,7 @@ export default defineTool({
   run: emailTool,
   emoji: "✉️",
   description:
-    "Send outbound email via Resend (HTTP API). Configure in Settings → Email. Actions: `self_test` (Resend credentials), `send` ({to, subject, text, from?, html?}). Resend requires primary `to` (not cc-only). Prefer flat fields; nested `arguments` is merged for non-cron calls. For cron / `.cronjobs.json`, you may omit `action` when `to`, `subject`, and `text` are all set — it defaults to `send`. `send` may require approval when confirmations are enabled. Examples (arguments JSON only): " +
+    "Send outbound email via Resend (HTTP API). Configure in Settings → Email. Actions: `self_test` (Resend credentials), `send` ({to, subject, text, from?, html?}). Resend requires primary `to` (not cc-only). Prefer flat fields; nested `arguments` is merged for non-cron calls. For cron / `.webagent/cronjobs.json`, you may omit `action` when `to`, `subject`, and `text` are all set — it defaults to `send`. `send` may require approval when confirmations are enabled. Examples (arguments JSON only): " +
     JSON.stringify(EMAIL_INPUT_EXAMPLES[0]) +
     " | " +
     JSON.stringify(EMAIL_INPUT_EXAMPLES[1]) +

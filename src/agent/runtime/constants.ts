@@ -40,7 +40,7 @@ export function memoryStatePath(relativePath: string): string {
   return `${getMemoryRoot()}/${String(relativePath || "").replace(/^\/+/, "")}`;
 }
 
-export const HISTORY_PATH = `${WS}/.history.json`;
+export const HISTORY_PATH = `${WS}/.webagent/history.json`;
 export const AGENT_MD = `${WS}/AGENT.md`;
 export const USER_MD = `${WS}/USER.md`;
 export const HEARTBEAT_MD = `${WS}/HEARTBEAT.md`;
@@ -50,9 +50,9 @@ export const PROVIDER_CATALOG_PATH = `${WS}/.webagent/providers.json`;
 export const BROWSER_AGENT_CATALOG_PATH = `${WS}/.webagent/browseragent.json`;
 export const CHANNEL_CATALOG_PATH = `${WS}/.webagent/channels.json`;
 export const CAPABILITIES_DIR = `${WS}/.webagent/capabilities`;
-export const CHANNEL_STATE_PATH = `${WS}/.channel-state.json`;
-export const CRONJOBS_PATH = `${WS}/.cronjobs.json`;
-export const HEARTBEAT_STATE_PATH = `${WS}/.heartbeat-state.json`;
+export const CHANNEL_STATE_PATH = `${WS}/.webagent/channel-state.json`;
+export const CRONJOBS_PATH = `${WS}/.webagent/cronjobs.json`;
+export const HEARTBEAT_STATE_PATH = `${WS}/.webagent/heartbeat-state.json`;
 export const MEMORY_ROOT = getMemoryRoot();
 export const CHANNEL_HISTORY_DIR = `${MEMORY_ROOT}/channels`;
 export const MEMORY_CONVERSATIONS_DIR = `${MEMORY_ROOT}/conversations`;
@@ -89,7 +89,7 @@ export const TOOL_CONFIRM_END = "<<<END_WEBAGENT_TOOL_CONFIRM>>>";
 export const ARTIFACT_PRESENT_START = "<<<WEBAGENT_ARTIFACT>>>";
 export const ARTIFACT_PRESENT_END = "<<<END_WEBAGENT_ARTIFACT>>>";
 
-/** Minimum wall-clock spacing between heartbeat "ticks" that evaluate `.cronjobs.json`. */
+/** Minimum wall-clock spacing between heartbeat "ticks" that evaluate `.webagent/cronjobs.json`. */
 export const HEARTBEAT_INTERVAL_MS = 30 * 60 * 1000;
 export const LLM_REQUEST_TIMEOUT_MS = 180_000;
 export const LLM_METADATA_TIMEOUT_MS = 15_000;

@@ -1005,7 +1005,7 @@ export async function skillDeleteTool(args: ToolArgs = {}, ctx) {
 }
 
 export async function todoWriteTool(payload: ToolArgs | unknown[] = {}, _ctx) {
-  const todosPath = workspaceStatePath(".todos.json");
+  const todosPath = workspaceStatePath(".webagent/todos.json");
   let rawTodos: unknown[] = [];
   if (Array.isArray(payload)) rawTodos = payload;
   else if (Array.isArray((payload as ToolArgs).todos)) rawTodos = (payload as ToolArgs).todos as unknown[];

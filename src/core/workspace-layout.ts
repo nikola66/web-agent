@@ -17,11 +17,23 @@ export const WORKSPACE_KNOWLEDGE_VAULT_DIR_REL = ".webagent/knowledge-vault";
 
 export const WORKSPACE_SESSION_MEMORY_REL = ".webagent/session-memory.jsonl";
 export const WORKSPACE_TELEGRAM_AUTH_REL = ".webagent/telegram-auth.json";
+export const WORKSPACE_HISTORY_REL = ".webagent/history.json";
+export const WORKSPACE_TODOS_REL = ".webagent/todos.json";
+export const WORKSPACE_CRONJOBS_REL = ".webagent/cronjobs.json";
+export const WORKSPACE_HEARTBEAT_STATE_REL = ".webagent/heartbeat-state.json";
+export const WORKSPACE_CHANNEL_STATE_REL = ".webagent/channel-state.json";
+export const WORKSPACE_MIGRATIONS_REL = ".webagent/migrations.json";
 
 /** Dotfiles / single files under `.webagent/` that must survive OPFS snapshot export. */
 export const WORKSPACE_WEBAGENT_USER_FILES = [
   WORKSPACE_SESSION_MEMORY_REL,
   WORKSPACE_TELEGRAM_AUTH_REL,
+  WORKSPACE_HISTORY_REL,
+  WORKSPACE_TODOS_REL,
+  WORKSPACE_CRONJOBS_REL,
+  WORKSPACE_HEARTBEAT_STATE_REL,
+  WORKSPACE_CHANNEL_STATE_REL,
+  WORKSPACE_MIGRATIONS_REL,
 ] as const;
 
 /** Default dirs to show in the Files tree even when empty (matches primary user-facing vaults). */

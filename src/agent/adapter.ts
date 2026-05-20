@@ -73,6 +73,13 @@ import runtimeMemorySkillsSource from "../../dist/agent-runtime/memory/skills.js
 import runtimeMemoryContextBlocksSource from "../../dist/agent-runtime/memory/context-blocks.js?raw";
 /** Nodebox copies this string at agent start — it is `dist/`, not `src/`; run `npm run build:embed-runtime` after changing runtime TS. */
 import runtimePersistenceSource from "../../dist/agent-runtime/state/persistence.js?raw";
+import runtimeMigrationsIndexSource from "../../dist/agent-runtime/migrations/index.js?raw";
+import runtimeMigrationsTypesSource from "../../dist/agent-runtime/migrations/types.js?raw";
+import runtimeMigrationsStateSource from "../../dist/agent-runtime/migrations/state.js?raw";
+import runtimeMigrationsRunnerSource from "../../dist/agent-runtime/migrations/runner.js?raw";
+import runtimeMigrationsRegistrySource from "../../dist/agent-runtime/migrations/registry.js?raw";
+import runtimeMigration001Source from "../../dist/agent-runtime/migrations/001-relocate-state-files.js?raw";
+import runtimeMigrationsNotifySource from "../../dist/agent-runtime/migrations/notify.js?raw";
 import runtimeChannelDispatcherSource from "../../dist/agent-runtime/channels/dispatcher.js?raw";
 import runtimeChannelIndexSource from "../../dist/agent-runtime/channels/index.js?raw";
 import runtimeChannelTelegramSource from "../../dist/agent-runtime/channels/telegram.js?raw";
@@ -352,10 +359,12 @@ async function ensureOnboardingFiles(profileId: string): Promise<void> {
     await emulator.fs.writeFile(`${workspaceDir}/SOUL.md`, soulSource);
   }
 
+  const cronjobsPath = `${workspaceDir}/.webagent/cronjobs.json`;
   try {
-    await emulator.fs.readFile(`${workspaceDir}/.cronjobs.json`);
+    await emulator.fs.readFile(cronjobsPath);
   } catch {
-    await emulator.fs.writeFile(`${workspaceDir}/.cronjobs.json`, JSON.stringify({ jobs: [] }, null, 2));
+    await emulator.fs.mkdir(`${workspaceDir}/.webagent`, { recursive: true });
+    await emulator.fs.writeFile(cronjobsPath, JSON.stringify({ jobs: [] }, null, 2));
   }
 }
 
@@ -368,6 +377,7 @@ async function writeRuntimeSources(profileId: string): Promise<void> {
   await emulator.fs.mkdir(`${webagentDir}/llm`, { recursive: true });
   await emulator.fs.mkdir(`${webagentDir}/logging`, { recursive: true });
   await emulator.fs.mkdir(`${webagentDir}/memory`, { recursive: true });
+  await emulator.fs.mkdir(`${webagentDir}/migrations`, { recursive: true });
   await emulator.fs.mkdir(`${webagentDir}/state`, { recursive: true });
   await emulator.fs.mkdir(`${webagentDir}/tools`, { recursive: true });
   await emulator.fs.mkdir(`${webagentDir}/channels`, { recursive: true });
@@ -418,6 +428,13 @@ async function writeRuntimeSources(profileId: string): Promise<void> {
   await emulator.fs.writeFile(`${webagentDir}/memory/learnings.js`, runtimeMemoryLearningsSource);
   await emulator.fs.writeFile(`${webagentDir}/memory/skills.js`, runtimeMemorySkillsSource);
   await emulator.fs.writeFile(`${webagentDir}/memory/context-blocks.js`, runtimeMemoryContextBlocksSource);
+  await emulator.fs.writeFile(`${webagentDir}/migrations/index.js`, runtimeMigrationsIndexSource);
+  await emulator.fs.writeFile(`${webagentDir}/migrations/types.js`, runtimeMigrationsTypesSource);
+  await emulator.fs.writeFile(`${webagentDir}/migrations/state.js`, runtimeMigrationsStateSource);
+  await emulator.fs.writeFile(`${webagentDir}/migrations/runner.js`, runtimeMigrationsRunnerSource);
+  await emulator.fs.writeFile(`${webagentDir}/migrations/registry.js`, runtimeMigrationsRegistrySource);
+  await emulator.fs.writeFile(`${webagentDir}/migrations/001-relocate-state-files.js`, runtimeMigration001Source);
+  await emulator.fs.writeFile(`${webagentDir}/migrations/notify.js`, runtimeMigrationsNotifySource);
   await emulator.fs.writeFile(`${webagentDir}/state/persistence.js`, runtimePersistenceSource);
   for (const [sourcePath, content] of Object.entries(runtimeToolSources)) {
     const rel = sourcePath.replace(/^.*dist\/agent-runtime\/tools\//, "tools/");
@@ -654,8 +671,13 @@ export async function startWebAgent(options: AgentStartOptions): Promise<void> {
         const resetCandidates = [
           `${profileWorkspaceDir}/AGENT.md`,
           `${profileWorkspaceDir}/USER.md`,
-          `${profileWorkspaceDir}/.history.json`,
-          `${profileWorkspaceDir}/.memory.jsonl`,
+          `${profileWorkspaceDir}/.webagent/history.json`,
+          `${profileWorkspaceDir}/.webagent/todos.json`,
+          `${profileWorkspaceDir}/.webagent/cronjobs.json`,
+          `${profileWorkspaceDir}/.webagent/heartbeat-state.json`,
+          `${profileWorkspaceDir}/.webagent/channel-state.json`,
+          `${profileWorkspaceDir}/.webagent/session-memory.jsonl`,
+          `${profileWorkspaceDir}/.webagent/migrations.json`,
           `${profileWorkspaceDir}/memory`,
         ];
         for (const path of resetCandidates) {

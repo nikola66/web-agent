@@ -33,7 +33,7 @@ const SNAPSHOTS_PREFIX = "memory/snapshots/";
 const CONVERSATIONS_PREFIX = "memory/conversations/";
 const RUNS_PREFIX = "memory/runs/";
 const JOBS_ARCHIVE_PREFIX = "memory/jobs/";
-const CRONJOBS_PATH = ".cronjobs.json";
+const CRONJOBS_PATH = ".webagent/cronjobs.json";
 
 export type MemoryReflection = {
   path: string;

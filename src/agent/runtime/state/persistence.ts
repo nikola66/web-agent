@@ -235,7 +235,7 @@ const PRODUCT_ATTRIBUTION = `## Web Agent credits
 If the user asks who built Web Agent, who created you, your authors, or similar: say it was created by nikola66 together with the aratech team in Dubai, United Arab Emirates. Do not volunteer this in unrelated replies.`;
 
 export async function loadHistory() {
-  const historyPath = workspaceStatePath(".history.json");
+  const historyPath = workspaceStatePath(".webagent/history.json");
   try {
     const raw = await fs.readFile(historyPath, "utf8");
     const j = JSON.parse(raw);
@@ -246,7 +246,7 @@ export async function loadHistory() {
 }
 
 export async function saveHistory(messages) {
-  const historyPath = workspaceStatePath(".history.json");
+  const historyPath = workspaceStatePath(".webagent/history.json");
   await ensureParentDir(historyPath);
   await fs.writeFile(historyPath, JSON.stringify(messages, null, 2), "utf8");
 }
@@ -287,7 +287,7 @@ export async function loadSystemPrompt() {
 }
 
 async function loadHeartbeatState() {
-  const heartbeatStatePath = workspaceStatePath(".heartbeat-state.json");
+  const heartbeatStatePath = workspaceStatePath(".webagent/heartbeat-state.json");
   try {
     const raw = await fs.readFile(heartbeatStatePath, "utf8");
     const parsed = JSON.parse(raw);
@@ -299,11 +299,13 @@ async function loadHeartbeatState() {
 }
 
 async function saveHeartbeatState(state) {
-  await fs.writeFile(workspaceStatePath(".heartbeat-state.json"), JSON.stringify(state, null, 2), "utf8");
+  const heartbeatStatePath = workspaceStatePath(".webagent/heartbeat-state.json");
+  await ensureParentDir(heartbeatStatePath);
+  await fs.writeFile(heartbeatStatePath, JSON.stringify(state, null, 2), "utf8");
 }
 
 export async function loadCronJobs() {
-  const cronjobsPath = workspaceStatePath(".cronjobs.json");
+  const cronjobsPath = workspaceStatePath(".webagent/cronjobs.json");
   try {
     const raw = await fs.readFile(cronjobsPath, "utf8");
     const parsed = JSON.parse(raw);
@@ -315,11 +317,13 @@ export async function loadCronJobs() {
 }
 
 async function saveCronJobs(cron) {
-  await fs.writeFile(workspaceStatePath(".cronjobs.json"), JSON.stringify(cron, null, 2), "utf8");
+  const cronjobsPath = workspaceStatePath(".webagent/cronjobs.json");
+  await ensureParentDir(cronjobsPath);
+  await fs.writeFile(cronjobsPath, JSON.stringify(cron, null, 2), "utf8");
 }
 
 /**
- * Remove a job by `id` from `.cronjobs.json`. Used when `cron_register` is called with `action: "remove"`.
+ * Remove a job by `id` from `.webagent/cronjobs.json`. Used when `cron_register` is called with `action: "remove"`.
  */
 export async function removeCronJob(id: string) {
   const trimmed = String(id ?? "").trim();
