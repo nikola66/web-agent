@@ -48,8 +48,10 @@ async function scoreWithRecovery(premise: string): Promise<SupervisorScores> {
         const key = formatTransformersError(err);
         repeatSame = key === lastErrorKey ? repeatSame + 1 : 1;
         lastErrorKey = key;
-        if (repeatSame >= 2) break;
-        await recoverFromScoreError();
+        if (repeatSame >= 2) {
+          await recoverFromScoreError();
+          break;
+        }
       }
     }
     if (repeatSame >= 2) break;

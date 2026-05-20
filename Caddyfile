@@ -56,11 +56,21 @@
 		}
 	}
 
-	# WASM (sql.js): skip gzip/zstd — some stacks return 502 or bad bodies for compressed wasm.
+	# WASM / ONNX: skip gzip/zstd — compressed binaries break ORT/sql.js in the browser.
 	@wasm {
 		path_regexp wasm \.wasm$
 	}
+	@onnx {
+		path_regexp onnx \.onnx$
+	}
 	handle @wasm {
+		root * dist
+		file_server {
+			hide .git
+			hide .env*
+		}
+	}
+	handle @onnx {
 		root * dist
 		file_server {
 			hide .git

@@ -1,7 +1,21 @@
-const ORT_PUBLIC_PREFIX = "/transformers-ort/";
-export const LOOP_GUARD_MODEL_PATH = "/models/loop-guard";
+const ORT_PUBLIC_PREFIX = "transformers-ort/";
+const LOOP_GUARD_MODEL_SUFFIX = "models/loop-guard";
 
 let configured = false;
+
+function viteBaseUrl(): string {
+  if (typeof import.meta === "undefined") return "/";
+  const base = (import.meta as ImportMeta & { env?: { BASE_URL?: string } }).env?.BASE_URL;
+  return typeof base === "string" && base ? base : "/";
+}
+
+function publicAssetPath(suffix: string): string {
+  const base = viteBaseUrl().replace(/\/?$/, "/");
+  const path = `${base}${suffix.replace(/^\//, "")}`.replace(/\/{2,}/g, "/");
+  return path.startsWith("/") ? path : `/${path}`;
+}
+
+export const LOOP_GUARD_MODEL_PATH = publicAssetPath(LOOP_GUARD_MODEL_SUFFIX);
 
 function runtimeOrigin(): string | null {
   if (typeof window !== "undefined" && window.location?.origin) return window.location.origin;
@@ -13,9 +27,10 @@ function runtimeOrigin(): string | null {
 }
 
 function ortAssetBase(): string {
+  const path = publicAssetPath(ORT_PUBLIC_PREFIX);
   const origin = runtimeOrigin();
-  if (!origin) return ORT_PUBLIC_PREFIX;
-  return new URL(ORT_PUBLIC_PREFIX, origin).href;
+  if (!origin) return path.endsWith("/") ? path : `${path}/`;
+  return new URL(path.endsWith("/") ? path : `${path}/`, origin).href;
 }
 
 export function formatTransformersError(error: unknown): string {
