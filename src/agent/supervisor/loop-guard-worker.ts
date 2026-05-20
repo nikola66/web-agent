@@ -4,9 +4,13 @@
 /// <reference lib="webworker" />
 import { LOOP_GUARD_HYPOTHESES } from "./prompts.js";
 import type { SupervisorScores } from "./thresholds.js";
-import { ensureTransformersEnv, formatTransformersError } from "./transformers-env.js";
+import {
+  ensureTransformersEnv,
+  formatTransformersError,
+  LOOP_GUARD_MODEL_PATH,
+} from "./transformers-env.js";
 
-const MODEL_ID = "/models/loop-guard";
+const MODEL_ID = LOOP_GUARD_MODEL_PATH;
 
 type ZeroShotClassifier = (
   text: string,
@@ -25,7 +29,10 @@ async function getClassifier(): Promise<ZeroShotClassifier> {
     classifierPromise = (async () => {
       await ensureTransformersEnv();
       const { pipeline } = await import("@huggingface/transformers");
-      const pipe = await pipeline("zero-shot-classification", MODEL_ID, { device: "wasm" });
+      const pipe = await pipeline("zero-shot-classification", MODEL_ID, {
+        device: "wasm",
+        dtype: "q8",
+      });
       return pipe as unknown as ZeroShotClassifier;
     })().catch((err) => {
       resetClassifier();
