@@ -1,52 +1,47 @@
-import { LOOP_GUARD_HYPOTHESES } from "./prompts.js";
+import { LOOP_GUARD_PREMISE_MAX_CHARS, tailText } from "./prompts.js";
 import type { SupervisorScores } from "./thresholds.js";
-import { ensureTransformersEnv, LOOP_GUARD_MODEL_PATH } from "./transformers-env.js";
+import {
+  prefetchLoopGuardWorker,
+  restartLoopGuardWorker,
+  scorePremiseInWorker,
+} from "./worker-scoring.js";
 
-const MODEL_ID = LOOP_GUARD_MODEL_PATH;
+let scoreChain: Promise<unknown> = Promise.resolve();
 
-type ZeroShotClassifier = (
-  text: string,
-  labels: string[],
-  options?: { multi_label?: boolean }
-) => Promise<{ labels: string[]; scores: number[] }>;
-
-let classifierPromise: Promise<ZeroShotClassifier> | null = null;
-
-async function getClassifier(): Promise<ZeroShotClassifier> {
-  if (!classifierPromise) {
-    classifierPromise = (async () => {
-      await ensureTransformersEnv();
-      const { pipeline } = await import("@huggingface/transformers");
-      const pipe = await pipeline("zero-shot-classification", MODEL_ID);
-      return pipe as unknown as ZeroShotClassifier;
-    })().catch((err) => {
-      classifierPromise = null;
-      throw err;
-    });
-  }
-  return classifierPromise;
+function enqueueScore<T>(fn: () => Promise<T>): Promise<T> {
+  const run = scoreChain.then(fn, fn);
+  scoreChain = run.then(
+    () => undefined,
+    () => undefined
+  );
+  return run;
 }
 
-/** Warm-load the classifier off the critical path. Safe to call multiple times. */
-export function prefetchClassifier(): void {
-  void getClassifier().catch(() => {});
+const PREMISE_BUDGETS = [LOOP_GUARD_PREMISE_MAX_CHARS, 1200, 800] as const;
+const ATTEMPTS_PER_BUDGET = 3;
+
+async function scoreWithRecovery(premise: string): Promise<SupervisorScores> {
+  const base = premise.trim() || " ";
+  let lastError: unknown;
+  for (const maxChars of PREMISE_BUDGETS) {
+    const text = tailText(base, maxChars);
+    for (let attempt = 0; attempt < ATTEMPTS_PER_BUDGET; attempt++) {
+      try {
+        return await scorePremiseInWorker(text);
+      } catch (err) {
+        lastError = err;
+        await restartLoopGuardWorker();
+      }
+    }
+  }
+  throw lastError instanceof Error ? lastError : new Error(String(lastError ?? "loop-guard scoring failed"));
+}
+
+/** Warm-load the classifier in an isolated worker. Safe to call multiple times. */
+export async function prefetchClassifier(): Promise<void> {
+  await prefetchLoopGuardWorker();
 }
 
 export async function scoreHypotheses(premise: string): Promise<SupervisorScores> {
-  const classifier = await getClassifier();
-  const labels = [
-    LOOP_GUARD_HYPOTHESES.continue,
-    LOOP_GUARD_HYPOTHESES.stop,
-    LOOP_GUARD_HYPOTHESES.ask_user,
-  ];
-  const out = await classifier(premise, labels, { multi_label: true });
-  const scores: SupervisorScores = { continue: 0, stop: 0, ask_user: 0 };
-  for (let i = 0; i < out.labels.length; i++) {
-    const label = out.labels[i];
-    const score = Number(out.scores[i] ?? 0);
-    if (label === LOOP_GUARD_HYPOTHESES.continue) scores.continue = score;
-    else if (label === LOOP_GUARD_HYPOTHESES.stop) scores.stop = score;
-    else if (label === LOOP_GUARD_HYPOTHESES.ask_user) scores.ask_user = score;
-  }
-  return scores;
+  return enqueueScore(() => scoreWithRecovery(premise));
 }

@@ -19,7 +19,20 @@ export type SupervisorResult = {
   decision: AgentDecision;
   scores: SupervisorScores;
   reason?: string;
+  error?: string;
 };
+
+export type LoopGuardContext = {
+  userRequest?: string;
+  webSearchCount?: number;
+  webFetchCount?: number;
+  toolsExecutedInTurn?: boolean;
+  pendingToolNames?: string[];
+  visible?: string;
+};
+
+type ConvRow = { role?: string; content?: unknown };
+type SupervisorMessage = { role: string; content: string };
 
 const STOP_RESULT: SupervisorResult = {
   decision: "stop",
@@ -33,8 +46,10 @@ const SCORING_UNAVAILABLE_RESULT: SupervisorResult = {
   reason: "scoring_unavailable",
 };
 
-export function isLoopGuardScoringUnavailable(result) {
-  const reason = String(result?.reason ?? "");
+export function isLoopGuardScoringUnavailable(result: unknown): boolean {
+  const row =
+    result && typeof result === "object" ? (result as Partial<SupervisorResult>) : undefined;
+  const reason = String(row?.reason ?? "");
   if (
     reason === "scoring_unavailable" ||
     reason === "ipc_error" ||
@@ -44,9 +59,9 @@ export function isLoopGuardScoringUnavailable(result) {
     return true;
   }
   if (
-    result?.decision === "stop" &&
-    result?.scores?.stop === 1 &&
-    result?.scores?.continue === 0 &&
+    row?.decision === "stop" &&
+    row?.scores?.stop === 1 &&
+    row?.scores?.continue === 0 &&
     reason &&
     reason !== "disabled" &&
     /could not locate|failed to fetch|network|onnx|model/i.test(reason)
@@ -56,10 +71,11 @@ export function isLoopGuardScoringUnavailable(result) {
   return false;
 }
 
-export function normalizeLoopGuardResult(result) {
+export function normalizeLoopGuardResult(result: unknown): SupervisorResult {
   if (!result || typeof result !== "object") return { ...SCORING_UNAVAILABLE_RESULT, reason: "invalid_response" };
-  if (!isLoopGuardScoringUnavailable(result)) return result as SupervisorResult;
-  const detail = String(result.reason ?? "scoring_unavailable");
+  const row = result as SupervisorResult;
+  if (!isLoopGuardScoringUnavailable(row)) return row;
+  const detail = String(row.reason ?? "scoring_unavailable");
   const normalizedReason =
     detail === "scoring_unavailable" || detail === "ipc_error" || detail === "invalid_response"
       ? detail
@@ -68,7 +84,7 @@ export function normalizeLoopGuardResult(result) {
     decision: "continue",
     scores: { continue: 0, stop: 0, ask_user: 0 },
     reason: normalizedReason,
-    error: result.error,
+    error: row.error,
   };
 }
 
@@ -79,7 +95,7 @@ export function isLoopGuardEnabled() {
   return raw !== "0" && raw !== "false" && raw !== "off" && raw !== "no";
 }
 
-export function resolveMaxAutoContinueNudges(originalUserInput) {
+export function resolveMaxAutoContinueNudges(originalUserInput: string | null | undefined): number {
   const base = (() => {
     const raw = String(
       typeof process !== "undefined" ? process.env?.WEBAGENT_MAX_AUTO_CONTINUE_NUDGES ?? "20" : "20"
@@ -100,7 +116,9 @@ export function resolveMaxAutoContinueNudges(originalUserInput) {
 }
 
 /** Suppress continue nudges when the last batch hit a deterministic Nodebox shell block. */
-export function shouldSuppressPostToolNudgeFromExecutions(executions) {
+export function shouldSuppressPostToolNudgeFromExecutions(
+  executions: Array<{ error?: unknown; retryable?: boolean; error_code?: string }> | null | undefined
+): boolean {
   if (!Array.isArray(executions) || executions.length === 0) return false;
   return executions.some(
     (item) =>
@@ -110,8 +128,8 @@ export function shouldSuppressPostToolNudgeFromExecutions(executions) {
   );
 }
 
-function convToSupervisorMessages(conv) {
-  const out = [];
+function convToSupervisorMessages(conv: ConvRow[] | null | undefined): SupervisorMessage[] {
+  const out: SupervisorMessage[] = [];
   for (const row of conv || []) {
     if (!row || typeof row !== "object") continue;
     const role = String(row.role || "");
@@ -128,11 +146,14 @@ function convToSupervisorMessages(conv) {
   return out;
 }
 
-export async function requestLoopGuardDecision(conv, ctx = {}) {
+export async function requestLoopGuardDecision(
+  conv: ConvRow[] | null | undefined,
+  ctx: LoopGuardContext = {}
+): Promise<SupervisorResult> {
   if (!isLoopGuardEnabled()) return { ...STOP_RESULT, reason: "disabled" };
   try {
     const messages = convToSupervisorMessages(conv);
-    const result = await ipcLoopGuardRequest({
+    const result: unknown = await ipcLoopGuardRequest({
       messages,
       meta: {
         userRequest: ctx.userRequest,
@@ -142,22 +163,72 @@ export async function requestLoopGuardDecision(conv, ctx = {}) {
         pendingToolCalls: ctx.pendingToolNames,
       },
     });
-    if (!result || typeof result !== "object" || !result.decision) {
+    if (!result || typeof result !== "object") {
       return normalizeLoopGuardResult({ ...STOP_RESULT, reason: "invalid_response" });
     }
-    return normalizeLoopGuardResult(result as SupervisorResult);
+    const row = result as Partial<SupervisorResult>;
+    if (!row.decision) {
+      return normalizeLoopGuardResult({ ...STOP_RESULT, reason: "invalid_response" });
+    }
+    return normalizeLoopGuardResult(row as SupervisorResult);
   } catch {
     return normalizeLoopGuardResult({ ...SCORING_UNAVAILABLE_RESULT, reason: "ipc_error" });
   }
 }
 
-export function shouldContinueFromLoopGuard(result) {
-  if (isLoopGuardScoringUnavailable(result)) return false;
-  return result?.decision === "continue";
+/** Matches default VITE_WEBAGENT_LOOP_GUARD_CONTINUE_THRESHOLD (see thresholds.ts). */
+const CONTINUE_SCORE_THRESHOLD = 0.58;
+
+/** When ONNX/IPC scoring fails, avoid nudging after a clear final answer. */
+export function looksLikeTaskCompleteReply(visible: unknown): boolean {
+  const v = String(visible ?? "").trim();
+  if (v.length < 16) return false;
+  return /\b(?:done|complete|finished|installed|ready(?:\s+to\s+go)?|successfully)\b/i.test(v);
+}
+
+/** Assistant prose that expects a user reply — honor ask_user and do not nudge. */
+export function visibleExpectsUserReply(visible: unknown): boolean {
+  const v = String(visible ?? "").trim();
+  if (v.length < 12) return false;
+  if (/\?/.test(v)) return true;
+  if (
+    /\b(let me know|your choice|pick one|which (one|article|option)|what(?:'s| is) the move|you choose|prefer|or let me choose)\b/i.test(
+      v
+    )
+  ) {
+    return true;
+  }
+  if (/(?:^|\n)\s*\d+\.\s+\S/.test(v) && /\b(pick|choose|which|or let)\b/i.test(v)) return true;
+  return false;
+}
+
+export function shouldContinueFromLoopGuard(
+  result: SupervisorResult | null | undefined,
+  ctx: LoopGuardContext = {}
+): boolean {
+  if (isLoopGuardScoringUnavailable(result)) {
+    if (!ctx.toolsExecutedInTurn) return false;
+    if (looksLikeTaskCompleteReply(ctx.visible)) return false;
+    return true;
+  }
+  if (result?.decision === "continue") return true;
+  if (result?.decision === "ask_user") {
+    const scores = result.scores ?? {};
+    const cont = Number(scores.continue ?? 0);
+    const stop = Number(scores.stop ?? 0);
+    if (visibleExpectsUserReply(ctx.visible)) return false;
+    if (cont >= CONTINUE_SCORE_THRESHOLD) return true;
+    if (ctx.toolsExecutedInTurn && stop < 0.2 && cont < CONTINUE_SCORE_THRESHOLD) return true;
+    return false;
+  }
+  return false;
 }
 
 /** When the model attached tool calls after prose, trust NLI stop to drop stale pending tools. */
-export function shouldRejectPendingToolsFromLoopGuard(result, ctx = {}) {
+export function shouldRejectPendingToolsFromLoopGuard(
+  result: SupervisorResult | null | undefined,
+  ctx: LoopGuardContext = {}
+): boolean {
   if (isLoopGuardScoringUnavailable(result)) return false;
   if (!result || result.decision !== "stop") return false;
 
@@ -179,6 +250,15 @@ export function getSkillSelfImproveNudgeState({
   skillMutatingCalled,
   autoContinueNudges,
   maxNudges,
+}: {
+  loopGuardDecision?: AgentDecision;
+  executedToolsInTurn?: boolean;
+  usedTodoWrite?: boolean;
+  usedPlanningGate?: boolean;
+  estimatedStepsOverSix?: boolean;
+  skillMutatingCalled?: boolean;
+  autoContinueNudges: number;
+  maxNudges: number;
 }) {
   const taskComplete = loopGuardDecision === "stop";
   const eligible =
@@ -198,16 +278,16 @@ export function getSkillSelfImproveNudgeState({
   };
 }
 
-export function emitLoopStopLine(message) {
+export function emitLoopStopLine(message: string): void {
   if (!isDebugLogEnabled()) return;
   process.stdout.write(dim(`▸ stopped: ${message}\n\n`));
 }
 
-function formatLoopGuardScore(n) {
+function formatLoopGuardScore(n: unknown): string {
   return typeof n === "number" && Number.isFinite(n) ? n.toFixed(2) : "?";
 }
 
-export function formatLoopGuardScores(scores) {
+export function formatLoopGuardScores(scores: Partial<SupervisorScores> | null | undefined): string {
   const s = scores ?? { continue: 0, stop: 0, ask_user: 0 };
   return `continue=${formatLoopGuardScore(s.continue)} stop=${formatLoopGuardScore(s.stop)} ask_user=${formatLoopGuardScore(s.ask_user)}`;
 }
@@ -219,7 +299,14 @@ export function emitLoopGuardDecisionLine({
   rejectPending,
   pendingTools,
   action,
-}) {
+}: {
+  round?: number;
+  phase?: string;
+  result?: SupervisorResult | null;
+  rejectPending?: boolean;
+  pendingTools?: string[];
+  action?: string;
+}): void {
   if (!isDebugLogEnabled()) return;
   const unavailable = isLoopGuardScoringUnavailable(result);
   const decision = unavailable ? "unavailable" : String(result?.decision ?? "?");

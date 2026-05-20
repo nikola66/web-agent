@@ -722,7 +722,13 @@ export async function startWebAgent(options: AgentStartOptions): Promise<void> {
   idleSchedule(() => {
     void import("./supervisor/index.js")
       .then((mod) => mod.prefetchClassifier())
-      .catch(() => {});
+      .catch(async (e) => {
+        const { formatTransformersError } = await import("./supervisor/transformers-env.js");
+        console.warn(
+          "[loop-guard] prefetch failed — scoring may be unavailable until reload:",
+          formatTransformersError(e)
+        );
+      });
   });
 
   let agentOutputBuffer = "";

@@ -551,6 +551,7 @@ export async function agentTurn(
         webSearchCount: webSearchCountInTurn,
         webFetchCount: webFetchCountInTurn,
         toolsExecutedInTurn: executedToolsInTurn,
+        visible,
       };
 
       if (tools.length && executedToolsInTurn) {
@@ -624,7 +625,7 @@ export async function agentTurn(
             phase: "no_tools",
             result: loopGuard,
           });
-          const wantsContinue = shouldContinueFromLoopGuard(loopGuard);
+          const wantsContinue = shouldContinueFromLoopGuard(loopGuard, loopGuardCtx);
           if (wantsContinue && autoContinueNudges >= maxAutoContinueNudges) {
             process.stdout.write(
               dim(

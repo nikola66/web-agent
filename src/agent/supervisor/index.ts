@@ -32,18 +32,18 @@ export async function decide({
   thresholds: thresholdOverrides = {},
 }: DecideInput): Promise<SupervisorResult> {
   const thresholds = { ...LOOP_GUARD_DEFAULTS, ...thresholdOverrides };
+  const premise = buildSupervisorPremise(messages, maxMessages, meta);
   try {
-    const premise = buildSupervisorPremise(messages, maxMessages, meta);
     const scores = await scoreHypotheses(premise);
     const decision = decideFromScores(scores, thresholds);
     return { decision, scores };
   } catch (e) {
-    const message = formatTransformersError(e);
+    const error = formatTransformersError(e);
     return {
       decision: "continue",
       scores: { continue: 0, stop: 0, ask_user: 0 },
       reason: "scoring_unavailable",
-      error: message,
+      error,
     };
   }
 }

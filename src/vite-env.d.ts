@@ -20,6 +20,11 @@ declare module "*?raw" {
   export default src;
 }
 
+declare module "*?worker" {
+  const WorkerFactory: new () => Worker;
+  export default WorkerFactory;
+}
+
 declare module "sql.js/dist/sql-wasm.js" {
   const initSqlJs: (config?: { locateFile?: (file: string) => string }) => Promise<{
     Database: new (data?: Uint8Array) => {
