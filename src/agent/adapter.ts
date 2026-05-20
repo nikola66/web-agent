@@ -713,6 +713,18 @@ export async function startWebAgent(options: AgentStartOptions): Promise<void> {
   agentProcesses.set(profile.id, agentProcess);
   onStatusChange("running");
 
+  // Warm MobileBERT loop-guard model off the critical path so the first guard call
+  // isn't paying for WASM + weights download synchronously.
+  const idleSchedule =
+    typeof requestIdleCallback === "function"
+      ? requestIdleCallback
+      : (cb: () => void) => setTimeout(cb, 1500);
+  idleSchedule(() => {
+    void import("./supervisor/index.js")
+      .then((mod) => mod.prefetchClassifier())
+      .catch(() => {});
+  });
+
   let agentOutputBuffer = "";
   let toolParseLineBuffer = "";
   let promptParseBuffer = "";

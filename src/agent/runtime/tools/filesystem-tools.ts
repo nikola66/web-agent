@@ -12,7 +12,7 @@ export {
   ensureParentDir,
   toWorkspaceRelative,
   normalizeWorkspaceRelativePath,
-} from "./filesystem/path-utils.js";
+} from "../workspace-paths.js";
 
 // Path hints for error messages
 export {

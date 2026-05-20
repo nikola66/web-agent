@@ -27,6 +27,11 @@ async function getClassifier(): Promise<ZeroShotClassifier> {
   return classifierPromise;
 }
 
+/** Warm-load the classifier off the critical path. Safe to call multiple times. */
+export function prefetchClassifier(): void {
+  void getClassifier().catch(() => {});
+}
+
 export async function scoreHypotheses(premise: string): Promise<SupervisorScores> {
   const classifier = await getClassifier();
   const labels = [

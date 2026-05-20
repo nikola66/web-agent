@@ -17,6 +17,16 @@ import {
 const SIDEBAR_SLIDE_MS = 280;
 const MOBILE_SIDEBAR_MQ = "(max-width: 767px)";
 
+const AURORA_TOP_STYLE = {
+  background: "radial-gradient(ellipse, rgba(251,117,252,0.5) 0%, transparent 70%)",
+  filter: "blur(100px)",
+} as const;
+
+const AURORA_BOTTOM_STYLE = {
+  background: "radial-gradient(ellipse, rgba(75,28,221,0.4) 0%, transparent 70%)",
+  filter: "blur(80px)",
+} as const;
+
 function mobileSidebarOpenWidthPx(): number {
   const iw = typeof window !== "undefined" ? window.innerWidth : 0;
   const vw = typeof window !== "undefined" ? window.visualViewport?.width ?? 0 : 0;
@@ -81,15 +91,23 @@ export function App() {
   }, [runtimeStatus, sidebarOpen]);
 
   useEffect(() => {
+    let timer: number | null = null;
     const onWinResize = () => {
-      setLayoutVersion((v) => v + 1);
-      const st = useSettingsStore.getState();
-      const w = st.sidebarWidthPx;
-      const next = clampSidebarWidthPx(w);
-      if (next !== w) setSidebarWidthPx(next);
+      if (timer !== null) window.clearTimeout(timer);
+      timer = window.setTimeout(() => {
+        timer = null;
+        setLayoutVersion((v) => v + 1);
+        const st = useSettingsStore.getState();
+        const w = st.sidebarWidthPx;
+        const next = clampSidebarWidthPx(w);
+        if (next !== w) setSidebarWidthPx(next);
+      }, 120);
     };
     window.addEventListener("resize", onWinResize);
-    return () => window.removeEventListener("resize", onWinResize);
+    return () => {
+      if (timer !== null) window.clearTimeout(timer);
+      window.removeEventListener("resize", onWinResize);
+    };
   }, [setSidebarWidthPx]);
 
   const onResizeStart = useCallback(
@@ -133,19 +151,11 @@ export function App() {
       {/* Aurora glow accent */}
       <div
         className="pointer-events-none fixed top-[-200px] left-[-100px] h-[600px] w-[600px] rounded-full opacity-14"
-        style={{
-          background:
-            "radial-gradient(ellipse, rgba(251,117,252,0.5) 0%, transparent 70%)",
-          filter: "blur(100px)",
-        }}
+        style={AURORA_TOP_STYLE}
       />
       <div
         className="pointer-events-none fixed right-[-150px] bottom-[-150px] h-[500px] w-[500px] rounded-full opacity-8"
-        style={{
-          background:
-            "radial-gradient(ellipse, rgba(75,28,221,0.4) 0%, transparent 70%)",
-          filter: "blur(80px)",
-        }}
+        style={AURORA_BOTTOM_STYLE}
       />
 
       {/* Sidebar — inner slides on transform; rail width transitions so main column moves in sync */}

@@ -145,10 +145,3 @@ export function flushTerminalTypewriter(
   if (term && s.pending.length > 0) term.write(s.pending);
   s.pending = "";
 }
-
-export function disposeTerminalTypewriter(profileId: string): void {
-  const s = states.get(profileId);
-  if (!s) return;
-  if (s.rafId !== null) cancelAnimationFrame(s.rafId);
-  states.delete(profileId);
-}

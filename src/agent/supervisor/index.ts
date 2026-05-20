@@ -4,7 +4,7 @@ import {
   type LoopGuardMeta,
   type SupervisorMessage,
 } from "./prompts.js";
-import { scoreHypotheses } from "./model.js";
+import { prefetchClassifier, scoreHypotheses } from "./model.js";
 import { formatTransformersError } from "./transformers-env.js";
 import {
   decideFromScores,
@@ -16,7 +16,7 @@ import {
 } from "./thresholds.js";
 
 export type { AgentDecision, LoopGuardMeta, LoopGuardThresholds, SupervisorMessage, SupervisorResult, SupervisorScores };
-export { LOOP_GUARD_DEFAULTS, LOOP_GUARD_HYPOTHESES, buildSupervisorPremise, decideFromScores };
+export { LOOP_GUARD_DEFAULTS, LOOP_GUARD_HYPOTHESES, buildSupervisorPremise, decideFromScores, prefetchClassifier };
 
 export type DecideInput = {
   messages: SupervisorMessage[];

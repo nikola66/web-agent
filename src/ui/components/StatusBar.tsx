@@ -44,7 +44,8 @@ export function StatusBar() {
       : queuedCount > 0
         ? `Thinking · ${queuedCount} queued`
         : "Thinking...";
-  const { storageUsed, storagePersistent } = useRuntimeStore();
+  const storageUsed = useRuntimeStore((s) => s.storageUsed);
+  const storagePersistent = useRuntimeStore((s) => s.storagePersistent);
   const { profiles, activeProfileId } = useProfileStore();
   const [filesOpen, setFilesOpen] = useState(false);
   const filesRootRef = useRef<HTMLDivElement>(null);

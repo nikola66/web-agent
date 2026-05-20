@@ -100,13 +100,13 @@ export function estimateTokens(text) {
   return Math.max(1, Math.ceil(String(text).length / 4));
 }
 
+export function estimateMessageTokens(msg) {
+  return 4 + estimateTokens(msg?.role || "") + estimateTokens(msg?.content || "");
+}
+
 export function estimateMessagesTokens(messages) {
   let total = 0;
-  for (const msg of messages || []) {
-    total += 4;
-    total += estimateTokens(msg.role || "");
-    total += estimateTokens(msg.content || "");
-  }
+  for (const msg of messages || []) total += estimateMessageTokens(msg);
   return total + 2;
 }
 
@@ -341,16 +341,17 @@ export async function streamOpenAI(messages, cfg, onDelta, tools, options = {}) 
   const STREAM_HTTP_MAX_ATTEMPTS = getLlmInitialHttpMaxAttempts();
   const useIpcStream = shouldUseIpcStream(endpoint);
   let buf = "";
-  let full = "";
+  const fullParts: string[] = [];
   let sawReasoning = false;
   const toolAcc = new Map();
+  const onContent = (content) => {
+    fullParts.push(content);
+    onDelta(content);
+  };
   const parseData = (data) => {
     if (data === "[DONE]") return;
     try {
-      const parsed = parseOpenAiStreamPayload(JSON.parse(data), toolAcc, (content) => {
-        full += content;
-        onDelta(content);
-      });
+      const parsed = parseOpenAiStreamPayload(JSON.parse(data), toolAcc, onContent);
       sawReasoning = sawReasoning || parsed.sawReasoning;
     } catch {
       /* ignore malformed SSE payloads */
@@ -382,7 +383,7 @@ export async function streamOpenAI(messages, cfg, onDelta, tools, options = {}) 
     try {
       if (useIpcStream) {
         let meta = { status: 0, statusText: "", contentType: "" };
-        full = "";
+        fullParts.length = 0;
         sawReasoning = false;
         toolAcc.clear();
         buf = "";
@@ -410,7 +411,7 @@ export async function streamOpenAI(messages, cfg, onDelta, tools, options = {}) 
           ok: meta.status >= 200 && meta.status < 300,
           status: meta.status,
           async text() {
-            return full;
+            return fullParts.join("");
           },
           body: null,
         };
@@ -465,6 +466,7 @@ export async function streamOpenAI(messages, cfg, onDelta, tools, options = {}) 
   }
   /* eslint-enable no-await-in-loop */
   if (useIpcStream) {
+    const fullText = fullParts.join("");
     const toolCalls = [...toolAcc.values()].map((call) => ({
       name: call.name,
       arguments: call.arguments || "{}",
@@ -472,12 +474,12 @@ export async function streamOpenAI(messages, cfg, onDelta, tools, options = {}) 
     await logDebugEvent("llm_stream_complete", {
       provider: cfg.provider,
       durationMs: Date.now() - startedAt,
-      outputChars: full.length,
+      outputChars: fullText.length,
       toolCalls: toolCalls.length,
       sawReasoning,
       transport: "ipc_stream",
     });
-    return { text: full, toolCalls, sawReasoning };
+    return { text: fullText, toolCalls, sawReasoning };
   }
   const reader = res.body.getReader();
   const abortStream = () => {
@@ -544,6 +546,7 @@ export async function streamOpenAI(messages, cfg, onDelta, tools, options = {}) 
   } finally {
     options.signal?.removeEventListener?.("abort", abortStream);
   }
+  const fullText = fullParts.join("");
   const toolCalls = [...toolAcc.values()].map((call) => ({
     name: call.name,
     arguments: call.arguments || "{}",
@@ -551,11 +554,11 @@ export async function streamOpenAI(messages, cfg, onDelta, tools, options = {}) 
   await logDebugEvent("llm_stream_complete", {
     provider: cfg.provider,
     durationMs: Date.now() - startedAt,
-    outputChars: full.length,
+    outputChars: fullText.length,
     toolCalls: toolCalls.length,
     sawReasoning,
   });
-  return { text: full, toolCalls, sawReasoning };
+  return { text: fullText, toolCalls, sawReasoning };
 }
 
 function completionMessageText(payload) {
