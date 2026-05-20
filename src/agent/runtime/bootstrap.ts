@@ -56,6 +56,7 @@ import { fetchWithTimeout } from "./llm/streaming.js";
 import {
   clearEchoedPrompt,
   dim,
+  green,
   pink,
   R,
   red,
