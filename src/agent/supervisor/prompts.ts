@@ -5,12 +5,6 @@ export type SupervisorMessage = {
   content: string;
 };
 
-export const LOOP_GUARD_HYPOTHESES = {
-  continue: "The agent should continue working because the task is not complete.",
-  stop: "The agent should stop because the task appears complete.",
-  ask_user: "The agent should ask the user for clarification.",
-} as const;
-
 export type LoopGuardMeta = {
   userRequest?: string;
   webSearchCount?: number;
@@ -19,8 +13,14 @@ export type LoopGuardMeta = {
   pendingToolCalls?: string[];
 };
 
-/** MobileBERT max_position_embeddings=512; zero-shot pairs each hypothesis with the premise. */
-export const LOOP_GUARD_PREMISE_MAX_CHARS = 1800;
+export const LOOP_GUARD_HYPOTHESES = {
+  continue: "The agent should continue working because the task is not complete.",
+  stop: "The agent should stop because the task appears complete.",
+  ask_user: "The agent should ask the user for clarification.",
+} as const;
+
+/** Tail sent to MobileBERT (512-token model; tokenizer truncates longer UTF-8). */
+export const LOOP_GUARD_PREMISE_MAX_CHARS = 2000;
 export const LOOP_GUARD_MESSAGE_TAIL_CHARS = 400;
 export const LOOP_GUARD_USER_REQUEST_TAIL_CHARS = 200;
 
@@ -86,7 +86,10 @@ export function buildSupervisorPremise(
     metaLines.push(`pending_tool_calls: ${meta.pendingToolCalls.join(", ")}`);
   }
 
-  while (messageLines.length > 1 && joinPremise(messageLines, metaLines).length > LOOP_GUARD_PREMISE_MAX_CHARS) {
+  while (
+    messageLines.length > 1 &&
+    joinPremise(messageLines, metaLines).length > LOOP_GUARD_PREMISE_MAX_CHARS
+  ) {
     messageLines.shift();
   }
 

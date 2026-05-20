@@ -3,9 +3,19 @@ export const LOOP_GUARD_MODEL_PATH = "/models/loop-guard";
 
 let configured = false;
 
+function runtimeOrigin(): string | null {
+  if (typeof window !== "undefined" && window.location?.origin) return window.location.origin;
+  if (typeof self !== "undefined" && "location" in self) {
+    const origin = (self as WorkerGlobalScope & { location?: { origin?: string } }).location?.origin;
+    if (origin) return origin;
+  }
+  return null;
+}
+
 function ortAssetBase(): string {
-  if (typeof window === "undefined") return ORT_PUBLIC_PREFIX;
-  return new URL(ORT_PUBLIC_PREFIX, window.location.origin).href;
+  const origin = runtimeOrigin();
+  if (!origin) return ORT_PUBLIC_PREFIX;
+  return new URL(ORT_PUBLIC_PREFIX, origin).href;
 }
 
 export function formatTransformersError(error: unknown): string {
@@ -32,8 +42,7 @@ export async function ensureTransformersEnv(): Promise<void> {
   env.useBrowserCache = true;
   const wasm = (env.backends.onnx as { wasm?: Record<string, unknown> }).wasm ?? {};
   wasm.wasmPaths = ortAssetBase();
-  wasm.numThreads =
-    typeof globalThis.crossOriginIsolated === "boolean" && globalThis.crossOriginIsolated ? 0 : 1;
+  wasm.numThreads = 1;
   wasm.proxy = false;
   (env.backends.onnx as { wasm?: Record<string, unknown> }).wasm = wasm;
 }
