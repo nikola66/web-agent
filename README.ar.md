@@ -263,7 +263,7 @@ Web Agent ships with a broad native tool belt. The built-ins cover workspace man
 | --- | --- |
 | `🩹 apply_patch` | Apply unified patch operations for surgical file changes. |
 | `🪄 artifact_present` | Present markdown to the browser host with view or download affordances. |
-| `📋 cron_list` | List heartbeat cron jobs from `.cronjobs.json`. |
+| `📋 cron_list` | List heartbeat cron jobs from `.webagent/cronjobs.json`. |
 | `⏱️ cron_register` | Register recurring heartbeat jobs that run while the app tab is open. |
 | `🗑️ delete_file` | Delete a file from the workspace. |
 | `🛠️ edit_file` | Replace a matching snippet or fully replace file contents. |

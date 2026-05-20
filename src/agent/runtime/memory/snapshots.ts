@@ -114,7 +114,7 @@ const SNAPSHOT_BASENAME_FROM_MESSAGE_RE = /memory\/snapshots\/([A-Za-z0-9_.-]+\.
 
 /**
  * Collect snapshot filenames still referenced in chat/tool-result messages (e.g. `result_ref`).
- * Used so we do not delete spill files that `.history.json` still points at.
+ * Used so we do not delete spill files that `.webagent/history.json` still points at.
  */
 export function collectReferencedSnapshotBasenames(messages) {
   const keep = new Set();

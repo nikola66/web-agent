@@ -506,7 +506,7 @@ export function MemoryTab({
 
             {section === "jobs" ? (
               snapshot.cronJobs.length === 0 ? (
-                <EmptySection message="No cron jobs registered. Use cron_register (writes .cronjobs.json) to schedule recurring work." />
+                <EmptySection message="No cron jobs registered. Use cron_register (writes .webagent/cronjobs.json) to schedule recurring work." />
               ) : filteredJobs.length === 0 ? (
                 <EmptySection message="No cron jobs match the current filter." />
               ) : (

@@ -5,7 +5,7 @@ import { ensureParentDir } from "../workspace-paths.js";
 import { buildTelegramBotCommands } from "../commands.js";
 
 async function readStateFile() {
-  const channelStatePath = workspaceStatePath(".channel-state.json");
+  const channelStatePath = workspaceStatePath(".webagent/channel-state.json");
   try {
     const raw = await fs.readFile(channelStatePath, "utf8");
     const j = JSON.parse(raw);
@@ -16,7 +16,7 @@ async function readStateFile() {
 }
 
 async function writeStateFile(next) {
-  const channelStatePath = workspaceStatePath(".channel-state.json");
+  const channelStatePath = workspaceStatePath(".webagent/channel-state.json");
   await ensureParentDir(channelStatePath);
   await fs.writeFile(channelStatePath, JSON.stringify(next, null, 2), "utf8");
 }

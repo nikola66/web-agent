@@ -5,9 +5,9 @@ Periodic tasks are evaluated on a heartbeat while **this browser tab/session is 
 ## How it works
 
 - **Tick cadence:** the runtime wakes the evaluator on a timer. The interval is **`HEARTBEAT_INTERVAL_MS`** in [`constants.js`](./constants.js) (currently **30 minutes** — not once per minute). Jobs with `everyMinutes` smaller than the tick spacing may still wait until the next tick after they become due.
-- **State file:** `.heartbeat-state.json`.
-- **Cron tracker file:** `.cronjobs.json`.
-- On each heartbeat, the runtime loads `.cronjobs.json`, finds jobs that are due (by `everyMinutes` and `lastRunAt`), and runs them.
+- **State file:** `.webagent/heartbeat-state.json`.
+- **Cron tracker file:** `.webagent/cronjobs.json`.
+- On each heartbeat, the runtime loads `.webagent/cronjobs.json`, finds jobs that are due (by `everyMinutes` and `lastRunAt`), and runs them.
 
 **Scheduling expectations:** Cron is **heartbeat-gated**. “Every 60 minutes” means “at least 60 minutes after `lastRunAt`, when a heartbeat sees it”—not precise wall-clock cron like systemd. Overnight or “end of day” jobs only fire if the app stays open across that window.
 
@@ -15,7 +15,7 @@ Periodic tasks are evaluated on a heartbeat while **this browser tab/session is 
 
 When calling the **`cron_register`** tool from the model, use the same shapes as below; copy-ready fenced JSON examples live in [`cron-register-description.ts`](./tools/cron-register-description.ts) (tool catalog text).
 
-Use this JSON shape in `.cronjobs.json`. Prefer **`web_search` / `write_file` / memory tools** in steps—not `run_shell`—because the hosted **Nodebox** runtime has **no POSIX shell wrapper** (`sh -c`). For shell pipelines you need a **local/full** runtime, not this browser-backed one.
+Use this JSON shape in `.webagent/cronjobs.json`. Prefer **`web_search` / `write_file` / memory tools** in steps—not `run_shell`—because the hosted **Nodebox** runtime has **no POSIX shell wrapper** (`sh -c`). For shell pipelines you need a **local/full** runtime, not this browser-backed one.
 
 ```json
 {

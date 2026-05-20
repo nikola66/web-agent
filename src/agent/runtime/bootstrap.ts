@@ -64,6 +64,7 @@ import {
   renderUserBlock,
 } from "./terminal-format.js";
 import { getDebugLogPath, logDebugEvent } from "./logging/debug-log.js";
+import { notifyMigrationsApplied, runPendingMigrations } from "./migrations/index.js";
 import { buildToolRowsFromCatalog } from "./slash-command-views.js";
 import { formatHelpForSurface, runSkillsSlashCommand } from "./channel-outbound.js";
 import { SLASH_COMMANDS } from "./commands.js";
@@ -296,6 +297,20 @@ export async function main() {
     contextWindowTokens: cfg.contextWindowTokens ?? null,
     debugLogPath: getDebugLogPath(),
   });
+
+  try {
+    const migrationSummary = await runPendingMigrations();
+    if (migrationSummary.applied.length || migrationSummary.failed.length) {
+      await logDebugEvent("migrations_run", migrationSummary);
+    }
+    await notifyMigrationsApplied(migrationSummary, (chunk) =>
+      process.stdout.write(chunk)
+    );
+  } catch (err) {
+    await logDebugEvent("migrations_runner_crashed", {
+      error: err instanceof Error ? err.message : String(err),
+    });
+  }
 
   const turnMutex = createTurnMutex();
   const heartbeatSkipOpts = { shouldSkipTick: () => turnMutex.isBusy() };

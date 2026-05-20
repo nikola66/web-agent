@@ -2,7 +2,7 @@
  * Tool catalog copy for `cron_register` (Node registry + browser metadata).
  * Keep dependency-free so browser stubs can import it safely.
  */
-export const CRON_REGISTER_TOOL_DESCRIPTION = `Save a recurring heartbeat job to \`.cronjobs.json\`, or remove one. The job runs only while the app tab is open; the runtime checks due jobs on heartbeat ticks (see HEARTBEAT.md — \`everyMinutes\` is minimum spacing between runs, not wall-clock cron like systemd).
+export const CRON_REGISTER_TOOL_DESCRIPTION = `Save a recurring heartbeat job to \`.webagent/cronjobs.json\`, or remove one. The job runs only while the app tab is open; the runtime checks due jobs on heartbeat ticks (see HEARTBEAT.md — \`everyMinutes\` is minimum spacing between runs, not wall-clock cron like systemd).
 
 **Remove a job:** \`{"action":"remove","id":"<job_id>"}\`. Requires an existing id; unknown ids error (use \`cron_list\` first).
 

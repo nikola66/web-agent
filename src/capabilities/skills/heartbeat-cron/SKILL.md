@@ -18,13 +18,13 @@ triggers: [schedule, cron, daily digest, recurring, every day, reminder job, cro
 
 - Jobs run **only while the app tab/session is open**. Closing the browser stops the heartbeat until you return.
 - Scheduling is **heartbeat-gated**, not systemd-style cron: `everyMinutes` is **minimum** spacing between runs; ticks use `HEARTBEAT_INTERVAL_MS` (typically 30 minutes). Short `everyMinutes` still waits for the next tick after becoming due.
-- State files: `.heartbeat-state.json`, cron definition **`.cronjobs.json`** in the workspace.
+- State files: `.webagent/heartbeat-state.json`, cron definition **`.webagent/cronjobs.json`** in the workspace.
 - `tool` at job root or each `steps[]` entry must be a **built-in** name with that tool's `arguments`.
 - **`delivery`** is only on the job: `silent` (minimal logs), `terminal` (agent terminal; optional `notifyChannel` for Telegram), or `email` (needs `deliveryEmailTo`, optional subject). Never put `silent`/`terminal`/`email` as a step `tool`.
 
 ## Authoring
 
-1. Use **`cron_register`** (or edit `.cronjobs.json` carefully) with `id`, `everyMinutes` (≥1), and `delivery` (confirm email vs terminal with the user).
+1. Use **`cron_register`** (or edit `.webagent/cronjobs.json` carefully) with `id`, `everyMinutes` (≥1), and `delivery` (confirm email vs terminal with the user).
 2. Prefer **`web_search`**, **`write_file`**, memory tools — **not** `run_shell` in steps on Nodebox (no real POSIX shell). The **canonical** tool decision table is **`browser-runtime-map`**; this skill only adds cron/heartbeat/delivery rules.
 3. For Telegram side-channel: `delivery: terminal` plus `notifyChannel: telegram:<chatId>` when Telegram is configured; `silent`/`email` do not use `notifyChannel`. Ad-hoc (non-cron) delivery formatting lives in **`artifact-delivery`**.
 4. Multi-step: ordered `steps` with shape `{"tool":"…","arguments":{…}}` (legacy `action` aliases to `tool`).
