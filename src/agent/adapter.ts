@@ -739,10 +739,13 @@ export async function startWebAgent(options: AgentStartOptions): Promise<void> {
 
   // Warm MobileBERT loop-guard model off the critical path so the first guard call
   // isn't paying for WASM + weights download synchronously.
-  const idleSchedule =
-    typeof requestIdleCallback === "function"
-      ? requestIdleCallback
-      : (cb: () => void) => setTimeout(cb, 1500);
+  const idleSchedule = (cb: () => void) => {
+    if (typeof requestIdleCallback === "function") {
+      requestIdleCallback(cb, { timeout: 12_000 });
+      return;
+    }
+    setTimeout(cb, 12_000);
+  };
   idleSchedule(() => {
     void import("./supervisor/index.js")
       .then((mod) => mod.prefetchClassifier())

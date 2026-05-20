@@ -1,5 +1,7 @@
 const ORT_PUBLIC_PREFIX = "transformers-ort/";
 const LOOP_GUARD_MODEL_SUFFIX = "models/loop-guard";
+/** Smallest Xenova quant variant — lower WASM peak than model_quantized (q8). */
+export const LOOP_GUARD_DTYPE = "q4f16" as const;
 
 let configured = false;
 

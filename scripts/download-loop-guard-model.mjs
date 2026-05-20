@@ -18,7 +18,7 @@ const FILES = [
   "tokenizer_config.json",
   "vocab.txt",
   "special_tokens_map.json",
-  "onnx/model_quantized.onnx",
+  "onnx/model_q4f16.onnx",
 ];
 
 async function download(relPath) {

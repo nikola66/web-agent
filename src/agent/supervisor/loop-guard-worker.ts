@@ -7,6 +7,7 @@ import type { SupervisorScores } from "./thresholds.js";
 import {
   ensureTransformersEnv,
   formatTransformersError,
+  LOOP_GUARD_DTYPE,
   LOOP_GUARD_MODEL_PATH,
 } from "./transformers-env.js";
 
@@ -31,7 +32,7 @@ async function getClassifier(): Promise<ZeroShotClassifier> {
       const { pipeline } = await import("@huggingface/transformers");
       const pipe = await pipeline("zero-shot-classification", MODEL_ID, {
         device: "wasm",
-        dtype: "q8",
+        dtype: LOOP_GUARD_DTYPE,
       });
       return pipe as unknown as ZeroShotClassifier;
     })().catch((err) => {
