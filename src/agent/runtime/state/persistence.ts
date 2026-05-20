@@ -561,7 +561,7 @@ export async function runHeartbeatTick(
 
   state.lastHeartbeatAt = now;
   await saveHeartbeatState(state);
-  process.stdout.write(dim(`\n🫀 heartbeat: checking periodic tasks (${reason})...\n`));
+  process.stdout.write(dim(`🫀 heartbeat: checking periodic tasks (${reason})...\n`));
 
   const cron = await loadCronJobs();
   if (!Array.isArray(cron.jobs) || cron.jobs.length === 0) {

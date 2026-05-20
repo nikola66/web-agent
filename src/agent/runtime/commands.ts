@@ -25,6 +25,11 @@ export const SLASH_COMMANDS = [
     description: "Search markdown in the wiki vault when memory tools are not enough.",
   },
   { name: "/<skill> [task]", description: "Invoke an installed skill for a task." },
+  {
+    name: "/voice [on|off]",
+    description:
+      "Voice mode: speak agent replies aloud (browser OS voices, fully local). Mic uses local Whisper STT. No arg shows status.",
+  },
   { name: "/stop", description: "Interrupt the current run." },
   { name: "/exit", description: "Exit the active terminal agent session." },
 ];

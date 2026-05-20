@@ -423,7 +423,7 @@ Default vault root: `.webagent/knowledge-vault/`. Legacy `knowledge-vault/` at w
 
 Open [webagent.aratech.ae](https://webagent.aratech.ae), create or select a profile, add a free key from [OpenRouter.ai](https://openrouter.ai) or [Ollama](https://ollama.com), click **Launch**, and start chatting.
 
-For Web Agent, `Gemma4` is the recommended model because it strikes a strong balance between speed, price, and tool-calling support, including images, audio, and video. You can choose any model you prefer.
+For Web Agent, `Gemma4` is the recommended chat model because it strikes a strong balance between speed, price, and tool-calling support, including images and vision. Voice input is transcribed locally in the browser via whisper-tiny.en (English). You can choose any chat model you prefer.
 
 ### Run locally
 

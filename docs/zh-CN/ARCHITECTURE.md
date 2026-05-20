@@ -50,7 +50,7 @@
 <<<WEBAGENT_PROXY_REQ:<id>>>{"method":"POST","url":"…","headers":{…},"body":"…"}<<<END_WEBAGENT_PROXY_REQ>>>
 ```
 
-`adapter.ts` 解析这些标记（约 834–900 行），经 `/api/proxy` 路由（开发：`vite.config.ts`；生产：`scripts/cors-proxy-server.mjs` 或 Caddy），再将响应写回 stdin：
+`adapter.ts` 解析这些标记（在该文件中搜索 `WEBAGENT_PROXY_REQ`）。非流式请求经 `/api/proxy` 路由（开发：`vite.config.ts`；生产：`scripts/cors-proxy-server.mjs` 或 Caddy）。流式 LLM 请求在 `src/agent/runtime/llm/streaming.ts` 的 `shouldUseIpcStream` 适用时对同源 `/api/llm/...` 直接 `fetch`。响应写回 stdin：
 
 ```
 <<<WEBAGENT_PROXY_RESP:<id>>>{"status":200,"body":"…"}<<<END_WEBAGENT_PROXY_RESP>>>

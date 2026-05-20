@@ -52,7 +52,7 @@ The embedded runtime cannot directly call `fetch` (CORS / no origin). To make HT
 <<<WEBAGENT_PROXY_REQ:<id>>>{"method":"POST","url":"…","headers":{…},"body":"…"}<<<END_WEBAGENT_PROXY_REQ>>>
 ```
 
-`adapter.ts` parses these markers (currently lines ~834–900), routes through `/api/proxy` (CORS proxy, dev: `vite.config.ts`; prod: `scripts/cors-proxy-server.mjs` or Caddy), then writes the response back to stdin:
+`adapter.ts` parses these markers (search for `WEBAGENT_PROXY_REQ` in that file). Non-streaming requests go through `/api/proxy` (CORS proxy, dev: `vite.config.ts`; prod: `scripts/cors-proxy-server.mjs` or Caddy). Streaming LLM requests use same-origin `fetch` to `/api/llm/...` when `shouldUseIpcStream` in `src/agent/runtime/llm/streaming.ts` applies. Responses are written back to stdin:
 
 ```
 <<<WEBAGENT_PROXY_RESP:<id>>>{"status":200,"body":"…"}<<<END_WEBAGENT_PROXY_RESP>>>

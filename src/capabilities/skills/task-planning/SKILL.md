@@ -25,6 +25,8 @@ Companion to **`systematic-debugging`** (which falsifies one hypothesis at a tim
 3. **Execute sequentially.** Mark a todo done before starting the next; do not batch completions.
 4. **Re-plan only on falsification** — evidence shows a step is wrong or blocked. Otherwise, follow the plan.
 5. **Cross-link delivery**: if the final todo produces a file or message, route through **`artifact-delivery`**.
+6. **Hand off to execution**: once the user approves scope, switch to **`task-execution`** — it owns gating, status transitions, failure recovery, and the final report.
+7. **Visualize the plan**: include a Mermaid flowchart of the ordered steps via **`chart`** when the plan has branching, dependencies, or ≥4 todos — humans grasp the shape faster from a diagram.
 
 ## Pitfalls
 

@@ -3,6 +3,13 @@ import assert from "node:assert/strict";
 import fs from "node:fs/promises";
 import path from "node:path";
 
+test("reasoningDisableExtras uses OpenRouter reasoning object and reasoning_effort elsewhere", async () => {
+  const { reasoningDisableExtras } = await import("../dist/agent-runtime/llm/provider-config.js");
+  assert.deepEqual(reasoningDisableExtras("openrouter"), { reasoning: { enabled: false } });
+  assert.deepEqual(reasoningDisableExtras("ollama"), { reasoning_effort: "none" });
+  assert.deepEqual(reasoningDisableExtras("custom"), { reasoning_effort: "none" });
+});
+
 test("resolveLlm routes built-in providers through the app LLM proxy in nodebox", async () => {
   const providers = await Promise.all(
     (await fs.readdir(path.join(process.cwd(), "src/capabilities/providers"))).map(

@@ -1,7 +1,9 @@
 const ORT_PUBLIC_PREFIX = "transformers-ort/";
 const LOOP_GUARD_MODEL_SUFFIX = "models/loop-guard";
+const WHISPER_MODEL_SUFFIX = "models/whisper-tiny-en";
 /** Smallest Xenova quant variant — lower WASM peak than model_quantized (q8). */
 export const LOOP_GUARD_DTYPE = "q4f16" as const;
+export const WHISPER_DTYPE = "q4f16" as const;
 
 let configured = false;
 
@@ -18,6 +20,7 @@ function publicAssetPath(suffix: string): string {
 }
 
 export const LOOP_GUARD_MODEL_PATH = publicAssetPath(LOOP_GUARD_MODEL_SUFFIX);
+export const WHISPER_MODEL_PATH = publicAssetPath(WHISPER_MODEL_SUFFIX);
 
 function runtimeOrigin(): string | null {
   if (typeof window !== "undefined" && window.location?.origin) return window.location.origin;

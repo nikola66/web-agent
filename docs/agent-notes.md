@@ -54,11 +54,22 @@ Use [`.env.local`](../.env.local) for machine-specific local dev (gitignored; Vi
 
 Threshold order: stop → ask_user → continue; if none clear the bar, decision is **stop** (safe default).
 
+The NLI premise includes a short task frame plus **Turn context** meta (`round`, `loop_phase`, `last_reply_had_tool_calls`, `auto_continue_nudges`, tool counts, etc.) so MobileBERT can distinguish autonomous next steps from blocked-on-user cases.
+
 **`scoring_unavailable`** means every recovery attempt in the Loop Guard worker failed (not that Loop Guard is disabled). Scoring runs in a dedicated Web Worker with serialized requests, per-label forwards (lower WASM memory than batched multi-label), premise tail budgets (800 → 1200 → 2000 chars), and worker restart only after repeated identical non-ONNX failures. Typical root causes: ORT WASM assets missing (`/transformers-ort/`), model weights missing (`public/models/loop-guard/onnx/model_q4f16.onnx`), **gzip/brotli on `.onnx` or `.wasm`** (production `Caddyfile` serves both uncompressed), or **WASM OOM** while Nodebox is active (opaque numeric codes like `66250952`). Verify Network: `ort-wasm-simd-threaded.jsep.wasm` and `model_q4f16.onnx` return 200 with no `Content-Encoding`; refresh weights with `npm run download:loop-guard-model`. Cloudflare **report-only** CSP warnings (`script-src`, `connect-src`) are from CF RUM/service-worker probes, not enforced blocks.
 
 Debug: set `VITE_WEBAGENT_DEBUG_LOG=1` and look for `turn_loop_guard` / `turn_loop_guard_nudge` in the session JSONL, or dim `▸ loop guard · …` lines in the terminal.
 
 **Separate from Loop Guard:** `tool-failure-streak.ts` halts repeated identical tool failures inside one turn (deterministic streak counter).
+
+## Voice (STT / TTS)
+
+- **Browser mic:** `src/core/voice/stt-worker.ts` + `stt-client.ts` run vendored whisper-tiny.en (WASM). Mic input in `ChatInput` submits transcribed text directly — no LLM provider required for STT.
+- **Telegram / workspace audio:** `audio_analyze` sends bytes to the same STT worker over IPC (`WEBAGENT_STT_REQ` markers in `adapter.ts`).
+- **Telegram outbound:** Kokoro-82M TTS in Nodebox (`src/agent/runtime/voice/synthesize.ts`); model weights mirrored at boot via `writeModelAssets` in `adapter.ts` (Kokoro only — Whisper stays under `public/models/whisper-tiny-en/` on the page origin).
+- **Refresh scripts:** `npm run download:whisper`, `npm run download:kokoro`; `npm run check:models` runs before production builds.
+
+See [`src/agent/runtime/voice/README.md`](../src/agent/runtime/voice/README.md) for the full pipeline.
 
 ## Bundled skills (discovery)
 

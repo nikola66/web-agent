@@ -1,14 +1,140 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { submitUserInput } from "@/core/orchestrator";
 import { ALLOWED_UPLOAD_EXTENSIONS } from "@embed-runtime/tools/upload-allowlist.js";
 import { SLASH_COMMANDS } from "@/agent/embed-commands";
 import { writeWorkspaceUpload } from "@/core/workspace";
+import { transcribeBlob } from "@/core/voice/stt-client";
 import { profileAgentWorking, useActiveProfileRuntime } from "../stores/runtime-store";
 import { useProfileStore } from "../stores/profile-store";
-import { Plus } from "lucide-react";
+import { Mic, MicOff, Plus } from "lucide-react";
 import { StatusBar } from "./StatusBar";
+import { useVoiceStore } from "../stores/voice-store";
 
-/** True when the trimmed line is a known slash command (primary token + optional args). */
+// ---------------------------------------------------------------------------
+// Browser mic recording (MediaRecorder → local Whisper STT)
+// ---------------------------------------------------------------------------
+type RecState = "idle" | "recording";
+
+const VOICE_CHUNK_MS = 2500;
+
+function pickRecordingMime(): { mime: string; ext: string } {
+  const candidates = [
+    { mime: "audio/webm;codecs=opus", ext: "webm" },
+    { mime: "audio/webm", ext: "webm" },
+    { mime: "audio/mp4", ext: "m4a" },
+  ];
+  for (const c of candidates) {
+    if (typeof MediaRecorder !== "undefined" && MediaRecorder.isTypeSupported(c.mime)) return c;
+  }
+  return { mime: "audio/webm", ext: "webm" };
+}
+
+function useVoiceRecording({
+  onError,
+  onInterim,
+}: {
+  onError: (msg: string) => void;
+  onInterim: (chunk: string) => void;
+}) {
+  const recorderRef = useRef<MediaRecorder | null>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+  const chunksRef = useRef<BlobPart[]>([]);
+  const formatRef = useRef(pickRecordingMime());
+  const transcribeQueueRef = useRef(Promise.resolve());
+  const [recState, setRecState] = useState<RecState>("idle");
+
+  const isSupported =
+    typeof window !== "undefined" &&
+    typeof MediaRecorder !== "undefined" &&
+    !!navigator.mediaDevices?.getUserMedia;
+
+  const releaseStream = useCallback(() => {
+    streamRef.current?.getTracks().forEach((t) => t.stop());
+    streamRef.current = null;
+  }, []);
+
+  const enqueueChunkTranscribe = useCallback(
+    (blob: Blob) => {
+      transcribeQueueRef.current = transcribeQueueRef.current
+        .then(async () => {
+          const text = await transcribeBlob(blob);
+          if (text) onInterim(text);
+        })
+        .catch(() => {
+          /* chunk failures are non-fatal */
+        });
+    },
+    [onInterim]
+  );
+
+  const start = useCallback(async () => {
+    if (recorderRef.current) return;
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      streamRef.current = stream;
+      const format = pickRecordingMime();
+      formatRef.current = format;
+      const recorder = new MediaRecorder(
+        stream,
+        format.mime ? { mimeType: format.mime } : undefined
+      );
+      chunksRef.current = [];
+      recorder.ondataavailable = (e) => {
+        if (e.data.size > 0) {
+          chunksRef.current.push(e.data);
+          enqueueChunkTranscribe(e.data);
+        }
+      };
+      recorder.onerror = () => {
+        onError("Recording failed. Try again.");
+        releaseStream();
+        recorderRef.current = null;
+        setRecState("idle");
+      };
+      recorder.start(VOICE_CHUNK_MS);
+      recorderRef.current = recorder;
+      setRecState("recording");
+    } catch (err) {
+      onError(
+        err instanceof DOMException && err.name === "NotAllowedError"
+          ? "Microphone permission denied. Allow mic access in your browser settings."
+          : "Could not access the microphone."
+      );
+    }
+  }, [enqueueChunkTranscribe, onError, releaseStream]);
+
+  const stop = useCallback((): Promise<{ blob: Blob; ext: string } | null> => {
+    const recorder = recorderRef.current;
+    if (!recorder || recorder.state === "inactive") return Promise.resolve(null);
+    return new Promise((resolve) => {
+      recorder.onstop = () => {
+        releaseStream();
+        recorderRef.current = null;
+        setRecState("idle");
+        const ext = formatRef.current.ext;
+        const blob = new Blob(chunksRef.current, {
+          type: formatRef.current.mime || "audio/webm",
+        });
+        chunksRef.current = [];
+        void transcribeQueueRef.current.finally(() => {
+          resolve(blob.size > 0 ? { blob, ext } : null);
+        });
+      };
+      recorder.stop();
+    });
+  }, [releaseStream]);
+
+  useEffect(() => {
+    return () => {
+      recorderRef.current?.stop();
+      releaseStream();
+      recorderRef.current = null;
+    };
+  }, [releaseStream]);
+
+  return { recState, isSupported, start, stop };
+}
+
 function shouldSubmitTypedSlashDirectly(value: string): boolean {
   const trimmed = value.trim();
   const firstToken = trimmed.split(/\s+/)[0] ?? "";
@@ -53,11 +179,19 @@ function persistInputHistory(profileId: string, lines: string[]) {
   }
 }
 
+// ---------------------------------------------------------------------------
+// Component
+// ---------------------------------------------------------------------------
 export function ChatInput() {
   const [value, setValue] = useState("");
   const [selectedCommand, setSelectedCommand] = useState(0);
   const [dragActive, setDragActive] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
+  const [voiceError, setVoiceError] = useState<string | null>(null);
+  const [voiceSending, setVoiceSending] = useState(false);
+  const [interimTranscript, setInterimTranscript] = useState("");
+
+  const voiceEnabled = useVoiceStore((s) => s.enabled);
   const rt = useActiveProfileRuntime();
   const {
     runtimeStatus,
@@ -76,6 +210,18 @@ export function ChatInput() {
   const dragDepthRef = useRef(0);
   const { activeProfileId } = useProfileStore();
   const disabled = runtimeStatus !== "running" && runtimeStatus !== "booting";
+
+  const handleVoiceError = useCallback((msg: string) => {
+    setVoiceError(msg);
+  }, []);
+
+  const appendInterim = useCallback((chunk: string) => {
+    setInterimTranscript((prev) => (prev ? `${prev} ${chunk}` : chunk));
+  }, []);
+
+  const { recState, isSupported: micSupported, start: startRecording, stop: stopRecording } =
+    useVoiceRecording({ onError: handleVoiceError, onInterim: appendInterim });
+
   const slashQuery = getSlashQuery(value);
 
   const commandMatches = useMemo(() => {
@@ -115,13 +261,9 @@ export function ChatInput() {
     const bootJustFinished =
       runtimeStatus === "running" &&
       (previousStatus === "booting" || previousStatus === "installing");
-
     if (bootJustFinished) {
-      requestAnimationFrame(() => {
-        inputRef.current?.focus();
-      });
+      requestAnimationFrame(() => inputRef.current?.focus());
     }
-
     previousRuntimeStatusRef.current = runtimeStatus;
   }, [runtimeStatus]);
 
@@ -163,12 +305,48 @@ export function ChatInput() {
   };
 
   const onSubmit = async () => {
-    const line = value;
+    const line = value.trim();
+    if (!line) return;
     const pid = activeProfileId;
     await submitUserInput(line);
     recordSubmittedLine(line, pid);
     historyBrowseIndexRef.current = null;
     setValue("");
+  };
+
+  const onMicClick = async () => {
+    if (!activeProfileId || runtimeStatus !== "running") {
+      setVoiceError("Launch the agent before using the microphone.");
+      return;
+    }
+    setVoiceError(null);
+    if (recState === "recording") {
+      setVoiceSending(true);
+      try {
+        const recorded = await stopRecording();
+        if (!recorded) {
+          setVoiceError("No audio captured. Try again.");
+          setInterimTranscript("");
+          return;
+        }
+        const { blob } = recorded;
+        const finalText = (await transcribeBlob(blob)).trim() || interimTranscript.trim();
+        setInterimTranscript("");
+        if (!finalText) {
+          setVoiceError("Could not transcribe audio. Try again.");
+          return;
+        }
+        await submitUserInput(finalText);
+        recordSubmittedLine(finalText, activeProfileId);
+      } catch (err) {
+        setVoiceError(err instanceof Error ? err.message : "Failed to send voice message.");
+      } finally {
+        setVoiceSending(false);
+      }
+      return;
+    }
+    setInterimTranscript("");
+    await startRecording();
   };
 
   const submitSlashPick = async (picked: { name: string }) => {
@@ -286,6 +464,26 @@ export function ChatInput() {
             e.target.value = "";
           }}
         />
+
+        {/* Mic button — only shown when voice mode is enabled */}
+        {(voiceEnabled || recState !== "idle") && micSupported && (
+          <button
+            type="button"
+            aria-label={recState === "recording" ? "Stop recording and send" : "Record voice message"}
+            data-testid="chat-input-mic"
+            disabled={(runtimeStatus !== "running" && recState === "idle") || voiceSending}
+            onClick={() => void onMicClick()}
+            className={[
+              "inline-flex min-h-8 min-w-8 shrink-0 touch-manipulation items-center justify-center rounded-[3px] transition-colors",
+              recState === "recording"
+                ? "bg-brand-magenta-light/30 text-brand-magenta-light animate-pulse"
+                : "bg-white/5 text-text-muted hover:text-text-primary",
+            ].join(" ")}
+          >
+            {recState === "recording" ? <MicOff size={12} /> : <Mic size={12} />}
+          </button>
+        )}
+
         <textarea
           ref={inputRef}
           rows={1}
@@ -324,7 +522,8 @@ export function ChatInput() {
             if (
               !disabled &&
               (e.key === "ArrowUp" || e.key === "ArrowDown") &&
-              inputHistoryRef.current.length > 0
+              inputHistoryRef.current.length > 0 &&
+              recState === "idle"
             ) {
               const hist = inputHistoryRef.current;
               if (e.key === "ArrowUp") {
@@ -364,14 +563,19 @@ export function ChatInput() {
               void onSubmit();
             }
           }}
-          disabled={disabled}
+          disabled={disabled || recState === "recording" || voiceSending}
           className="min-h-10 resize-none overflow-y-hidden flex-1 bg-transparent py-2 text-sm leading-5 text-text-primary outline-none placeholder:text-text-muted disabled:cursor-not-allowed disabled:opacity-60 md:min-h-7 md:py-1.5"
           placeholder={
             runtimeStatus === "running"
-              ? "Type message (Enter to send, /stop to interrupt)"
+              ? recState === "recording"
+                ? "Recording… click mic to stop and send"
+                : voiceSending
+                  ? "Sending voice message…"
+                  : "Type message (Enter to send, /stop to interrupt)"
               : "Launch the agent to start chatting"
           }
         />
+
         {slashQuery !== null && commandMatches.length > 0 && (
           <div className="absolute bottom-[calc(100%+0.5rem)] left-0 z-20 w-full border border-[#fb75fc4d] bg-[#05050dd9] p-2 shadow-[0_0_0_1px_rgba(251,117,252,0.16),0_18px_44px_rgba(0,0,0,0.55)] backdrop-blur-sm">
             <p className="px-2 pb-1 text-[10px] uppercase tracking-[0.22em] text-brand-magenta-light">
@@ -411,7 +615,33 @@ export function ChatInput() {
           </div>
         )}
       </div>
+
+      {/* Status row */}
       {uploadError ? <p className="mt-1 text-[11px] text-red-300">{uploadError}</p> : null}
+      {voiceError ? (
+        <p className="mt-1 text-[11px] text-red-300">
+          <button
+            type="button"
+            className="mr-2 underline-offset-2 hover:underline"
+            onClick={() => setVoiceError(null)}
+            aria-label="Dismiss voice error"
+          >
+            ✕
+          </button>
+          {voiceError}
+        </p>
+      ) : null}
+      {recState === "recording" && (
+        <p className="mt-1 text-[11px] text-brand-magenta-light animate-pulse">
+          ● Recording… speak now. Click the mic to stop and send.
+          {interimTranscript ? (
+            <span className="block mt-0.5 text-foreground/80 animate-none normal-case">
+              {interimTranscript}
+            </span>
+          ) : null}
+        </p>
+      )}
+
       <div className="mt-1 w-full">
         <StatusBar />
       </div>

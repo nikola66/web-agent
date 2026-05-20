@@ -366,8 +366,9 @@ function mapInboundUpdate(update) {
   if (!msg || typeof msg !== "object") return null;
   if (msg.from?.is_bot) return null;
   const textRaw = typeof msg.text === "string" ? msg.text : typeof msg.caption === "string" ? msg.caption : "";
-  if (!textRaw.trim()) return null;
-  return {
+  const voice = msg.voice && typeof msg.voice === "object" ? msg.voice : null;
+  if (!textRaw.trim() && !voice?.file_id) return null;
+  const payload = {
     channel: "telegram",
     chatId: String(msg.chat?.id ?? ""),
     userId: String(msg.from?.id ?? ""),
@@ -375,6 +376,15 @@ function mapInboundUpdate(update) {
     text: textRaw,
     timestamp: Number(msg.date || 0) * 1000,
   };
+  if (voice?.file_id) {
+    payload.voice = {
+      fileId: String(voice.file_id),
+      duration: Number(voice.duration || 0),
+      mimeType: typeof voice.mime_type === "string" ? voice.mime_type : "audio/ogg",
+      fileSize: Number(voice.file_size || 0),
+    };
+  }
+  return payload;
 }
 
 /**
@@ -397,7 +407,13 @@ export function pollTelegramUpdates({ token, signal, onInbound, onError }) {
         const url = new URL(`https://api.telegram.org/bot${encodeURIComponent(token)}/getUpdates`);
         if (nextPollOffset != null) url.searchParams.set("offset", String(nextPollOffset));
         url.searchParams.set("timeout", String(pollTimeoutSec));
-        url.searchParams.set("allowed_updates", JSON.stringify(["message", "channel_post"]));
+        url.searchParams.set(
+          "allowed_updates",
+          JSON.stringify(["message", "channel_post"])
+        );
+        // Telegram sends `voice` only when listed; default allow-list above covers
+        // both message and channel_post update kinds, both of which can carry a
+        // `voice` payload (see `mapInboundUpdate`).
 
         const result = await fetchTelegramResult(url.toString(), { signal });
         const updates = Array.isArray(result) ? result : [];

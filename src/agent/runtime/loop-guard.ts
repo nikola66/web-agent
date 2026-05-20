@@ -22,6 +22,8 @@ export type SupervisorResult = {
   error?: string;
 };
 
+export type LoopGuardPhase = "no_tools" | "post_tool_stale_calls";
+
 export type LoopGuardContext = {
   userRequest?: string;
   webSearchCount?: number;
@@ -29,6 +31,10 @@ export type LoopGuardContext = {
   toolsExecutedInTurn?: boolean;
   pendingToolNames?: string[];
   visible?: string;
+  round?: number;
+  loopPhase?: LoopGuardPhase;
+  lastReplyHadToolCalls?: boolean;
+  autoContinueNudges?: number;
 };
 
 type ConvRow = { role?: string; content?: unknown };
@@ -168,6 +174,10 @@ export async function requestLoopGuardDecision(
         webFetchCount: ctx.webFetchCount,
         toolsExecutedInTurn: ctx.toolsExecutedInTurn,
         pendingToolCalls: ctx.pendingToolNames,
+        round: ctx.round,
+        loopPhase: ctx.loopPhase,
+        lastReplyHadToolCalls: ctx.lastReplyHadToolCalls,
+        autoContinueNudges: ctx.autoContinueNudges,
       },
     });
     if (!result || typeof result !== "object") {
@@ -239,7 +249,7 @@ export function shouldContinueFromLoopGuard(
     const stop = Number(scores.stop ?? 0);
     if (visibleExpectsUserReply(ctx.visible)) return false;
     if (cont >= CONTINUE_SCORE_THRESHOLD) return true;
-    if (ctx.toolsExecutedInTurn && stop < 0.2 && cont < CONTINUE_SCORE_THRESHOLD) return true;
+    if (stop < 0.2 && cont < CONTINUE_SCORE_THRESHOLD) return true;
     return false;
   }
   return false;

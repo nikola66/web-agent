@@ -482,7 +482,27 @@ export function ProfileEditor(props: {
               const token = channelTokens[channel.id] || "";
               const isVisible = channelTokenVisible[channel.id] || false;
               return (
-                <Field key={channel.id} label={channel.name}>
+                <Field
+                  key={channel.id}
+                  label={
+                    <>
+                      {channel.name}
+                      {channel.docsUrl ? (
+                        <>
+                          {" · "}
+                          <a
+                            href={channel.docsUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="font-normal underline underline-offset-2 hover:text-text-primary"
+                          >
+                            Setup tutorial
+                          </a>
+                        </>
+                      ) : null}
+                    </>
+                  }
+                >
                   <div className="flex gap-1.5">
                     <div className="relative flex-1">
                       <input

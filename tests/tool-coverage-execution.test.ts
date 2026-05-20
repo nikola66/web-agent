@@ -12,6 +12,7 @@ const createToolContext = createToolContextRaw as (
 ) => ReturnType<typeof createToolContextRaw>;
 import { emailTool } from "../dist/agent-runtime/tools/email-tools.js";
 import { visionAnalyzeTool } from "../dist/agent-runtime/tools/vision-tools.js";
+import { audioAnalyzeTool } from "../dist/agent-runtime/tools/audio-tools.js";
 import {
   BUILTIN_TOOLS,
   loadToolCatalog,
@@ -50,6 +51,7 @@ test("each builtin tool has a documented execution test path", () => {
   const covered = new Set([
     "apply_patch",
     "artifact_present",
+    "audio_analyze",
     "cron_list",
     "cron_register",
     "delete_file",
@@ -586,5 +588,22 @@ test("vision_analyze rejects workspace image paths outside uploads before provid
       { env: process.env, cwd: process.cwd() }
     ),
     /uploads\//
+  );
+});
+
+test("audio_analyze rejects missing audio payloads before STT IPC", async () => {
+  await assert.rejects(
+    audioAnalyzeTool({ question: "What did they say?" }, { env: process.env }),
+    /workspace_relative_audio_path|audio_data_url|audio_url|fetch_url/
+  );
+});
+
+test("audio_analyze rejects workspace audio paths outside the allowed roots", async () => {
+  await assert.rejects(
+    audioAnalyzeTool(
+      { workspace_relative_audio_path: "notes/clip.ogg" },
+      { env: process.env, cwd: process.cwd() }
+    ),
+    /uploads\/|voice-inbox/
   );
 });

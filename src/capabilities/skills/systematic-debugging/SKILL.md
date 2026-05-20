@@ -37,3 +37,11 @@ triggers: [bug, error, fails, flaky, crash, regression, test failure, doesn't wo
 
 - Random refactor without a falsified hypothesis.
 - Parallel changes that hide which one fixed the issue.
+
+## Inside a multi-step run
+
+Inside a plan being run by **`task-execution`**, this loop is invoked **per failing step**: one falsification cycle, then resume, re-plan, or abort with a partial report.
+
+## Visualizing the hypothesis tree
+
+When more than two hypotheses are alive at once, draw the fault tree as a Mermaid `flowchart` via **`chart`** — keeps "what is falsified vs open" legible.

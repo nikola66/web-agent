@@ -3,10 +3,12 @@
  * (browser page context) rather than from inside the sandbox, bypassing
  * the sandbox's localhost isolation.
  *
- * Flow:
+ * Flow (non-streaming):
  *   agent stdout  → <<<WEBAGENT_PROXY_REQ:id>>>{request}<<<END_WEBAGENT_PROXY_REQ>>>
  *   adapter       → fetch("/api/proxy") on the browser page (same-origin)
  *   adapter stdin → <<<WEBAGENT_PROXY_RESP:id>>>{response}<<<END_WEBAGENT_PROXY_RESP>>>
+ *
+ * Streaming LLM (Nodebox): adapter fetches same-origin /api/llm/... URLs directly.
  */
 
 export const IPC_PROXY_REQ_PREFIX = "<<<WEBAGENT_PROXY_REQ:";
@@ -33,6 +35,11 @@ export const IPC_LOOP_GUARD_REQ_END = "<<<END_WEBAGENT_LOOP_GUARD_REQ>>>";
 export const IPC_LOOP_GUARD_RESP_PREFIX = "<<<WEBAGENT_LOOP_GUARD_RESP:";
 export const IPC_LOOP_GUARD_RESP_END = "<<<END_WEBAGENT_LOOP_GUARD_RESP>>>";
 
+export const IPC_STT_REQ_PREFIX = "<<<WEBAGENT_STT_REQ:";
+export const IPC_STT_REQ_END = "<<<END_WEBAGENT_STT_REQ>>>";
+export const IPC_STT_RESP_PREFIX = "<<<WEBAGENT_STT_RESP:";
+export const IPC_STT_RESP_END = "<<<END_WEBAGENT_STT_RESP>>>";
+
 let _nextId = 0;
 const _pending = new Map(); // id → { resolve, reject, timer }
 let _streamNextId = 0;
@@ -44,12 +51,35 @@ const _spawnPending = new Map(); // id → { resolve, reject, timer }
 let _loopGuardNextId = 0;
 const _loopGuardPending = new Map(); // id → { resolve, reject, timer }
 
+let _sttNextId = 0;
+const _sttPending = new Map(); // id → { resolve, reject, timer }
+
 function encodePayload(payload) {
   return Buffer.from(JSON.stringify(payload), "utf8").toString("base64");
 }
 
 function decodePayload(payload) {
   return JSON.parse(Buffer.from(String(payload || ""), "base64").toString("utf8"));
+}
+
+function stripSttResponses(text) {
+  const re = new RegExp(
+    IPC_STT_RESP_PREFIX.replace(/</g, "<") + "([^>]+)>>>" + "([\\s\\S]*?)" + IPC_STT_RESP_END,
+    "g"
+  );
+  return text.replace(re, (_, id, payload) => {
+    const entry = _sttPending.get(id);
+    if (entry) {
+      clearTimeout(entry.timer);
+      _sttPending.delete(id);
+      try {
+        entry.resolve(JSON.parse(payload));
+      } catch (e) {
+        entry.reject(new Error(`IPC STT response parse error: ${e?.message || e}`));
+      }
+    }
+    return "";
+  });
 }
 
 function stripLoopGuardResponses(text) {
@@ -156,7 +186,8 @@ function stripStreamResponses(text) {
  * Called from agent.js stdin data handler.
  */
 export function processStdinChunk(text) {
-  let out = stripLoopGuardResponses(text);
+  let out = stripSttResponses(text);
+  out = stripLoopGuardResponses(out);
   out = stripSpawnResponses(out);
   out = stripStreamResponses(out);
   out = stripProxyResponses(out);
@@ -252,6 +283,22 @@ export function ipcLoopGuardRequest(payload) {
     _loopGuardPending.set(id, { resolve, reject, timer });
     process.stdout.write(
       `${IPC_LOOP_GUARD_REQ_PREFIX}${id}>>>${JSON.stringify(payload)}${IPC_LOOP_GUARD_REQ_END}`
+    );
+  });
+}
+
+export function ipcSttRequest(payload) {
+  return new Promise((resolve, reject) => {
+    const id = String(++_sttNextId);
+    const timer = setTimeout(() => {
+      if (_sttPending.has(id)) {
+        _sttPending.delete(id);
+        reject(new Error("IPC STT request timed out after 90s."));
+      }
+    }, 90_000);
+    _sttPending.set(id, { resolve, reject, timer });
+    process.stdout.write(
+      `${IPC_STT_REQ_PREFIX}${id}>>>${JSON.stringify(payload)}${IPC_STT_REQ_END}`
     );
   });
 }

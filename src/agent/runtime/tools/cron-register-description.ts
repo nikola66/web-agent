@@ -30,7 +30,7 @@ Daily web search:
 
 Multi-step (each step is \`tool\` + \`arguments\`):
 \`\`\`json
-{"id":"search_then_save","everyMinutes":180,"delivery":"silent","steps":[{"tool":"web_search","arguments":{"query":"rust release notes","page":0}},{"tool":"write_file","arguments":{"path":"work/notes/rust.md","content":"TODO paste summary here"}}]}
+{"id":"search_then_save","everyMinutes":180,"delivery":"silent","steps":[{"tool":"web_search","arguments":{"query":"rust release notes","page":0}},{"tool":"write_file","arguments":{"path":"work/notes/rust.md","content":"paste summary here"}}]}
 \`\`\`
 
 Email digest when done:

@@ -25,6 +25,7 @@ This skill owns **backup, checkpoint, export, and risk isolation** before destru
 3. **Isolate experiments** — New disposable trees under **`work/<purpose-slug>/`**; durable demos under **`projects/<slug>/`**. Call `skill_view` **`project-scaffold`** when layout is unclear.
 4. **Secrets** — Never checkpoint or export and share without redacting; see **`credential-hygiene`**.
 5. **Destructive tools** — Confirm scope before `delete_file`, wide patches, or shell that removes files.
+6. **Inside multi-step runs** — **`task-execution`** inserts a checkpoint todo as step 0 when the approved plan contains an irreversible step; do not skip it.
 
 ## Pitfalls
 
