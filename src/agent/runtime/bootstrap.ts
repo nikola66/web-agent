@@ -4,6 +4,7 @@
 
 import fs from "node:fs/promises";
 import { processStdinChunk } from "./ipc.js";
+import { takeFramedUserInput } from "./user-input-framing.js";
 import {
   AGENT_MD,
   HEARTBEAT_INTERVAL_MS,
@@ -258,6 +259,16 @@ export async function main() {
   function _rlReadLine() {
     return new Promise((resolve) => {
       const tryConsume = () => {
+        const framed = takeFramedUserInput(_rlLineBuffer);
+        if (framed?.kind === "incomplete") {
+          process.stdin.once?.("data", tryConsume);
+          return;
+        }
+        if (framed?.kind === "complete") {
+          _rlLineBuffer = framed.rest;
+          resolve(framed.line);
+          return;
+        }
         const nl = _rlLineBuffer.indexOf("\n");
         if (nl !== -1) {
           const line = _rlLineBuffer.slice(0, nl).replace(/\r$/, "");
@@ -399,7 +410,7 @@ export async function main() {
         );
       });
     if (kind === "approval") {
-      const label = `${pink("❯")}${R} `;
+      const label = `${pink("❯")}${R} ${dim("✅")} ${green("y")}${dim("/yes")} ${dim("·")} ${dim("❌")} ${green("n")}${R} `;
       try {
         const answer = await raceQuestion(label, "");
         const trimmed = String(answer || "").trim();

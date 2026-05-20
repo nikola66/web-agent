@@ -1,10 +1,18 @@
 ---
 name: Systematic Debugging
-description: Lightweight hypothesis–experiment loop for bugs and flakey behavior using existing read/grep/web tools (no language-specific harness assumed).
+description: Use when the user reports a bug, error, flaky test, crash, regression, or "it doesn't work"—hypothesis-first debugging before random edits.
 version: 1.0.0
 category: bundled
-tags: [debugging, reliability, investigation, science]
+tags: [debugging, bug, error, flaky, crash, regression, test-failure, investigation]
+triggers: [bug, error, fails, flaky, crash, regression, test failure, doesn't work, debug this, broken, not working]
 ---
+
+## When to Use
+
+- User says something is broken, failing, flaky, or regressed.
+- Error messages, stack traces, or "it used to work" reports.
+- Before stacking fixes—anchor repro and falsify one hypothesis at a time.
+- Test failures, CI red, or intermittent behavior you need to isolate.
 
 ## Loop
 

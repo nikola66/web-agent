@@ -1,14 +1,17 @@
 ---
 name: Research Pack
-description: Free scholarly search workflows—arXiv API and Semantic Scholar—via existing web_fetch (no dedicated tools needed).
+description: Use when the user wants papers, arXiv, citations, literature review, or Semantic Scholar—not general creator or product discovery.
 version: 1.0.0
 category: bundled
-tags: [research, papers, citations, academic, arxiv, semantic-scholar]
+tags: [research, papers, citations, academic, arxiv, semantic-scholar, literature]
+triggers: [arxiv, paper, citation, semantic scholar, literature review, academic, research paper, who cited, references]
 ---
 
-## When to use (and not)
+## When to Use
 
-Use this skill for **scholarly** workflows: papers, arXiv, Semantic Scholar, citations. For general open-web discovery (people, products, creators, regional lists), use **`open-web-research`**—different minimum-effort norms.
+- **Scholarly** workflows: papers, arXiv, Semantic Scholar, citations, literature review.
+- User shares arXiv links, DOIs, or asks for related work / reference lists.
+- Not for general open-web discovery (people, products, creators)—use **`open-web-research`**.
 
 ## Preconditions
 

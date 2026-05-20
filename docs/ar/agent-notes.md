@@ -66,7 +66,7 @@ Debug: set `VITE_WEBAGENT_DEBUG_LOG=1` and look for `turn_loop_guard` / `turn_lo
 - Parallel safe tools (`web_search`, `web_fetch`, `grep`, `read_file`, …) run concurrently (cap 6) when emitted in one assistant turn.
 - Research turns use the higher Loop Guard nudge cap (`VITE_WEBAGENT_RESEARCH_MAX_AUTO_CONTINUE_NUDGES`, default 30).
 - Optional: `WEBAGENT_MAX_AGENT_ROUNDS=90` for long discovery tasks; configure a browser-agent search API key (Settings) — DuckDuckGo fallback is weaker for niche queries.
-- Telegram sends `Still researching…` every 90s during an active channel turn.
+- Telegram sends `Still working…` every 90s during an active channel turn.
 
 ## Profiles
 

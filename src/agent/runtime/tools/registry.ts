@@ -530,7 +530,13 @@ async function gatePreparedToolCall(
   const raw = toolCatalog?.[prepared.name];
   const toolEntry =
     raw && typeof raw === "object" && !Array.isArray(raw)
-      ? (raw as { approvalSummary?: string; requiresConfirmation?: boolean })
+      ? (raw as { approvalSummary?: string; requiresConfirmation?: boolean; emoji?: string })
+      : undefined;
+  const baseName = prepared.name.includes(":") ? prepared.name.split(":")[0] : prepared.name;
+  const baseRaw = toolCatalog?.[baseName];
+  const baseEntry =
+    baseRaw && typeof baseRaw === "object" && !Array.isArray(baseRaw)
+      ? (baseRaw as { emoji?: string })
       : undefined;
   const summary = summarizeToolApproval(prepared.name, prepared.args, toolEntry?.approvalSummary);
   const risky = Boolean(toolEntry?.requiresConfirmation);
@@ -540,6 +546,7 @@ async function gatePreparedToolCall(
     summary,
     args: prepared.args,
     risky,
+    toolEmoji: toolEntry?.emoji || baseEntry?.emoji,
   });
 }
 

@@ -77,6 +77,7 @@ import runtimeChannelDispatcherSource from "../../dist/agent-runtime/channels/di
 import runtimeChannelIndexSource from "../../dist/agent-runtime/channels/index.js?raw";
 import runtimeChannelTelegramSource from "../../dist/agent-runtime/channels/telegram.js?raw";
 import runtimeIpcSource from "../../dist/agent-runtime/ipc.js?raw";
+import runtimeUserInputFramingSource from "../../dist/agent-runtime/user-input-framing.js?raw";
 import sqlWasmRuntimeSource from "sql.js/dist/sql-wasm.js?raw";
 import sqlWasmUrl from "sql.js/dist/sql-wasm.wasm?url";
 
@@ -380,6 +381,7 @@ async function writeRuntimeSources(profileId: string): Promise<void> {
   );
 
   await emulator.fs.writeFile(`${webagentDir}/ipc.js`, runtimeIpcSource);
+  await emulator.fs.writeFile(`${webagentDir}/user-input-framing.js`, runtimeUserInputFramingSource);
   await emulator.fs.writeFile(`${webagentDir}/agent.js`, runtimeAgentSource);
   await emulator.fs.writeFile(`${webagentDir}/constants.js`, runtimeConstantsSource);
   await emulator.fs.writeFile(`${webagentDir}/reflection.js`, runtimeReflectionSource);

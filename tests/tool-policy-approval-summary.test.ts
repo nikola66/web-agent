@@ -113,9 +113,27 @@ test("formatApprovalTerminalBlock skill_save is compact", () => {
   assert.match(block, /skill_save/);
   assert.match(block, /blog-seo-audit/);
   assert.ok(/4(,?)882/.test(block));
-  assert.match(block, /content=\d+ chars/);
+  assert.match(block, /\d+ chars/);
   assert.match(block, /Approve/);
   assert.match(block, /Deny/);
+});
+
+test("formatApprovalTerminalBlock email send uses labeled To and Subject rows", () => {
+  const block = formatApprovalTerminalBlock({
+    toolLabel: "email:send",
+    summary: summarizeToolApproval("email:send", {
+      to: "a@b.com",
+      subject: "Hello there",
+      text: "body",
+    }),
+    args: { to: "a@b.com", subject: "Hello there", text: "body" },
+    toolEmoji: "✉️",
+  });
+  assert.match(block, /Permission required/i);
+  assert.match(block, /a@b\.com/);
+  assert.match(block, /Hello there/);
+  assert.match(block, /📬/);
+  assert.match(block, /📋/);
 });
 
 test("summarizeToolApproval email send is readable", () => {
@@ -140,13 +158,13 @@ test("summarizeToolApproval email send reads to/subject from nested arguments", 
   assert.match(s, /Nested subj/);
 });
 
-test("formatApprovalTerminalBlock generic keeps semicolon summary on one line", () => {
+test("formatApprovalTerminalBlock generic keeps semicolon summary pieces", () => {
   const block = formatApprovalTerminalBlock({
     toolLabel: "email:send",
     summary: "first piece; second piece; third",
     args: null,
   });
-  assert.match(block, /email:send/);
+  assert.match(block, /email/);
   assert.ok(block.includes("first piece"));
   assert.ok(block.includes("second piece"));
 });

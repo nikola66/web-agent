@@ -65,6 +65,22 @@ Create `src/capabilities/skills/<skill_id>/SKILL.md`.
 
 Bundled skills use the same `SKILL.md` validation as user-created skills. User-created skills in `.webagent/skills/` take precedence over bundled skills with the same slug.
 
+**Discovery surface:** Each turn injects a compact index built from frontmatter only (`name`, `description`, optional `triggers`, `tags`) — not the full `SKILL.md` body. Write `description` and `triggers` so they match how users phrase requests; load procedures with `skill_view`.
+
+Optional frontmatter:
+
+```yaml
+---
+name: Example Skill
+description: Use when the user asks to …
+triggers: [phrase one, phrase two, error message users paste]
+tags: [topic]
+category: bundled
+---
+```
+
+`triggers` accepts YAML lists or inline `[a, b]` arrays (same as `tags`). The index shows triggers after the description (truncated per skill if needed).
+
 ## Verification
 
 Run:

@@ -1,9 +1,10 @@
 ---
 name: Project Scaffold
-description: Scaffold a new isolated workspace folder before any files—multi-file app, demo, spike, sandbox, test harness, or exploratory codegen; use projects/ for durable mini-projects and work/ for scratch; minimal entrypoint plus verification.
+description: Use when starting a new app, demo, spike, starter, or multi-file project—make_dir under projects/ or work/ before any writes.
 version: 1.0.0
 category: bundled
-tags: [project, scaffold, verification]
+tags: [project, scaffold, verification, demo, starter, spike, greenfield]
+triggers: [new app, create project, demo, starter, spike, sandbox, test harness, greenfield, bootstrap project, mini-project]
 ---
 
 ## When to Use
@@ -12,7 +13,7 @@ tags: [project, scaffold, verification]
 - Work will create **multiple new files** or a tree that should live together.
 - **Scratch or disposable** experiment: try an API, spike a parser, sandbox a pattern.
 - User wants something **runnable or verifiable** in isolation (smoke test, start command).
-- **Risky or high-value** new trees (could destroy data or hard to redo): pair with **`workspace-safety`**—checkpoint or export before big writes, alongside picking `projects/` vs `work/`.
+- **Risky or high-value** new trees: pair with **`workspace-safety`**—checkpoint or export before big writes.
 
 ## Procedure
 

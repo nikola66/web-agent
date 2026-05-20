@@ -1,16 +1,18 @@
 ---
 name: Credential Hygiene
-description: Keep API keys and secrets out of chat and git—use per-profile Settings, local vault, and safe handling in artifacts.
+description: Use when the user pastes API keys, asks to commit .env, store secrets, or redact tokens from logs and artifacts.
 version: 1.0.0
 category: bundled
-tags: [security, credentials, api-keys, privacy]
+tags: [security, credentials, api-keys, privacy, secrets, env, redact]
+triggers: [api key, secret, .env, paste key, sk-, bearer, rotate key, commit secrets, redact, password in chat]
 ---
 
 ## When to Use
 
-- User pastes keys in chat or asks to commit `.env`.
-- Configuring OpenRouter, browser agent, email, or Telegram.
-- Writing docs or artifacts that might echo secrets.
+- User pastes keys in chat or asks to commit `.env` / track secrets in git.
+- Configuring OpenRouter, browser agent, email, or Telegram credentials.
+- Writing docs or artifacts that might echo secrets; sharing logs or screenshots.
+- User asks where to put keys—direct to Settings/vault, not memory or workspace prose.
 
 ## Rules
 

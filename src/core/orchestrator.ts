@@ -22,6 +22,7 @@ import {
 import { SLASH_COMMANDS } from "@/agent/embed-commands";
 import { TOOL_CATALOG } from "@/agent/tool-catalog";
 import { buildToolRowsFromCatalog, renderHelpView } from "@/agent/runtime/slash-command-views";
+import { encodeUserInputLineForAgent } from "@/agent/runtime/user-input-framing";
 import {
   enqueueTerminalTypewriter,
   flushTerminalTypewriter,
@@ -191,7 +192,7 @@ async function dispatchQueuedInputIfReady(profileId: string): Promise<void> {
   const nextInput = useRuntimeStore.getState().commitQueuedDispatch(profileId);
   if (!nextInput) return;
   state.agentReadyForInput = false;
-  await writeToWebAgent(profileId, `${nextInput}\n`);
+  await writeToWebAgent(profileId, encodeUserInputLineForAgent(nextInput));
 }
 
 async function onAgentPromptReady(profileId: string): Promise<void> {
@@ -284,7 +285,7 @@ export async function submitUserInput(raw: string): Promise<void> {
 
   const rtSnapshot = useRuntimeStore.getState().profileRuntime[targetProfileId];
   if (rtSnapshot?.pendingToolConfirm) {
-    await writeToWebAgent(targetProfileId, `${input}\n`);
+    await writeToWebAgent(targetProfileId, encodeUserInputLineForAgent(input));
     useRuntimeStore.getState().setPendingToolConfirm(targetProfileId, false);
     return;
   }
@@ -297,7 +298,7 @@ export async function submitUserInput(raw: string): Promise<void> {
 
   state.agentReadyForInput = false;
   useRuntimeStore.getState().setAwaitingResponse(targetProfileId, true);
-  await writeToWebAgent(targetProfileId, `${input}\n`);
+  await writeToWebAgent(targetProfileId, encodeUserInputLineForAgent(input));
 }
 
 export async function initialize(): Promise<void> {
