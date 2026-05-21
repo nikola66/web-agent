@@ -252,6 +252,19 @@ function tailPromisesFurtherAction(text: string): boolean {
   return ACTION_MARKERS.some((marker) => tail.includes(marker));
 }
 
+/** Model promises to run a cron job manually — not supported. */
+export function looksLikeFalseManualCronPromise(text: string): boolean {
+  const low = String(text || "").trim().toLowerCase();
+  if (!low) return false;
+  return (
+    /\bmanual(?:ly)?\s+(?:run|start|kick|trigger|execute)\b/i.test(low) ||
+    /\bkick\s+off\s+(?:a\s+)?(?:manual\s+)?(?:run\s+of\s+)?(?:the\s+)?cron\b/i.test(low) ||
+    /\brun\s+the\s+cron\s+(?:manually|now|immediately)\b/i.test(low) ||
+    /\btrigger\s+the\s+cron\b/i.test(low) ||
+    /\bwhy\s+wait\s+for\s+the\s+timer\b/i.test(low)
+  );
+}
+
 /** Agent plans to choose from a found set — not asking the user to choose. */
 function looksLikeAgentSelfSelection(low: string): boolean {
   return (
@@ -418,6 +431,12 @@ function looksLikeActionPromiseStall(visible: string): boolean {
   const low = text.toLowerCase();
   if (low.length > 1200) return false;
   const tailCommit = tailHasStrongToolCommitment(text);
+  if (
+    looksLikeFalseManualCronPromise(low) &&
+    (tailCommit || matchesFutureActionIntent(low))
+  ) {
+    return true;
+  }
   if (shouldSuppressContinuationNudge(text)) {
     if (!(looksLikeAgentSelfSelection(low) && tailCommit)) return false;
   }
@@ -468,7 +487,10 @@ export function cronJobIdsFromListResult(result: unknown): Set<string> {
   return ids;
 }
 
-export function buildContinuationNudge(kind: ContinuationNudgeKind, extra?: { pendingCronIds?: string[] }): string {
+export function buildContinuationNudge(
+  kind: ContinuationNudgeKind,
+  extra?: { pendingCronIds?: string[]; falseManualCron?: boolean }
+): string {
   if (kind === "empty_after_tools") {
     return (
       "You just executed tool calls but returned an empty response. " +
@@ -476,9 +498,14 @@ export function buildContinuationNudge(kind: ContinuationNudgeKind, extra?: { pe
     );
   }
   if (kind === "post_tool_stall") {
+    const cronHint = extra?.falseManualCron
+      ? " There is no manual cron run — jobs execute only on heartbeat ticks while the tab is open. " +
+        "To work now, call the job step tools in this chat; otherwise use cron_list and cite nextEligibleAtMs."
+      : "";
     return (
       "You executed tool calls but ended with only a promise to take the next step. " +
-      "Process the tool results above and continue now by calling the tools needed for that step."
+      "Process the tool results above and continue now by calling the tools needed for that step." +
+      cronHint
     );
   }
   if (kind === "pre_tool_promise") {

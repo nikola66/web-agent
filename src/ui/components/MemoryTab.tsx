@@ -10,6 +10,11 @@ import {
   type SessionMemoryEntry,
 } from "@/core/agent-memory";
 import { useProfileRuntime } from "@/ui/stores/runtime-store";
+import {
+  CRON_SCHEDULING_NOTE,
+  cronNextEligibleAtMs,
+  cronOutputDestination,
+} from "@/core/cron-scheduling";
 import { formatBytes } from "../utils/format";
 
 type MemorySection =
@@ -74,10 +79,15 @@ function cronJobToolSummary(job: CronJobEntry): string {
   return job.tool ?? "—";
 }
 
+function formatCronOutputDestination(job: CronJobEntry): string {
+  return cronOutputDestination(job);
+}
+
 function cronJobSearchText(job: CronJobEntry): string {
   return [
     job.id,
     job.delivery,
+    formatCronOutputDestination(job),
     job.tool ?? "",
     (job.steps ?? []).map((step) => step.tool).join(" "),
     job.notifyChannel ?? "",
@@ -577,7 +587,8 @@ export function MemoryTab({
                           </span>
                         </div>
                         <p className="mt-0.5 truncate text-[10px] text-text-muted">
-                          every {formatEveryMinutes(job.everyMinutes)} · {job.delivery}
+                          every {formatEveryMinutes(job.everyMinutes)} ·{" "}
+                          {formatCronOutputDestination(job)}
                         </p>
                         <p className="truncate text-[10px] text-text-muted">
                           {cronJobToolSummary(job)}
@@ -596,12 +607,19 @@ export function MemoryTab({
                             <span>
                               schedule: every {formatEveryMinutes(selectedCronJob.everyMinutes)}
                             </span>
-                            <span>delivery: {selectedCronJob.delivery}</span>
+                            <span>
+                              output: {formatCronOutputDestination(selectedCronJob)}
+                            </span>
                             <span>
                               enabled: {selectedCronJob.enabled ? "yes" : "no"}
                             </span>
                             <span>
                               last run: {formatEpochMs(selectedCronJob.lastRunAt)}
+                            </span>
+                            <span className="col-span-2">
+                              next eligible:{" "}
+                              {formatEpochMs(cronNextEligibleAtMs(selectedCronJob))}
+                              {" · heartbeat-gated (no manual run)"}
                             </span>
                             {selectedCronJob.retryCount != null ? (
                               <span>
@@ -629,6 +647,9 @@ export function MemoryTab({
                                 subject: {selectedCronJob.deliveryEmailSubject}
                               </span>
                             ) : null}
+                            <span className="col-span-2 text-text-muted/80">
+                              {CRON_SCHEDULING_NOTE}
+                            </span>
                           </div>
                         </div>
 

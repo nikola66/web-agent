@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import {
   looksLikeCodexIntermediateAck,
   looksLikeEmptyAfterTools,
+  looksLikeFalseManualCronPromise,
   looksLikePostToolStall,
   looksLikePreToolPromiseStall,
   matchesFutureActionIntent,
@@ -115,6 +116,18 @@ test("looksLikePostToolStall rejects user-input prompts", () => {
   assert.equal(
     looksLikePostToolStall("Give me the list of domains and I'll start pulling contacts.", true),
     false
+  );
+});
+
+test("looksLikePostToolStall detects false manual cron promise", () => {
+  const text =
+    "The job was refreshed and is on its 120-minute countdown. However, why wait for the timer? I'll kick off a manual run of the outreach-hunter skill right now.";
+  assert.equal(looksLikeFalseManualCronPromise(text), true);
+  assert.equal(looksLikePostToolStall(text, true), true);
+  assert.equal(shouldContinuePostToolStall(text, true, 0), true);
+  assert.match(
+    buildContinuationNudge("post_tool_stall", { falseManualCron: true }),
+    /no manual cron run/i
   );
 });
 

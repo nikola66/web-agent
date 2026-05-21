@@ -4,6 +4,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 import {
+  looksLikeFalseManualCronPromise,
   looksLikePostToolStall,
   looksLikePreToolPromiseStall,
   shouldContinuePostToolStall,
@@ -45,6 +46,16 @@ const LOOP_RECOVERY_CASES: LoopRecoveryCase[] = [
       const text =
         "Found a goldmine. I'll pick one of the documented projects from the archive. " +
         "Step 1 begins now. I'll fetch the cemetery's contents to pick a victim.";
+      assert.equal(looksLikePostToolStall(text, true), true);
+      assert.equal(shouldContinuePostToolStall(text, true, 0), true);
+    },
+  },
+  {
+    id: "post_tool_false_manual_cron_run",
+    check: () => {
+      const text =
+        "The hunt loop was refreshed. Why wait for the timer? I'll kick off a manual run right now.";
+      assert.equal(looksLikeFalseManualCronPromise(text), true);
       assert.equal(looksLikePostToolStall(text, true), true);
       assert.equal(shouldContinuePostToolStall(text, true, 0), true);
     },

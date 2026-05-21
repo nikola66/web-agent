@@ -437,6 +437,11 @@ export async function upsertCronJob(job) {
   else jobs.push({ ...entry, lastRunAt: 0, retryAttempts: 0, nextRetryAt: 0 });
   await saveCronJobs({ jobs });
   const persisted = jobs.find((j) => j && String(j.id) === id) ?? entry;
+  const { enrichCronJobForList } = await import("../cron-scheduling.js");
+  const enriched = {
+    ...persisted,
+    ...enrichCronJobForList(persisted, HEARTBEAT_INTERVAL_MS),
+  };
   return {
     success: true,
     ok: true,
@@ -446,7 +451,7 @@ export async function upsertCronJob(job) {
     ...(hasSteps ? { steps: job.steps.length } : { tool: toolName }),
     jobsRegistered: jobs.length,
     count: jobs.length,
-    job: persisted,
+    job: enriched,
     message: `Cron job "${id}" ${idx >= 0 ? "updated" : "registered"}.`,
   };
 }

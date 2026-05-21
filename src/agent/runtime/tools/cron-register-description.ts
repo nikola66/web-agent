@@ -2,13 +2,20 @@
  * Tool catalog copy for `cron_register` (Node registry + browser metadata).
  * Keep dependency-free so browser stubs can import it safely.
  */
-export const CRON_REGISTER_TOOL_DESCRIPTION = `Save a recurring heartbeat job to \`.webagent/cronjobs.json\`, or remove one. The job runs only while the app tab is open; the runtime checks due jobs on heartbeat ticks (see HEARTBEAT.md — \`everyMinutes\` is minimum spacing between runs, not wall-clock cron like systemd).
+export const CRON_REGISTER_TOOL_DESCRIPTION = `Save a recurring heartbeat job to \`.webagent/cronjobs.json\`, or remove one. Jobs run **only** on heartbeat ticks while the app tab is open (\`everyMinutes\` + \`lastRunAt\`). **No manual run** — refreshing/registering reschedules; it does not execute the job unless a heartbeat tick is due at that moment.
 
 **Remove a job:** \`{"action":"remove","id":"<job_id>"}\`. Requires an existing id; unknown ids error (use \`cron_list\` first).
 
-**Register / update (default):** Always include \`id\` (string) and \`everyMinutes\` (number, ≥1). Set \`delivery\` to \`silent\`, \`terminal\`, or \`email\`. For \`email\`, also set \`deliveryEmailTo\` (and optional \`deliveryEmailSubject\`). Optional: \`notifyChannel\` as \`telegram:<chatId>\` when Telegram is configured.
+**Register / update (default):** Always include \`id\` (string) and \`everyMinutes\` (number, ≥1). Set \`delivery\` explicitly. For immediate work the user asked for now, run the job's step tools in the **current chat** — do not promise a "manual cron run".
 
-**Verify before claiming success:** After every successful \`cron_register\`, call \`cron_list\` in the same turn and confirm the returned \`jobs\` array contains the same \`id\` before telling the user the job is registered or active. Never announce "Job Registered" or "confirmed active" from intent text alone — only from \`cron_list\` tool output.
+**Where output goes (\`outputDestination\` in \`cron_list\`):**
+| Job fields | Destination |
+| \`delivery: silent\` | **Silent** — dim heartbeat log only |
+| \`delivery: terminal\` | **Web UI** — agent terminal / chat stream |
+| \`delivery: terminal\` + \`notifyChannel: telegram:<chatId>\` | **Web UI + Telegram** |
+| \`delivery: email\` + \`deliveryEmailTo\` | **Email** (not chat) |
+
+**Verify before claiming success:** After every successful \`cron_register\`, call \`cron_list\` and cite \`nextEligibleAtMs\`, \`outputDestination\`, and \`schedulingNote\` before telling the user when the job runs or where results appear. Never say the job "ran" from register/refresh alone — only when heartbeat shows \`▸ cron '<id>' ran\`.
 
 **What runs:** Either (1) one tool at the job root, or (2) an ordered \`steps\` array. Each step must be a **built-in tool name** plus that tool’s arguments.
 

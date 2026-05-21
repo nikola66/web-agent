@@ -267,14 +267,25 @@ export async function cronRegisterTool(args: ToolArgs = {}, ctx) {
 }
 
 export async function cronListTool(_args, _ctx) {
+  const { HEARTBEAT_INTERVAL_MS } = await import("../constants.js");
+  const {
+    buildCronListSchedulingMeta,
+    enrichCronJobForList,
+  } = await import("../cron-scheduling.js");
   const { loadCronJobs } = await import("../state/persistence.js");
   const store = await loadCronJobs();
-  const jobs = Array.isArray(store?.jobs) ? store.jobs : [];
+  const rawJobs = Array.isArray(store?.jobs) ? store.jobs : [];
+  const now = Date.now();
+  const jobs = rawJobs.map((job) => ({
+    ...job,
+    ...enrichCronJobForList(job, HEARTBEAT_INTERVAL_MS, now),
+  }));
   return {
     success: true,
     ok: true,
     count: jobs.length,
     jobs,
+    scheduling: buildCronListSchedulingMeta(HEARTBEAT_INTERVAL_MS),
     message: jobs.length ? `${jobs.length} cron job(s) registered.` : "No cron jobs registered.",
   };
 }
