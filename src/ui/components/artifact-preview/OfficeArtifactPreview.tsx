@@ -1,49 +1,39 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 
 export function PdfArtifactPreview({ buffer }: { buffer: ArrayBuffer }) {
-  const hostRef = useRef<HTMLDivElement | null>(null);
+  const [blobUrl, setBlobUrl] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    const host = hostRef.current;
-    if (!host) return;
-    let cancelled = false;
-
-    (async () => {
-      try {
-        const pdfjs = await import("pdfjs-dist");
-        const worker = await import("pdfjs-dist/build/pdf.worker.min.mjs?url");
-        pdfjs.GlobalWorkerOptions.workerSrc = worker.default;
-        const pdf = await pdfjs.getDocument({ data: buffer.slice(0) }).promise;
-        if (cancelled) return;
-        host.replaceChildren();
-
-        for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
-          if (cancelled) return;
-          const page = await pdf.getPage(pageNum);
-          const viewport = page.getViewport({ scale: 1.25 });
-          const canvas = document.createElement("canvas");
-          canvas.className = "mx-auto mb-4 max-w-full rounded-md border border-white/10 bg-white";
-          canvas.width = viewport.width;
-          canvas.height = viewport.height;
-          host.appendChild(canvas);
-          const ctx = canvas.getContext("2d");
-          if (!ctx) continue;
-          await page.render({ canvas, canvasContext: ctx, viewport }).promise;
-        }
-      } catch (err) {
-        if (cancelled) return;
-        const message = err instanceof Error ? err.message : String(err);
-        host.innerHTML = `<p class="text-sm text-text-muted">${message}</p>`;
-      }
-    })();
-
+    let url: string | null = null;
+    try {
+      url = URL.createObjectURL(new Blob([buffer], { type: "application/pdf" }));
+      setBlobUrl(url);
+      setError(null);
+    } catch (err) {
+      setBlobUrl(null);
+      setError(err instanceof Error ? err.message : String(err));
+    }
     return () => {
-      cancelled = true;
-      host.replaceChildren();
+      if (url) URL.revokeObjectURL(url);
     };
   }, [buffer]);
 
-  return <div ref={hostRef} className="fancy-scroll mx-auto w-full max-w-4xl" />;
+  if (error) {
+    return <p className="text-sm text-text-muted">{error}</p>;
+  }
+  if (!blobUrl) {
+    return <p className="text-sm text-text-muted">Loading PDF…</p>;
+  }
+
+  return (
+    <iframe
+      src={blobUrl}
+      title="PDF preview"
+      className="mx-auto block w-full max-w-4xl rounded-md border border-white/10 bg-white"
+      style={{ height: "min(72vh, 900px)" }}
+    />
+  );
 }
 
 export function DocxArtifactPreview({ buffer }: { buffer: ArrayBuffer }) {

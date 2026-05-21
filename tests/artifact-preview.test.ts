@@ -5,6 +5,7 @@ import nodePath from "node:path";
 import os from "node:os";
 
 import {
+  artifactContentSourceKey,
   fileExtension,
   inferArtifactKind,
   mimeForArtifactKind,
@@ -41,6 +42,19 @@ test("unsupportedPreviewMessage explains legacy office formats", () => {
 test("fileExtension reads basename extension", () => {
   assert.equal(fileExtension("work/out/report.pdf"), "pdf");
   assert.equal(fileExtension("noext"), "");
+});
+
+test("artifactContentSourceKey is stable for the same path offer", () => {
+  const offer = {
+    title: "Cron",
+    filename: "artifact.md",
+    kind: "markdown" as const,
+    path: "work/outreach/artifact.md",
+  };
+  const a = artifactContentSourceKey(offer, "profile-1");
+  const b = artifactContentSourceKey({ ...offer }, "profile-1");
+  assert.equal(a, b);
+  assert.match(a, /path:profile-1:markdown:artifact\.md:work\/outreach\/artifact\.md/);
 });
 
 test("artifactPresentTool accepts path or markdown exclusively", async () => {

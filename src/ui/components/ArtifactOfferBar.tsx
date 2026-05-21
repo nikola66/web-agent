@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { Download, Eye, X } from "lucide-react";
 import { inferArtifactKind, mimeForArtifactKind } from "@/core/artifact-preview";
 import { readWorkspaceFileBuffer, readWorkspaceFileText } from "@/core/workspace";
@@ -33,12 +33,16 @@ export function ArtifactOfferBar() {
   const [modalOpen, setModalOpen] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
 
-  const offerWithKind = artifactOffer
-    ? {
-        ...artifactOffer,
-        kind: artifactOffer.kind || inferArtifactKind(artifactOffer.filename),
-      }
-    : null;
+  const offerWithKind = useMemo(
+    () =>
+      artifactOffer
+        ? {
+            ...artifactOffer,
+            kind: artifactOffer.kind || inferArtifactKind(artifactOffer.filename),
+          }
+        : null,
+    [artifactOffer],
+  );
 
   const content = useArtifactContent(activeProfileId, offerWithKind, modalOpen, reloadKey);
 

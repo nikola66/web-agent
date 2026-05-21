@@ -53,6 +53,7 @@ import {
   bold,
   cyan,
   dim,
+  normalizeLatexInlineSymbols,
   prefixBlock,
   renderMarkdownToAnsi,
 } from "./terminal-format.js";
@@ -513,7 +514,7 @@ export async function agentTurn(
       if (!visible.trim() && streamedVisible.trim()) {
         visible = sanitizeAssistantVisibleText(streamedVisible, toolNames);
       }
-      visible = repairExactResponseText(originalUserInput, visible);
+      visible = normalizeLatexInlineSymbols(repairExactResponseText(originalUserInput, visible));
       if ((visible.trim() || clarifyEmitted) && !quietTurn) {
         run.final_visible_assistant_text = visible;
         const rendered = visible.trim() ? renderMarkdownToAnsi(visible) : "";

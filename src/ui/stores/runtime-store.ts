@@ -39,6 +39,8 @@ export interface ProfileRuntimeState {
     kind: string | null;
     source: string | null;
   }>;
+  /** Bumped when workspace files change (uploads, etc.) so @-reference index refreshes. */
+  workspaceFilesRevision: number;
 }
 
 const EMPTY_PROFILE_RUNTIME: ProfileRuntimeState = {
@@ -55,6 +57,7 @@ const EMPTY_PROFILE_RUNTIME: ProfileRuntimeState = {
   artifactOffer: null,
   clarifyOffer: null,
   selfImprovementFeed: [],
+  workspaceFilesRevision: 0,
 };
 
 export interface RuntimeState {
@@ -98,6 +101,7 @@ export interface RuntimeState {
     profileId: string,
     payload: { summary: string; kind?: string | null; source?: string | null; at?: string },
   ) => void;
+  bumpWorkspaceFilesRevision: (profileId: string) => void;
 }
 
 function getProfileRuntime(
@@ -337,6 +341,19 @@ export const useRuntimeStore = create<RuntimeState>()((set, get) => ({
           [profileId]: {
             ...prev,
             selfImprovementFeed: [nextEntry, ...deduped].slice(0, 40),
+          },
+        },
+      };
+    }),
+  bumpWorkspaceFilesRevision: (profileId) =>
+    set((s) => {
+      const prev = getProfileRuntime(s.profileRuntime, profileId);
+      return {
+        profileRuntime: {
+          ...s.profileRuntime,
+          [profileId]: {
+            ...prev,
+            workspaceFilesRevision: prev.workspaceFilesRevision + 1,
           },
         },
       };

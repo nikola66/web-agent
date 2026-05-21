@@ -17,7 +17,7 @@ import {
   X,
 } from "lucide-react";
 import { ALLOWED_UPLOAD_EXTENSIONS } from "@embed-runtime/tools/upload-allowlist.js";
-import { invalidateWorkspaceFileIndex } from "@/core/workspace-file-index";
+import { notifyWorkspaceFilesChanged } from "@/core/workspace-file-index";
 import {
   downloadWorkspaceFile,
   listWorkspaceFiles,
@@ -30,7 +30,7 @@ import {
   type WorkspaceTerminalSession,
   type WorkspaceFileEntry,
 } from "@/core/workspace";
-import { useActiveProfileRuntime } from "../stores/runtime-store";
+import { useActiveProfileRuntime, useRuntimeStore } from "../stores/runtime-store";
 import { SearchableSelect } from "./SearchableSelect";
 import { MemoryTab } from "./MemoryTab";
 import { terminalFontFamily, terminalTheme } from "../theme";
@@ -289,6 +289,7 @@ export function FilesPopup({
   const terminalSessionRef = useRef<WorkspaceTerminalSession | null>(null);
 
   const { runtimeStatus } = useActiveProfileRuntime();
+  const bumpWorkspaceFilesRevision = useRuntimeStore((s) => s.bumpWorkspaceFilesRevision);
   const uploadDisabled = runtimeStatus !== "running" || uploading;
 
   const webagentRoot = ".webagent";
@@ -498,7 +499,8 @@ export function FilesPopup({
         lastUploadedPath = await writeWorkspaceUpload(profileId, `uploads/${file.name}`, bytes);
       }
       await loadFiles();
-      invalidateWorkspaceFileIndex(profileId);
+      notifyWorkspaceFilesChanged(profileId);
+      bumpWorkspaceFilesRevision(profileId);
       if (lastUploadedPath) {
         setSelectedPath(lastUploadedPath);
         setPreviewOpen(canPreview(lastUploadedPath));

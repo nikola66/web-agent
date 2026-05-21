@@ -92,6 +92,27 @@ export function mimeForArtifactKind(kind: ArtifactKind, filename: string): strin
   }
 }
 
+export type ArtifactOfferSource = {
+  filename: string;
+  kind?: ArtifactKind;
+  path?: string;
+  markdown?: string;
+};
+
+/** Stable identity for artifact body (avoids re-fetch when parent recreates offer objects). */
+export function artifactContentSourceKey(
+  offer: ArtifactOfferSource | null,
+  profileId: string | null,
+): string {
+  if (!offer || !profileId) return "";
+  const kind = offer.kind || inferArtifactKind(offer.filename);
+  const inline = offer.markdown?.trim();
+  if (inline) return `inline:${profileId}:${kind}:${offer.filename}:${inline.length}`;
+  const path = offer.path?.trim();
+  if (!path) return "";
+  return `path:${profileId}:${kind}:${offer.filename}:${path}`;
+}
+
 export function unsupportedPreviewMessage(filename: string): string {
   const ext = fileExtension(filename);
   if (ext === "doc") {

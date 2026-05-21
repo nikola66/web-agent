@@ -88,6 +88,26 @@ const BLOCK_FONT = {
 
 type BlockFontKey = keyof typeof BLOCK_FONT;
 
+const LATEX_INLINE_ARROW: Record<string, string> = {
+  rightarrow: "→",
+  to: "→",
+  leftarrow: "←",
+  leftrightarrow: "↔",
+  Rightarrow: "⇒",
+  Leftarrow: "⇐",
+  Leftrightarrow: "⇔",
+};
+
+/** Models often emit LaTeX arrows in prose; the terminal has no math renderer. */
+export function normalizeLatexInlineSymbols(input: unknown) {
+  let out = String(input || "");
+  out = out.replace(
+    /\$\s*\\(rightarrow|to|leftarrow|leftrightarrow|Rightarrow|Leftarrow|Leftrightarrow)\s*\$/g,
+    (_m, cmd: string) => LATEX_INLINE_ARROW[cmd] ?? "→"
+  );
+  return out;
+}
+
 export function normalizeEmojiSpacing(input: unknown) {
   if (!input) return "";
   return String(input).replace(
@@ -98,7 +118,7 @@ export function normalizeEmojiSpacing(input: unknown) {
 
 export function styleInlineMarkdown(input: unknown) {
   if (!input) return "";
-  let out = normalizeEmojiSpacing(input);
+  let out = normalizeLatexInlineSymbols(normalizeEmojiSpacing(input));
   out = out.replace(/`([^`\n]+)`/g, (_m, code) => amber(code));
   out = out.replace(/\*\*([^*\n]+)\*\*/g, (_m, text) => bold(text));
   out = out.replace(/(^|[^\w])__([^_\n]+)__([^\w]|$)/g, (_m, pre, text, post) => `${pre}${bold(text)}${post}`);

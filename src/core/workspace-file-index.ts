@@ -39,6 +39,11 @@ export function invalidateWorkspaceFileIndex(profileId?: string): void {
   cache.clear();
 }
 
+/** Call after writes/uploads so the next index fetch sees new files. */
+export function notifyWorkspaceFilesChanged(profileId: string): void {
+  invalidateWorkspaceFileIndex(profileId);
+}
+
 export async function getWorkspaceFileIndex(
   profileId: string,
   options: { force?: boolean } = {}

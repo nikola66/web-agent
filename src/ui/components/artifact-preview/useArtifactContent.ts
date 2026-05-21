@@ -1,6 +1,10 @@
 import { useEffect, useRef, useState } from "react";
 import type { ArtifactKind } from "@/core/artifact-preview";
-import { inferArtifactKind, mimeForArtifactKind } from "@/core/artifact-preview";
+import {
+  artifactContentSourceKey,
+  inferArtifactKind,
+  mimeForArtifactKind,
+} from "@/core/artifact-preview";
 import { readWorkspaceFileBuffer, readWorkspaceFileText } from "@/core/workspace";
 
 export type ArtifactOfferPayload = {
@@ -34,6 +38,10 @@ export function useArtifactContent(
 ): ArtifactContentState {
   const [state, setState] = useState<ArtifactContentState>({ status: "idle" });
   const blobUrlRef = useRef<string | null>(null);
+  const loadedSourceRef = useRef("");
+
+  const sourceKey = artifactContentSourceKey(offer, profileId);
+  const loadToken = sourceKey ? `${sourceKey}#${reloadKey}` : "";
 
   useEffect(() => {
     if (blobUrlRef.current) {
@@ -42,6 +50,7 @@ export function useArtifactContent(
     }
 
     if (!enabled || !offer) {
+      loadedSourceRef.current = "";
       setState({ status: "idle" });
       return;
     }
@@ -51,6 +60,7 @@ export function useArtifactContent(
     let cancelled = false;
 
     if (offer.markdown?.trim()) {
+      loadedSourceRef.current = loadToken;
       setState({
         status: "ready",
         kind,
@@ -61,7 +71,12 @@ export function useArtifactContent(
     }
 
     if (!offer.path || !profileId) {
+      loadedSourceRef.current = "";
       setState({ status: "error", message: "Artifact path is missing." });
+      return;
+    }
+
+    if (loadedSourceRef.current === loadToken) {
       return;
     }
 
@@ -72,6 +87,7 @@ export function useArtifactContent(
         if (TEXT_KINDS.has(kind)) {
           const text = await readWorkspaceFileText(profileId, offer.path!, { preferLive: true });
           if (cancelled) return;
+          loadedSourceRef.current = loadToken;
           setState({ status: "ready", kind, text, mimeType });
           return;
         }
@@ -82,13 +98,16 @@ export function useArtifactContent(
         if (kind === "image" || kind === "audio" || kind === "video") {
           const blobUrl = URL.createObjectURL(new Blob([buffer], { type: mimeType }));
           blobUrlRef.current = blobUrl;
+          loadedSourceRef.current = loadToken;
           setState({ status: "ready", kind, buffer, blobUrl, mimeType });
           return;
         }
 
+        loadedSourceRef.current = loadToken;
         setState({ status: "ready", kind, buffer, mimeType });
       } catch (err) {
         if (cancelled) return;
+        loadedSourceRef.current = "";
         const message = err instanceof Error ? err.message : String(err);
         setState({ status: "error", message });
       }
@@ -101,7 +120,7 @@ export function useArtifactContent(
         blobUrlRef.current = null;
       }
     };
-  }, [enabled, offer, profileId, reloadKey]);
+  }, [enabled, loadToken, offer, profileId]);
 
   return state;
 }

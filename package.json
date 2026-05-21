@@ -1,7 +1,7 @@
 {
   "name": "web-agent",
   "private": true,
-  "version": "0.0.28",
+  "version": "0.0.29",
   "type": "module",
   "scripts": {
     "build:embed-runtime": "node scripts/build-embed-runtime.mjs",
@@ -31,7 +31,6 @@
     "lucide-react": "^0.474.0",
     "markdown-it": "^14.1.1",
     "mermaid": "^11.15.0",
-    "pdfjs-dist": "^5.7.284",
     "pptx-preview": "^1.0.7",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",

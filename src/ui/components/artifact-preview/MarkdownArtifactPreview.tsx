@@ -49,22 +49,25 @@ const ARTICLE_CLASS = [
   "[&_.mermaid-source]:whitespace-pre-wrap [&_.mermaid-source]:text-[12px] [&_.mermaid-source]:text-red-200",
 ].join(" ");
 
-async function hydrateMermaid(host: HTMLElement) {
+async function hydrateMermaid(host: HTMLElement, signal?: AbortSignal) {
   const blocks = Array.from(
     host.querySelectorAll<HTMLElement>(".mermaid-block:not(.mermaid-rendered):not(.mermaid-error)")
   );
   if (blocks.length === 0) return;
   ensureMermaid();
   for (let i = 0; i < blocks.length; i++) {
+    if (signal?.aborted) return;
     const block = blocks[i];
     const code = decodeURIComponent(block.dataset.code || "");
     if (!code.trim()) continue;
     try {
       const id = `mermaid-${Date.now()}-${i}`;
       const { svg } = await mermaid.render(id, code);
+      if (signal?.aborted) return;
       block.innerHTML = svg;
       block.classList.add("mermaid-rendered");
     } catch (err) {
+      if (signal?.aborted) return;
       block.classList.add("mermaid-error");
       const message = err instanceof Error ? err.message : String(err);
       block.innerHTML = `<pre class="mermaid-source">${md.utils.escapeHtml(`${message}\n\n${code}`)}</pre>`;
@@ -85,14 +88,12 @@ export function MarkdownArtifactPreview({ text, mermaidOnly = false }: { text: s
   useLayoutEffect(() => {
     const host = previewRef.current;
     if (!host) return;
-    let cancelled = false;
-    void hydrateMermaid(host).catch((err) => {
-      if (cancelled) return;
+    const ac = new AbortController();
+    void hydrateMermaid(host, ac.signal).catch((err) => {
+      if (ac.signal.aborted) return;
       console.error("Mermaid preview failed:", err);
     });
-    return () => {
-      cancelled = true;
-    };
+    return () => ac.abort();
   }, [rendered]);
 
   return (

@@ -4,6 +4,7 @@ import { logDebugEvent } from "../logging/debug-log.js";
 import { ensureParentDir } from "../workspace-paths.js";
 import { buildTelegramBotCommands } from "../commands.js";
 import { listSkills } from "../memory/index.js";
+import { normalizeLatexInlineSymbols } from "../terminal-format.js";
 
 async function readStateFile() {
   const channelStatePath = workspaceStatePath(".webagent/channel-state.json");
@@ -112,7 +113,7 @@ function escapeTelegramHtml(text) {
 }
 
 function formatInlineMarkdownForTelegram(text) {
-  let out = escapeTelegramHtml(text);
+  let out = escapeTelegramHtml(normalizeLatexInlineSymbols(text));
   const codeTokens = [];
   out = out.replace(/`([^`\n]+)`/g, (_m, code) => {
     const token = `@@TGCODE${codeTokens.length}@@`;

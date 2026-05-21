@@ -33,6 +33,16 @@ test("renderMarkdownToAnsi still supports standalone underscore emphasis", () =>
   assert.equal(stripAnsi(renderMarkdownToAnsi("This is _important_.")), "This is important.");
 });
 
+test("renderMarkdownToAnsi converts LaTeX inline arrows to Unicode", () => {
+  const md =
+    "Web Search $\\rightarrow$ Write File $\\rightarrow$ Email to ping you that it's ready for review.";
+  const plain = stripAnsi(renderMarkdownToAnsi(md));
+  assert.equal(
+    plain,
+    "Web Search → Write File → Email to ping you that it's ready for review."
+  );
+});
+
 test("renderMarkdownToAnsi preserves a single authored space after emoji", () => {
   assert.equal(stripAnsi(renderMarkdownToAnsi("🛠️ Tools")), "🛠️ Tools");
   assert.equal(stripAnsi(renderMarkdownToAnsi("⏱️ Cron")), "⏱️ Cron");

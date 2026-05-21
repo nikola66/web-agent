@@ -6,6 +6,7 @@ import { writeWorkspaceUpload } from "@/core/workspace";
 import {
   getWorkspaceFileIndex,
   invalidateWorkspaceFileIndex,
+  notifyWorkspaceFilesChanged,
   searchWorkspaceFiles,
   type WorkspaceFileIndex,
   type WorkspaceFileIndexEntry,
@@ -17,7 +18,11 @@ import {
   getAtReferenceQuery,
   insertAtReference,
 } from "../chat/at-reference";
-import { profileAgentWorking, useActiveProfileRuntime } from "../stores/runtime-store";
+import {
+  profileAgentWorking,
+  useActiveProfileRuntime,
+  useRuntimeStore,
+} from "../stores/runtime-store";
 import { useProfileStore } from "../stores/profile-store";
 import { Mic, MicOff, Plus, X } from "lucide-react";
 import { FileReferenceMenu } from "./FileReferenceMenu";
@@ -236,6 +241,11 @@ export function ChatInput() {
   const previousRuntimeStatusRef = useRef(runtimeStatus);
   const dragDepthRef = useRef(0);
   const { activeProfileId } = useProfileStore();
+  const workspaceFilesRevision = useRuntimeStore((s) =>
+    activeProfileId ? s.profileRuntime[activeProfileId]?.workspaceFilesRevision ?? 0 : 0,
+  );
+  const bumpWorkspaceFilesRevision = useRuntimeStore((s) => s.bumpWorkspaceFilesRevision);
+  const atMenuWasOpenRef = useRef(false);
   const disabled = runtimeStatus !== "running" && runtimeStatus !== "booting";
   const uploadInFlight = pendingAttachments.some((a) => a.status === "uploading");
   const readyAttachmentPaths = pendingAttachments
@@ -335,11 +345,19 @@ export function ChatInput() {
   }, [value]);
 
   useEffect(() => {
-    if (!atRef || !activeProfileId || runtimeStatus !== "running") return;
-    if (!fileIndex && !fileIndexLoading) {
-      void refreshFileIndex(activeProfileId);
+    if (!activeProfileId || runtimeStatus !== "running") return;
+    notifyWorkspaceFilesChanged(activeProfileId);
+    void refreshFileIndex(activeProfileId, true);
+  }, [activeProfileId, refreshFileIndex, runtimeStatus, workspaceFilesRevision]);
+
+  useEffect(() => {
+    const open = atRef !== null && runtimeStatus === "running";
+    if (open && !atMenuWasOpenRef.current && activeProfileId) {
+      notifyWorkspaceFilesChanged(activeProfileId);
+      void refreshFileIndex(activeProfileId, true);
     }
-  }, [activeProfileId, atRef, fileIndex, fileIndexLoading, refreshFileIndex, runtimeStatus]);
+    atMenuWasOpenRef.current = open;
+  }, [activeProfileId, atRef, refreshFileIndex, runtimeStatus]);
 
   useEffect(() => {
     historyBrowseIndexRef.current = null;
@@ -539,8 +557,7 @@ export function ChatInput() {
       }
     }
     if (uploadedAny) {
-      invalidateWorkspaceFileIndex(activeProfileId);
-      void refreshFileIndex(activeProfileId, true);
+      bumpWorkspaceFilesRevision(activeProfileId);
     }
     requestAnimationFrame(() => inputRef.current?.focus());
   };
