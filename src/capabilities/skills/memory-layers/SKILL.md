@@ -1,11 +1,24 @@
 ---
 name: Memory Layers
-description: Use when the user says remember this, save a preference, or you must pick memory_save vs session notes vs skill_save.
+description: Use when the user says remember this, save a preference, or you must pick memory_save vs session notes vs skill_save vs wiki_* tools.
 version: 1.0.0
 category: bundled
 tags: [memory, session, skills, facts, context, remember, preference]
-triggers: [remember this, save preference, memory_save, session note, store fact, recall later, what do we remember, persistent note]
+triggers: [remember this, save preference, memory_save, session note, store fact, recall later, what do we remember, persistent note, knowledge vault, wiki sync, sync facts to wiki, wiki search, skill_save, wiki_setup]
 ---
+
+## Tool contract (read first)
+
+Canonical picker for **what to persist** and **which memory tool**. Maintainer evolution: **`web-agent-skill`**.
+
+| Layer | Tools | Use for |
+|-------|--------|---------|
+| **Facts** | `memory_save`, `memory_recall`, `memory_search` | Stable preferences (timezone, stack, env constraints). |
+| **Session** | `session_memory_append`, `session_memory_list`, `session_search` | Rolling notes, temporary decisions, artifact pointers this session. |
+| **Skills** | `skill_view`, `skill_list`, `skill_save`, `skill_manage`, `skill_bulk_save`, `skill_delete`, `skill_recall` | Repeatable procedures with a clear trigger. |
+| **Wiki vault** | `wiki_setup`, `wiki_sync`, `wiki_search` | PARA markdown mirror (default `.webagent/knowledge-vault/`). Also `/wiki_setup`, `/wiki_sync`, `/wiki_search`. |
+
+**Non-negotiable:** One-off facts → `memory_save`. Debugging trail → `session_memory_append`. Repeatable recipe → `skill_save` after `skill_view`. No secrets in memory — **`credential-hygiene`**.
 
 ## Canonical scope
 
@@ -24,7 +37,15 @@ This skill is the **single guide** for choosing among durable facts, rolling ses
 | **Facts** | `memory_save`, `memory_recall`, `memory_search` | Stable preferences (timezone, stack choices, env constraints that stay true). |
 | **Session** | `session_memory_append`, `session_memory_list`, `session_search` | Rolling investigation notes, temporary decisions, pointers to artifacts this session. |
 | **Skills** | `skill_view`, `skill_list`, `skill_save`, `skill_manage`, `skill_bulk_save`, `skill_delete`, `skill_recall` | Repeatable **procedures** with a clear trigger — not one-off facts. |
-| **Knowledge vault** | `wiki_setup`, `wiki_sync`, `wiki_search` | PARA-shaped markdown vault in the workspace (Obsidian-friendly). Use `wiki_sync` to **project** facts/session/learnings into vault notes for browsing; canonical structured facts stay in memory tools unless you intentionally archive prose there. Procedural detail in **`knowledge-vault`**. |
+| **Wiki vault** | `wiki_setup`, `wiki_sync`, `wiki_search` | PARA markdown mirror (Obsidian-friendly; default `.webagent/knowledge-vault/`). Use **`/wiki_setup`**, **`/wiki_sync`**, **`/wiki_search`** or the matching tools. `wiki_sync` **projects** facts/session/learnings — canonical structured facts stay in memory tools unless you intentionally archive prose there. |
+
+## Wiki vault
+
+1. **Scaffold once** — `wiki_setup` or `/wiki_setup` (legacy `knowledge-vault/` migrates when `root_path` is omitted).
+2. **Project runtime** — `wiki_sync` or `/wiki_sync [facts|session|all]` after facts/session exist.
+3. **Browse/search** — `wiki_search` or `/wiki_search <query>` when memory tools are not enough.
+
+Optional PARA or topic-map diagrams: pair with **`chart`** when vault pages benefit from structure visuals.
 
 ## Heuristics
 

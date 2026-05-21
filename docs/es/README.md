@@ -16,6 +16,7 @@ Documentación pública para contribuidores y operadores de Web Agent.
 | [ARCHITECTURE.md](ARCHITECTURE.md) | Mapa del sistema, IPC, almacenamiento, bucle del agente |
 | [testing-checklist.md](testing-checklist.md) | Lista de regresión manual |
 | [test-prompts.md](test-prompts.md) | Prompts de humo (instrucciones en español, prompts en inglés) |
+| [use-cases-playbook.md](use-cases-playbook.md) | 25 escenarios de asistente personal con prompts, herramientas y skills empaquetados |
 | [CAPABILITIES.md](CAPABILITIES.md) | Capacidades modulares |
 | [DESIGN.md](DESIGN.md) | Sistema de diseño |
 | [AGENTS.md](AGENTS.md) | Reglas para agentes de código IA |

@@ -4,8 +4,19 @@ description: Use when the user wants papers, arXiv, citations, literature review
 version: 1.0.0
 category: bundled
 tags: [research, papers, citations, academic, arxiv, semantic-scholar, literature]
-triggers: [arxiv, paper, citation, semantic scholar, literature review, academic, research paper, who cited, references]
+triggers: [arxiv, paper, citation, semantic scholar, literature review, academic, research paper, who cited, references, web_fetch, write_file]
 ---
+
+## Tool contract (read first)
+
+| Step | Tool |
+|------|------|
+| Fetch arXiv / Semantic Scholar APIs | `web_fetch` on documented GET URLs |
+| Persist bibliography / notes | `write_file` under `work/` or `projects/` |
+| Present report to user | `artifact_present` — **`artifact-delivery`** |
+| Open-web entity discovery | defer to **`open-web-research`** |
+
+**Non-negotiable:** Scholarly APIs only — not creator/product discovery. On `429`, back off once; avoid fan-out.
 
 ## When to Use
 

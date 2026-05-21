@@ -4,8 +4,26 @@ description: Use when fixing or extending Web Agent itself—runtime, bundled sk
 version: 1.1.0
 category: bundled
 tags: [web-agent, self-evolution, maintenance, skills, memory, cron, capability]
-triggers: [web agent, this agent, bundled skill, capability folder, fix runtime, self-evolution, improve skill, web-agent repo]
+triggers: [web agent, this agent, bundled skill, capability folder, fix runtime, self-evolution, improve skill, web-agent repo, skill_manage, skill_bulk_save, capability_list]
 ---
+
+## Tool contract (read first)
+
+Maintainer scope only — not everyday user tasks. Do **not** embed the full tool catalog here; use hub skills.
+
+| Need | Tool / skill |
+|------|----------------|
+| Runtime environment | `system_info` |
+| Installed capability folders | `capability_list` |
+| Read bundled skill bodies | `skill_list`, `skill_view` |
+| Patch / install skills | `skill_manage`, `skill_bulk_save`, `skill_save`, `skill_delete` |
+| Inspect repo files | `read_file`, `grep`, `list_dir` — see **`browser-runtime-map`** |
+| Facts / session / wiki | **`memory-layers`** |
+| Deliverables / artifacts | **`artifact-delivery`**, **`chart`** |
+| Cron / heartbeat jobs | `cron_list`, `cron_register` — **`heartbeat-cron`** |
+| Tool picker (everything else) | **`browser-runtime-map`** |
+
+**Non-negotiable:** Remote skill installs via HTTPS URLs + `skill_bulk_save` / `skill_manage` — never `run_shell`, `npx`, or `git clone`. Confirm with `skill_list` + `skill_view` after install.
 
 ## When to Use
 

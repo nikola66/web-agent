@@ -4,8 +4,21 @@ description: Use when starting a new app, demo, spike, starter, or multi-file pr
 version: 1.0.0
 category: bundled
 tags: [project, scaffold, verification, demo, starter, spike, greenfield]
-triggers: [new app, create project, demo, starter, spike, sandbox, test harness, greenfield, bootstrap project, mini-project]
+triggers: [new app, create project, demo, starter, spike, sandbox, test harness, greenfield, bootstrap project, mini-project, make_dir, write_file]
 ---
+
+## Tool contract (read first)
+
+| Step | Tool |
+|------|------|
+| Create tree root | `make_dir` under `projects/<slug>/` or `work/<slug>/` |
+| Add files | `write_file`, `apply_patch` |
+| Verify layout | `list_dir`, `tree` |
+| Smoke test / run | `run_shell` (host) or project entrypoint — see **`browser-runtime-map`** |
+| Folder diagram in README | Mermaid via **`chart`** |
+| Risky new tree | checkpoint via **`workspace-safety`** |
+
+**Non-negotiable:** `make_dir` **before** first `write_file` for this effort. No new project files at workspace root.
 
 ## When to Use
 

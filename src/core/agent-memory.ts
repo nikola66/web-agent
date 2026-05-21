@@ -34,6 +34,9 @@ const CONVERSATIONS_PREFIX = "memory/conversations/";
 const RUNS_PREFIX = "memory/runs/";
 const JOBS_ARCHIVE_PREFIX = "memory/jobs/";
 const CRONJOBS_PATH = ".webagent/cronjobs.json";
+const CURATOR_STATE_PATH = ".webagent/skills/.curator_state";
+const CURATOR_REPORTS_PREFIX = ".webagent/skills/.curator/reports/";
+const SKILL_USAGE_PATH = ".webagent/skills/.usage.json";
 
 export type MemoryReflection = {
   path: string;
@@ -81,12 +84,43 @@ export type AgentMemorySnapshot = {
   cronJobs: CronJobEntry[];
   sessionEntries: SessionMemoryEntry[];
   reflections: MemoryReflection[];
+  curator: CuratorSnapshot | null;
+  skillProvenance: SkillProvenanceSnapshot | null;
   archives: {
     conversations: ReturnType<typeof buildArchiveIndex>;
     runs: ReturnType<typeof buildArchiveIndex>;
     jobs: ReturnType<typeof buildArchiveIndex>;
     snapshots: ReturnType<typeof buildArchiveIndex>;
   };
+};
+
+export type CuratorSnapshot = {
+  paused: boolean;
+  lastRunAt: string | null;
+  lastRunSummary: string | null;
+  lastReportPath: string | null;
+  runCount: number;
+  latestReport: Record<string, unknown> | null;
+};
+
+export type SkillUsageSnapshot = {
+  slug: string;
+  createdBy?: string;
+  state?: string;
+  useCount?: number;
+  viewCount?: number;
+  patchCount?: number;
+  pinned?: boolean;
+  lastUsedAt?: string | null;
+  lastViewedAt?: string | null;
+  lastPatchedAt?: string | null;
+};
+
+export type SkillProvenanceSnapshot = {
+  total: number;
+  agentCreated: number;
+  byState: { active: number; stale: number; archived: number };
+  skills: SkillUsageSnapshot[];
 };
 
 type SqlDatabase = {
@@ -312,6 +346,115 @@ async function loadReflections(
   return reflections;
 }
 
+async function loadCuratorSnapshot(
+  profileId: string,
+  files: WorkspaceFileEntry[],
+  warnings: string[]
+): Promise<CuratorSnapshot | null> {
+  let stateRaw = "";
+  try {
+    stateRaw = await readWorkspaceFileText(profileId, CURATOR_STATE_PATH, { preferLive: true });
+  } catch {
+    return null;
+  }
+  let state: Record<string, unknown> = {};
+  try {
+    state = JSON.parse(stateRaw) as Record<string, unknown>;
+  } catch (error) {
+    warnings.push(
+      `Could not parse ${CURATOR_STATE_PATH}: ${error instanceof Error ? error.message : String(error)}`
+    );
+    return null;
+  }
+
+  const reportPaths = files
+    .filter((file) => file.path.startsWith(CURATOR_REPORTS_PREFIX) && file.path.endsWith(".json"))
+    .sort((a, b) => b.path.localeCompare(a.path));
+  let latestReport: Record<string, unknown> | null = null;
+  if (reportPaths.length > 0) {
+    try {
+      const content = await readWorkspaceFileText(profileId, reportPaths[0].path, {
+        preferLive: true,
+      });
+      latestReport = JSON.parse(content) as Record<string, unknown>;
+    } catch (error) {
+      warnings.push(
+        `Could not read curator report: ${error instanceof Error ? error.message : String(error)}`
+      );
+    }
+  }
+
+  return {
+    paused: state.paused === true,
+    lastRunAt: typeof state.last_run_at === "string" ? state.last_run_at : null,
+    lastRunSummary: typeof state.last_run_summary === "string" ? state.last_run_summary : null,
+    lastReportPath: typeof state.last_report_path === "string" ? state.last_report_path : null,
+    runCount: Number(state.run_count || 0),
+    latestReport,
+  };
+}
+
+async function loadSkillProvenanceSnapshot(
+  profileId: string,
+  warnings: string[]
+): Promise<SkillProvenanceSnapshot | null> {
+  let raw = "";
+  try {
+    raw = await readWorkspaceFileText(profileId, SKILL_USAGE_PATH, { preferLive: true });
+  } catch {
+    return null;
+  }
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch (error) {
+    warnings.push(
+      `Could not parse ${SKILL_USAGE_PATH}: ${error instanceof Error ? error.message : String(error)}`
+    );
+    return null;
+  }
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return null;
+
+  const byState = { active: 0, stale: 0, archived: 0 };
+  const skills: SkillUsageSnapshot[] = [];
+  let agentCreated = 0;
+  for (const [slug, value] of Object.entries(parsed as Record<string, unknown>)) {
+    const record = asRecord(value);
+    if (!record) continue;
+    const state =
+      record.state === "stale" || record.state === "archived" ? record.state : "active";
+    byState[state] += 1;
+    if (record.created_by === "agent") agentCreated += 1;
+    skills.push({
+      slug,
+      createdBy: typeof record.created_by === "string" ? record.created_by : undefined,
+      state,
+      useCount: Number(record.use_count || 0),
+      viewCount: Number(record.view_count || 0),
+      patchCount: Number(record.patch_count || 0),
+      pinned: record.pinned === true,
+      lastUsedAt: typeof record.last_used_at === "string" ? record.last_used_at : null,
+      lastViewedAt: typeof record.last_viewed_at === "string" ? record.last_viewed_at : null,
+      lastPatchedAt: typeof record.last_patched_at === "string" ? record.last_patched_at : null,
+    });
+  }
+
+  skills.sort((a, b) => {
+    if (a.createdBy === "agent" && b.createdBy !== "agent") return -1;
+    if (b.createdBy === "agent" && a.createdBy !== "agent") return 1;
+    return a.slug.localeCompare(b.slug);
+  });
+
+  if (!skills.length) return null;
+
+  return {
+    total: skills.length,
+    agentCreated,
+    byState,
+    skills,
+  };
+}
+
 export async function loadAgentMemorySnapshot(
   profileId: string
 ): Promise<AgentMemorySnapshot> {
@@ -331,6 +474,8 @@ export async function loadAgentMemorySnapshot(
 
   const reflections = await loadReflections(profileId, files, warnings);
   const cronJobs = await loadCronJobsFile(profileId, warnings);
+  const curator = await loadCuratorSnapshot(profileId, files, warnings);
+  const skillProvenance = await loadSkillProvenanceSnapshot(profileId, warnings);
 
   return {
     loadedAt: new Date().toISOString(),
@@ -344,6 +489,8 @@ export async function loadAgentMemorySnapshot(
     cronJobs,
     sessionEntries,
     reflections,
+    curator,
+    skillProvenance,
     archives: {
       conversations: buildArchiveIndex(files, CONVERSATIONS_PREFIX),
       runs: buildArchiveIndex(files, RUNS_PREFIX),

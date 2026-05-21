@@ -1,11 +1,22 @@
 ---
 name: Clarify
-description: Use when the user’s request is ambiguous, conflicting, or has multiple valid paths—emit one structured choice block instead of guessing.
+description: Use when intent is ambiguous or conflicting—emit one <<<CLARIFY>>> block (option buttons in UI, no tools). Or user sends /clarify.
 version: 1.0.0
 category: bundled
 tags: [ux, ambiguity, clarification, dialog, choices, requirements]
-triggers: [which should I, pick one, either/or, not sure, ambiguous, conflicting requirements, what do you mean, unclear scope]
+triggers: [which should I, pick one, either/or, not sure, ambiguous, conflicting requirements, what do you mean, unclear scope, CLARIFY, /clarify, choose between]
 ---
+
+## Tool contract (read first)
+
+| Rule | Detail |
+|------|--------|
+| **No tools** | Do not call any tool in the clarify turn — output plain assistant text only |
+| Output | Exactly one `<<<CLARIFY>>>` … `<<<END>>>` JSON block on its own (runtime forwards it to the host UI) |
+| After emit | Stop and wait for the user's choice as the next message |
+| Manual test | User can send `/clarify [topic]` to force this mode |
+
+Hand off to workflow skills (`open-web-research`, `task-planning`, etc.) **after** the user picks — not before.
 
 ## When to Use
 

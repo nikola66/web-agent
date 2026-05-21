@@ -4,8 +4,24 @@ description: Use when the user wants scheduled jobs, daily digests, recurring re
 version: 1.0.0
 category: bundled
 tags: [cron, schedule, heartbeat, automation, telegram, email, recurring, digest]
-triggers: [schedule, cron, daily digest, recurring, every day, reminder job, cron_register, periodic, automate daily]
+triggers: [schedule, cron, daily digest, recurring, every day, reminder job, cron_register, cron_list, periodic, automate daily]
 ---
+
+## Tool contract (read first)
+
+| Need | Tool |
+|------|------|
+| Create or update a scheduled job | `cron_register` |
+| List existing jobs | `cron_list` |
+| Inspect job definitions on disk | `read_file` on `.webagent/cronjobs.json` |
+| Step tools inside a job | Built-in names only — e.g. `web_search`, `web_fetch`, `write_file`, `memory_save` |
+| Deliver job output to terminal | `delivery: terminal` on the job |
+| Deliver job output to Telegram | `delivery: terminal` + `notifyChannel: telegram:<chatId>` |
+| Deliver job output by email | `delivery: email` + `deliveryEmailTo` |
+
+**Non-negotiable:** Never use host `crontab`/`at` via `run_shell` — blocked. No `run_shell` pipelines in Nodebox cron steps. `delivery` is a **job field**, not a step `tool`. Tab must stay open for jobs to run.
+
+Tool choice for step bodies: **`browser-runtime-map`**. Ad-hoc present/email: **`artifact-delivery`**.
 
 ## When to Use
 

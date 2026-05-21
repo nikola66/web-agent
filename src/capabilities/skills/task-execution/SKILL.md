@@ -4,8 +4,23 @@ description: Use when an approved multi-step plan must be executed end to end—
 version: 1.0.0
 category: bundled
 tags: [execution, multi-step, todo, report, agentic, delivery]
-triggers: [execute the plan, run the plan, go ahead, proceed with execution, start executing, kick off, run all steps, do it now, ship it, work the list]
+triggers: [execute the plan, run the plan, go ahead, proceed with execution, start executing, kick off, run all steps, do it now, ship it, work the list, todo_write, artifact_present]
 ---
+
+## Tool contract (read first)
+
+| Step | Tool |
+|------|------|
+| Gate / advance plan | `todo_write` — one `in_progress` at a time |
+| Session audit trail | `session_memory_append` |
+| Per-step work | canonical tools from **`browser-runtime-map`** |
+| Final report file | `write_file` at `work/task-execution/<slug>/report.md` |
+| Present report | `artifact_present` — **`artifact-delivery`** |
+| Status diagram | Mermaid via **`chart`** at top of report |
+| Failure recovery | **`systematic-debugging`** one cycle, then resume or abort |
+| Irreversible steps | checkpoint via **`workspace-safety`** as step 0 |
+
+**Non-negotiable:** Every multi-step run gets a report via `artifact_present` — never inline the full body. `/stop` → partial report immediately.
 
 ## When to Use
 
@@ -41,7 +56,7 @@ triggers: [execute the plan, run the plan, go ahead, proceed with execution, sta
 
 ## Final report (mandatory deliverable)
 
-Write `work/task-execution/<run-slug>/report.md` (see **`project-scaffold`** for path discipline) and present it through **`artifact-delivery`** (`artifact_present`). Open the report with a **Mermaid status flowchart** via **`chart`** (step nodes with status icons) — readers see shape before scanning the table.
+Write `work/task-execution/<run-slug>/report.md` via `write_file` (see **`project-scaffold`** for path discipline) and present it through **`artifact-delivery`** (`artifact_present`). Open the report with a **Mermaid status flowchart** via **`chart`** (step nodes with status icons).
 
 ```markdown
 # Task Execution Report — <goal in one sentence>

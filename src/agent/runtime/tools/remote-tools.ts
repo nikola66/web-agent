@@ -488,7 +488,12 @@ export async function memorySearchTool(args: ToolArgs = {}, ctx) {
     limit,
     hits: rows.length,
   });
-  return rows;
+  return rows.map(({ _match_score, _match_source, ...fact }) => ({
+    ...fact,
+    ...(typeof _match_score === "number"
+      ? { match_score: _match_score, match_source: _match_source || "unknown" }
+      : {}),
+  }));
 }
 
 const SESSION_SEARCH_CONTEXT = 200;

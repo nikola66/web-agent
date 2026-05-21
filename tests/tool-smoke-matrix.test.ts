@@ -193,6 +193,19 @@ test("local smoke tier tools execute without error", async (t) => {
       args: { title: "Smoke", filename: "smoke.md", markdown: "# Smoke\n" },
     },
     {
+      name: "artifact_present",
+      args: { title: "Path smoke", path: "work/smoke-path.md" },
+      setup: async () => {
+        const rel = nodePath.join(process.env.WEBAGENT_WORKSPACE_ROOT || "", "work/smoke-path.md");
+        await fs.mkdir(nodePath.dirname(rel), { recursive: true });
+        await fs.writeFile(rel, "# Path smoke\n", "utf8");
+      },
+      check: (r) => {
+        assert.equal((r as { ok?: boolean; kind?: string; path?: string }).kind, "markdown");
+        assert.equal((r as { path?: string }).path, "work/smoke-path.md");
+      },
+    },
+    {
       name: "cron_register",
       args: {
         id: `smoke-cron-${stamp}`,

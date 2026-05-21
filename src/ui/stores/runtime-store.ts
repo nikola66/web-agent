@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import type { ArtifactKind } from "@/core/artifact-preview";
 import { useProfileStore } from "./profile-store";
 
 export type RuntimeStatus =
@@ -22,10 +23,23 @@ export interface ProfileRuntimeState {
   onboardingActive: boolean;
   /** Tool gate is awaiting a line on stdin (e.g. `y`). Chat bypasses queue when true. */
   pendingToolConfirm: boolean;
-  /** Latest markdown offer from artifact_present markers. */
-  artifactOffer: { title: string; filename: string; markdown: string } | null;
+  /** Latest artifact offer from artifact_present markers. */
+  artifactOffer: {
+    title: string;
+    filename: string;
+    kind: ArtifactKind;
+    path?: string;
+    markdown?: string;
+  } | null;
   /** <<<CLARIFY>>> skill marker — structured question + option buttons. */
   clarifyOffer: { question: string; options: string[]; openEnded: boolean } | null;
+  /** Recent background review / curator summaries for this profile. */
+  selfImprovementFeed: Array<{
+    at: string;
+    summary: string;
+    kind: string | null;
+    source: string | null;
+  }>;
 }
 
 const EMPTY_PROFILE_RUNTIME: ProfileRuntimeState = {
@@ -41,6 +55,7 @@ const EMPTY_PROFILE_RUNTIME: ProfileRuntimeState = {
   pendingToolConfirm: false,
   artifactOffer: null,
   clarifyOffer: null,
+  selfImprovementFeed: [],
 };
 
 export interface RuntimeState {
@@ -79,6 +94,10 @@ export interface RuntimeState {
   setClarifyOffer: (
     profileId: string,
     payload: ProfileRuntimeState["clarifyOffer"],
+  ) => void;
+  pushSelfImprovementSummary: (
+    profileId: string,
+    payload: { summary: string; kind?: string | null; source?: string | null; at?: string },
   ) => void;
 }
 
@@ -295,6 +314,31 @@ export const useRuntimeStore = create<RuntimeState>()((set, get) => ({
         profileRuntime: {
           ...s.profileRuntime,
           [profileId]: { ...prev, clarifyOffer: payload },
+        },
+      };
+    }),
+  pushSelfImprovementSummary: (profileId, payload) =>
+    set((s) => {
+      const prev = getProfileRuntime(s.profileRuntime, profileId);
+      const summary = String(payload.summary || "").trim();
+      if (!summary) return s;
+      const at = payload.at || new Date().toISOString();
+      const nextEntry = {
+        at,
+        summary,
+        kind: payload.kind ?? null,
+        source: payload.source ?? null,
+      };
+      const deduped = prev.selfImprovementFeed.filter(
+        (item) => !(item.summary === nextEntry.summary && item.at === nextEntry.at)
+      );
+      return {
+        profileRuntime: {
+          ...s.profileRuntime,
+          [profileId]: {
+            ...prev,
+            selfImprovementFeed: [nextEntry, ...deduped].slice(0, 40),
+          },
         },
       };
     }),

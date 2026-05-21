@@ -16,6 +16,7 @@
 | [ARCHITECTURE.md](ARCHITECTURE.md) | خريطة النظام، IPC، التخزين، حلقة الوكيل |
 | [testing-checklist.md](testing-checklist.md) | قائمة اختبار يدوي |
 | [test-prompts.md](test-prompts.md) | مطالبات دخان (تعليمات عربية، المطالبات بالإنجليزية) |
+| [use-cases-playbook.md](use-cases-playbook.md) | 25 سيناريو مساعد شخصي مع مطالبات وأدوات وskills مجمّعة |
 | [CAPABILITIES.md](CAPABILITIES.md) | قدرات معيارية |
 | [DESIGN.md](DESIGN.md) | نظام التصميم |
 | [AGENTS.md](AGENTS.md) | قواعد وكلاء الترميز بالذكاء الاصطناعي |

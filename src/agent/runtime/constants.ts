@@ -88,6 +88,8 @@ export const TOOL_CONFIRM_START = "<<<WEBAGENT_TOOL_CONFIRM>>>";
 export const TOOL_CONFIRM_END = "<<<END_WEBAGENT_TOOL_CONFIRM>>>";
 export const ARTIFACT_PRESENT_START = "<<<WEBAGENT_ARTIFACT>>>";
 export const ARTIFACT_PRESENT_END = "<<<END_WEBAGENT_ARTIFACT>>>";
+export const SELF_IMPROVEMENT_START = "<<<WEBAGENT_SELF_IMPROVEMENT>>>";
+export const SELF_IMPROVEMENT_END = "<<<END_WEBAGENT_SELF_IMPROVEMENT>>>";
 
 /** Minimum wall-clock spacing between heartbeat "ticks" that evaluate `.webagent/cronjobs.json`. */
 export const HEARTBEAT_INTERVAL_MS = 30 * 60 * 1000;

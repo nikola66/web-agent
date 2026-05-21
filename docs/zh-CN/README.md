@@ -16,6 +16,7 @@ Web Agent 的公开贡献者与操作者文档。
 | [ARCHITECTURE.md](ARCHITECTURE.md) | 系统结构、IPC、存储、代理循环 |
 | [testing-checklist.md](testing-checklist.md) | 手动回归清单 |
 | [test-prompts.md](test-prompts.md) | 冒烟测试提示词（指令中文，提示词英文） |
+| [use-cases-playbook.md](use-cases-playbook.md) | 25 个个人助手场景：提示词、工具与 bundled 技能 |
 | [CAPABILITIES.md](CAPABILITIES.md) | 模块化能力 |
 | [DESIGN.md](DESIGN.md) | 设计系统 |
 | [AGENTS.md](AGENTS.md) | AI 编码代理规则 |

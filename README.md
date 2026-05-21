@@ -38,6 +38,7 @@ It is designed to feel simple for end users and capable for power users: isolate
 - [Workspace Features](#workspace-features)
 - [How Persistence Works](#how-persistence-works)
 - [Get Started Presets](#get-started-presets)
+- [Personal Helper Playbook](#personal-helper-playbook)
 - [Quick Start](#quick-start)
 - [Development](#development)
 - [Architecture At A Glance](#architecture-at-a-glance)
@@ -186,6 +187,10 @@ flowchart TB
 
 **Skill provenance:** skills created in background review are tagged `created_by: agent` in `.webagent/skills/.usage.json` (usage counters, lifecycle state). **Curator** runs on heartbeat (~weekly while the tab is open): stale/archive idle agent-created skills, consolidate overlaps; pinned skills opt out; archives go to `.webagent/skills/.archive/` (no hard delete). Tune with `WEBAGENT_CURATOR_INTERVAL_MS`, `WEBAGENT_CURATOR_STALE_AFTER_DAYS`, `WEBAGENT_CURATOR_ARCHIVE_AFTER_DAYS`.
 
+**Inspect in UI:** Files → Memory → **Self-improve** shows the live session feed (background review + curator summaries), curator state/reports, and agent-created skill provenance.
+
+**Semantic memory:** `memory_search` blends substring matching with a persisted local embedding index (`memory/fact-embeddings.json`). Turn context also pulls semantically relevant facts for the active user goal alongside recent facts and high-signal learnings.
+
 For choosing **facts vs session vs skills vs vault**, use the bundled **`/memory-layers`** skill.
 
 ### Quick Capability Map
@@ -211,6 +216,8 @@ These commands make the terminal experience feel like an operator console rather
 | `/clear` | Clear conversation history for a fresh thread; keeps agent and user identity. |
 | `/compact` | Summarize older context and keep the current thread going. |
 | `/plan [goal]` | **Planning mode:** research the workspace with read-only tools, write the full plan markdown under `plans/`, present it via `artifact_present`, then **stop** — reply on the **next** turn with “execute the plan” (or edits) to implement. |
+| `/find-skills [query]` | **Find-skills mode:** search online skill registries (skills.sh, SkillsMP, Cursor Marketplace, etc.) and return the top 5 skills by installs, stars, or votes. |
+| `/clarify [topic]` | **Clarify mode:** emit one structured clarification block when intent is ambiguous — no tools; UI shows choice buttons. |
 | `/checkpoint [name]` | Save a named snapshot of current history for rollback. |
 | `/rollback [name]` | List checkpoints or restore a named checkpoint. |
 | `/skills [search]` | List installed skills, or search skills by query. |
@@ -220,6 +227,8 @@ These commands make the terminal experience feel like an operator console rather
 | `/<skill> [task]` | Invoke an installed skill for a task. |
 | `/stop` | Interrupt the current run. |
 | `/exit` | Exit the active terminal agent session. |
+
+> `📌 Tip:` Use `/find-skills pdf` (or any topic) to discover popular skills online, then install with `/skills install <url>`.
 
 > `📌 Tip:` Use `/skills` to discover capabilities, then jump straight into a workflow with `/<skill-slug> [task]`.
 
@@ -329,6 +338,7 @@ Skills are reusable procedures stored as `SKILL.md` files. They let Web Agent sw
 
 | Slash command | Name | What it is for | Tags |
 | --- | --- | --- | --- |
+| `/find-skills` | Find Skills | Search online skill registries and return the top 5 matches by installs, stars, or votes. | `skills`, `discovery`, `registry`, `marketplace`, `install` |
 | `/clarify` | Clarify | Emit one structured clarification block when user intent is ambiguous, so the UI can present choices instead of guessing. | `ux`, `ambiguity`, `clarification`, `dialog` |
 | `/project-scaffold` | Project Scaffold | Create an isolated workspace folder for a new app, demo, spike, sandbox, or test harness before file generation begins. | `project`, `scaffold`, `verification` |
 | `/research-pack` | Research Pack | Run scholarly research workflows using existing web tools such as arXiv and Semantic Scholar paths. | `research`, `papers`, `citations`, `academic`, `arxiv`, `semantic-scholar` |
@@ -435,6 +445,40 @@ Execute the plan you just wrote.
 ```
 
 Default vault root: `.webagent/knowledge-vault/`. Legacy `knowledge-vault/` at workspace root migrates automatically.
+
+## Personal Helper Playbook
+
+Twenty-five personal-helper scenarios with copy-paste prompts, bundled skills, and the tools that typically fire. Full cards with example prompts live in **[docs/use-cases-playbook.md](docs/use-cases-playbook.md)**. Prompts are in English — paste as-is into chat.
+
+**Filter by category:** [Research](docs/use-cases-playbook.md#playbook-research) · [Memory](docs/use-cases-playbook.md#playbook-memory) · [Planning](docs/use-cases-playbook.md#playbook-planning) · [Automation](docs/use-cases-playbook.md#playbook-automation) · [Workspace](docs/use-cases-playbook.md#playbook-workspace) · [Debug](docs/use-cases-playbook.md#playbook-debug) · [Multimodal](docs/use-cases-playbook.md#playbook-multimodal) · [Delivery](docs/use-cases-playbook.md#playbook-delivery) · [UX](docs/use-cases-playbook.md#playbook-ux) · [Safety](docs/use-cases-playbook.md#playbook-safety) · [Meta](docs/use-cases-playbook.md#playbook-meta)
+
+| Category | Use case | Bundled skill(s) | Key tools |
+| --- | --- | --- | --- |
+| Research | Find niche creators / competitors | `/open-web-research` | `web_search`, `web_fetch`, `write_file`, `artifact_present` |
+| Research | Academic paper / citation dig | `/research-pack` | `web_search`, `web_fetch`, `write_file`, `artifact_present` |
+| Research | Extract a table or JSON from a page | `/structured-extraction` | `web_fetch`, `write_file`, `artifact_present` |
+| Meta | Discover installable skills online | `/find-skills` | `web_search`, `web_fetch`, `skill_manage` |
+| Memory | Save a durable preference | `/memory-layers` | `memory_save`, `memory_recall` |
+| Memory | Capture rolling session context | `/memory-layers` | `session_memory_append`, `session_memory_list` |
+| Memory | Mirror memory into Obsidian-style vault | `/memory-layers` | `wiki_setup`, `wiki_sync`, `wiki_search` |
+| Memory | Find something from an old chat | `/memory-layers` | `session_search` |
+| Planning | Spec-first feature plan (no execution yet) | `/plan`, `/task-planning` | `read_file`, `grep`, `write_file`, `artifact_present` |
+| Planning | Break a stacked request into todos | `/task-planning` | `todo_write`, `skill_view` |
+| Planning | Execute an approved multi-step plan | `/task-execution` | `todo_write`, `read_file`, `write_file`, `artifact_present` |
+| Automation | Daily digest while tab is open | `/heartbeat-cron` | `cron_register`, `cron_list`, `web_search`, `web_fetch` |
+| Workspace | Bootstrap a new side project folder | `/project-scaffold` | `make_dir`, `write_file`, `tree` |
+| Workspace | Reorganize files safely | `/workspace-safety`, `/browser-runtime-map` | `list_dir`, `find_files`, `move_file`, `tree` |
+| Debug | Hypothesis-first bug hunt | `/systematic-debugging` | `read_file`, `grep`, `file_diff`, `run_shell` |
+| Debug | Shell / `npx` failed in WebContainer | `/browser-runtime-map` | `read_file`, `web_fetch`, `grep` |
+| Multimodal | Read a screenshot or diagram | `/multimodal-ingest` | `vision_analyze`, `write_file` |
+| Multimodal | Summarize a YouTube tutorial | `/multimodal-ingest` | `youtube_transcribe`, `write_file`, `artifact_present` |
+| Delivery | Present a finished report in-app | `/artifact-delivery` | `write_file`, `artifact_present` |
+| Delivery | Email a deliverable | `/artifact-delivery` | `write_file`, `email`, `artifact_present` |
+| Delivery | Flowchart for a plan or report | `/chart` | `artifact_present` |
+| UX | Disambiguate a vague ask | `/clarify` | *(none)* |
+| Safety | Checkpoint before bulk delete | `/workspace-safety` | `list_dir`, `file_stat`, `delete_file` |
+| Safety | Pasted API key / secret hygiene | `/credential-hygiene` | *(redaction; no secret persistence)* |
+| Meta | Improve Web Agent itself | `/web-agent-skill` | `read_file`, `grep`, `skill_manage`, `memory_save` |
 
 ## Quick Start
 

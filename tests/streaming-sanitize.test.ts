@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 
 import {
   createToolAwareStreamWriter,
+  extractClarifyMarkers,
   extractPlainToolCommandLines,
   extractJsonToolCallPayloads,
   normalizeToolCalls,
@@ -143,6 +144,27 @@ test("createToolAwareStreamWriter flush surfaces tail when stream ends inside <<
   w.push('<<<TOOL>>>{"name":"read_file"');
   w.flush();
   assert.equal(chunks.join(""), 'before {"name":"read_file"');
+});
+
+test("extractClarifyMarkers pulls host blocks and strips them from visible text", () => {
+  const raw = `Here is context.
+
+<<<CLARIFY>>>
+{"question":"Which stack?","options":["React","Vue"],"open_ended":false}
+<<<END>>>
+
+Trailing.`;
+  const { blocks, visible } = extractClarifyMarkers(raw);
+  assert.equal(blocks.length, 1);
+  assert.match(blocks[0], /<<<CLARIFY>>>/);
+  assert.match(blocks[0], /Which stack/);
+  assert.ok(visible.includes("Here is context"));
+  assert.ok(visible.includes("Trailing"));
+  assert.ok(!visible.includes("CLARIFY"));
+  assert.equal(
+    sanitizeAssistantVisibleText(raw, []),
+    sanitizeAssistantVisibleText(visible, []),
+  );
 });
 
 test("normalizeToolCalls rejects duplicate same-turn tool calls with identical args", () => {

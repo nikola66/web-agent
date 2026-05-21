@@ -4,8 +4,20 @@ description: Use when the user wants tables, lists, or JSON pulled from fetched 
 version: 1.0.0
 category: bundled
 tags: [extraction, scraping, parsing, etl, web_fetch, data]
-triggers: [scrape, extract table, parse html, structured data, csv from page, json from feed, normalize results, dedupe rows, list from page]
+triggers: [scrape, extract table, parse html, structured data, csv from page, json from feed, normalize results, dedupe rows, list from page, web_fetch, write_file]
 ---
+
+## Tool contract (read first)
+
+| Step | Tool |
+|------|------|
+| Fetch source | `web_fetch` (or URLs from **`open-web-research`**) |
+| Parse on Nodebox | `run_shell` with `node -e` snippet only — see **`browser-runtime-map`** |
+| Persist rows | `write_file` under `work/<slug>/` |
+| Deliver to user | `artifact_present` — **`artifact-delivery`** |
+| Scholarly APIs | defer to **`research-pack`** |
+
+**Non-negotiable:** Do not store extracted rows in `memory_save` — file + present. Prefer feeds/JSON-LD over regex on minified JS.
 
 ## When to Use
 

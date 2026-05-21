@@ -22,7 +22,7 @@
   </tr>
 </table>
 
-<!-- i18n-sync: en@8293e87 2026-05-20 -->
+<!-- i18n-sync: en@73a242b 2026-05-21 -->
 
 Web Agent 是在 WebContainers 上直接在浏览器中运行的开源 AI 代理。终端用户无需安装：无 Docker、无 VPS、无 VM、无 Mac mini、无 Hostinger、无本地 Python 栈。打开应用、启动 profile 即可工作。
 
@@ -40,6 +40,7 @@ Web Agent 是在 WebContainers 上直接在浏览器中运行的开源 AI 代理
 - [工作区功能](#工作区功能)
 - [持久化如何工作](#持久化如何工作)
 - [入门预设](#入门预设)
+- [个人助手场景手册](#个人助手场景手册)
 - [快速开始](#快速开始)
 - [开发](#开发)
 - [架构一览](#架构一览)
@@ -437,6 +438,40 @@ Execute the plan you just wrote.
 ```
 
 Default vault root: `.webagent/knowledge-vault/`. Legacy `knowledge-vault/` at workspace root migrates automatically.
+
+## 个人助手场景手册
+
+25 个个人助手场景：可复制提示词、对应 bundled 技能与常用工具。完整示例卡片见 **[docs/zh-CN/use-cases-playbook.md](docs/zh-CN/use-cases-playbook.md)**。提示词为英文——请原样粘贴到聊天框。
+
+**按类别筛选：** [研究](docs/zh-CN/use-cases-playbook.md#playbook-research) · [记忆](docs/zh-CN/use-cases-playbook.md#playbook-memory) · [规划](docs/zh-CN/use-cases-playbook.md#playbook-planning) · [自动化](docs/zh-CN/use-cases-playbook.md#playbook-automation) · [工作区](docs/zh-CN/use-cases-playbook.md#playbook-workspace) · [调试](docs/zh-CN/use-cases-playbook.md#playbook-debug) · [多模态](docs/zh-CN/use-cases-playbook.md#playbook-multimodal) · [交付](docs/zh-CN/use-cases-playbook.md#playbook-delivery) · [体验](docs/zh-CN/use-cases-playbook.md#playbook-ux) · [安全](docs/zh-CN/use-cases-playbook.md#playbook-safety) · [元](docs/zh-CN/use-cases-playbook.md#playbook-meta)
+
+| 类别 | 场景 | Bundled skill(s) | Key tools |
+| --- | --- | --- | --- |
+| 研究 | 发现细分创作者 / 竞品 | `/open-web-research` | `web_search`, `web_fetch`, `write_file`, `artifact_present` |
+| 研究 | 学术论文 / 引用检索 | `/research-pack` | `web_search`, `web_fetch`, `write_file`, `artifact_present` |
+| 研究 | 从页面提取表格或 JSON | `/structured-extraction` | `web_fetch`, `write_file`, `artifact_present` |
+| 元 | 在线发现可安装技能 | `/find-skills` | `web_search`, `web_fetch`, `skill_manage` |
+| 记忆 | 保存持久偏好 | `/memory-layers` | `memory_save`, `memory_recall` |
+| 记忆 | 记录滚动会话上下文 | `/memory-layers` | `session_memory_append`, `session_memory_list` |
+| 记忆 | 同步到 Obsidian 风格知识库 | `/memory-layers` | `wiki_setup`, `wiki_sync`, `wiki_search` |
+| 记忆 | 从旧对话中查找 | `/memory-layers` | `session_search` |
+| 规划 | 先写规格再实现 | `/plan`, `/task-planning` | `read_file`, `grep`, `write_file`, `artifact_present` |
+| 规划 | 拆解多步请求为 todos | `/task-planning` | `todo_write`, `skill_view` |
+| 规划 | 执行已批准的多步计划 | `/task-execution` | `todo_write`, `read_file`, `write_file`, `artifact_present` |
+| 自动化 | 标签页打开时的每日摘要 | `/heartbeat-cron` | `cron_register`, `cron_list`, `web_search`, `web_fetch` |
+| 工作区 | 新建副项目目录 | `/project-scaffold` | `make_dir`, `write_file`, `tree` |
+| 工作区 | 安全整理文件 | `/workspace-safety`, `/browser-runtime-map` | `list_dir`, `find_files`, `move_file`, `tree` |
+| 调试 | 假设驱动的排错 | `/systematic-debugging` | `read_file`, `grep`, `file_diff`, `run_shell` |
+| 调试 | WebContainer 中 shell / `npx` 失败 | `/browser-runtime-map` | `read_file`, `web_fetch`, `grep` |
+| 多模态 | 解读截图或图表 | `/multimodal-ingest` | `vision_analyze`, `write_file` |
+| 多模态 | 总结 YouTube 教程 | `/multimodal-ingest` | `youtube_transcribe`, `write_file`, `artifact_present` |
+| 交付 | 在应用内展示报告 | `/artifact-delivery` | `write_file`, `artifact_present` |
+| 交付 | 邮件发送交付物 | `/artifact-delivery` | `write_file`, `email`, `artifact_present` |
+| 交付 | 计划或报告的流程图 | `/chart` | `artifact_present` |
+| 体验 | 澄清模糊需求 | `/clarify` | *(none)* |
+| 安全 | 批量删除前检查点 | `/workspace-safety` | `list_dir`, `file_stat`, `delete_file` |
+| 安全 | 粘贴 API 密钥 / 密钥卫生 | `/credential-hygiene` | *(redaction; no secret persistence)* |
+| 元 | 改进 Web Agent 本身 | `/web-agent-skill` | `read_file`, `grep`, `skill_manage`, `memory_save` |
 
 ## 快速开始
 

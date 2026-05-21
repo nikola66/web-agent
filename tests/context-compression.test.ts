@@ -226,6 +226,16 @@ test("/plan command appears in runtime and Telegram registries", async () => {
   assert.ok(buildTelegramBotCommands().some((command) => command.command === "plan"));
 });
 
+test("/clarify command appears in runtime and Telegram registries", async () => {
+  assert.ok(SLASH_COMMANDS.some((command) => String(command.name).startsWith("/clarify")));
+  assert.ok(buildTelegramBotCommands().some((command) => command.command === "clarify"));
+});
+
+test("/find-skills command appears in runtime and Telegram registries", async () => {
+  assert.ok(SLASH_COMMANDS.some((command) => String(command.name).startsWith("/find-skills")));
+  assert.ok(buildTelegramBotCommands().some((command) => command.command === "find-skills"));
+});
+
 test("adapter injects every bootstrap static ./ import (runtime entry pulls the graph)", async () => {
   const [bootstrapSource, adapterSource] = await Promise.all([
     fs.readFile(path.join(process.cwd(), "src/agent/runtime/bootstrap.ts"), "utf8"),

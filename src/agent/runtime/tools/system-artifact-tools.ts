@@ -5,6 +5,7 @@
 import fs from "node:fs/promises";
 import os from "node:os";
 import nodePath from "node:path";
+import { inferArtifactKind, mimeForArtifactKind } from "../artifact-preview.js";
 import { ARTIFACT_PRESENT_END, ARTIFACT_PRESENT_START, WS } from "../constants.js";
 import { resolveWorkspacePath } from "../workspace-paths.js";
 
@@ -147,31 +148,97 @@ export async function fileStatTool(args = {}, ctx) {
   };
 }
 
+function sanitizeArtifactFilename(name) {
+  return String(name || "").replace(/[^\w.\-]+/g, "_").slice(0, 120);
+}
+
 export async function artifactPresentTool(args = {}, ctx) {
   const title = String(args?.title ?? "Document").trim() || "Document";
-  let filename = String(args?.filename ?? "artifact.md").trim() || "artifact.md";
+  const pathArg = typeof args?.path === "string" ? args.path.trim() : "";
   const markdownRaw = args?.markdown;
   const markdown = typeof markdownRaw === "string" ? markdownRaw : String(markdownRaw ?? "");
-  if (!markdown.trim()) throw new Error("`markdown` is required for artifact_present.");
-  const capped = markdown.length > 200_000 ? `${markdown.slice(0, 200_000)}\n\n…truncated…` : markdown;
-  filename = filename.replace(/[^\w.\-]+/g, "_").slice(0, 120) || "artifact.md";
-  if (!filename.endsWith(".md")) filename = `${filename}.md`;
-  const payload = {
-    title: title.slice(0, 200),
-    filename,
-    markdown: capped,
-  };
+  const hasMarkdown = Boolean(markdown.trim());
+  const hasPath = Boolean(pathArg);
+
+  if (hasPath === hasMarkdown) {
+    throw new Error("Provide exactly one of `path` (workspace file) or `markdown` (inline body).");
+  }
+
+  /** @type {{ title: string; filename: string; kind: string; path?: string; markdown?: string }} */
+  let payload;
+
+  if (hasPath) {
+    const abs = resolveWorkspacePath(ctx, pathArg);
+    let st;
+    try {
+      st = await fs.stat(abs);
+    } catch (err) {
+      if (err?.code === "ENOENT") {
+        throw new Error(`Path not found: ${pathArg}. Confirm path via list_dir before retrying.`);
+      }
+      throw err;
+    }
+    if (!st.isFile()) throw new Error(`Path is not a file: ${pathArg}`);
+    const basename = nodePath.basename(pathArg);
+    const filename = sanitizeArtifactFilename(basename) || "artifact";
+    const kind = inferArtifactKind(filename);
+    payload = {
+      title: title.slice(0, 200),
+      filename,
+      kind,
+      path: pathArg,
+    };
+  } else {
+    let filename = String(args?.filename ?? "artifact.md").trim() || "artifact.md";
+    const capped = markdown.length > 200_000 ? `${markdown.slice(0, 200_000)}\n\n…truncated…` : markdown;
+    filename = sanitizeArtifactFilename(filename) || "artifact.md";
+    if (!filename.includes(".")) filename = `${filename}.md`;
+    if (!filename.endsWith(".md") && !filename.endsWith(".markdown")) filename = `${filename}.md`;
+    payload = {
+      title: title.slice(0, 200),
+      filename,
+      kind: "markdown",
+      markdown: capped,
+    };
+  }
+
   process.stdout.write(
     `${ARTIFACT_PRESENT_START}${JSON.stringify(payload)}${ARTIFACT_PRESENT_END}\n`
   );
+
   if (typeof ctx?.services?.sendDocument === "function") {
-    await ctx.services.sendDocument({ title: payload.title, filename: payload.filename, content: capped }).catch(() => {});
+    try {
+      if (payload.path) {
+        const abs = resolveWorkspacePath(ctx, payload.path);
+        const bytes = await fs.readFile(abs);
+        await ctx.services.sendDocument({
+          title: payload.title,
+          filename: payload.filename,
+          content: bytes,
+          mimeType: mimeForArtifactKind(payload.kind, payload.filename),
+        });
+      } else if (payload.markdown) {
+        await ctx.services.sendDocument({
+          title: payload.title,
+          filename: payload.filename,
+          content: payload.markdown,
+          mimeType: mimeForArtifactKind("markdown", payload.filename),
+        });
+      }
+    } catch {
+      /* side-channel delivery is best-effort */
+    }
   }
+
   return {
     ok: true,
     title: payload.title,
     filename: payload.filename,
-    bytes: Buffer.byteLength(payload.markdown, "utf8"),
+    kind: payload.kind,
+    path: payload.path ?? null,
+    bytes: payload.markdown
+      ? Buffer.byteLength(payload.markdown, "utf8")
+      : null,
     note: "The host UI should offer View / Download for this artifact marker.",
   };
 }

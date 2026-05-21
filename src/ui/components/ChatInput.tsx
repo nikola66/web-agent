@@ -3,10 +3,24 @@ import { submitUserInput } from "@/core/orchestrator";
 import { ALLOWED_UPLOAD_EXTENSIONS } from "@embed-runtime/tools/upload-allowlist.js";
 import { SLASH_COMMANDS } from "@/agent/embed-commands";
 import { writeWorkspaceUpload } from "@/core/workspace";
+import {
+  getWorkspaceFileIndex,
+  invalidateWorkspaceFileIndex,
+  searchWorkspaceFiles,
+  type WorkspaceFileIndex,
+  type WorkspaceFileIndexEntry,
+} from "@/core/workspace-file-index";
 import { transcribeBlob } from "@/core/voice/stt-client";
+import {
+  appendReferencedFilesNote,
+  extractAtReferences,
+  getAtReferenceQuery,
+  insertAtReference,
+} from "../chat/at-reference";
 import { profileAgentWorking, useActiveProfileRuntime } from "../stores/runtime-store";
 import { useProfileStore } from "../stores/profile-store";
-import { Mic, MicOff, Plus } from "lucide-react";
+import { Mic, MicOff, Plus, X } from "lucide-react";
+import { FileReferenceMenu } from "./FileReferenceMenu";
 import { StatusBar } from "./StatusBar";
 import { useVoiceStore } from "../stores/voice-store";
 
@@ -157,6 +171,14 @@ function getSlashQuery(value: string): string | null {
 const CHAT_INPUT_HISTORY_PREFIX = "webagent.chatInputHistory.";
 const UPLOAD_ACCEPT = [...ALLOWED_UPLOAD_EXTENSIONS].map((ext) => `.${ext}`).join(",");
 
+type PendingAttachment = {
+  id: string;
+  name: string;
+  status: "uploading" | "ready" | "error";
+  path?: string;
+  error?: string;
+};
+
 function loadPersistedInputHistory(profileId: string): string[] {
   if (typeof localStorage === "undefined") return [];
   try {
@@ -185,8 +207,13 @@ function persistInputHistory(profileId: string, lines: string[]) {
 export function ChatInput() {
   const [value, setValue] = useState("");
   const [selectedCommand, setSelectedCommand] = useState(0);
+  const [selectedFileRef, setSelectedFileRef] = useState(0);
+  const [cursorPos, setCursorPos] = useState(0);
+  const [fileIndex, setFileIndex] = useState<WorkspaceFileIndex | null>(null);
+  const [fileIndexLoading, setFileIndexLoading] = useState(false);
   const [dragActive, setDragActive] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
+  const [pendingAttachments, setPendingAttachments] = useState<PendingAttachment[]>([]);
   const [voiceError, setVoiceError] = useState<string | null>(null);
   const [voiceSending, setVoiceSending] = useState(false);
   const [interimTranscript, setInterimTranscript] = useState("");
@@ -210,6 +237,10 @@ export function ChatInput() {
   const dragDepthRef = useRef(0);
   const { activeProfileId } = useProfileStore();
   const disabled = runtimeStatus !== "running" && runtimeStatus !== "booting";
+  const uploadInFlight = pendingAttachments.some((a) => a.status === "uploading");
+  const readyAttachmentPaths = pendingAttachments
+    .filter((a) => a.status === "ready" && a.path)
+    .map((a) => a.path!);
 
   const handleVoiceError = useCallback((msg: string) => {
     setVoiceError(msg);
@@ -223,6 +254,14 @@ export function ChatInput() {
     useVoiceRecording({ onError: handleVoiceError, onInterim: appendInterim });
 
   const slashQuery = getSlashQuery(value);
+  const atRef = getAtReferenceQuery(value, cursorPos);
+
+  const fileMatches = useMemo(() => {
+    if (!atRef || !fileIndex) return [];
+    return searchWorkspaceFiles(fileIndex, atRef.query);
+  }, [atRef, fileIndex]);
+
+  const fileRefMenuOpen = atRef !== null && runtimeStatus === "running";
 
   const commandMatches = useMemo(() => {
     if (slashQuery === null) return [];
@@ -238,6 +277,45 @@ export function ChatInput() {
   useLayoutEffect(() => {
     setSelectedCommand(0);
   }, [slashQuery]);
+
+  useLayoutEffect(() => {
+    setSelectedFileRef(0);
+  }, [atRef?.query, atRef?.replaceStart]);
+
+  const refreshFileIndex = useCallback(async (profileId: string, force = false) => {
+    setFileIndexLoading(true);
+    try {
+      const index = await getWorkspaceFileIndex(profileId, { force });
+      setFileIndex(index);
+    } catch (err) {
+      console.error("Failed to load workspace file index:", err);
+    } finally {
+      setFileIndexLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!activeProfileId) {
+      setFileIndex(null);
+      return;
+    }
+    invalidateWorkspaceFileIndex(activeProfileId);
+    if (runtimeStatus === "running") {
+      void refreshFileIndex(activeProfileId, true);
+    }
+  }, [activeProfileId, refreshFileIndex, runtimeStatus]);
+
+  useEffect(() => {
+    const previousStatus = previousRuntimeStatusRef.current;
+    const bootJustFinished =
+      runtimeStatus === "running" &&
+      (previousStatus === "booting" || previousStatus === "installing");
+    if (bootJustFinished && activeProfileId) {
+      void refreshFileIndex(activeProfileId, true);
+      requestAnimationFrame(() => inputRef.current?.focus());
+    }
+    previousRuntimeStatusRef.current = runtimeStatus;
+  }, [activeProfileId, refreshFileIndex, runtimeStatus]);
 
   const AUTOSIZE_MAX_ROWS = 4;
   useLayoutEffect(() => {
@@ -257,15 +335,11 @@ export function ChatInput() {
   }, [value]);
 
   useEffect(() => {
-    const previousStatus = previousRuntimeStatusRef.current;
-    const bootJustFinished =
-      runtimeStatus === "running" &&
-      (previousStatus === "booting" || previousStatus === "installing");
-    if (bootJustFinished) {
-      requestAnimationFrame(() => inputRef.current?.focus());
+    if (!atRef || !activeProfileId || runtimeStatus !== "running") return;
+    if (!fileIndex && !fileIndexLoading) {
+      void refreshFileIndex(activeProfileId);
     }
-    previousRuntimeStatusRef.current = runtimeStatus;
-  }, [runtimeStatus]);
+  }, [activeProfileId, atRef, fileIndex, fileIndexLoading, refreshFileIndex, runtimeStatus]);
 
   useEffect(() => {
     historyBrowseIndexRef.current = null;
@@ -274,6 +348,11 @@ export function ChatInput() {
       return;
     }
     inputHistoryRef.current = loadPersistedInputHistory(activeProfileId);
+  }, [activeProfileId]);
+
+  useEffect(() => {
+    setPendingAttachments([]);
+    setUploadError(null);
   }, [activeProfileId]);
 
   const replaceTypedSlashWith = (nextCommand: string) => {
@@ -295,6 +374,49 @@ export function ChatInput() {
     setValue(`${value.slice(0, leadingWhitespaceLength)}${rest}`);
   };
 
+  const dismissAtMenu = () => {
+    if (!atRef) return;
+    setValue(`${value.slice(0, atRef.replaceStart)}${value.slice(atRef.replaceEnd)}`);
+    const nextCursor = atRef.replaceStart;
+    requestAnimationFrame(() => {
+      inputRef.current?.setSelectionRange(nextCursor, nextCursor);
+      setCursorPos(nextCursor);
+    });
+  };
+
+  const pickAtReference = (entry: WorkspaceFileIndexEntry) => {
+    if (!atRef) return;
+    const { nextValue, nextCursor } = insertAtReference(
+      value,
+      atRef.replaceStart,
+      atRef.replaceEnd,
+      entry.path
+    );
+    setValue(nextValue);
+    requestAnimationFrame(() => {
+      const el = inputRef.current;
+      if (!el) return;
+      el.focus();
+      el.setSelectionRange(nextCursor, nextCursor);
+      setCursorPos(nextCursor);
+    });
+  };
+
+  const pickSelectedAtReference = () => {
+    if (!fileRefMenuOpen || fileMatches.length === 0) return false;
+    const idx = Math.min(Math.max(0, selectedFileRef), fileMatches.length - 1);
+    const picked = fileMatches[idx];
+    if (!picked) return false;
+    pickAtReference(picked);
+    return true;
+  };
+
+  const syncCursorFromTextarea = () => {
+    const el = inputRef.current;
+    if (!el) return;
+    setCursorPos(el.selectionStart ?? el.value.length);
+  };
+
   const recordSubmittedLine = (line: string, profileId: string | null) => {
     if (!line.trim()) return;
     const h = inputHistoryRef.current;
@@ -305,13 +427,21 @@ export function ChatInput() {
   };
 
   const onSubmit = async () => {
+    if (uploadInFlight) return;
     const line = value.trim();
-    if (!line) return;
+    if (!line && readyAttachmentPaths.length === 0) return;
     const pid = activeProfileId;
-    await submitUserInput(line);
-    recordSubmittedLine(line, pid);
+    let message = line;
+    message = appendReferencedFilesNote(message, extractAtReferences(message));
+    if (readyAttachmentPaths.length > 0) {
+      const uploadNote = `User uploaded files: ${readyAttachmentPaths.join(", ")}`;
+      message = message ? `${message}\n\n${uploadNote}` : uploadNote;
+    }
+    await submitUserInput(message);
+    recordSubmittedLine(message, pid);
     historyBrowseIndexRef.current = null;
     setValue("");
+    setPendingAttachments([]);
   };
 
   const onMicClick = async () => {
@@ -347,6 +477,7 @@ export function ChatInput() {
   };
 
   const submitSlashPick = async (picked: { name: string }) => {
+    if (uploadInFlight) return;
     const pid = activeProfileId;
     await submitUserInput(picked.name);
     recordSubmittedLine(picked.name, pid);
@@ -373,24 +504,44 @@ export function ChatInput() {
       return;
     }
     setUploadError(null);
-    const uploaded: string[] = [];
-    const failures: string[] = [];
-    for (const file of Array.from(files)) {
+    const fileList = Array.from(files);
+    if (fileList.length === 0) return;
+    const staged: PendingAttachment[] = fileList.map((file) => ({
+      id: `${Date.now()}-${Math.random().toString(36).slice(2)}-${file.name}`,
+      name: file.name,
+      status: "uploading",
+    }));
+    setPendingAttachments((prev) => [...prev, ...staged]);
+    let uploadedAny = false;
+    for (let i = 0; i < fileList.length; i++) {
+      const file = fileList[i];
+      const item = staged[i];
+      if (!file || !item) continue;
       try {
         const bytes = new Uint8Array(await file.arrayBuffer());
-        uploaded.push(await writeWorkspaceUpload(activeProfileId, `uploads/${file.name}`, bytes));
+        const path = await writeWorkspaceUpload(activeProfileId, `uploads/${file.name}`, bytes);
+        uploadedAny = true;
+        setPendingAttachments((prev) =>
+          prev.map((a) => (a.id === item.id ? { ...a, status: "ready", path } : a))
+        );
       } catch (err) {
-        failures.push(err instanceof Error ? err.message : String(err));
+        const message = err instanceof Error ? err.message : String(err);
+        console.error("Upload failed:", message);
+        setPendingAttachments((prev) =>
+          prev.map((a) => (a.id === item.id ? { ...a, status: "error", error: message } : a))
+        );
+        setUploadError(message);
       }
     }
-    if (uploaded.length > 0) {
-      await submitUserInput(`User uploaded files: ${uploaded.join(", ")}`);
+    if (uploadedAny) {
+      invalidateWorkspaceFileIndex(activeProfileId);
+      void refreshFileIndex(activeProfileId, true);
     }
-    if (failures.length > 0) {
-      const message = failures[0] || "Upload failed.";
-      console.error("Upload failed:", message);
-      setUploadError(message);
-    }
+    requestAnimationFrame(() => inputRef.current?.focus());
+  };
+
+  const removePendingAttachment = (id: string) => {
+    setPendingAttachments((prev) => prev.filter((a) => a.id !== id));
   };
 
   return (
@@ -432,6 +583,40 @@ export function ChatInput() {
         boxShadow: dragActive ? "inset 0 0 0 1px rgba(251,117,252,0.45)" : undefined,
       }}
     >
+      {pendingAttachments.length > 0 ? (
+        <div className="mb-1 flex flex-wrap gap-1.5">
+          {pendingAttachments.map((attachment) => (
+            <div
+              key={attachment.id}
+              className={[
+                "inline-flex max-w-full items-center gap-1 rounded-[3px] border px-2 py-1 text-[11px]",
+                attachment.status === "error"
+                  ? "border-red-400/40 bg-red-500/10 text-red-200"
+                  : "border-white/10 bg-white/5 text-text-primary",
+              ].join(" ")}
+            >
+              <span className="truncate">{attachment.name}</span>
+              {attachment.status === "uploading" ? (
+                <span className="shrink-0 text-text-muted">uploading…</span>
+              ) : null}
+              {attachment.status === "error" ? (
+                <span className="shrink-0 text-red-300" title={attachment.error}>
+                  failed
+                </span>
+              ) : null}
+              <button
+                type="button"
+                aria-label={`Remove ${attachment.name}`}
+                className="inline-flex shrink-0 items-center justify-center text-text-muted transition-colors hover:text-text-primary"
+                onClick={() => removePendingAttachment(attachment.id)}
+              >
+                <X size={10} />
+              </button>
+            </div>
+          ))}
+        </div>
+      ) : null}
+
       <div className="relative flex w-full items-center gap-2 py-2 font-mono">
         <button
           type="button"
@@ -493,9 +678,40 @@ export function ChatInput() {
           onChange={(e) => {
             historyBrowseIndexRef.current = null;
             setValue(e.target.value);
+            setCursorPos(e.target.selectionStart ?? e.target.value.length);
           }}
+          onSelect={syncCursorFromTextarea}
+          onClick={syncCursorFromTextarea}
+          onKeyUp={syncCursorFromTextarea}
           onKeyDown={(e) => {
-            if (slashQuery !== null && commandMatches.length > 0) {
+            if (fileRefMenuOpen) {
+              if (e.key === "Escape") {
+                e.preventDefault();
+                dismissAtMenu();
+                return;
+              }
+              if (fileMatches.length > 0) {
+                if (e.key === "ArrowDown") {
+                  e.preventDefault();
+                  setSelectedFileRef((idx) => (idx + 1) % fileMatches.length);
+                  return;
+                }
+                if (e.key === "ArrowUp") {
+                  e.preventDefault();
+                  setSelectedFileRef(
+                    (idx) => (idx - 1 + fileMatches.length) % fileMatches.length
+                  );
+                  return;
+                }
+                if (e.key === "Tab") {
+                  e.preventDefault();
+                  pickSelectedAtReference();
+                  return;
+                }
+              }
+            }
+
+            if (!fileRefMenuOpen && slashQuery !== null && commandMatches.length > 0) {
               if (e.key === "Escape") {
                 e.preventDefault();
                 dismissSlashMenu();
@@ -522,6 +738,7 @@ export function ChatInput() {
             }
 
             if (
+              !fileRefMenuOpen &&
               !disabled &&
               (e.key === "ArrowUp" || e.key === "ArrowDown") &&
               inputHistoryRef.current.length > 0 &&
@@ -554,11 +771,16 @@ export function ChatInput() {
 
             if (e.key === "Enter" && !e.shiftKey) {
               e.preventDefault();
+              if (uploadInFlight) return;
+              if (fileRefMenuOpen && fileMatches.length > 0) {
+                pickSelectedAtReference();
+                return;
+              }
               if (shouldSubmitTypedSlashDirectly(value)) {
                 void onSubmit();
                 return;
               }
-              if (slashQuery !== null && commandMatches.length > 0) {
+              if (!fileRefMenuOpen && slashQuery !== null && commandMatches.length > 0) {
                 void submitPickedSlashCommand();
                 return;
               }
@@ -573,12 +795,27 @@ export function ChatInput() {
                 ? "Recording… click mic to stop and send"
                 : voiceSending
                   ? "Sending voice message…"
-                  : "Type message (Enter to send, /stop to interrupt)"
+                  : uploadInFlight
+                    ? "Uploading files…"
+                    : readyAttachmentPaths.length > 0
+                      ? "Add a message about these files (Enter to send)"
+                      : "Type message (Enter to send, @ to reference files)"
               : "Launch the agent to start chatting"
           }
         />
 
-        {slashQuery !== null && commandMatches.length > 0 && (
+        {fileRefMenuOpen ? (
+          <FileReferenceMenu
+            matches={fileMatches}
+            selectedIndex={selectedFileRef}
+            loading={fileIndexLoading}
+            query={atRef?.query ?? ""}
+            onPick={pickAtReference}
+            onHover={setSelectedFileRef}
+          />
+        ) : null}
+
+        {!fileRefMenuOpen && slashQuery !== null && commandMatches.length > 0 && (
           <div className="absolute bottom-[calc(100%+0.5rem)] left-0 z-20 w-full border border-[#fb75fc4d] bg-[#05050dd9] p-2 shadow-[0_0_0_1px_rgba(251,117,252,0.16),0_18px_44px_rgba(0,0,0,0.55)] backdrop-blur-sm">
             <p className="px-2 pb-1 text-[10px] uppercase tracking-[0.22em] text-brand-magenta-light">
               slash commands

@@ -48,12 +48,15 @@ import runtimeMessageSanitizerSource from "../../dist/agent-runtime/message-sani
 import runtimeStreamOutputSource from "../../dist/agent-runtime/stream-output.js?raw";
 import runtimeContextCompressionSource from "../../dist/agent-runtime/context-compression.js?raw";
 import runtimePlanningSlashSource from "../../dist/agent-runtime/planning-slash.js?raw";
+import runtimeClarifySlashSource from "../../dist/agent-runtime/clarify-slash.js?raw";
+import runtimeFindSkillsSlashSource from "../../dist/agent-runtime/find-skills-slash.js?raw";
 import runtimeWikiSlashSource from "../../dist/agent-runtime/wiki-slash.js?raw";
 import runtimeTerminalFormatSource from "../../dist/agent-runtime/terminal-format.js?raw";
 import runtimeToolResultPreviewSource from "../../dist/agent-runtime/tool-result-preview.js?raw";
 import runtimeTranscriptSource from "../../dist/agent-runtime/transcript.js?raw";
 import runtimeTranscriptDeliverySource from "../../dist/agent-runtime/transcript-delivery.js?raw";
 import runtimeWorkspacePathsSource from "../../dist/agent-runtime/workspace-paths.js?raw";
+import runtimeArtifactPreviewSource from "../../dist/agent-runtime/artifact-preview.js?raw";
 import runtimeCommandsSource from "../../dist/agent-runtime/commands.js?raw";
 import runtimeSlashCommandViewsSource from "../../dist/agent-runtime/slash-command-views.js?raw";
 import runtimeChannelOutboundSource from "../../dist/agent-runtime/channel-outbound.js?raw";
@@ -71,6 +74,7 @@ import runtimeMemoryJobsSource from "../../dist/agent-runtime/memory/jobs.js?raw
 import runtimeMemorySnapshotsSource from "../../dist/agent-runtime/memory/snapshots.js?raw";
 import runtimeMemoryReflectionSource from "../../dist/agent-runtime/memory/reflection.js?raw";
 import runtimeMemoryFactsSource from "../../dist/agent-runtime/memory/facts.js?raw";
+import runtimeMemorySemanticIndexSource from "../../dist/agent-runtime/memory/semantic-index.js?raw";
 import runtimeMemoryToolStatsSource from "../../dist/agent-runtime/memory/tool-stats.js?raw";
 import runtimeMemoryLearningsSource from "../../dist/agent-runtime/memory/learnings.js?raw";
 import runtimeMemorySkillsSource from "../../dist/agent-runtime/memory/skills.js?raw";
@@ -121,15 +125,25 @@ export interface AgentStartOptions {
   onOnboardingStateChange?: (active: boolean) => void;
   /** Emitted after a guarded tool asks for stdin approval (`y`/…). */
   onPendingToolConfirmation?: (profileId: string) => void;
-  /** Markdown artifact surfaced via `artifact_present` tool markers. */
+  /** Artifact surfaced via `artifact_present` tool markers. */
   onArtifactOffer?: (
     profileId: string,
-    payload: { title: string; filename: string; markdown: string },
+    payload: {
+      title: string;
+      filename: string;
+      kind: import("@/core/artifact-preview").ArtifactKind;
+      path?: string;
+      markdown?: string;
+    },
   ) => void;
   /** Clarification UX: structured prompt from <<<CLARIFY>>> markers (skill-driven). */
   onClarifyOffer?: (
     profileId: string,
     payload: { question: string; options: string[]; openEnded: boolean },
+  ) => void;
+  onSelfImprovementSummary?: (
+    profileId: string,
+    payload: { summary: string; kind?: string | null; source?: string | null; at?: string },
   ) => void;
   ptySize?: SpawnPtySize;
 }
@@ -154,6 +168,8 @@ const ARTIFACT_PRESENT_START = "<<<WEBAGENT_ARTIFACT>>>";
 const ARTIFACT_PRESENT_END = "<<<END_WEBAGENT_ARTIFACT>>>";
 const CLARIFY_PROMPT_START = "<<<CLARIFY>>>";
 const CLARIFY_PROMPT_END = "<<<END>>>";
+const SELF_IMPROVEMENT_START = "<<<WEBAGENT_SELF_IMPROVEMENT>>>";
+const SELF_IMPROVEMENT_END = "<<<END_WEBAGENT_SELF_IMPROVEMENT>>>";
 /** Emitted when the runtime begins work before visible streaming (e.g. startup greeting). Stripped from terminal output. */
 const AWAITING_RESPONSE_LINE = "<<<WEBAGENT_AWAITING_RESPONSE>>>";
 /** Emitted when the agent is ready for the next user message (turn finished or failed). Not shown in the terminal. */
@@ -412,6 +428,8 @@ async function writeRuntimeSources(profileId: string): Promise<void> {
   await emulator.fs.writeFile(`${webagentDir}/stream-output.js`, runtimeStreamOutputSource);
   await emulator.fs.writeFile(`${webagentDir}/context-compression.js`, runtimeContextCompressionSource);
   await emulator.fs.writeFile(`${webagentDir}/planning-slash.js`, runtimePlanningSlashSource);
+  await emulator.fs.writeFile(`${webagentDir}/clarify-slash.js`, runtimeClarifySlashSource);
+  await emulator.fs.writeFile(`${webagentDir}/find-skills-slash.js`, runtimeFindSkillsSlashSource);
   await emulator.fs.writeFile(`${webagentDir}/wiki-slash.js`, runtimeWikiSlashSource);
   await emulator.fs.writeFile(`${webagentDir}/terminal-format.js`, runtimeTerminalFormatSource);
   await emulator.fs.writeFile(`${webagentDir}/tool-result-preview.js`, runtimeToolResultPreviewSource);
@@ -421,6 +439,7 @@ async function writeRuntimeSources(profileId: string): Promise<void> {
   await emulator.fs.writeFile(`${webagentDir}/slash-command-views.js`, runtimeSlashCommandViewsSource);
   await emulator.fs.writeFile(`${webagentDir}/channel-outbound.js`, runtimeChannelOutboundSource);
   await emulator.fs.writeFile(`${webagentDir}/workspace-paths.js`, runtimeWorkspacePathsSource);
+  await emulator.fs.writeFile(`${webagentDir}/artifact-preview.js`, runtimeArtifactPreviewSource);
   await emulator.fs.writeFile(`${webagentDir}/privacy.js`, runtimePrivacySource);
   await emulator.fs.writeFile(`${webagentDir}/identity/onboarding.js`, runtimeOnboardingSource);
   await emulator.fs.writeFile(`${webagentDir}/llm/provider-config.js`, runtimeProviderConfigSource);
@@ -434,6 +453,7 @@ async function writeRuntimeSources(profileId: string): Promise<void> {
   await emulator.fs.writeFile(`${webagentDir}/memory/snapshots.js`, runtimeMemorySnapshotsSource);
   await emulator.fs.writeFile(`${webagentDir}/memory/reflection.js`, runtimeMemoryReflectionSource);
   await emulator.fs.writeFile(`${webagentDir}/memory/facts.js`, runtimeMemoryFactsSource);
+  await emulator.fs.writeFile(`${webagentDir}/memory/semantic-index.js`, runtimeMemorySemanticIndexSource);
   await emulator.fs.writeFile(`${webagentDir}/memory/tool-stats.js`, runtimeMemoryToolStatsSource);
   await emulator.fs.writeFile(`${webagentDir}/memory/learnings.js`, runtimeMemoryLearningsSource);
   await emulator.fs.writeFile(`${webagentDir}/memory/skills.js`, runtimeMemorySkillsSource);
@@ -598,6 +618,7 @@ export async function startWebAgent(options: AgentStartOptions): Promise<void> {
     onPendingToolConfirmation,
     onArtifactOffer,
     onClarifyOffer,
+    onSelfImprovementSummary,
     ptySize = DEFAULT_PTY,
   } = options;
   if (agentProcesses.has(profile.id)) {
@@ -891,6 +912,7 @@ export async function startWebAgent(options: AgentStartOptions): Promise<void> {
       const toolConfirmStart = agentOutputBuffer.indexOf(TOOL_CONFIRM_START);
       const artifactStart = agentOutputBuffer.indexOf(ARTIFACT_PRESENT_START);
       const clarifyStart = agentOutputBuffer.indexOf(CLARIFY_PROMPT_START);
+      const selfImprovementStart = agentOutputBuffer.indexOf(SELF_IMPROVEMENT_START);
       const proxyReqStart = agentOutputBuffer.indexOf(PROXY_REQ_PREFIX);
       const proxyStreamReqStart = agentOutputBuffer.indexOf(PROXY_STREAM_REQ_PREFIX);
       const spawnReqStart = agentOutputBuffer.indexOf(SPAWN_REQ_PREFIX);
@@ -905,6 +927,7 @@ export async function startWebAgent(options: AgentStartOptions): Promise<void> {
         toolConfirmStart,
         artifactStart,
         clarifyStart,
+        selfImprovementStart,
         proxyReqStart,
         proxyStreamReqStart,
         spawnReqStart,
@@ -1060,19 +1083,52 @@ export async function startWebAgent(options: AgentStartOptions): Promise<void> {
           const parsed = JSON.parse(payload) as {
             title?: string;
             filename?: string;
+            kind?: string;
+            path?: string;
             markdown?: string;
           };
-          if (parsed?.markdown && String(parsed.markdown).trim()) {
+          const markdown = typeof parsed?.markdown === "string" ? parsed.markdown.trim() : "";
+          const path = typeof parsed?.path === "string" ? parsed.path.trim() : "";
+          if (markdown || path) {
             onArtifactOffer?.(profile.id, {
               title: String(parsed.title || "Document").trim() || "Document",
               filename: String(parsed.filename || "artifact.md").trim() || "artifact.md",
-              markdown: String(parsed.markdown || ""),
+              kind: (parsed.kind as import("@/core/artifact-preview").ArtifactKind) || "markdown",
+              ...(path ? { path } : {}),
+              ...(markdown ? { markdown: String(parsed.markdown || "") } : {}),
             });
           }
         } catch {
           /* ignore malformed */
         }
         agentOutputBuffer = agentOutputBuffer.slice(end + ARTIFACT_PRESENT_END.length);
+        continue;
+      }
+
+      if (agentOutputBuffer.startsWith(SELF_IMPROVEMENT_START)) {
+        const end = agentOutputBuffer.indexOf(SELF_IMPROVEMENT_END);
+        if (end < 0) break;
+        const payload = agentOutputBuffer.slice(SELF_IMPROVEMENT_START.length, end).trim();
+        agentOutputBuffer = agentOutputBuffer.slice(end + SELF_IMPROVEMENT_END.length);
+        try {
+          const parsed = JSON.parse(payload) as {
+            summary?: string;
+            kind?: string | null;
+            source?: string | null;
+            at?: string;
+          };
+          const summary = String(parsed.summary || "").trim();
+          if (summary) {
+            onSelfImprovementSummary?.(profile.id, {
+              summary,
+              kind: parsed.kind ?? null,
+              source: parsed.source ?? null,
+              at: parsed.at,
+            });
+          }
+        } catch {
+          /* ignore malformed */
+        }
         continue;
       }
 

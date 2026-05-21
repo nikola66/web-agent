@@ -443,6 +443,7 @@ export default defineConfig(({ mode }) => {
     },
     optimizeDeps: {
       exclude: ["@huggingface/transformers"],
+      include: ["mermaid", "dayjs"],
     },
     build: {
       emptyOutDir: false,
@@ -458,6 +459,7 @@ export default defineConfig(({ mode }) => {
             if (normalized.includes("/node_modules/@xterm/")) return "xterm";
             if (normalized.includes("/node_modules/@codesandbox/nodebox/")) return "nodebox";
             if (normalized.includes("/node_modules/markdown-it/")) return "markdown";
+            if (normalized.includes("/node_modules/mermaid/")) return "mermaid";
             if (normalized.includes("/node_modules/lucide-react/")) return "icons";
             if (
               normalized.includes("/node_modules/react/") ||

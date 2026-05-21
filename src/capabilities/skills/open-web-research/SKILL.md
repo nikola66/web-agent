@@ -4,8 +4,21 @@ description: Use when the user wants to find, list, or discover people, creators
 version: 1.1.0
 category: bundled
 tags: [research, web, search, discovery, creators, influencers, competitors, list]
-triggers: [find youtubers, list creators, who posts about, discover, search for, competitors, influencers, channels about, posting about]
+triggers: [find youtubers, list creators, who posts about, discover, search for, competitors, influencers, channels about, posting about, web_search, web_fetch, artifact_present]
 ---
+
+## Tool contract (read first)
+
+| Step | Tool |
+|------|------|
+| Ambiguous intent | Follow **`clarify`** — emit one `<<<CLARIFY>>>` block (no search, no tools) |
+| Discovery queries | `web_search` — ≥6 varied queries before any final answer |
+| Verify hits | `web_fetch` — ≥2 URLs after each search batch |
+| Persist research pack | `write_file` under `work/` or `projects/` |
+| Show thumbnail/image | `artifact_present` with inline `markdown` `![alt](https://…)` — **`artifact-delivery`** |
+| Shape rows / JSON | defer to **`structured-extraction`** |
+
+**Non-negotiable:** After `web_search`, next tools must be `web_fetch`. Never claim "zero found" without ≥2 fetches. Sparse niche hits = inconclusive, not proof of absence.
 
 ## When to Use
 
@@ -15,7 +28,7 @@ triggers: [find youtubers, list creators, who posts about, discover, search for,
 
 ## Intent vs evidence
 
-If **what to research** is still ambiguous (topic, region, platform, or success criteria), call `skill_view` **`clarify`** and emit one `<<<CLARIFY>>>` block first; wait for the user’s choice. Once intent is settled, meet the minimum-effort bar below—do not stall search/fetch behind extra open questions.
+If **what to research** is still ambiguous (topic, region, platform, or success criteria), follow **`clarify`** and emit one `<<<CLARIFY>>>` block first — no tools; wait for the user’s choice. Once intent is settled, meet the minimum-effort bar below—do not stall search/fetch behind extra open questions.
 
 ## Minimum Effort (before any final answer)
 
@@ -71,6 +84,10 @@ Use `web_search` `location` (e.g. `ae`, `sa`) and `language` when the provider s
 ```
 
 Prefer pipe tables. Include direct links. State clearly when KSA/UAE YouTube coverage is thin but Instagram/social exists. For row-shaping, dedup, or JSON output, defer to **`structured-extraction`**.
+
+## Presenting visuals
+
+When the user asked to show/see/display an image or thumbnail, call `artifact_present` in the **same turn** you obtain a concrete image URL — inline `markdown` with `![alt](https://…)`. Do not stop with the URL alone; see **`artifact-delivery`**.
 
 ## Stop Rules
 

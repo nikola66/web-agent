@@ -22,7 +22,7 @@
   </tr>
 </table>
 
-<!-- i18n-sync: en@8293e87 2026-05-20 -->
+<!-- i18n-sync: en@73a242b 2026-05-21 -->
 
 Web Agent وكيل ذكاء اصطناعي مفتوح المصدر يعمل في المتصفح فوق WebContainers. There is nothing to install to use it: no Docker, no VPS, no VM, no Mac mini, no Hostinger box, no local Python stack. Open the app, launch a profile, and start working.
 
@@ -40,6 +40,7 @@ It is designed to feel simple for end users and capable for power users: isolate
 - [Workspace Features](#workspace-features)
 - [How Persistence Works](#how-persistence-works)
 - [Get Started Presets](#get-started-presets)
+- [دليل المساعد الشخصي](#دليل-المساعد-الشخصي)
 - [Quick Start](#quick-start)
 - [Development](#development)
 - [Architecture At A Glance](#architecture-at-a-glance)
@@ -437,6 +438,40 @@ Execute the plan you just wrote.
 ```
 
 Default vault root: `.webagent/knowledge-vault/`. Legacy `knowledge-vault/` at workspace root migrates automatically.
+
+## دليل المساعد الشخصي
+
+خمسة وعشرون سيناريو مساعد شخصي مع مطالبات جاهزة للنسخ والمهارات المجمّعة والأدوات المتوقعة. البطاقات الكاملة في **[docs/ar/use-cases-playbook.md](docs/ar/use-cases-playbook.md)**. المطالبات بالإنجليزية — الصقها كما هي في الدردشة.
+
+**تصفية حسب الفئة:** [بحث](docs/ar/use-cases-playbook.md#playbook-research) · [ذاكرة](docs/ar/use-cases-playbook.md#playbook-memory) · [تخطيط](docs/ar/use-cases-playbook.md#playbook-planning) · [أتمتة](docs/ar/use-cases-playbook.md#playbook-automation) · [مساحة عمل](docs/ar/use-cases-playbook.md#playbook-workspace) · [تصحيح](docs/ar/use-cases-playbook.md#playbook-debug) · [متعدد الوسائط](docs/ar/use-cases-playbook.md#playbook-multimodal) · [تسليم](docs/ar/use-cases-playbook.md#playbook-delivery) · [تجربة](docs/ar/use-cases-playbook.md#playbook-ux) · [أمان](docs/ar/use-cases-playbook.md#playbook-safety) · [Meta](docs/ar/use-cases-playbook.md#playbook-meta)
+
+| الفئة | حالة الاستخدام | Bundled skill(s) | Key tools |
+| --- | --- | --- | --- |
+| بحث | إيجاد منشئي محتوى / منافسين في niche | `/open-web-research` | `web_search`, `web_fetch`, `write_file`, `artifact_present` |
+| بحث | أوراق أكاديمية / استشهادات | `/research-pack` | `web_search`, `web_fetch`, `write_file`, `artifact_present` |
+| بحث | استخراج جدول أو JSON من صفحة | `/structured-extraction` | `web_fetch`, `write_file`, `artifact_present` |
+| Meta | اكتشاف skills قابلة للتثبيت | `/find-skills` | `web_search`, `web_fetch`, `skill_manage` |
+| ذاكرة | حفظ تفضيل دائم | `/memory-layers` | `memory_save`, `memory_recall` |
+| ذاكرة | تدوين سياق الجلسة | `/memory-layers` | `session_memory_append`, `session_memory_list` |
+| ذاكرة | mirroring إلى vault بأسلوب Obsidian | `/memory-layers` | `wiki_setup`, `wiki_sync`, `wiki_search` |
+| ذاكرة | البحث في محادثة قديمة | `/memory-layers` | `session_search` |
+| تخطيط | خطة spec-first (بدون تنفيذ) | `/plan`, `/task-planning` | `read_file`, `grep`, `write_file`, `artifact_present` |
+| تخطيط | تقسيم طلب متعدد إلى todos | `/task-planning` | `todo_write`, `skill_view` |
+| تخطيط | تنفيذ خطة متعددة الخطوات | `/task-execution` | `todo_write`, `read_file`, `write_file`, `artifact_present` |
+| أتمتة | digest يومي مع تبويب مفتوح | `/heartbeat-cron` | `cron_register`, `cron_list`, `web_search`, `web_fetch` |
+| مساحة عمل | تهيئة مجلد مشروع جانبي | `/project-scaffold` | `make_dir`, `write_file`, `tree` |
+| مساحة عمل | إعادة تنظيم ملفات بأمان | `/workspace-safety`, `/browser-runtime-map` | `list_dir`, `find_files`, `move_file`, `tree` |
+| تصحيح | تصحيح بالفرضيات | `/systematic-debugging` | `read_file`, `grep`, `file_diff`, `run_shell` |
+| تصحيح | فشل shell / `npx` في WebContainer | `/browser-runtime-map` | `read_file`, `web_fetch`, `grep` |
+| متعدد الوسائط | قراءة لقطة شاشة أو مخطط | `/multimodal-ingest` | `vision_analyze`, `write_file` |
+| متعدد الوسائط | تلخيص tutorial على YouTube | `/multimodal-ingest` | `youtube_transcribe`, `write_file`, `artifact_present` |
+| تسليم | عرض تقرير داخل التطبيق | `/artifact-delivery` | `write_file`, `artifact_present` |
+| تسليم | إرسال deliverable بالبريد | `/artifact-delivery` | `write_file`, `email`, `artifact_present` |
+| تسليم | مخطط انسيابي للخطة أو التقرير | `/chart` | `artifact_present` |
+| تجربة | توضيح طلب غامض | `/clarify` | *(none)* |
+| أمان | checkpoint قبل حذف جماعي | `/workspace-safety` | `list_dir`, `file_stat`, `delete_file` |
+| أمان | مفتاح API ملصوق / hygiene | `/credential-hygiene` | *(redaction; no secret persistence)* |
+| Meta | تحسين Web Agent نفسه | `/web-agent-skill` | `read_file`, `grep`, `skill_manage`, `memory_save` |
 
 ## البدء السريع
 

@@ -1,28 +1,28 @@
-import MarkdownIt from "markdown-it";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useState } from "react";
 import { Download, Eye, X } from "lucide-react";
+import { inferArtifactKind, mimeForArtifactKind } from "@/core/artifact-preview";
+import { readWorkspaceFileBuffer, readWorkspaceFileText } from "@/core/workspace";
 import { useProfileStore } from "../stores/profile-store";
 import { useRuntimeStore } from "../stores/runtime-store";
+import {
+  ArtifactPreviewBody,
+  ArtifactPreviewError,
+  ArtifactPreviewLoading,
+  artifactPreviewLabel,
+} from "./artifact-preview/ArtifactPreviewBody";
+import {
+  buildArtifactDownloadBlob,
+  useArtifactContent,
+} from "./artifact-preview/useArtifactContent";
 
-const md = new MarkdownIt({ html: false, linkify: true, breaks: true });
-
-/**
- * Custom fence renderer: when the info-string is `mermaid`, emit a
- * placeholder div that we render into via the `mermaid` library on mount.
- * Other languages keep the default `<pre><code>` rendering.
- */
-const defaultFence = md.renderer.rules.fence?.bind(md.renderer.rules);
-md.renderer.rules.fence = (tokens, idx, options, env, self) => {
-  const token = tokens[idx];
-  const info = (token.info || "").trim().toLowerCase();
-  if (info === "mermaid") {
-    const encoded = encodeURIComponent(token.content);
-    return `<div class="mermaid-block" data-code="${encoded}"><pre class="mermaid-source">${md.utils.escapeHtml(token.content)}</pre></div>`;
-  }
-  return defaultFence
-    ? defaultFence(tokens, idx, options, env, self)
-    : self.renderToken(tokens, idx, options);
-};
+function triggerBlobDownload(blob: Blob, filename: string) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename || "artifact";
+  a.click();
+  URL.revokeObjectURL(url);
+}
 
 export function ArtifactOfferBar() {
   const activeProfileId = useProfileStore((s) => s.activeProfileId);
@@ -31,72 +31,78 @@ export function ArtifactOfferBar() {
   );
   const setArtifactOffer = useRuntimeStore((s) => s.setArtifactOffer);
   const [modalOpen, setModalOpen] = useState(false);
+  const [reloadKey, setReloadKey] = useState(0);
 
-  const rendered = useMemo(() => {
-    if (!artifactOffer) return "";
-    return md.render(artifactOffer.markdown);
-  }, [artifactOffer]);
-  const previewRef = useRef<HTMLElement | null>(null);
-
-  useEffect(() => {
-    if (!modalOpen) return;
-    const host = previewRef.current;
-    if (!host) return;
-    const blocks = Array.from(host.querySelectorAll<HTMLElement>(".mermaid-block"));
-    if (blocks.length === 0) return;
-
-    let cancelled = false;
-    (async () => {
-      try {
-        const { default: mermaid } = await import("mermaid");
-        mermaid.initialize({ startOnLoad: false, theme: "dark", securityLevel: "strict" });
-        for (let i = 0; i < blocks.length; i++) {
-          if (cancelled) return;
-          const block = blocks[i];
-          const code = decodeURIComponent(block.dataset.code || "");
-          if (!code.trim()) continue;
-          try {
-            const id = `mermaid-${Date.now()}-${i}`;
-            const { svg } = await mermaid.render(id, code);
-            if (cancelled) return;
-            block.innerHTML = svg;
-            block.classList.add("mermaid-rendered");
-          } catch (err) {
-            block.classList.add("mermaid-error");
-            const message = err instanceof Error ? err.message : String(err);
-            block.innerHTML = `<pre class="mermaid-source">${message}\n\n${code}</pre>`;
-          }
-        }
-      } catch {
-        /* mermaid load failed — leave source pre blocks intact */
+  const offerWithKind = artifactOffer
+    ? {
+        ...artifactOffer,
+        kind: artifactOffer.kind || inferArtifactKind(artifactOffer.filename),
       }
-    })();
+    : null;
 
-    return () => {
-      cancelled = true;
-    };
-  }, [modalOpen, rendered]);
-
-  if (!activeProfileId || !artifactOffer) {
-    return null;
-  }
+  const content = useArtifactContent(activeProfileId, offerWithKind, modalOpen, reloadKey);
 
   const dismiss = () => {
     setModalOpen(false);
-    setArtifactOffer(activeProfileId, null);
+    if (activeProfileId) setArtifactOffer(activeProfileId, null);
   };
 
-  const onDownload = () => {
-    const blob = new Blob([artifactOffer.markdown], {
-      type: "text/markdown;charset=utf-8",
-    });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = artifactOffer.filename || "artifact.md";
-    a.click();
-    URL.revokeObjectURL(url);
-  };
+  const onDownload = useCallback(async () => {
+    if (!artifactOffer || !offerWithKind) return;
+
+    if (content.status === "ready") {
+      try {
+        const blob = buildArtifactDownloadBlob(offerWithKind, content);
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = artifactOffer.filename || "artifact";
+        a.click();
+        URL.revokeObjectURL(url);
+        return;
+      } catch {
+        /* fall through */
+      }
+    }
+
+    if (artifactOffer.markdown) {
+      const blob = new Blob([artifactOffer.markdown], {
+        type: mimeForArtifactKind("markdown", artifactOffer.filename),
+      });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = artifactOffer.filename || "artifact.md";
+      a.click();
+      URL.revokeObjectURL(url);
+      return;
+    }
+
+    if (artifactOffer.path && activeProfileId) {
+      try {
+        const kind = offerWithKind.kind;
+        const mimeType = mimeForArtifactKind(kind, artifactOffer.filename);
+        if (kind === "markdown" || kind === "mermaid") {
+          const text = await readWorkspaceFileText(activeProfileId, artifactOffer.path, { preferLive: true });
+          const blob = new Blob([text], { type: mimeType });
+          triggerBlobDownload(blob, artifactOffer.filename);
+          return;
+        }
+        const buffer = await readWorkspaceFileBuffer(activeProfileId, artifactOffer.path, { preferLive: true });
+        triggerBlobDownload(new Blob([buffer], { type: mimeType }), artifactOffer.filename);
+      } catch {
+        /* best effort */
+      }
+    }
+  }, [activeProfileId, artifactOffer, content, offerWithKind]);
+
+  const retry = () => setReloadKey((k) => k + 1);
+
+  if (!activeProfileId || !artifactOffer || !offerWithKind) {
+    return null;
+  }
+
+  const previewLabel = artifactPreviewLabel(offerWithKind.kind);
 
   return (
     <>
@@ -171,7 +177,7 @@ export function ArtifactOfferBar() {
             }}
             role="dialog"
             aria-modal="true"
-            aria-label="Markdown artifact"
+            aria-label={previewLabel}
           >
             <div className="flex items-start justify-between gap-3 border-b border-white/10 px-4 py-3">
               <div className="min-w-0">
@@ -201,28 +207,15 @@ export function ArtifactOfferBar() {
               </div>
             </div>
             <div className="fancy-scroll flex-1 overflow-auto px-4 py-4">
-              <article
-                className={[
-                  "mx-auto w-full max-w-[76ch] text-[15px] leading-7 text-text-primary",
-                  "[&_a]:text-brand-magenta-light [&_a]:underline-offset-2 hover:[&_a]:underline",
-                  "[&_p]:my-0 [&_p+*]:mt-4",
-                  "[&_h1]:mb-4 [&_h1]:text-2xl [&_h1]:font-semibold [&_h1]:leading-tight",
-                  "[&_h2]:mb-2 [&_h2]:mt-8 [&_h2]:text-xl [&_h2]:font-semibold [&_h2]:leading-tight",
-                  "[&_h3]:mb-2 [&_h3]:mt-6 [&_h3]:text-lg [&_h3]:font-semibold [&_h3]:leading-tight",
-                  "[&_ul]:my-3 [&_ul]:list-disc [&_ul]:pl-6 [&_ol]:my-3 [&_ol]:list-decimal [&_ol]:pl-6",
-                  "[&_li]:my-1.5",
-                  "[&_blockquote]:my-4 [&_blockquote]:border-l-2 [&_blockquote]:border-border [&_blockquote]:pl-4 [&_blockquote]:text-text-muted",
-                  "[&_hr]:my-6 [&_hr]:border-0 [&_hr]:border-t [&_hr]:border-white/10",
-                  "[&_code]:rounded-sm [&_code]:bg-black/35 [&_code]:px-1.5 [&_code]:py-0.5 [&_code]:text-[0.92em]",
-                  "[&_pre]:my-4 [&_pre]:overflow-x-auto [&_pre]:rounded-md [&_pre]:border [&_pre]:border-white/10 [&_pre]:bg-black/40 [&_pre]:p-3",
-                  "[&_pre_code]:bg-transparent [&_pre_code]:p-0",
-                  "[&_.mermaid-block]:my-4 [&_.mermaid-block]:flex [&_.mermaid-block]:justify-center",
-                  "[&_.mermaid-block_svg]:max-w-full [&_.mermaid-block_svg]:h-auto",
-                  "[&_.mermaid-source]:whitespace-pre-wrap [&_.mermaid-source]:rounded-md [&_.mermaid-source]:border [&_.mermaid-source]:border-white/10 [&_.mermaid-source]:bg-black/40 [&_.mermaid-source]:p-3 [&_.mermaid-source]:text-[12px]",
-                ].join(" ")}
-                ref={previewRef as React.RefObject<HTMLElement>}
-                dangerouslySetInnerHTML={{ __html: rendered }}
-              />
+              {content.status === "loading" || content.status === "idle" ? (
+                <ArtifactPreviewLoading />
+              ) : null}
+              {content.status === "error" ? (
+                <ArtifactPreviewError message={content.message} onRetry={retry} />
+              ) : null}
+              {content.status === "ready" ? (
+                <ArtifactPreviewBody content={content} filename={artifactOffer.filename} onRetry={retry} />
+              ) : null}
             </div>
           </div>
         </div>

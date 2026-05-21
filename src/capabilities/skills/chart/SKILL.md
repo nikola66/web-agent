@@ -1,11 +1,25 @@
 ---
 name: Chart
-description: Use when a visual representation would clarify a plan, flow, comparison, sequence, timeline, or hierarchy—draft a Mermaid diagram inline or inside an artifact.
+description: Use when a visual would clarify a plan, flow, or report — ```mermaid fences plus artifact_present View popup for SVG (GitHub-style).
 version: 1.0.0
 category: bundled
 tags: [chart, mermaid, diagram, visual, flowchart, sequence, gantt, mindmap, artifact]
-triggers: [chart, diagram, mermaid, flowchart, sequence diagram, gantt, mindmap, draw, visualize, show the flow, architecture diagram, state machine]
+triggers: [chart, diagram, mermaid, flowchart, sequence diagram, gantt, mindmap, draw, visualize, show the flow, architecture diagram, state machine, artifact_present, show diagram, render diagram]
 ---
+
+## Tool contract (read first)
+
+Mermaid **only renders as SVG** in the **`artifact_present` View popup** — like GitHub. Chat text and bare code blocks stay plain text.
+
+| To get a rendered diagram | Do this |
+|---------------------------|---------|
+| Markdown report/plan with diagram | `artifact_present` with inline `markdown` or `.md` `path`; body contains a ` ```mermaid ` fence |
+| Standalone diagram file | `write_file` as `*.mmd` / `*.mermaid`, then `artifact_present` with that `path` |
+| User asked to show/see the diagram | Call `artifact_present` **in the same turn** — do not paste the diagram source in chat and stop |
+
+**Fence rule (non-negotiable):** opening fence info-string must be exactly `mermaid` (lowercase). ` ```mermaid ` → SVG in preview. ` ``` `, ` ```text `, or raw unfenced source → literal text, no diagram.
+
+**After present:** one-line chat summary + pointer to View/Download — never dump the full artifact body again. Delivery mechanics: **`artifact-delivery`**.
 
 ## When to Use
 
@@ -24,8 +38,8 @@ Humans absorb structure faster from a diagram than from prose. Even a 4-node flo
 - Called by **`task-execution`** to embed a step-status diagram inside the final run report.
 - Called by **`systematic-debugging`** to draw the fault tree / hypothesis lattice.
 - Called by **`project-scaffold`** to show the new folder tree as a `graph` or file-tree diagram.
-- Called by **`knowledge-vault`** for PARA / topic-map pages.
-- Delivery surface owned by **`artifact-delivery`** — render charts inside `artifact_present` (the host renders Mermaid in the preview modal).
+- Called by **`memory-layers`** wiki flows for PARA / topic-map vault pages.
+- Delivery surface owned by **`artifact-delivery`** — always **`artifact_present`** so the host View popup can render Mermaid as SVG (see **Host preview contract** above).
 
 ## Diagram types and when to pick each
 
@@ -46,17 +60,17 @@ When in doubt → **flowchart TD** with 4–8 labeled nodes.
 
 ## Authoring rules
 
-1. **Fence with `mermaid`.** Always emit a fenced code block whose info-string is exactly `mermaid` (lowercase). The artifact preview renders SVG from this fence; any other language tag is treated as a literal code listing.
+1. **Fence with `mermaid`.** Info-string exactly `mermaid` (lowercase) — required for SVG in the View popup; any other tag stays a code listing.
 2. **Keep it scannable.** 4–12 nodes is the sweet spot. If you need more, split into two diagrams or use a hierarchical subgraph.
 3. **Label every edge** that carries semantic weight (`-->|approved|`, `-->|fails|`). Unlabeled arrows are fine for trivial linear flows.
 4. **Quote labels with special chars.** Wrap labels containing `()`, `:`, `/`, `&`, or quotes in `["…"]` so Mermaid does not choke on the parse.
 5. **Direction first.** Flowcharts: `TD` (top-down) for plans, `LR` (left-right) for pipelines. Be consistent inside one document.
 6. **Avoid styling unless asked.** Default theme is fine; bespoke `classDef` colors usually do more harm than good in a quick draft.
-7. **Validate locally first** — when the diagram is non-trivial, drop the source into the artifact preview and confirm it renders before claiming the task complete.
+7. **Present before done** — when the user should see the diagram, call `artifact_present` and open View; do not rely on chat paste alone.
 
 ## Embedding pattern
 
-Always show the chart **inside** the markdown deliverable, not as a sibling file:
+Always embed the chart in the markdown deliverable, then **`artifact_present`** that body or `.md` path:
 
 ````markdown
 ## Approval flow
@@ -76,7 +90,7 @@ For multi-step run reports (see **`task-execution`**), put the chart **above** t
 
 ## Pitfalls
 
-- Forgetting the `mermaid` info-string — the block stays as a plain `<pre>` and no SVG renders.
+- Forgetting ` ```mermaid ` or skipping `artifact_present` — user sees plain text, not a diagram.
 - Unclosed brackets / mismatched arrow syntax — parser errors. Keep diagrams small enough to spot the issue.
 - Inlining a 40-node diagram — unreadable; split or summarize.
 - Using HTML inside labels — Mermaid in `securityLevel: "strict"` (host config) will strip or refuse.

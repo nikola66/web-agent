@@ -4,8 +4,22 @@ description: Use when the input is an image, screenshot, diagram, or YouTube lin
 version: 1.0.0
 category: bundled
 tags: [vision, multimodal, ocr, youtube, transcript, image]
-triggers: [screenshot, image, diagram, ocr, what is in this image, youtube link, transcribe, video summary, vision_analyze, youtube_transcribe]
+triggers: [screenshot, image, diagram, ocr, what is in this image, youtube link, transcribe, video summary, vision_analyze, youtube_transcribe, audio_analyze]
 ---
+
+## Tool contract (read first)
+
+| Input | Tool |
+|-------|------|
+| Image / screenshot / diagram | `vision_analyze` with a focused question |
+| YouTube / Shorts URL | `youtube_transcribe` |
+| Workspace audio file | `audio_analyze` |
+| Cross-check claims | `web_search`, `web_fetch` — **`open-web-research`** |
+| Persist transcript / extract | `write_file` under `work/<slug>/` |
+| Show visual to user | `artifact_present` — **`artifact-delivery`** |
+| Durable non-secret facts | `memory_save` — **`memory-layers`** |
+
+**Non-negotiable:** Focused vision questions, not "describe everything". Long transcripts → file + present, not chat paste.
 
 ## When to Use
 

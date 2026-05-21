@@ -4,6 +4,7 @@
 
 import { dim } from "./terminal-format.js";
 import { logDebugEvent } from "./logging/debug-log.js";
+import { emitSelfImprovementSummary } from "./identity/onboarding.js";
 import { runWithSkillWriteOrigin } from "./skill-provenance.js";
 import { errorMessage } from "./utils.js";
 
@@ -242,6 +243,11 @@ export async function runBackgroundReview({
 
   const summary = `Self-improvement review: ${actions.join(" · ")}`;
   process.stdout.write(dim(`💾 ${summary}\n\n`));
+  emitSelfImprovementSummary({
+    summary,
+    kind,
+    source: writeOrigin,
+  });
   await logDebugEvent("background_review_completed", { kind, runId, actions, summary });
   if (typeof onSummary === "function") {
     await onSummary(summary);

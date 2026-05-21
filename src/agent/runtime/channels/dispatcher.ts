@@ -20,6 +20,8 @@ import {
 import { buildToolRowsFromCatalog } from "../slash-command-views.js";
 import { loadToolCatalog } from "../tools/registry.js";
 import { buildPlanModeUserPrompt } from "../planning-slash.js";
+import { buildClarifyModeUserPrompt } from "../clarify-slash.js";
+import { buildFindSkillsModeUserPrompt } from "../find-skills-slash.js";
 import { rewriteWikiSlashUserMessage } from "../wiki-slash.js";
 import { downloadTelegramVoice } from "../voice/telegram-voice.js";
 import { audioAnalyzeTool } from "../tools/audio-tools.js";
@@ -306,7 +308,15 @@ export function createChannelInboundHandler(deps) {
           ? buildPlanModeUserPrompt(
               trimmed === "/plan" ? "" : trimmed.slice("/plan ".length).trim()
             )
-          : trimmed);
+          : trimmed === "/clarify" || trimmed.startsWith("/clarify ")
+            ? buildClarifyModeUserPrompt(
+                trimmed === "/clarify" ? "" : trimmed.slice("/clarify ".length).trim()
+              )
+            : trimmed === "/find-skills" || trimmed.startsWith("/find-skills ")
+              ? buildFindSkillsModeUserPrompt(
+                  trimmed === "/find-skills" ? "" : trimmed.slice("/find-skills ".length).trim()
+                )
+              : trimmed);
       history.push({ role: "user", content: userContent });
       const compaction = await maybeCompactHistory(history, cfg, {
         ...contextCompaction,

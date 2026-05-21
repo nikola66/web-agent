@@ -52,6 +52,10 @@ const RAW_ALLOWED_UPLOAD_EXTENSIONS = [
   "webm",
   "mov",
   "m4v",
+  "doc",
+  "docx",
+  "ppt",
+  "pptx",
 ]
   .map((ext) => String(ext).trim().toLowerCase().replace(/^\.+/, ""))
   .filter(Boolean);

@@ -9,8 +9,14 @@ import {
   buildSkillsContextBlock,
   invalidateSkillsContextCache,
 } from "../dist/agent-runtime/memory/index.js";
+import { BUILTIN_TOOLS } from "../dist/agent-runtime/tools/registry-browser.js";
 
 const BUNDLED_SKILL_DIR = nodePath.join(process.cwd(), "src/capabilities/skills");
+const BUILTIN_TOOL_NAMES = Object.keys(BUILTIN_TOOLS);
+
+function skillMentionsBuiltinTool(raw) {
+  return BUILTIN_TOOL_NAMES.some((name) => raw.includes(`\`${name}\``));
+}
 
 function parseTriggersFromRaw(raw) {
   const inline = raw.match(/^triggers:\s*\[([^\]]+)\]/m);
@@ -86,6 +92,19 @@ test("every bundled capability skill is indexed and viewable on demand", async (
       const viewed = await viewSkill({ name: slug });
       assert.equal(viewed.slug, slug);
       assert.match(viewed.content, /## /);
+      assert.match(
+        viewed.content,
+        /## Tool contract/,
+        `${slug} should declare a Tool contract section`,
+      );
+      if (slug !== "clarify") {
+        assert.ok(
+          skillMentionsBuiltinTool(viewed.content),
+          `${slug} should name at least one built-in tool in backticks`,
+        );
+      } else {
+        assert.match(viewed.content, /No tools/i, `${slug} should state no-tool contract`);
+      }
 
       if (slug === "web-agent-skill") {
         assert.match(viewed.content, /## Self-Evolution Loop/);

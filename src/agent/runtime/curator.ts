@@ -7,6 +7,7 @@ import nodePath from "node:path";
 import { SKILLS_DIR, workspaceStatePath } from "./constants.js";
 import { dim } from "./terminal-format.js";
 import { logDebugEvent } from "./logging/debug-log.js";
+import { emitSelfImprovementSummary } from "./identity/onboarding.js";
 import { listSkills } from "./memory/skills.js";
 import {
   applyAutomaticSkillTransitions,
@@ -191,6 +192,13 @@ export async function maybeRunCurator({
   await saveCuratorState(state);
 
   process.stdout.write(dim(`🧹 Curator: ${report.summary}\n\n`));
+  if (!summary) {
+    emitSelfImprovementSummary({
+      summary: `Curator: ${report.summary}`,
+      kind: "skill",
+      source: "curator",
+    });
+  }
   await logDebugEvent("curator_completed", { reportPath, summary: report.summary });
   return { ran: true, summary: report.summary };
 }

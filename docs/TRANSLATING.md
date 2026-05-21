@@ -38,8 +38,9 @@ Root README translations:
 1. Follow [GLOSSARY.md](GLOSSARY.md) for do-not-translate terms.
 2. Keep code blocks, CLI commands, env vars, and tool names identical to English.
 3. In [test-prompts.md](test-prompts.md), translate instructions only; **keep prompt text in English** (prompts target the agent).
-4. [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md): add *“The English version is authoritative for enforcement.”* at the top of each translation.
-5. Arabic: natural RTL prose; leave code, paths, and slash commands in Latin.
+4. In [use-cases-playbook.md](use-cases-playbook.md) and root README playbook indexes, translate section titles, category labels, and use-case descriptions; **keep copy-paste prompts, tool IDs, skill slugs, and paths in English**. Each locale has `docs/{locale}/use-cases-playbook.md`; the root README carries a compact index table linking to the full playbook.
+5. [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md): add *“The English version is authoritative for enforcement.”* at the top of each translation.
+6. Arabic: natural RTL prose; leave code, paths, and slash commands in Latin.
 
 ## PR checklist
 

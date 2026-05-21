@@ -947,6 +947,19 @@ export function stripReasoningPlaceholderLines(text) {
     .join("\n");
 }
 
+/** Pull `<<<CLARIFY>>>` host markers out of model text; emit blocks on stdout separately from visible chat. */
+export function extractClarifyMarkers(text) {
+  const re = /<<<\s*CLARIFY\s*>>>[\s\S]*?<<<\s*END\s*>>>/gi;
+  const blocks = [];
+  const raw = String(text || "");
+  let m;
+  while ((m = re.exec(raw))) {
+    blocks.push(m[0]);
+  }
+  const visible = raw.replace(re, "").trimEnd();
+  return { blocks, visible };
+}
+
 /** @param {string[]} [knownToolNames] — adds exact-name matches; generic `name{"k":…}` lines strip even when [] */
 export function sanitizeAssistantVisibleText(text, knownToolNames) {
   const withoutMarkers = String(text || "")

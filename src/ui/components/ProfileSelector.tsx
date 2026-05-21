@@ -214,7 +214,7 @@ export function ProfileSelector() {
             onMouseLeave={() => setHoveredProfileId((current) => (current === p.id ? null : current))}
             style={{
               padding: "12px 14px",
-              borderRadius: "3px",
+              borderRadius: "15px",
               border: `1px solid ${cardBorder}`,
               background: hoveredProfileId === p.id ? hoverBackground : baseBackground,
               boxShadow: isActive ? "0 0 16px var(--color-glow-subtle)" : "none",

@@ -7,6 +7,16 @@ export const SLASH_COMMANDS = [
     description:
       "Planning mode: research the workspace, write a detailed plan under plans/, present it, then stop—execute on a follow-up message.",
   },
+  {
+    name: "/clarify [topic]",
+    description:
+      "Clarify mode: emit one <<<CLARIFY>>> option block—no tools; host shows choice buttons.",
+  },
+  {
+    name: "/find-skills [query]",
+    description:
+      "Find-skills mode: search online skill registries (skills.sh, SkillsMP, Cursor Marketplace, etc.) and return the top 5 by installs, stars, or votes.",
+  },
   { name: "/checkpoint [name]", description: "Save a named snapshot of current history for rollback." },
   { name: "/rollback [name]", description: "List checkpoints or restore a named checkpoint." },
   { name: "/skills [search]", description: "List installed skills, or search skills by query." },
@@ -35,7 +45,7 @@ export const SLASH_COMMANDS = [
 ];
 
 export function buildTelegramBotCommands() {
-  return SLASH_COMMANDS.filter((command) => /^\/[A-Za-z0-9_]+(?:\s|$)/.test(command.name || "")).map((command) => {
+  return SLASH_COMMANDS.filter((command) => /^\/[A-Za-z0-9_-]+(?:\s|$)/.test(command.name || "")).map((command) => {
     const nameWithoutSlash = String(command.name || "").replace(/^\//, "");
     const commandName = nameWithoutSlash.split(/\s/)[0];
     return {

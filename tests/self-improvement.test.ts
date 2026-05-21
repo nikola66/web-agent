@@ -187,3 +187,26 @@ test("loadCuratorState returns defaults when file missing", async () => {
   assert.equal(state.paused, false);
   assert.equal(state.run_count, 0);
 });
+
+test("semantic index ranks related facts above unrelated ones", async () => {
+  const tmp = await fs.mkdtemp(nodePath.join(os.tmpdir(), "webagent-semantic-"));
+  process.env.WEBAGENT_WORKSPACE_ROOT = tmp;
+  process.env.WEBAGENT_MEMORY_ROOT = nodePath.join(tmp, "memory");
+
+  const semantic = await import(`../dist/agent-runtime/memory/semantic-index.js?v=${Date.now()}`);
+  await semantic.upsertFactEmbedding("user_timezone", "America/Chicago");
+  await semantic.upsertFactEmbedding("favorite_color", "blue");
+
+  const hits = await semantic.searchFactEmbeddings("timezone america chicago", 5);
+  assert.ok(hits.length > 0);
+  assert.equal(hits[0].key, "user_timezone");
+
+  delete process.env.WEBAGENT_WORKSPACE_ROOT;
+  delete process.env.WEBAGENT_MEMORY_ROOT;
+});
+
+test("self-improvement IPC markers are stable", async () => {
+  const constants = await import("../dist/agent-runtime/constants.js");
+  assert.match(String(constants.SELF_IMPROVEMENT_START), /^<<<WEBAGENT_/);
+  assert.match(String(constants.SELF_IMPROVEMENT_END), /^<<<END_WEBAGENT_/);
+});

@@ -70,6 +70,8 @@ import { buildToolRowsFromCatalog } from "./slash-command-views.js";
 import { formatHelpForSurface, runSkillsSlashCommand } from "./channel-outbound.js";
 import { SLASH_COMMANDS } from "./commands.js";
 import { buildPlanModeUserPrompt } from "./planning-slash.js";
+import { buildClarifyModeUserPrompt } from "./clarify-slash.js";
+import { buildFindSkillsModeUserPrompt } from "./find-skills-slash.js";
 import { rewriteWikiSlashUserMessage } from "./wiki-slash.js";
 import {
   compactHistory,
@@ -588,6 +590,8 @@ export async function main() {
       "clear",
       "compact",
       "plan",
+      "clarify",
+      "find-skills",
       "checkpoint",
       "rollback",
       "skills",
@@ -701,6 +705,12 @@ export async function main() {
     } else if (input === "/plan" || input.startsWith("/plan ")) {
       const goal = input === "/plan" ? "" : input.slice("/plan ".length).trim();
       input = buildPlanModeUserPrompt(goal);
+    } else if (input === "/clarify" || input.startsWith("/clarify ")) {
+      const topic = input === "/clarify" ? "" : input.slice("/clarify ".length).trim();
+      input = buildClarifyModeUserPrompt(topic);
+    } else if (input === "/find-skills" || input.startsWith("/find-skills ")) {
+      const query = input === "/find-skills" ? "" : input.slice("/find-skills ".length).trim();
+      input = buildFindSkillsModeUserPrompt(query);
     } else {
       const skillPrompt = await skillInvocationPrompt(input);
       if (skillPrompt) input = skillPrompt;

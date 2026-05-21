@@ -279,25 +279,40 @@ export async function sendTelegramMessage(token, chatId, text) {
 }
 
 /**
- * Send a markdown file as a Telegram document attachment.
+ * Send a file as a Telegram document attachment.
  *
  * @param {string} token
  * @param {string | number} chatId
- * @param {{ title: string; filename: string; content: string }} doc
+ * @param {{ title: string; filename: string; content: string | Buffer | Uint8Array; mimeType?: string }} doc
  */
 export async function sendTelegramDocument(token, chatId, doc) {
   const title = String(doc?.title || "Document").trim();
   const filename = String(doc?.filename || "artifact.md").trim();
-  const content = String(doc?.content || "").trim();
-  if (!content) return;
+  const raw = doc?.content;
+  const mimeType = String(doc?.mimeType || "application/octet-stream").trim() || "application/octet-stream";
+  if (raw === undefined || raw === null) return;
+
+  let fileBytes;
+  if (typeof raw === "string") {
+    const content = raw.trim();
+    if (!content) return;
+    fileBytes = Buffer.from(content, "utf-8");
+  } else if (Buffer.isBuffer(raw)) {
+    if (raw.length === 0) return;
+    fileBytes = raw;
+  } else if (raw instanceof Uint8Array) {
+    if (raw.length === 0) return;
+    fileBytes = Buffer.from(raw);
+  } else {
+    return;
+  }
 
   const boundary = `----TGBoundary${Date.now().toString(36)}`;
-  const fileBytes = Buffer.from(content, "utf-8");
 
   const body = Buffer.concat([
     Buffer.from(`--${boundary}\r\nContent-Disposition: form-data; name="chat_id"\r\n\r\n${chatId}\r\n`),
     Buffer.from(`--${boundary}\r\nContent-Disposition: form-data; name="caption"\r\n\r\n${title}\r\n`),
-    Buffer.from(`--${boundary}\r\nContent-Disposition: form-data; name="document"; filename="${filename}"\r\nContent-Type: text/markdown\r\n\r\n`),
+    Buffer.from(`--${boundary}\r\nContent-Disposition: form-data; name="document"; filename="${filename}"\r\nContent-Type: ${mimeType}\r\n\r\n`),
     fileBytes,
     Buffer.from(`\r\n--${boundary}--\r\n`),
   ]);

@@ -4,8 +4,22 @@ description: Use when the user reports a bug, error, flaky test, crash, regressi
 version: 1.0.0
 category: bundled
 tags: [debugging, bug, error, flaky, crash, regression, test-failure, investigation]
-triggers: [bug, error, fails, flaky, crash, regression, test failure, doesn't work, debug this, broken, not working]
+triggers: [bug, error, fails, flaky, crash, regression, test failure, doesn't work, debug this, broken, not working, read_file, grep, file_diff]
 ---
+
+## Tool contract (read first)
+
+| Step | Tool |
+|------|------|
+| Read suspect code | `read_file` |
+| Find call sites / symbols | `grep`, `find_files` |
+| Compare versions | `file_diff` |
+| External API semantics | `web_fetch` |
+| Isolated repro / verify | `run_shell` (narrow) — **`browser-runtime-map`** |
+| Record hypothesis trail | `session_memory_append` |
+| Hypothesis tree visual | Mermaid via **`chart`** |
+
+**Non-negotiable:** Read before edit. One hypothesis, one falsifying experiment per cycle — no parallel mystery fixes.
 
 ## When to Use
 

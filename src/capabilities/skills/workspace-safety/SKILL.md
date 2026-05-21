@@ -4,8 +4,23 @@ description: Use when the user wants backup, export, checkpoint, or before bulk 
 version: 1.0.0
 category: bundled
 tags: [backup, export, checkpoint, safety, destructive, rollback, isolate]
-triggers: [backup, export profile, checkpoint, rollback, before delete, rm -rf, wipe workspace, risky refactor, save state]
+triggers: [backup, export profile, checkpoint, rollback, before delete, rm -rf, wipe workspace, risky refactor, save state, delete_file, move_file]
 ---
+
+## Tool contract (read first)
+
+| Need | Action |
+|------|--------|
+| Conversation checkpoint | UI slash `/checkpoint [name]` — not a built-in tool |
+| Restore checkpoint | `/rollback` — UI |
+| Profile portability | Workspaces tab Export/Import JSON — UI |
+| Isolate experiment | `make_dir` under `work/<slug>/` — **`project-scaffold`** |
+| Inventory before delete | `list_dir`, `tree` |
+| Destructive file ops | `delete_file`, `move_file` — confirm scope first |
+| Risky shell | `run_shell` — prefer `work/` subtree — **`browser-runtime-map`** |
+| Multi-step irreversible plan | **`task-execution`** inserts checkpoint todo as step 0 |
+
+**Non-negotiable:** No wide delete/refactor without checkpoint or export. Redact secrets before export — **`credential-hygiene`**.
 
 ## Canonical scope
 

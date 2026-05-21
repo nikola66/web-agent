@@ -5,6 +5,8 @@ import {
   CONTEXT_UPDATE_START,
   PROFILE_UPDATE_END,
   PROFILE_UPDATE_START,
+  SELF_IMPROVEMENT_END,
+  SELF_IMPROVEMENT_START,
   USER_MD,
   USER_UPDATE_END,
   USER_UPDATE_START,
@@ -41,6 +43,22 @@ export function emitUserUpdate(name) {
 export function emitContextUpdate(payload) {
   process.stdout.write(
     `${CONTEXT_UPDATE_START}${JSON.stringify(payload)}${CONTEXT_UPDATE_END}`
+  );
+}
+
+export function emitSelfImprovementSummary(payload: {
+  summary: string;
+  kind?: string | null;
+  source?: string | null;
+  at?: string;
+}) {
+  process.stdout.write(
+    `${SELF_IMPROVEMENT_START}${JSON.stringify({
+      at: payload.at || new Date().toISOString(),
+      summary: String(payload.summary || "").trim(),
+      kind: payload.kind || null,
+      source: payload.source || null,
+    })}${SELF_IMPROVEMENT_END}`
   );
 }
 

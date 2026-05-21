@@ -489,6 +489,9 @@ export async function startAgent(profileId?: string): Promise<void> {
         onClarifyOffer: (pid, payload) => {
           useRuntimeStore.getState().setClarifyOffer(pid, payload);
         },
+        onSelfImprovementSummary: (pid, payload) => {
+          useRuntimeStore.getState().pushSelfImprovementSummary(pid, payload);
+        },
         onContextUpdate: ({ modelId, contextWindowTokens, estimatedPromptTokens }) => {
           const state = useRuntimeStore.getState();
           state.setModelContext(profile.id, { modelId, contextWindowTokens });

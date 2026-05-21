@@ -4,8 +4,33 @@ description: Use when shell commands fail, npx/curl/git won’t run, or you must
 version: 1.0.0
 category: bundled
 tags: [nodebox, shell, runtime, tools, webcontainer, run_shell, command-failed]
-triggers: [shell failed, command failed, npx, curl, git clone, nodebox, run_shell error, no such file, not found in path, webcontainer]
+triggers: [shell failed, command failed, npx, curl, git clone, nodebox, run_shell error, no such file, not found in path, webcontainer, read_file, web_fetch, grep, write_file]
 ---
+
+## Tool contract (read first)
+
+This skill is the **canonical built-in tool picker**. Other skills defer here for filesystem vs HTTP vs shell vs cron.
+
+| Need | Use first |
+|------|-----------|
+| Read a file | `read_file` |
+| Search file contents | `grep` |
+| Find files by name/pattern | `find_files` |
+| List or tree a directory | `list_dir`, `tree` |
+| Create or overwrite a file | `write_file` |
+| Patch or multi-edit | `apply_patch`, `edit_file`, `multi_edit` |
+| Move / delete | `move_file`, `delete_file` |
+| Compare files | `file_diff`, `file_stat` |
+| HTTP(S) GET / API | `web_fetch` |
+| Web search | `web_search` |
+| Environment facts | `system_info` |
+| Recurring jobs | `cron_register`, `cron_list` — see **`heartbeat-cron`** |
+| Show file to user | `artifact_present` — see **`artifact-delivery`** |
+| Image / audio / video input | `vision_analyze`, `audio_analyze`, `youtube_transcribe` — see **`multimodal-ingest`** |
+| Memory / skills / wiki | `memory_*`, `session_*`, `skill_*`, `wiki_*` — see **`memory-layers`** |
+| One-off shell (last resort) | `run_shell` — host only; Nodebox: **`node …`** only |
+
+**Non-negotiable:** `run_shell` is not a catch-all — no `curl`/`npx`/`git clone` when a row above fits. Nodebox has **no** POSIX shell (no pipes). Skill installs: `skill_bulk_save` / `skill_manage`, never shell.
 
 ## Canonical scope
 

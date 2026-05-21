@@ -60,6 +60,7 @@ export {
   getFact,
   getAllFacts,
   searchFacts,
+  searchFactsForContext,
 } from "./facts.js";
 
 // Tool statistics

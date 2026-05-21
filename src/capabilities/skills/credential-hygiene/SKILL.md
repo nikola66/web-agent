@@ -4,8 +4,22 @@ description: Use when the user pastes API keys, asks to commit .env, store secre
 version: 1.0.0
 category: bundled
 tags: [security, credentials, api-keys, privacy, secrets, env, redact]
-triggers: [api key, secret, .env, paste key, sk-, bearer, rotate key, commit secrets, redact, password in chat]
+triggers: [api key, secret, .env, paste key, sk-, bearer, rotate key, commit secrets, redact, password in chat, memory_save, email, artifact_present]
 ---
+
+## Tool contract (read first)
+
+Secrets belong in **Settings / vault** (UI), not workspace tools — unless the user explicitly asks to inspect their own config path.
+
+| Surface | Rule |
+|---------|------|
+| `memory_save` | Preferences only — never API keys, tokens, or passwords |
+| `email` | Redact before send — **`artifact-delivery`** |
+| `artifact_present` | No secrets in markdown/path payloads |
+| `read_file` | Only when user explicitly asked to inspect their config |
+| `write_file` | Avoid long-lived secrets in tracked paths; warn about git |
+
+**Non-negotiable:** Never echo `sk-…`, bearer tokens, or `.env` contents in chat, artifacts, or email.
 
 ## When to Use
 

@@ -22,7 +22,7 @@
   </tr>
 </table>
 
-<!-- i18n-sync: en@8293e87 2026-05-20 -->
+<!-- i18n-sync: en@73a242b 2026-05-21 -->
 
 Web Agent es un agente de IA de código abierto que corre en el navegador sobre WebContainers. There is nothing to install to use it: no Docker, no VPS, no VM, no Mac mini, no Hostinger box, no local Python stack. Open the app, launch a profile, and start working.
 
@@ -40,6 +40,7 @@ It is designed to feel simple for end users and capable for power users: isolate
 - [Workspace Features](#workspace-features)
 - [How Persistence Works](#how-persistence-works)
 - [Get Started Presets](#get-started-presets)
+- [Manual del asistente personal](#manual-del-asistente-personal)
 - [Quick Start](#quick-start)
 - [Development](#development)
 - [Architecture At A Glance](#architecture-at-a-glance)
@@ -437,6 +438,40 @@ Execute the plan you just wrote.
 ```
 
 Default vault root: `.webagent/knowledge-vault/`. Legacy `knowledge-vault/` at workspace root migrates automatically.
+
+## Manual del asistente personal
+
+Veinticinco escenarios de asistente personal con prompts para copiar, skills empaquetados y herramientas habituales. Las tarjetas completas están en **[docs/es/use-cases-playbook.md](docs/es/use-cases-playbook.md)**. Los prompts están en inglés — pégalos tal cual en el chat.
+
+**Filtrar por categoría:** [Investigación](docs/es/use-cases-playbook.md#playbook-research) · [Memoria](docs/es/use-cases-playbook.md#playbook-memory) · [Planificación](docs/es/use-cases-playbook.md#playbook-planning) · [Automatización](docs/es/use-cases-playbook.md#playbook-automation) · [Workspace](docs/es/use-cases-playbook.md#playbook-workspace) · [Depuración](docs/es/use-cases-playbook.md#playbook-debug) · [Multimodal](docs/es/use-cases-playbook.md#playbook-multimodal) · [Entrega](docs/es/use-cases-playbook.md#playbook-delivery) · [UX](docs/es/use-cases-playbook.md#playbook-ux) · [Seguridad](docs/es/use-cases-playbook.md#playbook-safety) · [Meta](docs/es/use-cases-playbook.md#playbook-meta)
+
+| Categoría | Caso de uso | Bundled skill(s) | Key tools |
+| --- | --- | --- | --- |
+| Investigación | Encontrar creadores / competidores de nicho | `/open-web-research` | `web_search`, `web_fetch`, `write_file`, `artifact_present` |
+| Investigación | Búsqueda de papers / citas | `/research-pack` | `web_search`, `web_fetch`, `write_file`, `artifact_present` |
+| Investigación | Extraer tabla o JSON de una página | `/structured-extraction` | `web_fetch`, `write_file`, `artifact_present` |
+| Meta | Descubrir skills instalables online | `/find-skills` | `web_search`, `web_fetch`, `skill_manage` |
+| Memoria | Guardar preferencia durable | `/memory-layers` | `memory_save`, `memory_recall` |
+| Memoria | Capturar contexto de sesión | `/memory-layers` | `session_memory_append`, `session_memory_list` |
+| Memoria | Espejar memoria en vault estilo Obsidian | `/memory-layers` | `wiki_setup`, `wiki_sync`, `wiki_search` |
+| Memoria | Buscar en un chat antiguo | `/memory-layers` | `session_search` |
+| Planificación | Plan spec-first (sin ejecutar aún) | `/plan`, `/task-planning` | `read_file`, `grep`, `write_file`, `artifact_present` |
+| Planificación | Descomponer petición en todos | `/task-planning` | `todo_write`, `skill_view` |
+| Planificación | Ejecutar plan multi-paso aprobado | `/task-execution` | `todo_write`, `read_file`, `write_file`, `artifact_present` |
+| Automatización | Digest diario con pestaña abierta | `/heartbeat-cron` | `cron_register`, `cron_list`, `web_search`, `web_fetch` |
+| Workspace | Arrancar carpeta de side project | `/project-scaffold` | `make_dir`, `write_file`, `tree` |
+| Workspace | Reorganizar archivos con seguridad | `/workspace-safety`, `/browser-runtime-map` | `list_dir`, `find_files`, `move_file`, `tree` |
+| Depuración | Caza de bugs por hipótesis | `/systematic-debugging` | `read_file`, `grep`, `file_diff`, `run_shell` |
+| Depuración | Fallo de shell / `npx` en WebContainer | `/browser-runtime-map` | `read_file`, `web_fetch`, `grep` |
+| Multimodal | Leer captura o diagrama | `/multimodal-ingest` | `vision_analyze`, `write_file` |
+| Multimodal | Resumir tutorial de YouTube | `/multimodal-ingest` | `youtube_transcribe`, `write_file`, `artifact_present` |
+| Entrega | Presentar informe en la app | `/artifact-delivery` | `write_file`, `artifact_present` |
+| Entrega | Enviar entregable por email | `/artifact-delivery` | `write_file`, `email`, `artifact_present` |
+| Entrega | Diagrama de flujo para plan o informe | `/chart` | `artifact_present` |
+| UX | Desambiguar petición vaga | `/clarify` | *(none)* |
+| Seguridad | Checkpoint antes de borrado masivo | `/workspace-safety` | `list_dir`, `file_stat`, `delete_file` |
+| Seguridad | API key pegada / higiene de secretos | `/credential-hygiene` | *(redaction; no secret persistence)* |
+| Meta | Mejorar Web Agent en sí | `/web-agent-skill` | `read_file`, `grep`, `skill_manage`, `memory_save` |
 
 ## Inicio rápido
 

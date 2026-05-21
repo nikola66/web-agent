@@ -13,19 +13,24 @@ import {
   Folder,
   RefreshCw,
   TerminalSquare,
+  Upload,
   X,
 } from "lucide-react";
+import { ALLOWED_UPLOAD_EXTENSIONS } from "@embed-runtime/tools/upload-allowlist.js";
+import { invalidateWorkspaceFileIndex } from "@/core/workspace-file-index";
 import {
   downloadWorkspaceFile,
   listWorkspaceFiles,
   readWorkspaceFileText,
   startWorkspaceTerminalSession,
+  writeWorkspaceUpload,
   WORKSPACE_EMPTY_DIR_INJECTION,
   WORKSPACE_KNOWLEDGE_VAULT_DIR_REL,
   WORKSPACE_PLANS_DIR_REL,
   type WorkspaceTerminalSession,
   type WorkspaceFileEntry,
 } from "@/core/workspace";
+import { useActiveProfileRuntime } from "../stores/runtime-store";
 import { SearchableSelect } from "./SearchableSelect";
 import { MemoryTab } from "./MemoryTab";
 import { terminalFontFamily, terminalTheme } from "../theme";
@@ -33,6 +38,9 @@ import { formatBytes } from "../utils/format";
 
 const DEBUG_LOG_VIEWER_ENABLED =
   String(import.meta.env.VITE_WEBAGENT_DEBUG_LOG || "").trim() === "1";
+
+const MAX_UPLOAD_BYTES = 4 * 1024 * 1024;
+const UPLOAD_ACCEPT = [...ALLOWED_UPLOAD_EXTENSIONS].map((ext) => `.${ext}`).join(",");
 
 const PREVIEW_EXTENSIONS = new Set([
   "txt",
@@ -272,13 +280,20 @@ export function FilesPopup({
   const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set());
   const [terminalError, setTerminalError] = useState<string | null>(null);
   const [terminalReady, setTerminalReady] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const uploadInputRef = useRef<HTMLInputElement | null>(null);
   const terminalContainerRef = useRef<HTMLDivElement | null>(null);
   const terminalRef = useRef<XTerm | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
   const terminalSessionRef = useRef<WorkspaceTerminalSession | null>(null);
 
+  const { runtimeStatus } = useActiveProfileRuntime();
+  const uploadDisabled = runtimeStatus !== "running" || uploading;
+
   const webagentRoot = ".webagent";
   const memoryRoot = "memory";
+  const uploadsRoot = "uploads";
   const fileTree = useMemo(
     () =>
       injectEmptyWorkspaceDirs(buildFileTree(files, ""), [...WORKSPACE_EMPTY_DIR_INJECTION]),
@@ -410,8 +425,9 @@ export function FilesPopup({
     next.add(`${webagentRoot}/state`);
     next.add(memoryRoot);
     next.add(`${memoryRoot}/snapshots`);
+    next.add(uploadsRoot);
     setExpandedFolders(next);
-  }, [files, webagentRoot, memoryRoot]);
+  }, [files, webagentRoot, memoryRoot, uploadsRoot]);
 
   useEffect(() => {
     if (!DEBUG_LOG_VIEWER_ENABLED || !selectedDebugLogPath) {
@@ -458,6 +474,46 @@ export function FilesPopup({
       await downloadWorkspaceFile(profileId, selectedPath, { preferLive: true });
     } catch (err) {
       console.error("Download failed:", err);
+    }
+  };
+
+  const handleUploadFiles = async (files: FileList | File[]) => {
+    if (runtimeStatus !== "running") {
+      setUploadError("Uploads require a running agent.");
+      return;
+    }
+    const fileList = Array.from(files);
+    if (fileList.length === 0) return;
+
+    setUploadError(null);
+    setUploading(true);
+    let lastUploadedPath: string | null = null;
+
+    try {
+      for (const file of fileList) {
+        if (file.size > MAX_UPLOAD_BYTES) {
+          throw new Error(`${file.name} exceeds the 4 MB limit.`);
+        }
+        const bytes = new Uint8Array(await file.arrayBuffer());
+        lastUploadedPath = await writeWorkspaceUpload(profileId, `uploads/${file.name}`, bytes);
+      }
+      await loadFiles();
+      invalidateWorkspaceFileIndex(profileId);
+      if (lastUploadedPath) {
+        setSelectedPath(lastUploadedPath);
+        setPreviewOpen(canPreview(lastUploadedPath));
+        setExpandedFolders((prev) => {
+          const next = new Set(prev);
+          next.add(uploadsRoot);
+          return next;
+        });
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Upload failed.";
+      console.error("Upload failed:", message);
+      setUploadError(message);
+    } finally {
+      setUploading(false);
     }
   };
 
@@ -801,16 +857,53 @@ export function FilesPopup({
                   {selectedFile ? formatBytes(selectedFile.size) : ""}
                 </p>
               </div>
-              <button
-                type="button"
-                onClick={handleDownload}
-                disabled={!selectedFile}
-                className="inline-flex items-center gap-1 rounded-sm border border-white/10 px-2 py-1 text-[10px] text-text-secondary transition-colors hover:text-text-primary disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                <Download size={11} />
-                Download
-              </button>
+              <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setUploadError(null);
+                    uploadInputRef.current?.click();
+                  }}
+                  disabled={uploadDisabled}
+                  title={
+                    runtimeStatus !== "running"
+                      ? "Start agent first..."
+                      : uploading
+                        ? "Uploading..."
+                        : "Upload file to workspace (max 4 MB)"
+                  }
+                  className="inline-flex items-center gap-1 rounded-sm border border-white/10 px-2 py-1 text-[10px] text-text-secondary transition-colors hover:text-text-primary disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <Upload size={11} />
+                  {uploading ? "Uploading…" : "Upload"}
+                </button>
+                <button
+                  type="button"
+                  onClick={handleDownload}
+                  disabled={!selectedFile}
+                  className="inline-flex items-center gap-1 rounded-sm border border-white/10 px-2 py-1 text-[10px] text-text-secondary transition-colors hover:text-text-primary disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <Download size={11} />
+                  Download
+                </button>
+              </div>
+              <input
+                ref={uploadInputRef}
+                type="file"
+                multiple
+                accept={UPLOAD_ACCEPT}
+                className="hidden"
+                onChange={(e) => {
+                  const picked = e.target.files;
+                  if (picked?.length) void handleUploadFiles(picked);
+                  e.target.value = "";
+                }}
+              />
             </div>
+
+            {uploadError ? (
+              <p className="border-b border-white/10 px-3 py-1.5 text-[10px] text-red-300">{uploadError}</p>
+            ) : null}
 
             <div className="min-h-0 flex-1 overflow-auto p-3">
               {!selectedFile ? (

@@ -4,8 +4,19 @@ description: Use when the user gives a multi-step goal—decompose into ordered 
 version: 1.0.0
 category: bundled
 tags: [planning, todo, decomposition, agentic, hermes]
-triggers: [plan this, multi-step, break down, todo, todo_write, ordered steps, decompose, several things, do all of, then do]
+triggers: [plan this, multi-step, break down, todo, todo_write, ordered steps, decompose, several things, do all of, then do, skill_view]
 ---
+
+## Tool contract (read first)
+
+| Step | Tool |
+|------|------|
+| Decompose goal | `todo_write` — ordered, verifiable todos |
+| Read procedure skills | `skill_view` (`task-execution`, `chart`, `artifact-delivery`) |
+| Visualize plan | Mermaid via **`chart`** when ≥4 steps or branching |
+| Execute after approval | hand off to **`task-execution`** |
+
+**Non-negotiable:** No tool fan-out before `todo_write`. Do not store the plan only in `session_memory_append` — use `todo_write`.
 
 ## When to Use
 
@@ -13,10 +24,11 @@ triggers: [plan this, multi-step, break down, todo, todo_write, ordered steps, d
 - User asks "do A, then B, then C" or stacks deliverables in one message.
 - Before fan-out: when you would otherwise call many tools without a written plan.
 - Not for one-shot fetches, single edits, or pure Q&A — direct action is cheaper.
+- Not for **spec-first** planning — use **`/plan [goal]`** (read-only research, markdown under `plans/`, stop before execution).
 
 ## Relation to other skills
 
-Companion to **`systematic-debugging`** (which falsifies one hypothesis at a time): use **this** to plan multi-step *delivery* work; use that for multi-step *diagnosis*. When intent itself is unclear, **`clarify`** comes first.
+Companion to **`systematic-debugging`** (which falsifies one hypothesis at a time): use **this** to plan multi-step *delivery* work; use that for multi-step *diagnosis*. When intent itself is unclear, **`clarify`** comes first. For file-based specs before implementation, **`/plan`** owns the workflow; this skill owns in-session `todo_write` decomposition.
 
 ## Procedure
 

@@ -14,6 +14,7 @@ Public contributor and operator documentation for Web Agent.
 | [ARCHITECTURE.md](ARCHITECTURE.md) | System map, IPC, storage, agent loop |
 | [testing-checklist.md](testing-checklist.md) | Manual regression checklist |
 | [test-prompts.md](test-prompts.md) | Copy/paste smoke prompts |
+| [use-cases-playbook.md](use-cases-playbook.md) | 25 personal-helper scenarios with prompts, tools, and bundled skills |
 | [GLOSSARY.md](GLOSSARY.md) | Do-not-translate terms |
 | [TRANSLATING.md](TRANSLATING.md) | How to maintain locales |
 

@@ -9,6 +9,7 @@ import {
   type MemoryReflection,
   type SessionMemoryEntry,
 } from "@/core/agent-memory";
+import { useProfileRuntime } from "@/ui/stores/runtime-store";
 import { formatBytes } from "../utils/format";
 
 type MemorySection =
@@ -17,7 +18,8 @@ type MemorySection =
   | "learnings"
   | "session"
   | "reflections"
-  | "jobs";
+  | "jobs"
+  | "self-improvement";
 
 const SECTIONS: Array<{ id: MemorySection; label: string }> = [
   { id: "overview", label: "Overview" },
@@ -26,6 +28,7 @@ const SECTIONS: Array<{ id: MemorySection; label: string }> = [
   { id: "session", label: "Session" },
   { id: "reflections", label: "Reflections" },
   { id: "jobs", label: "Jobs" },
+  { id: "self-improvement", label: "Self-improve" },
 ];
 
 function formatTimestamp(value?: string | null): string {
@@ -115,6 +118,7 @@ export function MemoryTab({
   profileId: string;
   refreshKey: number;
 }) {
+  const profileRuntime = useProfileRuntime(profileId);
   const [snapshot, setSnapshot] = useState<AgentMemorySnapshot | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -206,12 +210,17 @@ export function MemoryTab({
       snapshot.sessionEntries.length > 0 ||
       snapshot.reflections.length > 0 ||
       snapshot.cronJobs.length > 0 ||
+      snapshot.curator != null ||
+      snapshot.skillProvenance != null ||
+      profileRuntime.selfImprovementFeed.length > 0 ||
       snapshot.archives.conversations.count > 0 ||
       snapshot.archives.runs.count > 0 ||
       snapshot.archives.jobs.count > 0 ||
       snapshot.archives.snapshots.count > 0
     );
-  }, [snapshot]);
+  }, [snapshot, profileRuntime.selfImprovementFeed.length]);
+
+  const liveSelfImprovementFeed = profileRuntime.selfImprovementFeed;
 
   const copyPayload = useMemo(() => {
     if (!snapshot) return null;
@@ -348,6 +357,30 @@ export function MemoryTab({
                 <OverviewCard label="Session notes" value={String(snapshot.sessionEntries.length)} />
                 <OverviewCard label="Reflections" value={String(snapshot.reflections.length)} />
                 <OverviewCard label="Cron jobs" value={String(snapshot.cronJobs.length)} />
+                <OverviewCard
+                  label="Agent skills"
+                  value={
+                    snapshot.skillProvenance
+                      ? `${snapshot.skillProvenance.agentCreated} agent-created`
+                      : "—"
+                  }
+                />
+                <OverviewCard
+                  label="Curator"
+                  value={
+                    snapshot.curator
+                      ? snapshot.curator.paused
+                        ? "paused"
+                        : snapshot.curator.lastRunAt
+                          ? "active"
+                          : "idle"
+                      : "—"
+                  }
+                />
+                <OverviewCard
+                  label="Self-improve events"
+                  value={String(liveSelfImprovementFeed.length)}
+                />
                 <OverviewCard
                   label="SQLite"
                   value={snapshot.sqliteBytes == null ? "missing" : formatBytes(snapshot.sqliteBytes)}
@@ -653,6 +686,90 @@ export function MemoryTab({
                   </div>
                 </div>
               )
+            ) : null}
+
+            {section === "self-improvement" ? (
+              <div className="space-y-2">
+                {liveSelfImprovementFeed.length > 0 ? (
+                  <div className="rounded-sm border border-white/10 bg-white/[0.03] p-2">
+                    <p className="mb-2 text-[10px] uppercase tracking-[0.12em] text-text-muted">
+                      Live session feed
+                    </p>
+                    <div className="space-y-1">
+                      {liveSelfImprovementFeed.slice(0, 20).map((entry) => (
+                        <div
+                          key={`${entry.at}:${entry.summary}`}
+                          className="rounded-sm border border-white/10 bg-black/20 px-2 py-1.5"
+                        >
+                          <p className="text-[11px] text-text-secondary">{entry.summary}</p>
+                          <p className="mt-0.5 text-[10px] text-text-muted">
+                            {formatTimestamp(entry.at)}
+                            {entry.source ? ` · ${entry.source}` : ""}
+                            {entry.kind ? ` · ${entry.kind}` : ""}
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : (
+                  <EmptySection message="No self-improvement events in this session yet." />
+                )}
+
+                {snapshot.curator ? (
+                  <div className="rounded-sm border border-white/10 bg-white/[0.03] p-2">
+                    <p className="mb-1 text-[10px] uppercase tracking-[0.12em] text-text-muted">
+                      Curator
+                    </p>
+                    <div className="grid grid-cols-2 gap-x-3 gap-y-0.5 text-[10px] text-text-muted">
+                      <span>status: {snapshot.curator.paused ? "paused" : "running"}</span>
+                      <span>runs: {snapshot.curator.runCount}</span>
+                      <span>last run: {formatTimestamp(snapshot.curator.lastRunAt)}</span>
+                      <span className="col-span-2 truncate">
+                        summary: {snapshot.curator.lastRunSummary || "—"}
+                      </span>
+                    </div>
+                    {snapshot.curator.latestReport ? (
+                      <pre className="mt-2 max-h-28 overflow-auto whitespace-pre-wrap wrap-break-word text-[10px] text-text-secondary">
+                        {JSON.stringify(snapshot.curator.latestReport, null, 2)}
+                      </pre>
+                    ) : null}
+                  </div>
+                ) : null}
+
+                {snapshot.skillProvenance ? (
+                  <div className="rounded-sm border border-white/10 bg-white/[0.03] p-2">
+                    <p className="mb-1 text-[10px] uppercase tracking-[0.12em] text-text-muted">
+                      Skill provenance
+                    </p>
+                    <p className="text-[10px] text-text-muted">
+                      {snapshot.skillProvenance.agentCreated} agent-created · active{" "}
+                      {snapshot.skillProvenance.byState.active} · stale{" "}
+                      {snapshot.skillProvenance.byState.stale} · archived{" "}
+                      {snapshot.skillProvenance.byState.archived}
+                    </p>
+                    <div className="mt-2 space-y-1">
+                      {snapshot.skillProvenance.skills
+                        .filter((skill) => skill.createdBy === "agent")
+                        .slice(0, 24)
+                        .map((skill) => (
+                          <div
+                            key={skill.slug}
+                            className="rounded-sm border border-white/10 bg-black/20 px-2 py-1"
+                          >
+                            <p className="text-[10px] text-[#f8e7ff]">
+                              {skill.slug}
+                              {skill.pinned ? " · pinned" : ""}
+                            </p>
+                            <p className="text-[10px] text-text-muted">
+                              {skill.state || "active"} · uses {skill.useCount ?? 0} · views{" "}
+                              {skill.viewCount ?? 0} · patches {skill.patchCount ?? 0}
+                            </p>
+                          </div>
+                        ))}
+                    </div>
+                  </div>
+                ) : null}
+              </div>
             ) : null}
           </div>
         </>
