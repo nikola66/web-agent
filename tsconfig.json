@@ -21,7 +21,6 @@
   "include": ["src"],
   "exclude": [
     "src/agent/runtime",
-    "src/capabilities/channels/**/runtime.ts",
     "src/capabilities/tools/**/handler.ts"
   ]
 }

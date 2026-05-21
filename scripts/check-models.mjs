@@ -25,18 +25,6 @@ const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), ".."
  */
 const MODELS = [
   {
-    label: "kokoro-82m",
-    dir: "public/models/onnx-community/Kokoro-82M-v1.0-ONNX",
-    files: [
-      "config.json",
-      "tokenizer.json",
-      "tokenizer_config.json",
-      "onnx/model_q8f16.onnx",
-      "voices/af_bella.bin",
-    ],
-    refreshHint: "npm run download:kokoro && git add public/models/onnx-community && git commit",
-  },
-  {
     label: "whisper-tiny-en",
     dir: "public/models/whisper-tiny-en",
     files: [

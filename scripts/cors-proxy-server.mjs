@@ -39,15 +39,21 @@ const server = http.createServer((req, res) => {
     req.on("data", (c) => chunks.push(c));
     req.on("end", async () => {
       try {
-        const { method = "GET", url, headers = {}, body } = JSON.parse(
+        const { method = "GET", url, headers = {}, body, bodyEncoding, binaryResponse } = JSON.parse(
           Buffer.concat(chunks).toString("utf8"),
         );
+        const upstreamBody =
+          bodyEncoding === "base64" && typeof body === "string"
+            ? Buffer.from(body, "base64")
+            : body;
         const upstream = await fetch(url, {
           method,
           headers,
-          ...(body != null ? { body } : {}),
+          ...(upstreamBody != null ? { body: upstreamBody } : {}),
         });
-        const responseBody = await upstream.text();
+        const responseBody = binaryResponse
+          ? Buffer.from(await upstream.arrayBuffer()).toString("base64")
+          : await upstream.text();
         res.statusCode = upstream.status;
         res.setHeader(
           "content-type",
@@ -59,6 +65,7 @@ const server = http.createServer((req, res) => {
             statusText: upstream.statusText,
             body: responseBody,
             contentType: upstream.headers.get("content-type") ?? "",
+            bodyEncoding: binaryResponse ? "base64" : undefined,
           }),
         );
       } catch (e) {

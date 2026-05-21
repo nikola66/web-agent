@@ -1,73 +1,94 @@
 /**
- * Telegram voice-message plumbing.
+ * Telegram inbound voice-note plumbing.
  *
- * Responsibilities:
- *   - Per-chat voice flag, persisted in `.webagent/channel-state.json` under
- *     `telegram.voiceChats: string[]`.
- *   - Download voice files Telegram references by `file_id` (Telegram serves
- *     them as OGG/Opus from `api.telegram.org/file/bot<TOKEN>/<file_path>`).
- *   - Send outbound voice notes via `sendVoice` / `sendAudio`. Inbound STT uses
- *     browser Whisper via `audio_analyze`; outbound TTS uses Kokoro in Nodebox.
+ * Downloads voice files Telegram references by `file_id` (OGG/Opus from
+ * `api.telegram.org/file/bot<TOKEN>/<file_path>`). Nodebox routes HTTP via
+ * adapter `/api/proxy`. Transcription runs in the browser (Whisper IPC).
  */
 
 import fs from "node:fs/promises";
 import nodePath from "node:path";
 import { workspaceStatePath } from "../constants.js";
-import { ensureParentDir } from "../workspace-paths.js";
 import { logDebugEvent } from "../logging/debug-log.js";
+import { ipcProxyRequest } from "../ipc.js";
 
-const CHANNEL_STATE_REL = ".webagent/channel-state.json";
-const VOICE_INBOX_REL = ".webagent/voice-inbox";
-
-interface ChannelStateShape {
-  telegram?: {
-    voiceChats?: string[];
-    nextPollOffset?: number;
-    [k: string]: unknown;
-  };
-  [k: string]: unknown;
+function isNodeboxRuntime(): boolean {
+  return String(process.env.WEBAGENT_RUNTIME ?? "").trim() === "nodebox";
 }
 
-async function readChannelState(): Promise<ChannelStateShape> {
-  try {
-    const raw = await fs.readFile(workspaceStatePath(CHANNEL_STATE_REL), "utf8");
-    const parsed = JSON.parse(raw);
-    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
-  } catch {
-    return {};
+type ExternalFetchResult = {
+  ok: boolean;
+  status: number;
+  body: string | Buffer;
+  contentType: string;
+};
+
+/** Nodebox cannot reach external HTTPS directly; route through adapter /api/proxy. */
+async function externalFetch(
+  url: string,
+  init: {
+    method?: string;
+    headers?: Record<string, string>;
+    body?: Buffer;
+    binaryResponse?: boolean;
+  } = {}
+): Promise<ExternalFetchResult> {
+  const method = init.method ?? "GET";
+  if (!isNodeboxRuntime()) {
+    const res = await fetch(url, {
+      method,
+      headers: init.headers,
+      ...(init.body ? { body: init.body } : {}),
+    });
+    const contentType = res.headers.get("content-type") ?? "";
+    if (init.binaryResponse) {
+      return {
+        ok: res.ok,
+        status: res.status,
+        body: Buffer.from(await res.arrayBuffer()),
+        contentType,
+      };
+    }
+    return { ok: res.ok, status: res.status, body: await res.text(), contentType };
   }
+
+  const proxyReq: Record<string, unknown> = {
+    method,
+    url,
+    headers: init.headers ?? {},
+    binaryResponse: init.binaryResponse ?? false,
+  };
+  if (init.body) {
+    proxyReq.body = init.body.toString("base64");
+    proxyReq.bodyEncoding = "base64";
+  }
+
+  const payload = (await ipcProxyRequest(proxyReq)) as {
+    error?: string;
+    status?: number;
+    body?: string;
+    contentType?: string;
+    bodyEncoding?: string;
+  };
+  if (payload?.error) throw new Error(String(payload.error));
+  const status = Number(payload?.status ?? 0);
+  const contentType = String(payload?.contentType ?? "");
+  if (!Number.isFinite(status) || status <= 0) {
+    throw new Error(`Proxy fetch failed (${status}) for ${url.slice(0, 120)}`);
+  }
+  const ok = status >= 200 && status < 300;
+  if (init.binaryResponse || payload?.bodyEncoding === "base64") {
+    return {
+      ok,
+      status,
+      body: Buffer.from(String(payload.body ?? ""), "base64"),
+      contentType,
+    };
+  }
+  return { ok, status, body: String(payload.body ?? ""), contentType };
 }
 
-async function writeChannelState(next: ChannelStateShape): Promise<void> {
-  const path = workspaceStatePath(CHANNEL_STATE_REL);
-  await ensureParentDir(path);
-  await fs.writeFile(path, JSON.stringify(next, null, 2), "utf8");
-}
-
-export async function isVoiceChatEnabled(chatId: string | number): Promise<boolean> {
-  const state = await readChannelState();
-  const list = state.telegram?.voiceChats;
-  if (!Array.isArray(list)) return false;
-  return list.includes(String(chatId));
-}
-
-export async function setVoiceChatEnabled(
-  chatId: string | number,
-  enabled: boolean
-): Promise<{ enabled: boolean; chatIds: string[] }> {
-  const state = await readChannelState();
-  const telegram = (state.telegram && typeof state.telegram === "object" ? state.telegram : {}) as Required<NonNullable<ChannelStateShape["telegram"]>>;
-  const current = Array.isArray(telegram.voiceChats) ? telegram.voiceChats.map(String) : [];
-  const set = new Set(current);
-  const key = String(chatId);
-  if (enabled) set.add(key);
-  else set.delete(key);
-  const nextChatIds = [...set];
-  state.telegram = { ...telegram, voiceChats: nextChatIds };
-  await writeChannelState(state);
-  await logDebugEvent("telegram_voice_chat_toggle", { chatId: key, enabled, total: nextChatIds.length });
-  return { enabled, chatIds: nextChatIds };
-}
+const VOICE_INBOX_REL = ".webagent/voice-inbox";
 
 /**
  * Resolve a Telegram `file_id` to a downloadable URL.
@@ -79,12 +100,12 @@ export async function resolveTelegramFileUrl(
 ): Promise<{ url: string; filePath: string } | null> {
   const apiUrl = new URL(`https://api.telegram.org/bot${encodeURIComponent(token)}/getFile`);
   apiUrl.searchParams.set("file_id", fileId);
-  const res = await fetch(apiUrl.toString());
+  const res = await externalFetch(apiUrl.toString());
   if (!res.ok) {
     await logDebugEvent("telegram_getFile_failed", { fileId, status: res.status });
     return null;
   }
-  const payload = (await res.json()) as { ok?: boolean; result?: { file_path?: string } };
+  const payload = JSON.parse(String(res.body)) as { ok?: boolean; result?: { file_path?: string } };
   const filePath = payload?.result?.file_path;
   if (!payload?.ok || !filePath) {
     await logDebugEvent("telegram_getFile_no_path", { fileId });
@@ -98,22 +119,20 @@ export async function resolveTelegramFileUrl(
 
 /**
  * Download a Telegram voice file (OGG/Opus) into the workspace voice inbox.
- * Returns the absolute saved path and the source URL so callers can hand
- * the buffer to a transcription pipeline without touching Telegram APIs.
  */
 export async function downloadTelegramVoice(
   token: string,
   fileId: string
-): Promise<{ savedPath: string; sourceUrl: string; byteLength: number } | null> {
+): Promise<{ savedPath: string; relPath: string; sourceUrl: string; byteLength: number } | null> {
   const resolved = await resolveTelegramFileUrl(token, fileId);
   if (!resolved) return null;
 
-  const res = await fetch(resolved.url);
+  const res = await externalFetch(resolved.url, { binaryResponse: true });
   if (!res.ok) {
     await logDebugEvent("telegram_voice_download_failed", { fileId, status: res.status });
     return null;
   }
-  const buffer = Buffer.from(await res.arrayBuffer());
+  const buffer = Buffer.isBuffer(res.body) ? res.body : Buffer.from(String(res.body));
 
   const ext = nodePath.extname(resolved.filePath) || ".oga";
   const safeId = String(fileId).replace(/[^A-Za-z0-9_-]/g, "").slice(0, 32) || `voice-${Date.now()}`;
@@ -126,72 +145,5 @@ export async function downloadTelegramVoice(
     bytes: buffer.byteLength,
     savedRel,
   });
-  return { savedPath: savedAbs, sourceUrl: resolved.url, byteLength: buffer.byteLength };
-}
-
-/**
- * Send an audio file via Telegram's `sendAudio` endpoint. Used by the
- * outbound TTS pipeline to deliver MP3 replies — `sendVoice` requires
- * OGG/Opus which no pure-JS encoder we trust ships today, but Telegram
- * plays `sendAudio` MP3 inline with full controls and a waveform-ish UI.
- */
-export async function sendTelegramAudio(
-  token: string,
-  chatId: string | number,
-  audio: Buffer,
-  options: {
-    filename?: string;
-    mimeType?: string;
-    caption?: string;
-    durationSec?: number;
-    title?: string;
-    performer?: string;
-  } = {}
-): Promise<void> {
-  if (!audio || audio.byteLength === 0) return;
-  const boundary = `----TGBoundary${Date.now().toString(36)}`;
-  const url = `https://api.telegram.org/bot${encodeURIComponent(token)}/sendAudio`;
-  const parts: Buffer[] = [];
-  const push = (s: string) => parts.push(Buffer.from(s, "utf8"));
-
-  push(`--${boundary}\r\n`);
-  push(`Content-Disposition: form-data; name="chat_id"\r\n\r\n${String(chatId)}\r\n`);
-
-  const textFields: Record<string, string | undefined> = {
-    caption: options.caption,
-    title: options.title,
-    performer: options.performer,
-    duration: options.durationSec != null ? String(Math.round(options.durationSec)) : undefined,
-    disable_notification: "true",
-  };
-  for (const [name, value] of Object.entries(textFields)) {
-    if (value == null || value === "") continue;
-    push(`--${boundary}\r\n`);
-    push(`Content-Disposition: form-data; name="${name}"\r\n\r\n${value}\r\n`);
-  }
-
-  const filename = (options.filename || "reply.mp3").replace(/[^A-Za-z0-9_.-]/g, "_");
-  const mimeType = options.mimeType || "audio/mpeg";
-  push(`--${boundary}\r\n`);
-  push(
-    `Content-Disposition: form-data; name="audio"; filename="${filename}"\r\nContent-Type: ${mimeType}\r\n\r\n`
-  );
-  parts.push(audio);
-  push(`\r\n--${boundary}--\r\n`);
-
-  const body = Buffer.concat(parts);
-  const res = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": `multipart/form-data; boundary=${boundary}` },
-    body,
-  });
-  if (!res.ok) {
-    const text = await res.text().catch(() => "");
-    await logDebugEvent("telegram_sendAudio_failed", {
-      chatId: String(chatId),
-      status: res.status,
-      body: text.slice(0, 200),
-    });
-    throw new Error(`sendAudio failed: ${res.status} ${text.slice(0, 200)}`);
-  }
+  return { savedPath: savedAbs, relPath: savedRel, sourceUrl: resolved.url, byteLength: buffer.byteLength };
 }

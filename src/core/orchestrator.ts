@@ -32,6 +32,7 @@ import {
   flushVoiceBuffer,
   primeVoiceEngine,
   pushVoiceChunk,
+  resetVoicePlaybackBackendCache,
   speakConfirmation,
 } from "./voice-playback";
 import { isVoiceEnabled, useVoiceStore } from "@/ui/stores/voice-store";
@@ -253,11 +254,13 @@ export async function submitUserInput(raw: string): Promise<void> {
     const voice = useVoiceStore.getState();
     if (arg === "on") {
       voice.setEnabled(true);
+      resetVoicePlaybackBackendCache();
       primeVoiceEngine();
       speakConfirmation("Voice mode on.");
       write("\r\n\x1b[32m▸ Voice mode ON — agent replies will be spoken via your OS voice (local, no network).\x1b[0m\r\n");
     } else if (arg === "off") {
       voice.setEnabled(false);
+      resetVoicePlaybackBackendCache();
       cancelVoicePlayback();
       write("\r\n\x1b[90m▸ Voice mode OFF.\x1b[0m\r\n");
     } else if (arg === "" || arg === "status") {

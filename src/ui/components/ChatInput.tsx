@@ -315,10 +315,7 @@ export function ChatInput() {
   };
 
   const onMicClick = async () => {
-    if (!activeProfileId || runtimeStatus !== "running") {
-      setVoiceError("Launch the agent before using the microphone.");
-      return;
-    }
+    if (!activeProfileId || disabled) return;
     setVoiceError(null);
     if (recState === "recording") {
       setVoiceSending(true);
@@ -440,12 +437,14 @@ export function ChatInput() {
           type="button"
           aria-label="Upload files"
           data-testid="chat-input-upload"
-          className="inline-flex min-h-8 min-w-8 shrink-0 touch-manipulation items-center justify-center rounded-[3px] bg-white/5 text-text-muted transition-colors hover:text-text-primary"
+          disabled={disabled}
+          title={disabled ? "Start agent first..." : undefined}
+          className={[
+            "inline-flex min-h-8 min-w-8 shrink-0 touch-manipulation items-center justify-center rounded-[3px] bg-white/5 text-text-muted transition-colors",
+            disabled ? "pointer-events-none opacity-20" : "hover:text-text-primary",
+          ].join(" ")}
           onClick={() => {
-            if (runtimeStatus !== "running" || !activeProfileId) {
-              showUploadUnavailable();
-              return;
-            }
+            if (disabled || !activeProfileId) return;
             setUploadError(null);
             fileInputRef.current?.click();
           }}
@@ -471,13 +470,16 @@ export function ChatInput() {
             type="button"
             aria-label={recState === "recording" ? "Stop recording and send" : "Record voice message"}
             data-testid="chat-input-mic"
-            disabled={(runtimeStatus !== "running" && recState === "idle") || voiceSending}
+            disabled={disabled || voiceSending}
+            title={disabled ? "Start agent first..." : undefined}
             onClick={() => void onMicClick()}
             className={[
               "inline-flex min-h-8 min-w-8 shrink-0 touch-manipulation items-center justify-center rounded-[3px] transition-colors",
-              recState === "recording"
-                ? "bg-brand-magenta-light/30 text-brand-magenta-light animate-pulse"
-                : "bg-white/5 text-text-muted hover:text-text-primary",
+              disabled
+                ? "pointer-events-none opacity-20 bg-white/5 text-text-muted"
+                : recState === "recording"
+                  ? "bg-brand-magenta-light/30 text-brand-magenta-light animate-pulse"
+                  : "bg-white/5 text-text-muted hover:text-text-primary",
             ].join(" ")}
           >
             {recState === "recording" ? <MicOff size={12} /> : <Mic size={12} />}

@@ -2,7 +2,15 @@ import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { Folder, Volume2, VolumeX } from "lucide-react";
 import { profileAgentWorking, useActiveProfileRuntime, useRuntimeStore } from "../stores/runtime-store";
 import { useVoiceStore } from "../stores/voice-store";
-import { cancelVoicePlayback, primeVoiceEngine, speakConfirmation } from "@/core/voice-playback";
+import {
+  cancelVoicePlayback,
+  getVoicePlaybackStatus,
+  primeVoiceEngine,
+  resetVoicePlaybackBackendCache,
+  resolveVoicePlaybackBackend,
+  speakConfirmation,
+  type VoicePlaybackBackend,
+} from "@/core/voice-playback";
 import { useProfileStore } from "../stores/profile-store";
 import { TOOL_CATALOG } from "@/agent/tool-catalog";
 import { ErrorBoundary } from "./ErrorBoundary";
@@ -203,34 +211,59 @@ export function StatusBar() {
 function VoiceToggleButton() {
   const enabled = useVoiceStore((s) => s.enabled);
   const setEnabled = useVoiceStore((s) => s.setEnabled);
-  const supported =
-    typeof window !== "undefined" && typeof window.speechSynthesis !== "undefined";
+  const [backend, setBackend] = useState<VoicePlaybackBackend | null>(null);
+
+  useEffect(() => {
+    if (!enabled) {
+      setBackend(null);
+      return;
+    }
+    let cancelled = false;
+    void resolveVoicePlaybackBackend().then((b) => {
+      if (!cancelled) setBackend(b);
+    });
+    const onUnavailable = () => {
+      resetVoicePlaybackBackendCache();
+      void resolveVoicePlaybackBackend().then((b) => {
+        if (!cancelled) setBackend(b);
+      });
+    };
+    window.addEventListener("webagent:voice-playback-unavailable", onUnavailable);
+    return () => {
+      cancelled = true;
+      window.removeEventListener("webagent:voice-playback-unavailable", onUnavailable);
+    };
+  }, [enabled]);
 
   const onClick = () => {
     const next = !enabled;
     setEnabled(next);
     if (next) {
+      resetVoicePlaybackBackendCache();
       primeVoiceEngine();
-      // One-shot confirmation lets the user verify TTS works AND satisfies
-      // any browser-level autoplay heuristic that needs a gesture-linked
-      // speak() call before background utterances are accepted.
       speakConfirmation("Voice mode on.");
+      void resolveVoicePlaybackBackend().then(setBackend);
     } else {
+      resetVoicePlaybackBackendCache();
       cancelVoicePlayback();
+      setBackend(null);
     }
   };
 
-  const label = !supported
-    ? "Voice unavailable (no SpeechSynthesis in this browser)"
-    : enabled
-      ? "Voice mode: ON — agent replies spoken aloud. Click to disable."
-      : "Voice mode: OFF — click to enable spoken replies (local OS voice).";
+  const statusHint =
+    enabled && backend ? getVoicePlaybackStatus(backend).hint : null;
+  const label = enabled
+    ? backend === "none"
+      ? `Voice ON but playback unavailable. ${statusHint ?? ""}`
+      : statusHint
+        ? `Voice mode: ON — ${statusHint}`
+        : "Voice mode: ON — agent replies spoken aloud. Click to disable."
+    : "Voice mode: OFF — click to enable spoken replies (local OS voice).";
 
   return (
     <button
       type="button"
       onClick={onClick}
-      disabled={!supported}
       className={[
         "inline-flex h-4 w-4 items-center justify-center transition-colors disabled:cursor-not-allowed disabled:opacity-40",
         enabled

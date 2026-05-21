@@ -85,7 +85,6 @@ import runtimeChannelDispatcherSource from "../../dist/agent-runtime/channels/di
 import runtimeChannelIndexSource from "../../dist/agent-runtime/channels/index.js?raw";
 import runtimeChannelTelegramSource from "../../dist/agent-runtime/channels/telegram.js?raw";
 import runtimeTelegramVoiceSource from "../../dist/agent-runtime/voice/telegram-voice.js?raw";
-import runtimeSynthesizeSource from "../../dist/agent-runtime/voice/synthesize.js?raw";
 import runtimeIpcSource from "../../dist/agent-runtime/ipc.js?raw";
 import runtimeUserInputFramingSource from "../../dist/agent-runtime/user-input-framing.js?raw";
 import sqlWasmRuntimeSource from "sql.js/dist/sql-wasm.js?raw";
@@ -96,22 +95,6 @@ const runtimeToolSources = import.meta.glob("../../dist/agent-runtime/tools/**/*
   query: "?raw",
   import: "default",
 }) as Record<string, string>;
-
-/**
- * Kokoro-82M TTS files mirrored into the Nodebox FS at boot for the
- * outbound voice-reply pipeline. q8f16 quantization (~85 MB) is the
- * smallest production-quality variant.
- *
- * Inbound speech-to-text runs in the browser via vendored whisper-tiny.en;
- * the agent reaches it through IPC (`audio_analyze` tool).
- */
-const KOKORO_NODEBOX_FILES = [
-  "config.json",
-  "tokenizer.json",
-  "tokenizer_config.json",
-  "onnx/model_q8f16.onnx",
-  "voices/af_bella.bin",
-] as const;
 
 export type OutputHandler = (data: string) => void;
 
@@ -467,7 +450,6 @@ async function writeRuntimeSources(profileId: string): Promise<void> {
   await emulator.fs.writeFile(`${webagentDir}/channels/dispatcher.js`, runtimeChannelDispatcherSource);
   await emulator.fs.writeFile(`${webagentDir}/channels/index.js`, runtimeChannelIndexSource);
   await emulator.fs.writeFile(`${webagentDir}/voice/telegram-voice.js`, runtimeTelegramVoiceSource);
-  await emulator.fs.writeFile(`${webagentDir}/voice/synthesize.js`, runtimeSynthesizeSource);
   await emulator.fs.writeFile(`${webagentDir}/vendor/sql-wasm.cjs`, sqlWasmRuntimeSource);
 
   const sqlWasmResponse = await fetch(sqlWasmUrl);
@@ -478,43 +460,6 @@ async function writeRuntimeSources(profileId: string): Promise<void> {
     `${webagentDir}/vendor/sql-wasm.wasm`,
     new Uint8Array(await sqlWasmResponse.arrayBuffer())
   );
-}
-
-/**
- * Mirror Kokoro TTS weights into the Nodebox FS for Telegram outbound voice.
- * Whisper STT loads in the browser worker from `/models/whisper-tiny-en/` (not mirrored here).
- */
-async function writeModelAssets(profileId: string): Promise<void> {
-  const emulator = await getNodebox();
-
-  const mirror = async (repoSlug: string, files: readonly string[]) => {
-    const base = `/workspace/${profileId}/.webagent/models/${repoSlug}`;
-    await emulator.fs.mkdir(base, { recursive: true });
-    for (const rel of files) {
-      if (rel.includes("/")) {
-        await emulator.fs.mkdir(`${base}/${rel.split("/").slice(0, -1).join("/")}`, {
-          recursive: true,
-        });
-      }
-      const target = `${base}/${rel}`;
-      try {
-        await emulator.fs.readFile(target);
-        continue;
-      } catch {
-        /* fall through */
-      }
-      const sourceUrl = `/models/${repoSlug}/${rel}`;
-      const res = await fetch(sourceUrl);
-      if (!res.ok) {
-        if (res.status === 404 && /(added_tokens|normalizer|special_tokens_map)\.json$/.test(rel)) continue;
-        throw new Error(`Failed to mirror model file ${repoSlug}/${rel}: HTTP ${res.status}`);
-      }
-      const bytes = new Uint8Array(await res.arrayBuffer());
-      await emulator.fs.writeFile(target, bytes);
-    }
-  };
-
-  await mirror("onnx-community/Kokoro-82M-v1.0-ONNX", KOKORO_NODEBOX_FILES);
 }
 
 async function writeCapabilitySources(profileId: string): Promise<void> {
@@ -759,7 +704,6 @@ export async function startWebAgent(options: AgentStartOptions): Promise<void> {
       await emulator.fs.mkdir(profileWorkspaceDir, { recursive: true });
       await writeRuntimeSources(profile.id);
       await writeCapabilitySources(profile.id);
-      await writeModelAssets(profile.id);
       await emulator.fs.writeFile(`${profileWorkspaceDir}/.webagent/tools.json`, TOOL_CATALOG_JSON);
       await emulator.fs.writeFile(`${profileWorkspaceDir}/.webagent/providers.json`, PROVIDER_CATALOG_JSON);
       await emulator.fs.writeFile(
@@ -1165,8 +1109,12 @@ export async function startWebAgent(options: AgentStartOptions): Promise<void> {
           let respPayload: string;
           try {
             const req = JSON.parse(reqBody) as {
-              method?: string; url: string;
-              headers?: Record<string, string>; body?: string | null;
+              method?: string;
+              url: string;
+              headers?: Record<string, string>;
+              body?: string | null;
+              bodyEncoding?: string;
+              binaryResponse?: boolean;
             };
             const res = await fetch("/api/proxy", {
               method: "POST",
@@ -1176,6 +1124,8 @@ export async function startWebAgent(options: AgentStartOptions): Promise<void> {
                 url: req.url,
                 headers: req.headers ?? {},
                 body: req.body ?? null,
+                bodyEncoding: req.bodyEncoding,
+                binaryResponse: req.binaryResponse,
               }),
             });
             const data = await res.json();
@@ -1184,6 +1134,7 @@ export async function startWebAgent(options: AgentStartOptions): Promise<void> {
               statusText: String(data?.statusText ?? ""),
               body: String(data?.body ?? ""),
               contentType: String(data?.contentType ?? ""),
+              bodyEncoding: data?.bodyEncoding,
             });
           } catch (e) {
             respPayload = JSON.stringify({ error: String((e as Error)?.message ?? e) });

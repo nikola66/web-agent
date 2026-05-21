@@ -55,14 +55,14 @@ Implementation: `src/agent/runtime/tools/tool-loop-guardrails.ts`, integrated in
 
 Multi-step turns end when the model produces a final answer without tool calls. `/plan` is one turn only; explicit follow-up executes the plan in a new turn.
 
-## Voice (STT / TTS)
+## Voice (STT / playback)
 
 - **Browser mic:** `src/core/voice/stt-worker.ts` + `stt-client.ts` run vendored whisper-tiny.en (WASM). Mic input in `ChatInput` submits transcribed text directly — no LLM provider required for STT.
-- **Telegram / workspace audio:** `audio_analyze` sends bytes to the same STT worker over IPC (`WEBAGENT_STT_REQ` markers in `adapter.ts`).
-- **Telegram outbound:** Kokoro-82M TTS in Nodebox (`src/agent/runtime/voice/synthesize.ts`); model weights mirrored at boot via `writeModelAssets` in `adapter.ts` (Kokoro only — Whisper stays under `public/models/whisper-tiny-en/` on the page origin).
-- **Refresh scripts:** `npm run download:whisper`, `npm run download:kokoro`; `npm run check:models` runs before production builds.
+- **Browser playback:** `src/core/voice-playback.ts` — `speechSynthesis` (OS voices). Toggle with `/voice on|off` or the speaker control.
+- **Telegram / workspace audio:** `audio_analyze` sends bytes to the STT worker over IPC (`WEBAGENT_STT_REQ` in `adapter.ts`). Telegram voice notes are transcribed and answered in **text** only.
+- **Refresh script:** `npm run download:whisper`; `npm run check:models` runs before production builds.
 
-See [`src/agent/runtime/voice/README.md`](../src/agent/runtime/voice/README.md) for the full pipeline.
+See [`src/agent/runtime/voice/README.md`](../src/agent/runtime/voice/README.md).
 
 ## Bundled skills (discovery)
 

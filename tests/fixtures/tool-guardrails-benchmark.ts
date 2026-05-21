@@ -496,7 +496,7 @@ export function buildToolGuardrailsBenchmarkCases(): BenchmarkCase[] {
 
   for (let i = 0; i < CATEGORY_COUNTS.clean_success_chain; i++) {
     const chain = workflowTools[i % workflowTools.length]!;
-    const steps: BenchmarkStep[] = chain.map((tool, j) => ({
+    const steps: BenchmarkStep[] = chain.map((tool, j): BenchmarkStep => ({
       tool,
       args: { step: j, batch: i, path: `projects/run-${i}/file.txt`, query: `step-${j}` },
       result: JSON.stringify({ ok: true, tool, step: j }),

@@ -4,6 +4,7 @@ import tailwindcss from "@tailwindcss/vite";
 import fs from "node:fs";
 import path from "path";
 import type { IncomingMessage } from "node:http";
+import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import {
   buildProxyDebugLogEntry,
@@ -147,6 +148,8 @@ function parseProxyTarget(rawUrl: string): { upstreamBase: string; targetPath: s
 }
 
 const CORS_PROXY_PATH = "/api/proxy";
+const LOCAL_TTS_PATH = "/api/local-tts";
+const LOCAL_TTS_MAX_CHARS = 2_500;
 
 function crossOriginIsolationHeaders() {
   const gate = (server: {
@@ -161,6 +164,96 @@ function crossOriginIsolationHeaders() {
   };
   return {
     name: "cross-origin-isolation-headers",
+    enforce: "pre" as const,
+    configureServer: gate,
+    configurePreviewServer: gate,
+  };
+}
+
+/** Linux Chromium/Electron often has broken speechSynthesis; route TTS to host spd-say in dev. */
+function localTtsGate() {
+  let spdSayPath: string | null | undefined;
+  const resolveSpdSay = () => {
+    if (spdSayPath !== undefined) return spdSayPath;
+    const candidates = ["/usr/bin/spd-say", "/bin/spd-say"];
+    spdSayPath = candidates.find((p) => fs.existsSync(p)) ?? null;
+    return spdSayPath;
+  };
+
+  let speaking = false;
+  const queue: string[] = [];
+
+  const drainQueue = () => {
+    const bin = resolveSpdSay();
+    if (!bin || speaking || queue.length === 0) return;
+    const text = queue.shift()!;
+    speaking = true;
+    const child = spawn(bin, [text], { stdio: "ignore" });
+    const done = () => {
+      speaking = false;
+      drainQueue();
+    };
+    child.on("error", done);
+    child.on("exit", done);
+  };
+
+  const gate = (server: {
+    middlewares: {
+      use: (fn: (req: IncomingMessage, res: import("node:http").ServerResponse, next: () => void) => void) => void;
+    };
+  }) => {
+    server.middlewares.use((req, res, next) => {
+      if (!req.url?.startsWith(LOCAL_TTS_PATH)) return next();
+      const remote = req.socket?.remoteAddress ?? "";
+      if (remote !== "127.0.0.1" && remote !== "::1" && remote !== "::ffff:127.0.0.1") {
+        res.statusCode = 403;
+        res.end();
+        return;
+      }
+      res.setHeader("access-control-allow-origin", "*");
+      res.setHeader("access-control-allow-methods", "GET,POST,OPTIONS");
+      res.setHeader("access-control-allow-headers", "content-type");
+      if (req.method === "OPTIONS") {
+        res.statusCode = 204;
+        res.end();
+        return;
+      }
+      const bin = resolveSpdSay();
+      if (req.method === "GET" || req.method === "HEAD") {
+        res.statusCode = bin ? 204 : 503;
+        res.end();
+        return;
+      }
+      if (req.method !== "POST" || !bin) {
+        res.statusCode = bin ? 405 : 503;
+        res.end();
+        return;
+      }
+      const chunks: Buffer[] = [];
+      req.on("data", (chunk: Buffer) => chunks.push(chunk));
+      req.on("end", () => {
+        try {
+          const { text } = JSON.parse(Buffer.concat(chunks).toString("utf8")) as { text?: string };
+          const trimmed = String(text ?? "").trim().slice(0, LOCAL_TTS_MAX_CHARS);
+          if (!trimmed) {
+            res.statusCode = 400;
+            res.end();
+            return;
+          }
+          queue.push(trimmed);
+          drainQueue();
+          res.statusCode = 204;
+          res.end();
+        } catch (e) {
+          res.statusCode = 400;
+          res.setHeader("content-type", "application/json");
+          res.end(JSON.stringify({ error: String(e instanceof Error ? e.message : e) }));
+        }
+      });
+    });
+  };
+  return {
+    name: "local-tts-gate",
     enforce: "pre" as const,
     configureServer: gate,
     configurePreviewServer: gate,
@@ -186,15 +279,21 @@ function corsProxyGate() {
       req.on("data", (chunk: Buffer) => chunks.push(chunk));
       req.on("end", async () => {
         try {
-          const { method = "GET", url, headers = {}, body } = JSON.parse(
+          const { method = "GET", url, headers = {}, body, bodyEncoding, binaryResponse } = JSON.parse(
             Buffer.concat(chunks).toString("utf8")
           );
+          const upstreamBody =
+            bodyEncoding === "base64" && typeof body === "string"
+              ? Buffer.from(body, "base64")
+              : body;
           const upstream = await fetch(url, {
             method,
             headers,
-            ...(body != null ? { body } : {}),
+            ...(upstreamBody != null ? { body: upstreamBody } : {}),
           });
-          const responseBody = await upstream.text();
+          const responseBody = binaryResponse
+            ? Buffer.from(await upstream.arrayBuffer()).toString("base64")
+            : await upstream.text();
           res.statusCode = upstream.status;
           res.setHeader("content-type", upstream.headers.get("content-type") ?? "application/octet-stream");
           res.end(JSON.stringify({
@@ -202,6 +301,7 @@ function corsProxyGate() {
             statusText: upstream.statusText,
             body: responseBody,
             contentType: upstream.headers.get("content-type") ?? "",
+            bodyEncoding: binaryResponse ? "base64" : undefined,
           }));
           logProxyDebug(req, CORS_PROXY_PATH, upstream.status);
         } catch (e) {
@@ -390,6 +490,7 @@ export default defineConfig(({ mode }) => {
       rawRuntimeFilesPlugin(),
       transformersOrtAssetsPlugin(__dirname),
       crossOriginIsolationHeaders(),
+      localTtsGate(),
       llmProxyGate(),
       corsProxyGate(),
       react(),
