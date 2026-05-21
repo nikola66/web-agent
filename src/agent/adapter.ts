@@ -98,10 +98,18 @@ import runtimeChannelTelegramSource from "../../dist/agent-runtime/channels/tele
 import runtimeTelegramVoiceSource from "../../dist/agent-runtime/voice/telegram-voice.js?raw";
 import runtimeIpcSource from "../../dist/agent-runtime/ipc.js?raw";
 import runtimeUserInputFramingSource from "../../dist/agent-runtime/user-input-framing.js?raw";
+import runtimeCronSchedulingSource from "../../dist/agent-runtime/cron-scheduling.js?raw";
 import sqlWasmRuntimeSource from "sql.js/dist/sql-wasm.js?raw";
 import sqlWasmUrl from "sql.js/dist/sql-wasm.wasm?url";
 
 const runtimeToolSources = import.meta.glob("../../dist/agent-runtime/tools/**/*.js", {
+  eager: true,
+  query: "?raw",
+  import: "default",
+}) as Record<string, string>;
+
+/** Root-level runtime modules (e.g. cron-scheduling.js) — not under tools/. */
+const runtimeRootModuleSources = import.meta.glob("../../dist/agent-runtime/*.js", {
   eager: true,
   query: "?raw",
   import: "default",
@@ -474,6 +482,11 @@ async function writeRuntimeSources(profileId: string): Promise<void> {
   await emulator.fs.writeFile(`${webagentDir}/migrations/001-relocate-state-files.js`, runtimeMigration001Source);
   await emulator.fs.writeFile(`${webagentDir}/migrations/notify.js`, runtimeMigrationsNotifySource);
   await emulator.fs.writeFile(`${webagentDir}/state/persistence.js`, runtimePersistenceSource);
+  await emulator.fs.writeFile(`${webagentDir}/cron-scheduling.js`, runtimeCronSchedulingSource);
+  for (const [sourcePath, content] of Object.entries(runtimeRootModuleSources)) {
+    const rel = sourcePath.replace(/^.*dist\/agent-runtime\//, "");
+    await emulator.fs.writeFile(`${webagentDir}/${rel}`, content);
+  }
   for (const [sourcePath, content] of Object.entries(runtimeToolSources)) {
     const rel = sourcePath.replace(/^.*dist\/agent-runtime\/tools\//, "tools/");
     const parent = rel.split("/").slice(0, -1).join("/");

@@ -11,6 +11,7 @@ import { dim, green, red } from "../terminal-format.js";
 import { emailTool } from "../tools/email-tools.js";
 import { ensureParentDir } from "../workspace-paths.js";
 import { errorMessage } from "../utils.js";
+import { enrichCronJobForList } from "../cron-scheduling.js";
 import { maybeRunCurator } from "../curator.js";
 
 /** Heartbeat cron result routing — must match `cron_register` tool schema. */
@@ -437,7 +438,6 @@ export async function upsertCronJob(job) {
   else jobs.push({ ...entry, lastRunAt: 0, retryAttempts: 0, nextRetryAt: 0 });
   await saveCronJobs({ jobs });
   const persisted = jobs.find((j) => j && String(j.id) === id) ?? entry;
-  const { enrichCronJobForList } = await import("../cron-scheduling.js");
   const enriched = {
     ...persisted,
     ...enrichCronJobForList(persisted, HEARTBEAT_INTERVAL_MS),

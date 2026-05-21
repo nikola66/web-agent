@@ -3,6 +3,7 @@ import nodePath from "node:path";
 import { ipcProxyRequest } from "../ipc.js";
 import {
   BROWSER_AGENT_CATALOG_PATH,
+  HEARTBEAT_INTERVAL_MS,
   MEMORY_CONVERSATIONS_DIR,
   MEMORY_RUNS_DIR,
   getWorkspaceRoot,
@@ -14,6 +15,10 @@ import { memoryPath } from "../memory/sql.js";
 import { createTimeoutController } from "./context.js";
 import { parseTinyFishFetchPayload } from "./tinyfish-fetch.js";
 import { expandSkillBulkSaveArgs } from "./skill-bulk-args.js";
+import {
+  buildCronListSchedulingMeta,
+  enrichCronJobForList,
+} from "../cron-scheduling.js";
 import {
   hasCronJobArgumentPayload,
   normalizeCronJobArguments,
@@ -267,11 +272,6 @@ export async function cronRegisterTool(args: ToolArgs = {}, ctx) {
 }
 
 export async function cronListTool(_args, _ctx) {
-  const { HEARTBEAT_INTERVAL_MS } = await import("../constants.js");
-  const {
-    buildCronListSchedulingMeta,
-    enrichCronJobForList,
-  } = await import("../cron-scheduling.js");
   const { loadCronJobs } = await import("../state/persistence.js");
   const store = await loadCronJobs();
   const rawJobs = Array.isArray(store?.jobs) ? store.jobs : [];
