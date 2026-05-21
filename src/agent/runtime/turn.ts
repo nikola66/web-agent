@@ -72,6 +72,11 @@ import {
   isExecutionContinuationIntent,
 } from "./turn-sequencing.js";
 import { buildExecutionGuidanceBlock } from "./execution-guidance.js";
+import {
+  getCachedSystemPrompt,
+  invalidateSystemPromptCache,
+  setCachedSystemPrompt,
+} from "./system-prompt-cache.js";
 import { buildMemoryLayerGuidanceBlock } from "./memory-guidance.js";
 import {
   buildContinuationNudge,
@@ -135,15 +140,24 @@ const MAX_TOOL_RESULT_INLINE_CHARS = Math.max(
   Number(process.env.WEBAGENT_MAX_TOOL_RESULT_INLINE_CHARS) || 10_000
 );
 
-let _cachedSystemPrompt: string | null = null;
 let _cachedToolNames: string[] | null = null;
+let _openAiToolsCacheKey: string | null = null;
+let _openAiToolsCache: Awaited<ReturnType<typeof buildOpenAiToolDefinitions>> | null = null;
 
-export function invalidateSystemPromptCache(): void {
-  _cachedSystemPrompt = null;
-}
+const STATIC_TOOL_DISCIPLINE =
+  "\n\nTools: prefer native tool calls and respect each tool's schema (especially `required` fields). For files/URLs/shell/external/memory data, use tools first, then answer. Never copy terminal status lines (e.g. lines starting with ✓ or parenthetical summaries) into tool arguments—use real paths, URLs, and queries only. When the user asks for a sequence (for example, testing tools one by one), continue step-by-step without waiting for another user nudge: after you announce a step, immediately emit the corresponding tool call. No fake <tool_call> markup. Text fallback: <<<TOOL>>>{\"name\":\"read_file\",\"arguments\":{\"path\":\"relative/path\"}}<<<END>>>. Memory example: <<<TOOL>>>{\"name\":\"memory_save\",\"arguments\":{\"key\":\"user_timezone\",\"value\":\"America/New_York\"}}<<<END>>> — never call memory_save without both `key` and `value`. Tool results (compact JSON batches): each entry may contain `result` (full inlined payload when it stayed under the size cap — read this first) or `result_ref` (workspace-relative spill file such as \"memory/snapshots/run_xxx_r0_0.json\" when the payload was too large — call read_file on that exact path only). Never call read_file on memory/snapshots/run_* paths when `result` is already present or when no `result_ref` was supplied. If read_file fails or snapshot files disappeared, rerun the originating tool (`web_fetch`, etc.)." +
+  "\n\nExact text discipline: when the user asks for an exact string, token, filename, identifier, code symbol, JSON key, or command output, copy it byte-for-byte. Preserve underscores, hyphens, slashes, capitalization, digits, punctuation, and spacing. Never normalize or prettify exact tokens such as FOO_BAR_TOKEN." +
+  "\n\nTopic discipline: when the user's latest message changes the subject or starts a new request, treat that as the active task. Do not continue earlier plans, files, or tools from older turns unless the user explicitly asks you to resume them." +
+  "\n\nSkill discipline: skills are procedural knowledge, separate from memory facts. The prompt contains only a compact skills index; call `skill_view` before relying on detailed skill instructions. Memory layer boundaries are in **Memory layers** above; for the full picker table call `skill_view` **`memory-layers`**. Saving or installing skills: `skill_view` **`web-agent-skill`**." +
+  "\n\nDomain tool discipline: bundled skills own tool choice—call `skill_view` for the matching skill before fan-out. Hubs: **`find-skills`** (online skill registries → top 5 by installs/stars/votes), **`browser-runtime-map`** (filesystem/HTTP/shell), **`memory-layers`** (memory/session/skills/wiki/secrets), **`artifact-delivery`** + **`chart`** (present/show/Mermaid), **`clarify`** (ambiguous intent → `<<<CLARIFY>>>` option buttons, no tools), **`open-web-research`** (discovery), **`heartbeat-cron`** (scheduled jobs), **`project-scaffold`** (projects/work paths), **`task-execution`** (multi-step plan+run). Prefer GitHub-flavored Markdown pipe tables in assistant-visible text." +
+  "\n\nCron discipline: heartbeat jobs in `.webagent/cronjobs.json` run only on heartbeat ticks while the tab is open (`everyMinutes` + `lastRunAt`); there is no manual cron run tool. `cron_register` refresh reschedules—it does not execute the job unless a heartbeat tick is due at that moment. If the user wants work now, run the job step tools in this chat (or invoke the relevant skill)—never claim to \"run the cron manually\". Before explaining cron timing or where output goes, call `cron_list` or `skill_view` **`heartbeat-cron`** and cite `outputDestination`, `nextEligibleAtMs`, and `schedulingNote` from tool output. Delivery: Silent (logs only), Web UI (`delivery: terminal`), Web UI + Telegram (`terminal` + `notifyChannel`), Email (`delivery: email` + `deliveryEmailTo`).";
+
+export { invalidateSystemPromptCache } from "./system-prompt-cache.js";
 
 export function invalidateToolNamesCache(): void {
   _cachedToolNames = null;
+  _openAiToolsCacheKey = null;
+  _openAiToolsCache = null;
 }
 
 /** Serialize terminal turns and inbound channel turns (Telegram, etc.). */
@@ -261,8 +275,10 @@ export async function agentTurn(
     final_visible_assistant_text: "",
   };
   const runStartedAt = Date.now();
-  if (!_cachedSystemPrompt) _cachedSystemPrompt = await loadSystemPrompt();
-  const sys = _cachedSystemPrompt;
+  if (!getCachedSystemPrompt()) {
+    setCachedSystemPrompt((await loadSystemPrompt()) + STATIC_TOOL_DISCIPLINE);
+  }
+  const sys = getCachedSystemPrompt()!;
   if (!_cachedToolNames) _cachedToolNames = await getToolNamesAsync();
   const allToolNames = _cachedToolNames;
   const toolNames = filterToolNames(allToolNames, turnMeta);
@@ -281,8 +297,16 @@ export async function agentTurn(
     toolNames.length === allToolNames.length
       ? toolCatalog
       : Object.fromEntries(Object.entries(toolCatalog).filter(([name]) => toolNames.includes(name)));
-  const openAiTools = await buildOpenAiToolDefinitions(filteredCatalog);
-  const streamTools = turnMeta?.textOnly === true ? [] : openAiTools;
+  const toolNamesKey = toolNames.join(",");
+  let openAiTools = _openAiToolsCache;
+  if (turnMeta?.textOnly !== true) {
+    if (_openAiToolsCacheKey !== toolNamesKey || !openAiTools) {
+      openAiTools = await buildOpenAiToolDefinitions(filteredCatalog);
+      _openAiToolsCacheKey = toolNamesKey;
+      _openAiToolsCache = openAiTools;
+    }
+  }
+  const streamTools = turnMeta?.textOnly === true ? [] : openAiTools!;
   const planExecutionPrefix =
     !turnMeta?.textOnly && originalUserInput
       ? buildPlanExecutionContextPrefix(originalUserInput)
@@ -291,24 +315,15 @@ export async function agentTurn(
     !turnMeta?.textOnly && originalUserInput
       ? buildExecutionContinuationContextPrefix(originalUserInput)
       : null;
-  const memoryLayerGuidance = buildMemoryLayerGuidanceBlock(toolNames);
-  const toolHint =
-    buildExecutionGuidanceBlock(
-      typeof cfg.model === "string" ? cfg.model : null
-    ) +
-    memoryLayerGuidance +
-    "\n\nTools: prefer native tool calls and respect each tool's schema (especially `required` fields). For files/URLs/shell/external/memory data, use tools first, then answer. Never copy terminal status lines (e.g. lines starting with ✓ or parenthetical summaries) into tool arguments—use real paths, URLs, and queries only. When the user asks for a sequence (for example, testing tools one by one), continue step-by-step without waiting for another user nudge: after you announce a step, immediately emit the corresponding tool call. No fake <tool_call> markup. Text fallback: <<<TOOL>>>{\"name\":\"read_file\",\"arguments\":{\"path\":\"relative/path\"}}<<<END>>>. Memory example: <<<TOOL>>>{\"name\":\"memory_save\",\"arguments\":{\"key\":\"user_timezone\",\"value\":\"America/New_York\"}}<<<END>>> — never call memory_save without both `key` and `value`. Tool results (compact JSON batches): each entry may contain `result` (full inlined payload when it stayed under the size cap — read this first) or `result_ref` (workspace-relative spill file such as \"memory/snapshots/run_xxx_r0_0.json\" when the payload was too large — call read_file on that exact path only). Never call read_file on memory/snapshots/run_* paths when `result` is already present or when no `result_ref` was supplied. If read_file fails or snapshot files disappeared, rerun the originating tool (`web_fetch`, etc.)." +
-    "\n\nExact text discipline: when the user asks for an exact string, token, filename, identifier, code symbol, JSON key, or command output, copy it byte-for-byte. Preserve underscores, hyphens, slashes, capitalization, digits, punctuation, and spacing. Never normalize or prettify exact tokens such as FOO_BAR_TOKEN." +
-    "\n\nTopic discipline: when the user's latest message changes the subject or starts a new request, treat that as the active task. Do not continue earlier plans, files, or tools from older turns unless the user explicitly asks you to resume them." +
-    "\n\nSkill discipline: skills are procedural knowledge, separate from memory facts. The prompt contains only a compact skills index; call `skill_view` before relying on detailed skill instructions. Memory layer boundaries are in **Memory layers** above; for the full picker table call `skill_view` **`memory-layers`**. Saving or installing skills: `skill_view` **`web-agent-skill`**." +
-    "\n\nDomain tool discipline: bundled skills own tool choice—call `skill_view` for the matching skill before fan-out. Hubs: **`find-skills`** (online skill registries → top 5 by installs/stars/votes), **`browser-runtime-map`** (filesystem/HTTP/shell), **`memory-layers`** (memory/session/skills/wiki), **`artifact-delivery`** + **`chart`** (present/show/Mermaid), **`clarify`** (ambiguous intent → `<<<CLARIFY>>>` option buttons, no tools), **`open-web-research`** (discovery), **`heartbeat-cron`** (scheduled jobs), **`project-scaffold`** (projects/work paths), **`task-planning`** / **`task-execution`** (multi-step runs). Prefer GitHub-flavored Markdown pipe tables in assistant-visible text." +
-    "\n\nCron discipline: heartbeat jobs in `.webagent/cronjobs.json` run only on heartbeat ticks while the tab is open (`everyMinutes` + `lastRunAt`); there is no manual cron run tool. `cron_register` refresh reschedules—it does not execute the job unless a heartbeat tick is due at that moment. If the user wants work now, run the job step tools in this chat (or invoke the relevant skill)—never claim to \"run the cron manually\". Before explaining cron timing or where output goes, call `cron_list` or `skill_view` **`heartbeat-cron`** and cite `outputDestination`, `nextEligibleAtMs`, and `schedulingNote` from tool output. Delivery: Silent (logs only), Web UI (`delivery: terminal`), Web UI + Telegram (`terminal` + `notifyChannel`), Email (`delivery: email` + `deliveryEmailTo`)." +
-    " Names: " +
+  const volatileToolHint =
+    buildExecutionGuidanceBlock(typeof cfg.model === "string" ? cfg.model : null) +
+    buildMemoryLayerGuidanceBlock(toolNames) +
+    "\n\nTool names: " +
     toolNames.join(", ") +
     ".";
 
   const fullMessages = [
-    { role: "system", content: sys + memoryBlock + skillsBlock + toolHint },
+    { role: "system", content: sys + memoryBlock + skillsBlock + volatileToolHint },
     ...safeList.filter((m) => m.role !== "system"),
   ];
 
@@ -685,7 +700,7 @@ export async function agentTurn(
             conv.push({
               role: "user",
               content:
-                "Hermes self-improve (one shot): If this turn produced a repeatable checklist, recovery, or shortcut worth reusing next time, call skill_save or skill_manage once with a compact procedural SKILL.md body (name + bullets). If nothing is reusable, reply one sentence: no skill warranted.",
+                "Web Agent self-improve (one shot): If this turn produced a repeatable checklist, recovery, or shortcut worth reusing next time, call skill_manage once (action create) with a compact procedural SKILL.md body (name + bullets). If nothing is reusable, reply one sentence: no skill warranted.",
             });
             await logDebugEvent("turn_skill_self_improve_nudge", {
               round,

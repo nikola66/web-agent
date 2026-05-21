@@ -126,6 +126,28 @@ test("renderTerminalTable wraps wide cells to fit terminal width", () => {
   }
 });
 
+test("renderMarkdownToAnsi GFM table wraps within terminal width", () => {
+  const prev = process.stdout.columns;
+  const prevEnv = process.env.COLUMNS;
+  Object.defineProperty(process.stdout, "columns", { value: 52, configurable: true });
+  process.env.COLUMNS = "52";
+  try {
+    const md = [
+      "| Source | Summary |",
+      "| --- | --- |",
+      "| Example Corp | A very long summary that should wrap inside the rendered terminal table borders. |",
+    ].join("\n");
+    const plain = stripAnsi(renderMarkdownToAnsi(md));
+    const lines = plain.split("\n");
+    assert.ok(lines.some((line) => line.includes("wrap inside")));
+    assert.ok(lines.every((line) => line.length <= 52));
+  } finally {
+    Object.defineProperty(process.stdout, "columns", { value: prev, configurable: true });
+    if (prevEnv !== undefined) process.env.COLUMNS = prevEnv;
+    else delete process.env.COLUMNS;
+  }
+});
+
 test("renderTerminalTable aligns emoji cells by display width", () => {
   const plain = stripAnsi(
     renderTerminalTable(

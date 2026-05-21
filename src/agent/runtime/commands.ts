@@ -17,8 +17,8 @@ export const SLASH_COMMANDS = [
     description:
       "Find-skills mode: search online skill registries (skills.sh, SkillsMP, Cursor Marketplace, etc.) and return the top 5 by installs, stars, or votes.",
   },
-  { name: "/checkpoint [name]", description: "Save a named snapshot of current history for rollback." },
-  { name: "/rollback [name]", description: "List checkpoints or restore a named checkpoint." },
+  { name: "/checkpoint [name]", description: "Save a named snapshot of current history for rollback (handled by the embedded agent runtime)." },
+  { name: "/rollback [name]", description: "List checkpoints or restore a named checkpoint (handled by the embedded agent runtime)." },
   { name: "/skills [search]", description: "List installed skills, or search skills by query." },
   {
     name: "/wiki_setup [path]",
@@ -46,7 +46,9 @@ export const SLASH_COMMANDS = [
 
 const TELEGRAM_COMMAND_RE = /^[a-z0-9_]{1,32}$/;
 
-export function buildTelegramBotCommands() {
+type TelegramSkillCommand = { slug: string; command: string; description: string };
+
+function builtinTelegramCommands() {
   return SLASH_COMMANDS.filter((command) => /^\/[a-z0-9_]+(?:\s|$)/i.test(command.name || ""))
     .map((command) => {
       const nameWithoutSlash = String(command.name || "").replace(/^\//, "");
@@ -57,4 +59,37 @@ export function buildTelegramBotCommands() {
       };
     })
     .filter(({ command }) => TELEGRAM_COMMAND_RE.test(command));
+}
+
+/** Built-in + bundled skill commands for Telegram Bot API (underscore tokens only). */
+export function buildTelegramBotCommands(
+  skills: Array<{ slug: string; name?: string; description?: string }> = []
+) {
+  const seen = new Set<string>();
+  const out: Array<{ command: string; description: string }> = [];
+
+  for (const entry of builtinTelegramCommands()) {
+    if (seen.has(entry.command)) continue;
+    seen.add(entry.command);
+    out.push(entry);
+  }
+
+  const skillRows: TelegramSkillCommand[] = [];
+  for (const skill of skills) {
+    const slug = String(skill.slug || "").trim();
+    if (!slug) continue;
+    const command = slug.replace(/-/g, "_");
+    if (!TELEGRAM_COMMAND_RE.test(command) || seen.has(command)) continue;
+    skillRows.push({
+      slug,
+      command,
+      description: String(skill.description || skill.name || slug).slice(0, 256),
+    });
+  }
+  skillRows.sort((a, b) => a.command.localeCompare(b.command));
+  for (const row of skillRows) {
+    seen.add(row.command);
+    out.push({ command: row.command, description: row.description });
+  }
+  return out;
 }

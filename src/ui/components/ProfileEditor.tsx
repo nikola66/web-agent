@@ -72,8 +72,7 @@ export function ProfileEditor(props: {
     editedProfileId !== null &&
     (runningProfileIds.includes(editedProfileId) ||
       editedRuntime.runtimeStatus === "running" ||
-      editedRuntime.runtimeStatus === "booting" ||
-      editedRuntime.runtimeStatus === "installing");
+      editedRuntime.runtimeStatus === "booting");
 
   const [name, setName] = useState("");
   const [userName, setUserName] = useState("");
@@ -194,7 +193,6 @@ export function ProfileEditor(props: {
       const keepActiveProfile =
         runtimeStatus === "running" ||
         runtimeStatus === "booting" ||
-        runtimeStatus === "installing" ||
         runningProfileIds.length > 0;
       const created = await createProfile({
         name,

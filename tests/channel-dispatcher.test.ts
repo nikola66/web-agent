@@ -191,7 +191,7 @@ test("channel dispatcher surfaces final assistant delivery failures", async () =
       text: "question",
     });
 
-    assert.deepEqual(replies, ["✓ 🔍 web_search", "Error: telegram unavailable"]);
+    assert.deepEqual(replies, ["✓ 🌍 web_search", "Error: telegram unavailable"]);
   } finally {
     process.chdir(originalCwd);
     delete process.env.WEBAGENT_MEMORY_ROOT;
@@ -362,6 +362,43 @@ test("channel dispatcher handles /skills without agent turn", async () => {
     assert.equal(replies.length, 1);
     assert.match(replies[0], /Installed skills|No skills installed/);
     assert.doesNotMatch(replies[0], /\x1b\[/);
+  } finally {
+    process.chdir(originalCwd);
+    delete process.env.WEBAGENT_MEMORY_ROOT;
+    await fs.rm(tmp, { recursive: true, force: true });
+  }
+});
+
+test("channel dispatcher handles /clear without agent turn", async () => {
+  const originalCwd = process.cwd();
+  const tmp = await fs.mkdtemp(path.join(os.tmpdir(), "webagent-channel-"));
+  const dispatcherUrl = pathToFileURL(
+    path.join(originalCwd, "dist/agent-runtime/channels/dispatcher.js")
+  ).href;
+
+  process.chdir(tmp);
+  process.env.WEBAGENT_MEMORY_ROOT = path.join(tmp, "memory");
+
+  try {
+    const { createChannelInboundHandler } = await import(`${dispatcherUrl}?t=${Date.now()}-clear`);
+    const replies: string[] = [];
+    let agentTurns = 0;
+    const inbound = createChannelInboundHandler({
+      cfg: {},
+      sendReply: async (_chatId, text) => {
+        replies.push(text);
+      },
+      agentTurn: async () => {
+        agentTurns += 1;
+        return [];
+      },
+    });
+
+    await inbound({ channel: "telegram", chatId: "123", text: "/plan test" });
+    await inbound({ channel: "telegram", chatId: "123", text: "/clear" });
+
+    assert.equal(agentTurns, 1);
+    assert.equal(replies.at(-1), "Conversation cleared (identity unchanged).");
   } finally {
     process.chdir(originalCwd);
     delete process.env.WEBAGENT_MEMORY_ROOT;

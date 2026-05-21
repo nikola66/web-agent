@@ -97,6 +97,12 @@ test("every bundled capability skill is indexed and viewable on demand", async (
         /## Tool contract/,
         `${slug} should declare a Tool contract section`,
       );
+      assert.match(viewed.content, /## When to Use/, `${slug} should declare When to Use`);
+      if (slug !== "clarify") {
+        assert.match(viewed.content, /## Relation to other skills/, `${slug} should declare Relation to other skills`);
+      }
+      assert.match(viewed.content, /## Pitfalls/, `${slug} should declare Pitfalls`);
+      assert.match(viewed.content, /## Anti-patterns/, `${slug} should declare Anti-patterns`);
       if (slug !== "clarify") {
         assert.ok(
           skillMentionsBuiltinTool(viewed.content),

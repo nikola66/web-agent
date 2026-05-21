@@ -3,6 +3,7 @@ import { TELEGRAM_AUTH_REL, workspaceStatePath } from "../constants.js";
 import { logDebugEvent } from "../logging/debug-log.js";
 import { ensureParentDir } from "../workspace-paths.js";
 import { buildTelegramBotCommands } from "../commands.js";
+import { listSkills } from "../memory/index.js";
 
 async function readStateFile() {
   const channelStatePath = workspaceStatePath(".webagent/channel-state.json");
@@ -97,7 +98,8 @@ async function sendTelegramPayload(urlString, payload, timeoutMs = 120_000) {
  * @param {string} token
  */
 export async function registerTelegramCommands(token) {
-  const commands = buildTelegramBotCommands();
+  const skills = await listSkills().catch(() => []);
+  const commands = buildTelegramBotCommands(skills);
   const url = new URL(`https://api.telegram.org/bot${encodeURIComponent(token)}/setMyCommands`);
   await sendTelegramPayload(url.toString(), { commands }, 30_000);
 }

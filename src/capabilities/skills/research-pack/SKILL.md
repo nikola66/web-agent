@@ -24,7 +24,11 @@ triggers: [arxiv, paper, citation, semantic scholar, literature review, academic
 - User shares arXiv links, DOIs, or asks for related work / reference lists.
 - Not for general open-web discovery (people, products, creators)—use **`open-web-research`**.
 
-## Preconditions
+## Relation to other skills
+
+- Open-web entity lists: **`open-web-research`**. Delivery: **`artifact-delivery`**.
+
+## Procedure
 
 Use `web_fetch` for HTTP GET. Respect rate limits (cache results; batch sparingly).
 
@@ -64,3 +68,13 @@ If `429` appears, back off and retry once with a longer delay; avoid fan-out.
 
 - Summarize papers in your own words; quote short phrases only with attribution.
 - Prefer primary links (arXiv abs, publisher DOI) from API fields when present.
+
+## Pitfalls
+
+- Fan-out on Semantic Scholar without backoff after `429`.
+- Conflating creator discovery with paper search.
+
+## Anti-patterns
+
+- Using training-memory citations without fetching API results.
+- Calling **`open-web-research`** workflows for DOI/arXiv tasks.

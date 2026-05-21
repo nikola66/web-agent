@@ -76,7 +76,7 @@ export function App() {
 
   useEffect(() => {
     if (!isMobileSidebarViewport()) return;
-    if (runtimeStatus !== "booting" && runtimeStatus !== "installing") return;
+    if (runtimeStatus !== "booting") return;
     if (!sidebarOpen) return;
     let id2 = 0;
     const id1 = requestAnimationFrame(() => {

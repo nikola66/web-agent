@@ -28,6 +28,10 @@ triggers: [screenshot, image, diagram, ocr, what is in this image, youtube link,
 - OCR or chart-read needed before any text reasoning can proceed.
 - Visual evidence requested (UI bug screenshot, design mock comparison).
 
+## Relation to other skills
+
+- Verify claims: **`open-web-research`**. Present files: **`artifact-delivery`**. Facts: **`memory-layers`**.
+
 ## Procedure
 
 1. **Images** → `vision_analyze` with a **focused question**, not "describe everything". Examples: "What error code is shown?", "List visible CLI flags", "Read the chart x-axis values".

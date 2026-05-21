@@ -3,7 +3,7 @@ import { emailTool } from "../email-tools.js";
 
 const EMAIL_INPUT_EXAMPLES = [
   { action: "self_test" },
-  { action: "send", to: "you@example.com", subject: "Hello", text: "Plain text body." },
+  { action: "send", to: "you@example.com", subject: "Hello", text: "Plain text body.", cc: "ops@example.com" },
   { to: "you@example.com", subject: "Hello", text: "You may omit action; defaults to send when all three are set." },
 ];
 
@@ -12,7 +12,7 @@ export default defineTool({
   run: emailTool,
   emoji: "✉️",
   description:
-    "Send outbound email via Resend (HTTP API). Configure in Settings → Email. Actions: `self_test` (Resend credentials), `send` ({to, subject, text, from?, html?}). Resend requires primary `to` (not cc-only). Prefer flat fields; nested `arguments` is merged for non-cron calls. For cron / `.webagent/cronjobs.json`, you may omit `action` when `to`, `subject`, and `text` are all set — it defaults to `send`. `send` may require approval when confirmations are enabled. Examples (arguments JSON only): " +
+    "Send outbound email via Resend (HTTP API). Configure in Settings → Email. Actions: `self_test` (Resend credentials), `send` ({to, subject, text, from?, html?, cc?}). Resend requires primary `to` (not cc-only). `cc` accepts a string or array. Prefer flat fields; nested `arguments` is merged for non-cron calls. For cron / `.webagent/cronjobs.json`, you may omit `action` when `to`, `subject`, and `text` are all set — it defaults to `send`. `send` may require approval when confirmations are enabled. Examples (arguments JSON only): " +
     JSON.stringify(EMAIL_INPUT_EXAMPLES[0]) +
     " | " +
     JSON.stringify(EMAIL_INPUT_EXAMPLES[1]) +
@@ -27,6 +27,7 @@ export default defineTool({
       text: { type: "string", description: "Plain text body (required for send)." },
       from: { type: "string", description: "Optional From; defaults to configured Resend from." },
       html: { type: "string", description: "Optional HTML body." },
+      cc: { type: "string", description: "Optional CC — comma-separated addresses or JSON array." },
     },
     required: [],
     additionalProperties: true,

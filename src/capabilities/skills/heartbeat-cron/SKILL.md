@@ -14,14 +14,15 @@ triggers: [schedule, cron, daily digest, recurring, every day, reminder job, cro
 | Create or update a scheduled job | `cron_register` |
 | List existing jobs | `cron_list` |
 | Inspect job definitions on disk | `read_file` on `.webagent/cronjobs.json` |
-| Step tools inside a job | Built-in names only — e.g. `web_search`, `web_fetch`, `write_file`, `memory_save` |
+| Step tools inside a job | Built-in names only — e.g. `web_search`, `web_fetch`, `write_file`, `email`, `memory_save` |
 | Output destination | Job fields (`cron_list` → `outputDestination`) |
 | **Silent** | `delivery: silent` |
 | **Web UI** (agent terminal / chat) | `delivery: terminal` |
 | **Web UI + Telegram** | `delivery: terminal` + `notifyChannel: telegram:<chatId>` |
-| **Email** | `delivery: email` + `deliveryEmailTo` |
+| **Email** | `delivery: email` + `deliveryEmailTo` (wraps all step outputs into one digest email) |
+| **Send mail inside a step** | Step tool `email` with `{to, subject, text[, cc]}` — distinct from job `delivery` |
 
-**Non-negotiable:** No manual cron run — `cron_list` reports `manualRunSupported: false`. Register/refresh does **not** execute the job. Never use host `crontab`/`at` via `run_shell`. `delivery` is a **job field**, not a step `tool`. Tab must stay open for jobs to run.
+**Non-negotiable:** No manual cron run — `cron_list` reports `manualRunSupported: false`. Register/refresh does **not** execute the job. Never use host `crontab`/`at` via `run_shell`. Job `delivery` routes **where results go**; step `email` **sends** during the run. Tab must stay open for jobs to run. **Steps do not pass variables** — use fixed `write_file` paths between steps. Cron runs tools only (no LLM between steps), so dynamic per-recipient cold outreach belongs in **`task-execution`** or an approval-first digest cron, not static spam templates.
 
 Tool choice for step bodies: **`browser-runtime-map`**. Ad-hoc present/email: **`artifact-delivery`**.
 
@@ -32,14 +33,19 @@ Tool choice for step bodies: **`browser-runtime-map`**. Ad-hoc present/email: **
 - Explaining why a job did not run at an exact wall-clock time (tab must stay open).
 - Choosing `delivery` and avoiding invalid step shapes on Nodebox.
 
+## Relation to other skills
+
+- Step tools: **`browser-runtime-map`**. Ad-hoc delivery: **`artifact-delivery`**.
+
 ## Facts (non-negotiable)
 
 - Jobs run **only while the app tab/session is open**. Closing the browser stops the heartbeat until you return.
 - Scheduling is **heartbeat-gated**, not systemd-style cron: `everyMinutes` is **minimum** spacing between runs; ticks use `HEARTBEAT_INTERVAL_MS` (typically 30 minutes). Short `everyMinutes` still waits for the next tick after becoming due.
 - State files: `.webagent/heartbeat-state.json`, cron definition **`.webagent/cronjobs.json`** in the workspace.
 - `tool` at job root or each `steps[]` entry must be a **built-in** name with that tool's `arguments`.
-- **`delivery`** is only on the job (see table above). `notifyChannel` applies only when `delivery` is `terminal`. Never put `silent`/`terminal`/`email` as a step `tool`.
+- **`delivery`** is only on the job (see table above). `notifyChannel` applies only when `delivery` is `terminal`. Never put `silent`/`terminal` as a step `tool`. **`email` is both** job delivery and a valid step tool when arguments include `to`+`subject` (+ `text` for send).
 - After register/refresh, call **`cron_list`** and tell the user **`nextEligibleAtMs`** and **`outputDestination`** — do not claim the job already ran unless heartbeat logged `▸ cron '<id>' ran`.
+- **Multi-step chaining:** write intermediate results to known paths (`work/...`); later steps cannot read prior tool JSON automatically. For outreach: research → `write_file` targets → `email` operator for approval — not unsupervised bulk cold email.
 
 ## Authoring
 

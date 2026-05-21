@@ -4,7 +4,7 @@ import { wikiSetupTool } from "../wiki-tools.js";
 export default defineTool({
   name: "wiki_setup",
   run: wikiSetupTool,
-  emoji: "📚",
+  emoji: "📓",
   description:
     "Create a PARA-style vault + Obsidian wiki scaffold under `root_path` (default .webagent/knowledge-vault): Projects, Areas, Resources/KnowledgeVault/{sources,entities,concepts,synthesis,ops}, Archives, index.md, log.md. Idempotent: skips existing files unless overwrite=true.",
   inputSchema: {

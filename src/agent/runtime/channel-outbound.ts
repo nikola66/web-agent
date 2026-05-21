@@ -1,6 +1,7 @@
 import * as memoryServices from "./memory/index.js";
 import type { SlashCommandRow, ToolViewRow, SkillViewRow } from "./slash-command-views.js";
 import { renderHelpView, renderSkillsView } from "./slash-command-views.js";
+import { skillSlashCommandForSurface } from "./slash-routing.js";
 import { dim, red } from "./terminal-format.js";
 
 export type OutboundSurface = "terminal" | "telegram";
@@ -13,9 +14,9 @@ export function outboundSurfaceForChannel(channel: string): OutboundSurface {
 const TG = {
   helpSlash: "⌨️ **Slash commands**",
   helpTools: "🛠 **Tools**",
-  helpFooter: "Invoke a skill with `/<skill-slug>` + optional task. List skills: `/skills`.",
+  helpFooter: "Invoke a skill with `/<skill_slug>` + optional task (underscores). List skills: `/skills`.",
   skillsTitle: "📚 **Installed skills**",
-  skillsFooter: "Invoke with `/<skill-slug>` + optional task. Filter: `/skills search <query>`.",
+  skillsFooter: "Invoke with `/<skill_slug>` + optional task. Filter: `/skills search <query>`.",
 } as const;
 
 const DESCRIPTION_DISPLAY_MAX = 160;
@@ -100,7 +101,7 @@ export function formatSkillsForSurface(
     });
     lines.push("", `**${category}**`);
     for (const skill of rows) {
-      const slug = `/${String(skill.slug || "").trim()}`;
+      const slug = skillSlashCommandForSurface(String(skill.slug || "").trim(), "telegram");
       const nm = skillDisplayName(skill);
       const desc = tgTrim(String(skill.description || skill.name || ""));
       const tags = skillTagsLine(skill);
@@ -152,7 +153,8 @@ export async function runSkillsSlashCommand(
       );
     } else if ("slug" in result) {
       const src = "source" in result ? String(result.source) : url;
-      await emit(styleOk(`Installed skill /${result.slug} from ${src}\n`));
+      const cmd = skillSlashCommandForSurface(String(result.slug), surface);
+      await emit(styleOk(`Installed skill ${cmd} from ${src}\n`));
     }
     return true;
   }

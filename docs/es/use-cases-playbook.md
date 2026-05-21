@@ -20,8 +20,8 @@ Veinticinco escenarios para copiar y pegar y hacer trabajo real con Web Agent. C
 | Memoria | Capturar contexto de sesión | `/memory-layers` | `session_memory_append`, `session_memory_list` |
 | Memoria | Espejar memoria en vault estilo Obsidian | `/memory-layers` | `wiki_setup`, `wiki_sync`, `wiki_search` |
 | Memoria | Buscar en un chat antiguo | `/memory-layers` | `session_search` |
-| Planificación | Plan spec-first (sin ejecutar aún) | `/plan`, `/task-planning` | `read_file`, `grep`, `write_file`, `artifact_present` |
-| Planificación | Descomponer petición en todos | `/task-planning` | `todo_write`, `skill_view` |
+| Planificación | Plan spec-first (sin ejecutar aún) | `/plan` | `read_file`, `grep`, `write_file`, `artifact_present` |
+| Planificación | Descomponer petición en todos | `/task-execution` | `todo_write`, `skill_view` |
 | Planificación | Ejecutar plan multi-paso aprobado | `/task-execution` | `todo_write`, `read_file`, `write_file`, `artifact_present` |
 | Automatización | Digest diario con pestaña abierta | `/heartbeat-cron` | `cron_register`, `cron_list`, `web_search`, `web_fetch` |
 | Workspace | Arrancar carpeta de side project | `/project-scaffold` | `make_dir`, `write_file`, `tree` |
@@ -34,8 +34,8 @@ Veinticinco escenarios para copiar y pegar y hacer trabajo real con Web Agent. C
 | Entrega | Enviar entregable por email | `/artifact-delivery` | `write_file`, `email`, `artifact_present` |
 | Entrega | Diagrama de flujo para plan o informe | `/chart` | `artifact_present` |
 | UX | Desambiguar petición vaga | `/clarify` | *(none)* |
-| Seguridad | Checkpoint antes de borrado masivo | `/workspace-safety` | `list_dir`, `file_stat`, `delete_file` |
-| Seguridad | API key pegada / higiene de secretos | `/credential-hygiene` | *(redaction; no secret persistence)* |
+| Seguridad | Checkpoint antes de borrado masivo | `/workspace-safety` | `list_dir`, `tree`, `delete_file` |
+| Seguridad | API key pegada / higiene de secretos | `/memory-layers` | *(redaction; no secret persistence)* |
 | Meta | Mejorar Web Agent en sí | `/web-agent-skill` | `read_file`, `grep`, `skill_manage`, `memory_save` |
 
 ---
@@ -240,7 +240,7 @@ When you want a reviewable markdown spec saved under `plans/` — implementation
 Execute the plan you just wrote.
 ```
 
-**Bundled skills:** `/plan` command + `/task-planning` (+ `/task-execution` on follow-up; `/artifact-delivery` for plan preview)
+**Bundled skills:** `/plan` command + `/task-execution` (+ `/task-execution` on follow-up; `/artifact-delivery` for plan preview)
 
 **Herramientas que se activan:** `read_file`, `grep`, `write_file`, `artifact_present`
 
@@ -257,7 +257,7 @@ When one message contains several deliverables — ordered todos before action.
 I need you to: (1) list top-level files in the workspace, (2) grep for TODO comments, (3) write a one-page summary markdown. Break this into todos first and show me the list before doing step 1.
 ```
 
-**Bundled skills:** `/task-planning` (+ `/chart` if ≥4 steps; `/task-execution` after approval)
+**Bundled skills:** `/task-execution` (+ `/chart` if ≥4 steps; `/task-execution` after approval)
 
 **Herramientas que se activan:** `todo_write`, `skill_view`
 
@@ -274,7 +274,7 @@ When todos already exist and you said "go ahead" — full report at the end.
 Execute the plan you just wrote. Stop if a step fails and give me a partial report.
 ```
 
-**Bundled skills:** `/task-execution` (+ `/task-planning` if no plan; `/systematic-debugging` on failure; `/artifact-delivery` for report)
+**Bundled skills:** `/task-execution` (+ `/task-execution` if no plan; `/systematic-debugging` on failure; `/artifact-delivery` for report)
 
 **Herramientas que se activan:** `todo_write`, `read_file`, `write_file`, `grep`, `artifact_present`
 
@@ -458,7 +458,7 @@ When you need the report emailed — requires Resend configured in settings.
 Draft work/reports/summary.md with a 5-bullet project update, present it, and if email is configured send it to my address with subject "Weekly update".
 ```
 
-**Bundled skills:** `/artifact-delivery` (+ `/credential-hygiene` if keys mentioned)
+**Bundled skills:** `/artifact-delivery` (+ `/memory-layers` if keys mentioned)
 
 **Herramientas que se activan:** `write_file`, `email`, `artifact_present`
 
@@ -529,7 +529,7 @@ I want to delete everything under work/scratch/. List what's there with sizes, c
 
 **Bundled skills:** `/workspace-safety`
 
-**Herramientas que se activan:** `list_dir`, `file_stat`, `delete_file`
+**Herramientas que se activan:** `list_dir`, `tree`, `delete_file`
 
 </details>
 
@@ -544,7 +544,7 @@ When you accidentally paste a key or ask to store secrets — rotate guidance, n
 I pasted this by mistake: sk-test-1234567890abcdef — redact it from your reply, tell me what you will NOT store, and how to rotate safely.
 ```
 
-**Bundled skills:** `/credential-hygiene`
+**Bundled skills:** `/memory-layers`
 
 **Herramientas que se activan:** *(redaction guidance; avoid `memory_save` for secrets)*
 

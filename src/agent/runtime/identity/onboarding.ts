@@ -12,6 +12,7 @@ import {
   USER_UPDATE_START,
 } from "../constants.js";
 import { cyan, dim, green } from "../terminal-format.js";
+import { invalidateSystemPromptCache } from "../system-prompt-cache.js";
 
 const brightWhite = (s) => `\x1b[97m${s}\x1b[0m`;
 
@@ -106,6 +107,7 @@ async function writeIdentityFiles(agentName, userName) {
   const safeUserName = cleanSetupName(userName, "User");
   await fs.writeFile(AGENT_MD, buildAgentMd(safeAgentName, safeUserName), "utf8");
   await fs.writeFile(USER_MD, buildUserMd(safeUserName), "utf8");
+  invalidateSystemPromptCache();
 }
 
 export async function synchronizeIdentityFiles(profileName, userName) {
@@ -113,12 +115,16 @@ export async function synchronizeIdentityFiles(profileName, userName) {
   const nextUserName = cleanSetupName(userName, "User");
   const currentAgent = await fs.readFile(AGENT_MD, "utf8").catch(() => "");
   const currentUser = await fs.readFile(USER_MD, "utf8").catch(() => "");
+  let identityChanged = false;
   if (currentAgent.trim() !== buildAgentMd(nextAgentName, nextUserName).trim()) {
     await fs.writeFile(AGENT_MD, buildAgentMd(nextAgentName, nextUserName), "utf8");
+    identityChanged = true;
   }
   if (currentUser.trim() !== buildUserMd(nextUserName).trim()) {
     await fs.writeFile(USER_MD, buildUserMd(nextUserName), "utf8");
+    identityChanged = true;
   }
+  if (identityChanged) invalidateSystemPromptCache();
 }
 
 export async function runFirstRunSetup(rl, fileExists) {

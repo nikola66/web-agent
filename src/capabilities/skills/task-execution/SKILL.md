@@ -1,62 +1,56 @@
 ---
 name: Task Execution
-description: Use when an approved multi-step plan must be executed end to end—gate, advance todos one-at-a-time, recover from failures, and deliver a high-quality final report.
-version: 1.0.0
+description: Use when a multi-step goal needs decomposition and end-to-end delivery—todo_write plan, one-at-a-time execution, failure recovery, and a final report.
+version: 1.1.0
 category: bundled
-tags: [execution, multi-step, todo, report, agentic, delivery]
-triggers: [execute the plan, run the plan, go ahead, proceed with execution, start executing, kick off, run all steps, do it now, ship it, work the list, todo_write, artifact_present]
+tags: [planning, execution, multi-step, todo, report, agentic, delivery]
+triggers: [plan this, multi-step, break down, decompose, ordered steps, several things, do all of, then do, execute the plan, run the plan, go ahead, proceed with execution, start executing, kick off, run all steps, do it now, ship it, work the list]
 ---
 
 ## Tool contract (read first)
 
-| Step | Tool |
-|------|------|
+| Phase | Tool |
+|-------|------|
+| Decompose goal | `todo_write` — ordered, verifiable todos |
+| Visualize plan | Mermaid via **`chart`** when ≥4 steps or branching |
 | Gate / advance plan | `todo_write` — one `in_progress` at a time |
 | Session audit trail | `session_memory_append` |
 | Per-step work | canonical tools from **`browser-runtime-map`** |
 | Final report file | `write_file` at `work/task-execution/<slug>/report.md` |
 | Present report | `artifact_present` — **`artifact-delivery`** |
-| Status diagram | Mermaid via **`chart`** at top of report |
 | Failure recovery | **`systematic-debugging`** one cycle, then resume or abort |
 | Irreversible steps | checkpoint via **`workspace-safety`** as step 0 |
 
-**Non-negotiable:** Every multi-step run gets a report via `artifact_present` — never inline the full body. `/stop` → partial report immediately.
+**Non-negotiable:** No tool fan-out before `todo_write`. Every multi-step run gets a report via `artifact_present` — never inline the full body. `/stop` → partial report immediately.
 
 ## When to Use
 
-- A plan already exists in `todo_write` (built via **`task-planning`**) and the user has approved scope.
-- Goal has **≥3 ordered steps**, multiple tools, or any irreversible action.
-- Not for one-shot fetches or single edits — direct action is cheaper.
-- Not for diagnosis loops — use **`systematic-debugging`** instead.
+- Goal has **≥3 sub-goals**, branching outcomes, step dependencies, or stacked deliverables.
+- User asks "do A, then B, then C" or says go ahead / execute / ship it.
+- Not for one-shot fetches, single edits, or pure Q&A — direct action is cheaper.
+- Not for diagnosis-only loops — use **`systematic-debugging`** instead.
+- Not for **spec-first** planning — use **`/plan [goal]`** (read-only research, markdown under `plans/`, stop before execution).
 
-## Relation to other skills (canonical handoffs)
+## Relation to other skills
 
-- Comes **after** **`task-planning`** (decomposition) and **`clarify`** (intent).
-- Defers **final delivery** of the report to **`artifact-delivery`**.
-- Defers **destructive-step safety** to **`workspace-safety`** (checkpoint before irreversible work).
-- Defers **per-step recovery** to **`systematic-debugging`**.
-- Defers **secret handling** in the report to **`credential-hygiene`**.
-- Defers **durable lesson storage** to **`memory-layers`** (facts vs session vs skills).
+- When intent is unclear, **`clarify`** comes first.
+- Companion to **`systematic-debugging`**: this skill plans and delivers multi-step work; that skill falsifies one hypothesis at a time.
+- Defers **final delivery** to **`artifact-delivery`**; **destructive safety** to **`workspace-safety`**; **durable storage** to **`memory-layers`**.
 
-## Pre-flight gate (run once at start)
+## Procedure
 
-1. **Plan present?** If not, call `skill_view` **`task-planning`**, build the list with `todo_write`, then continue executing — do not stop for approval when the user already said go ahead, yes, ok, or continue until completion.
-2. **Echo the plan.** One line back to the user: `Executing N steps. Stop anytime with /stop.`
-3. **Insert safety step.** If any todo is irreversible (delete, mass overwrite, external send), prepend a checkpoint todo via **`workspace-safety`** as step 0.
-4. **Snapshot start.** `session_memory_append` with `kind: "decision"`, `ref: "task-execution:start"`, and the goal in `text`. The timestamp anchors the duration column in the final report.
+### Phase A — Plan
 
-## Execution loop (per todo)
+1. **State goal** in one sentence — what "done" looks like and for whom.
+2. **`todo_write`** an ordered list. Each todo names a verifiable exit (file written, test green, URL fetched, message sent). Avoid "look into X".
+3. **Visualize** — Mermaid flowchart via **`chart`** when the plan has branching, dependencies, or ≥4 todos.
 
-1. **Lock** — mark exactly **one** todo `in_progress` via `todo_write`. Never run with zero or two in-flight.
-2. **Execute** — call the tool(s) the todo requires. Prefer the canonical tool from **`browser-runtime-map`** (e.g. `web_fetch` over `run_shell curl`).
-3. **Verify** — confirm the verifiable exit named in the todo (file present, test green, HTTP 200, expected JSON shape).
-4. **Record** — append a one-line session-memory entry: `{ kind: "note", text: "<step n> <tool> -> <outcome>", ref: "task-execution:step-<n>", artifact_path?: "<path>" }`.
-5. **Advance** — mark completed and unlock the next todo. **Do not batch completions.**
-6. **On failure** — call `skill_view` **`systematic-debugging`**, run one falsification cycle, then either resume the same todo, re-plan via **`task-planning`**, or abort cleanly with a partial-run report.
+### Phase B — Execute
 
-## Final report (mandatory deliverable)
-
-Write `work/task-execution/<run-slug>/report.md` via `write_file` (see **`project-scaffold`** for path discipline) and present it through **`artifact-delivery`** (`artifact_present`). Open the report with a **Mermaid status flowchart** via **`chart`** (step nodes with status icons).
+4. **Pre-flight** — If todos already exist and the user said go ahead, skip re-planning. Echo: `Executing N steps. Stop anytime with /stop.` Prepend a checkpoint todo via **`workspace-safety`** when any step is irreversible. `session_memory_append` with `ref: "task-execution:start"`.
+5. **Per todo** — mark exactly one `in_progress`; execute with tools from **`browser-runtime-map`**; verify exit; append session note; mark completed before the next. **Do not batch completions.**
+6. **On failure** — one **`systematic-debugging`** cycle, then resume, re-plan todos, or abort with partial report.
+7. **Final report** — write `work/task-execution/<run-slug>/report.md` and present via **`artifact-delivery`**. Open with Mermaid status diagram via **`chart`**.
 
 ```markdown
 # Task Execution Report — <goal in one sentence>
@@ -66,56 +60,29 @@ Write `work/task-execution/<run-slug>/report.md` via `write_file` (see **`projec
 
 ## Step breakdown
 
-| # | Step                | Tool(s)                  | Status | Duration | Artifact / Output                 | Notes               |
-|---|---------------------|--------------------------|--------|----------|-----------------------------------|---------------------|
-| 1 | <todo content>      | `web_fetch`              | ✅     | 0:04     | `work/.../page.html`              | 200 OK              |
-| 2 | <todo content>      | `apply_patch`            | ✅     | 0:11     | `src/foo.ts`                      | 3 lines added       |
-| 3 | <todo content>      | `run_shell` (`npx tsc`)  | ❌     | 0:32     | —                                 | TS2304 — see below  |
-| 4 | <todo content>      | —                        | ⏭️     | —        | —                                 | skipped (blocked)   |
+| # | Step | Tool(s) | Status | Duration | Artifact / Output | Notes |
+|---|------|---------|--------|----------|-------------------|-------|
 
 ## Artifacts produced
 
-- `work/<slug>/report.md` — this report (presented via `artifact_present`)
-- `<other paths>` — one bullet per file / email / message
-
 ## Failures & recovery
-
-- **Step 3** — `TS2304: Cannot find name 'Foo'`. Hypothesis cycle via **`systematic-debugging`** pointed to a missing import; fix landed in step 5.
 
 ## Memory promotion
 
-- **Fact** (`memory_save`): `<key>` → `<value>` — only if durable.
-- **Learning candidate**: `<one-liner>` — only if procedural and reusable.
-
 ## Next steps
-
-- <user-facing follow-up the agent did not run>
 ```
-
-### Report rules
-
-- **Status icons:** ✅ done · ❌ failed · ⚠️ partial · ⏭️ skipped · ⏳ in_progress (only when aborted).
-- **Durations** come from the per-step session-memory timestamps; total from the `task-execution:start` snapshot.
-- **Artifact column** uses workspace-relative paths so the user can `read_file` them directly.
-- **Tool column** shows the **actual** tool name(s) used, not the originally planned tool.
-- **Redact secrets** via **`credential-hygiene`** before writing the report file.
-
-## Stop rules
-
-- User issues `/stop` → produce a **partial** report immediately; do not silently halt.
-- Two consecutive failed retries on the same todo → abort with partial report.
-- Tool budget exceeded (>50 tool calls or >30 min wall-time) → checkpoint and ask the user before continuing.
 
 ## Pitfalls
 
-- Marking multiple todos `in_progress` at once — defeats the audit trail.
-- Skipping the report on short runs ("only 3 steps, no need") — every multi-step run gets one.
-- Inlining the report body in chat instead of `artifact_present` — duplicates content; route through **`artifact-delivery`**.
-- Dropping a failed step from the table to "look clean" — failures stay; that is the value of the report.
-- Re-planning silently mid-run without telling the user.
+- Fan-out before `todo_write` — many tool calls with no anchor.
+- Multiple todos `in_progress` at once — defeats the audit trail.
+- Skipping the report on short runs — every multi-step run gets one.
+- Re-planning every turn without telling the user.
+- Promoting every step into `memory_save` — see **`memory-layers`**.
 
 ## Anti-patterns
 
-- Storing the running plan only in chat — `todo_write` is the source of truth.
-- Embedding raw tool-output blobs in the report — link to the artifact instead.
-- Promoting every step into `memory_save` — only durable, reusable lessons; see **`memory-layers`**.
+- One giant todo covering the whole goal.
+- Storing the plan only in chat or `session_memory_append` instead of `todo_write`.
+- Inlining the report body in chat instead of `artifact_present`.
+- Embedding raw tool-output blobs in the report — link to artifacts instead.

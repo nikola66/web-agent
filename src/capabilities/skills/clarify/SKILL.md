@@ -16,7 +16,7 @@ triggers: [which should I, pick one, either/or, not sure, ambiguous, conflicting
 | After emit | Stop and wait for the user's choice as the next message |
 | Manual test | User can send `/clarify [topic]` to force this mode |
 
-Hand off to workflow skills (`open-web-research`, `task-planning`, etc.) **after** the user picks — not before.
+Hand off to workflow skills (`open-web-research`, `task-execution`, etc.) **after** the user picks — not before.
 
 ## When to Use
 
@@ -47,6 +47,11 @@ Rules:
 - JSON must parse; use double quotes. Do not wrap in markdown fences inside the markers.
 
 Then stop and wait — the host sends the user's choice as the next user message.
+
+## Pitfalls
+
+- Asking overlapping questions in one turn instead of one clear fork.
+- Using clarify to delay research after intent is already scoped.
 
 ## Anti-patterns
 

@@ -2,6 +2,8 @@
 
 Twenty-five copy-paste scenarios for getting real work done with Web Agent. Each entry maps to bundled skills and the tools those skills expect. Prompts stay in English — paste them as-is into chat.
 
+**Surface this playbook assumes:** **38** built-in tools (skill CRUD via **`skill_manage`** only), **16** bundled skills (four hubs + twelve workflows). Full catalog: [README § Tooling](../README.md#tooling) · [README § Skills](../README.md#skills).
+
 **Filter by category:** [Research](#playbook-research) · [Memory](#playbook-memory) · [Planning](#playbook-planning) · [Automation](#playbook-automation) · [Workspace](#playbook-workspace) · [Debug](#playbook-debug) · [Multimodal](#playbook-multimodal) · [Delivery](#playbook-delivery) · [UX](#playbook-ux) · [Safety](#playbook-safety) · [Meta](#playbook-meta)
 
 ## Quick index
@@ -16,9 +18,8 @@ Twenty-five copy-paste scenarios for getting real work done with Web Agent. Each
 | Memory | Capture rolling session context | `/memory-layers` | `session_memory_append`, `session_memory_list` |
 | Memory | Mirror memory into Obsidian-style vault | `/memory-layers` | `wiki_setup`, `wiki_sync`, `wiki_search` |
 | Memory | Find something from an old chat | `/memory-layers` | `session_search` |
-| Planning | Spec-first feature plan (no execution yet) | `/plan`, `/task-planning` | `read_file`, `grep`, `write_file`, `artifact_present` |
-| Planning | Break a stacked request into todos | `/task-planning` | `todo_write`, `skill_view` |
-| Planning | Execute an approved multi-step plan | `/task-execution` | `todo_write`, `read_file`, `write_file`, `artifact_present` |
+| Planning | Spec-first feature plan (no execution yet) | `/plan` | `read_file`, `grep`, `write_file`, `artifact_present` |
+| Planning | Plan and execute multi-step work | `/task-execution` | `todo_write`, `write_file`, `artifact_present` |
 | Automation | Daily digest while tab is open | `/heartbeat-cron` | `cron_register`, `cron_list`, `web_search`, `web_fetch` |
 | Workspace | Bootstrap a new side project folder | `/project-scaffold` | `make_dir`, `write_file`, `tree` |
 | Workspace | Reorganize files safely | `/workspace-safety`, `/browser-runtime-map` | `list_dir`, `find_files`, `move_file`, `tree` |
@@ -30,8 +31,8 @@ Twenty-five copy-paste scenarios for getting real work done with Web Agent. Each
 | Delivery | Email a deliverable | `/artifact-delivery` | `write_file`, `email`, `artifact_present` |
 | Delivery | Flowchart for a plan or report | `/chart` | `artifact_present` |
 | UX | Disambiguate a vague ask | `/clarify` | *(none)* |
-| Safety | Checkpoint before bulk delete | `/workspace-safety` | `list_dir`, `file_stat`, `delete_file` |
-| Safety | Pasted API key / secret hygiene | `/credential-hygiene` | *(redaction; no secret persistence)* |
+| Safety | Checkpoint before bulk delete | `/workspace-safety` | `list_dir`, `tree`, `delete_file` |
+| Safety | Pasted API key / secret hygiene | `/memory-layers` | *(redaction; no secret persistence)* |
 | Meta | Improve Web Agent itself | `/web-agent-skill` | `read_file`, `grep`, `skill_manage`, `memory_save` |
 
 ---
@@ -236,7 +237,7 @@ When you want a reviewable markdown spec saved under `plans/` — implementation
 Execute the plan you just wrote.
 ```
 
-**Bundled skills:** `/plan` command + `/task-planning` (+ `/task-execution` on follow-up; `/artifact-delivery` for plan preview)
+**Bundled skills:** `/plan` command (+ `/artifact-delivery` for plan preview)
 
 **Tools that fire:** `read_file`, `grep`, `write_file`, `artifact_present`
 
@@ -253,7 +254,7 @@ When one message contains several deliverables — ordered todos before action.
 I need you to: (1) list top-level files in the workspace, (2) grep for TODO comments, (3) write a one-page summary markdown. Break this into todos first and show me the list before doing step 1.
 ```
 
-**Bundled skills:** `/task-planning` (+ `/chart` if ≥4 steps; `/task-execution` after approval)
+**Bundled skills:** `/task-execution` (+ `/chart` if ≥4 steps)
 
 **Tools that fire:** `todo_write`, `skill_view`
 
@@ -270,7 +271,7 @@ When todos already exist and you said "go ahead" — full report at the end.
 Execute the plan you just wrote. Stop if a step fails and give me a partial report.
 ```
 
-**Bundled skills:** `/task-execution` (+ `/task-planning` if no plan; `/systematic-debugging` on failure; `/artifact-delivery` for report)
+**Bundled skills:** `/task-execution` (+ `/systematic-debugging` on failure; `/artifact-delivery` for report)
 
 **Tools that fire:** `todo_write`, `read_file`, `write_file`, `grep`, `artifact_present`
 
@@ -454,7 +455,7 @@ When you need the report emailed — requires Resend configured in settings.
 Draft work/reports/summary.md with a 5-bullet project update, present it, and if email is configured send it to my address with subject "Weekly update".
 ```
 
-**Bundled skills:** `/artifact-delivery` (+ `/credential-hygiene` if keys mentioned)
+**Bundled skills:** `/artifact-delivery` (+ `/memory-layers` if keys mentioned)
 
 **Tools that fire:** `write_file`, `email`, `artifact_present`
 
@@ -525,7 +526,7 @@ I want to delete everything under work/scratch/. List what's there with sizes, c
 
 **Bundled skills:** `/workspace-safety`
 
-**Tools that fire:** `list_dir`, `file_stat`, `delete_file`
+**Tools that fire:** `list_dir`, `tree`, `delete_file`
 
 </details>
 
@@ -540,7 +541,7 @@ When you accidentally paste a key or ask to store secrets — rotate guidance, n
 I pasted this by mistake: sk-test-1234567890abcdef — redact it from your reply, tell me what you will NOT store, and how to rotate safely.
 ```
 
-**Bundled skills:** `/credential-hygiene`
+**Bundled skills:** `/memory-layers`
 
 **Tools that fire:** *(redaction guidance; avoid `memory_save` for secrets)*
 

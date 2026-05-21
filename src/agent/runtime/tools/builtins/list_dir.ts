@@ -12,9 +12,9 @@ export default defineTool({
   run: listDirTool,
   emoji: "📁",
   description:
-    "List workspace entries. **path** must be workspace-relative — use `.` for the project root, " +
-    "never `/` or a host filesystem root (those escape the workspace). " +
-    "Optional `pattern` (substring or glob), `recursive`, `kind`. " +
+    "List entries in **one directory**. Use `.` for workspace root. Optional `pattern` filters names " +
+    "within that directory tree when `recursive` is true — for cross-tree name search use `find_files` instead. " +
+    "Optional `recursive`, `kind`. " +
     "Example arguments: " +
     JSON.stringify(LIST_DIR_EXAMPLES[0]) +
     " | " +

@@ -28,6 +28,11 @@ triggers: [bug, error, fails, flaky, crash, regression, test failure, doesn't wo
 - Before stacking fixes—anchor repro and falsify one hypothesis at a time.
 - Test failures, CI red, or intermittent behavior you need to isolate.
 
+## Relation to other skills
+
+- Multi-step delivery failures inside **`task-execution`** invoke this loop per step.
+- Visual hypothesis trees: **`chart`**.
+
 ## Loop
 
 1. **Reproduce** — smallest steps or command that shows the failure every time (or document intermittency rate).
@@ -46,6 +51,11 @@ triggers: [bug, error, fails, flaky, crash, regression, test failure, doesn't wo
 
 - Repro disappears with a falsifiable explanation and verification.
 - Hypothesis survives two independent checks (observation + small experiment).
+
+## Pitfalls
+
+- Editing before reading the failing code path.
+- Stacking multiple fixes without isolating which one worked.
 
 ## Anti-patterns
 

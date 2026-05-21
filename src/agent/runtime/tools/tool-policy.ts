@@ -107,29 +107,15 @@ export function summarizeToolApproval(name, args, approvalSummaryTemplate) {
   // Per-tool summarization
   const a = args && typeof args === "object" ? args : {};
 
-  if (tool === "skill_save") {
+  if (tool === "skill_manage") {
+    const action = String(a.action ?? "").trim();
     const name = String(a.name ?? "").trim();
     const desc = truncateDescription(a.description);
     const contentLen = formatContentLength(a.content);
     const parts = [];
-    if (name) parts.push(`name=${name}`);
-    if (desc) parts.push(`description=${desc}`);
-    if (contentLen) parts.push(`content=${contentLen}`);
-    return `skill_save: ${parts.join("; ")}`;
-  }
-
-  if (tool === "skill_delete") {
-    const name = String(a.name ?? "").trim();
-    return `skill_delete: name=${name}`;
-  }
-
-  if (tool === "skill_manage") {
-    const action = String(a.action ?? "").trim();
-    const name = String(a.name ?? "").trim();
-    const contentLen = formatContentLength(a.content);
-    const parts = [];
     if (action) parts.push(`action=${action}`);
     if (name) parts.push(`name=${name}`);
+    if (desc) parts.push(`description=${desc}`);
     if (contentLen) parts.push(`content=${contentLen}`);
     return `skill_manage: ${parts.join("; ")}`;
   }
@@ -237,7 +223,7 @@ function buildApprovalDetailRows(toolLabel, args, summary, toolEmoji) {
     }
   }
 
-  if (tool === "skill_save" || tool === "skill_delete" || tool === "skill_manage") {
+  if (tool === "skill_manage") {
     const rows = [{ label: "🔧 Tool", value: formatToolBadge(tool, em || "📦") }];
     const name = String(flat.name ?? "").trim();
     const desc = truncatePermissionText(truncateDescription(flat.description), 80);

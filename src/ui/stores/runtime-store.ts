@@ -5,7 +5,6 @@ import { useProfileStore } from "./profile-store";
 export type RuntimeStatus =
   | "idle"
   | "booting"
-  | "installing"
   | "running"
   | "error"
   | "stopped";

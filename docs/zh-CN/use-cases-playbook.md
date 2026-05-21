@@ -20,8 +20,8 @@
 | 记忆 | 记录滚动会话上下文 | `/memory-layers` | `session_memory_append`, `session_memory_list` |
 | 记忆 | 同步到 Obsidian 风格知识库 | `/memory-layers` | `wiki_setup`, `wiki_sync`, `wiki_search` |
 | 记忆 | 从旧对话中查找 | `/memory-layers` | `session_search` |
-| 规划 | 先写规格再实现（暂不执行） | `/plan`, `/task-planning` | `read_file`, `grep`, `write_file`, `artifact_present` |
-| 规划 | 拆解多步请求为 todos | `/task-planning` | `todo_write`, `skill_view` |
+| 规划 | 先写规格再实现（暂不执行） | `/plan` | `read_file`, `grep`, `write_file`, `artifact_present` |
+| 规划 | 拆解多步请求为 todos | `/task-execution` | `todo_write`, `skill_view` |
 | 规划 | 执行已批准的多步计划 | `/task-execution` | `todo_write`, `read_file`, `write_file`, `artifact_present` |
 | 自动化 | 标签页打开时的每日摘要 | `/heartbeat-cron` | `cron_register`, `cron_list`, `web_search`, `web_fetch` |
 | 工作区 | 新建副项目目录 | `/project-scaffold` | `make_dir`, `write_file`, `tree` |
@@ -34,8 +34,8 @@
 | 交付 | 邮件发送交付物 | `/artifact-delivery` | `write_file`, `email`, `artifact_present` |
 | 交付 | 计划或报告的流程图 | `/chart` | `artifact_present` |
 | 体验 | 澄清模糊需求 | `/clarify` | *(none)* |
-| 安全 | 批量删除前检查点 | `/workspace-safety` | `list_dir`, `file_stat`, `delete_file` |
-| 安全 | 粘贴 API 密钥 / 密钥卫生 | `/credential-hygiene` | *(redaction; no secret persistence)* |
+| 安全 | 批量删除前检查点 | `/workspace-safety` | `list_dir`, `tree`, `delete_file` |
+| 安全 | 粘贴 API 密钥 / 密钥卫生 | `/memory-layers` | *(redaction; no secret persistence)* |
 | 元 | 改进 Web Agent 本身 | `/web-agent-skill` | `read_file`, `grep`, `skill_manage`, `memory_save` |
 
 ---
@@ -240,7 +240,7 @@ Search my past conversations for mentions of "Prettier" or "formatter" and quote
 Execute the plan you just wrote.
 ```
 
-**Bundled 技能：** `/plan` command + `/task-planning` (+ `/task-execution` on follow-up; `/artifact-delivery` for plan preview)
+**Bundled 技能：** `/plan` command + `/task-execution` (+ `/task-execution` on follow-up; `/artifact-delivery` for plan preview)
 
 **会触发的工具：** `read_file`, `grep`, `write_file`, `artifact_present`
 
@@ -257,7 +257,7 @@ Execute the plan you just wrote.
 I need you to: (1) list top-level files in the workspace, (2) grep for TODO comments, (3) write a one-page summary markdown. Break this into todos first and show me the list before doing step 1.
 ```
 
-**Bundled 技能：** `/task-planning` (+ `/chart` if ≥4 steps; `/task-execution` after approval)
+**Bundled 技能：** `/task-execution` (+ `/chart` if ≥4 steps; `/task-execution` after approval)
 
 **会触发的工具：** `todo_write`, `skill_view`
 
@@ -274,7 +274,7 @@ I need you to: (1) list top-level files in the workspace, (2) grep for TODO comm
 Execute the plan you just wrote. Stop if a step fails and give me a partial report.
 ```
 
-**Bundled 技能：** `/task-execution` (+ `/task-planning` if no plan; `/systematic-debugging` on failure; `/artifact-delivery` for report)
+**Bundled 技能：** `/task-execution` (+ `/task-execution` if no plan; `/systematic-debugging` on failure; `/artifact-delivery` for report)
 
 **会触发的工具：** `todo_write`, `read_file`, `write_file`, `grep`, `artifact_present`
 
@@ -458,7 +458,7 @@ Write a one-page weekly status report to work/reports/week.md (Goals / Done / Bl
 Draft work/reports/summary.md with a 5-bullet project update, present it, and if email is configured send it to my address with subject "Weekly update".
 ```
 
-**Bundled 技能：** `/artifact-delivery` (+ `/credential-hygiene` if keys mentioned)
+**Bundled 技能：** `/artifact-delivery` (+ `/memory-layers` if keys mentioned)
 
 **会触发的工具：** `write_file`, `email`, `artifact_present`
 
@@ -529,7 +529,7 @@ I want to delete everything under work/scratch/. List what's there with sizes, c
 
 **Bundled 技能：** `/workspace-safety`
 
-**会触发的工具：** `list_dir`, `file_stat`, `delete_file`
+**会触发的工具：** `list_dir`, `tree`, `delete_file`
 
 </details>
 
@@ -544,7 +544,7 @@ I want to delete everything under work/scratch/. List what's there with sizes, c
 I pasted this by mistake: sk-test-1234567890abcdef — redact it from your reply, tell me what you will NOT store, and how to rotate safely.
 ```
 
-**Bundled 技能：** `/credential-hygiene`
+**Bundled 技能：** `/memory-layers`
 
 **会触发的工具：** *(redaction guidance; avoid `memory_save` for secrets)*
 

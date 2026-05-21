@@ -12,7 +12,7 @@ import {
 import { emitTranscriptEvent } from "../dist/agent-runtime/transcript-delivery.js";
 
 test("transcript formatter mirrors terminal tool lines", () => {
-  const cat = { web_search: { emoji: "🔍" }, read_file: { emoji: "📄" } };
+  const cat = { web_search: { emoji: "🌍" }, read_file: { emoji: "📄" } };
   assert.equal(
     formatToolStartTranscript({
       name: "web_search",
@@ -26,12 +26,12 @@ test("transcript formatter mirrors terminal tool lines", () => {
       argsPreview: "{\"query\":\"UAE Iran\"}",
       toolCatalog: cat,
     }),
-    "▸ 🔍 web_search {\"query\":\"UAE Iran\"}"
+    "▸ 🌍 web_search {\"query\":\"UAE Iran\"}"
   );
   assert.equal(formatToolResultTranscript({ name: "web_search", status: "ok" }), "✓ web_search");
   assert.equal(
     formatToolResultTranscript({ name: "web_search", status: "ok", toolCatalog: cat }),
-    "✓ 🔍 web_search"
+    "✓ 🌍 web_search"
   );
   assert.equal(
     formatToolResultTranscript({ name: "read_file", status: "error", error: "Path not found" }),
@@ -61,25 +61,25 @@ test("channel transcript formatter includes assistant name and branch prefix", (
 });
 
 test("terminal channel transcript includes tool emoji on tool lines", () => {
-  const cat = { web_search: { emoji: "🔍" } };
+  const cat = { web_search: { emoji: "🌍" } };
   assert.equal(
     formatTranscriptEventForChannel(
       { type: "tool_start", name: "web_search", argsPreview: '{"q":1}' },
       { style: "terminal", toolCatalog: cat }
     ),
-    "▸ 🔍 web_search {\"q\":1}"
+    "▸ 🌍 web_search {\"q\":1}"
   );
   assert.equal(
     formatTranscriptEventForChannel(
       { type: "tool_result", name: "web_search", status: "ok" },
       { style: "terminal", toolCatalog: cat }
     ),
-    "✓ 🔍 web_search"
+    "✓ 🌍 web_search"
   );
 });
 
 test("telegram channel transcript omits agent name and tool args", () => {
-  const cat = { web_search: { emoji: "🔍" } };
+  const cat = { web_search: { emoji: "🌍" } };
   assert.equal(
     formatTranscriptEventForChannel(
       {
@@ -97,14 +97,14 @@ test("telegram channel transcript omits agent name and tool args", () => {
       { type: "tool_start", name: "web_search", argsPreview: '{"q":1}' },
       { style: "telegram", toolCatalog: cat }
     ),
-    "▸ 🔍 web_search"
+    "▸ 🌍 web_search"
   );
   assert.equal(
     formatTranscriptEventForChannel(
       { type: "tool_result", name: "web_search", status: "ok" },
       { style: "telegram", toolCatalog: cat }
     ),
-    "✓ 🔍 web_search"
+    "✓ 🌍 web_search"
   );
   assert.equal(
     formatTranscriptEventForChannel(

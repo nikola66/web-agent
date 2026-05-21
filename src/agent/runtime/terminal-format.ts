@@ -317,12 +317,16 @@ function renderWrappedTableRows(
   return rendered;
 }
 
-export function renderTerminalTable(columns: TerminalTableColumn[], rows: string[][]) {
+export function renderTerminalTable(
+  columns: TerminalTableColumn[],
+  rows: string[][],
+  options: { maxTableWidth?: number } = {}
+) {
   const safeColumns = columns.length ? columns : [{ label: "" }];
   const normalizedRows = rows.map((row) =>
     safeColumns.map((_, index) => String(row[index] || "").replace(/\r?\n/g, " ").trim())
   );
-  const maxTableWidth = Math.max(24, terminalColumnCount() - 2);
+  const maxTableWidth = options.maxTableWidth ?? Math.max(24, terminalColumnCount() - 2);
   const widths = resolveTableColumnWidths(safeColumns, normalizedRows, maxTableWidth);
   const top = violet(`┌${widths.map((width) => "─".repeat(width + 2)).join("┬")}┐`);
   const mid = violet(`├${widths.map((width) => "─".repeat(width + 2)).join("┼")}┤`);
@@ -385,36 +389,16 @@ export function renderTerminalBorderedBlock(lines: string[]) {
 }
 
 function renderTableBlockAnsi(header: string[], bodyRows: string[][]) {
-  const nCols = header.length;
-  const styledHead = header.map((c) => cyan(bold(styleInlineMarkdown(c))));
-  const styledBody = bodyRows.map((row) => row.map((c) => styleInlineMarkdown(c)));
-  const widths = Array(nCols).fill(0);
-
-  const allRows = [styledHead, ...styledBody];
-  for (const row of allRows) {
-    for (let c = 0; c < nCols; c++) {
-      widths[c] = Math.max(widths[c], ansiDisplayWidth(row[c]));
-    }
-  }
-
-  const topInner = widths.map((w) => "─".repeat(w + 2)).join("┬");
-  const midInner = widths.map((w) => "─".repeat(w + 2)).join("┼");
-  const botInner = widths.map((w) => "─".repeat(w + 2)).join("┴");
-  const top = dim(`┌${topInner}┐`);
-  const mid = dim(`├${midInner}┤`);
-  const bot = dim(`└${botInner}┘`);
-
-  const lineCells = (row: string[]) =>
-    row.map((cell, ci) => ` ${padCell(cell, widths[ci])} `).join(dim("│"));
-
-  const out = [top];
-  out.push(dim("│") + lineCells(styledHead) + dim("│"));
-  out.push(mid);
-  for (const row of styledBody) {
-    out.push(dim("│") + lineCells(row) + dim("│"));
-  }
-  out.push(bot);
-  return out.join("\n");
+  const columns: TerminalTableColumn[] = header.map((label, index) => ({
+    label,
+    minWidth: 1,
+    wrap: index > 0 || header.length === 1,
+    formatter: (text) => styleInlineMarkdown(text),
+  }));
+  // Assistant tables render under ` └ ` on the first line (see prefixBlock).
+  return renderTerminalTable(columns, bodyRows, {
+    maxTableWidth: Math.max(24, terminalColumnCount() - 5),
+  });
 }
 
 export function renderMarkdownToAnsi(markdown: unknown) {

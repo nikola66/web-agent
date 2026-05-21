@@ -63,7 +63,7 @@ Multi-step work runs in one user turn: the model loops with tools until the task
 
 ## Telegram slash commands
 
-Built-in slash commands in `SLASH_COMMANDS` (`src/agent/runtime/commands.ts`) use **underscores** (`/find_skills`, `/wiki_setup`, …) so they pass Telegram Bot API `setMyCommands` validation (lowercase letters, digits, underscores only — no hyphens). `buildTelegramBotCommands()` filters the registry before registration. Bundled **skill** invocations may still use hyphenated slugs (e.g. `/memory-layers`); those are not registered in the Telegram command menu.
+Built-in slash commands in `SLASH_COMMANDS` (`src/agent/runtime/commands.ts`) use **underscores** (`/find_skills`, `/wiki_setup`, …) so they pass Telegram Bot API `setMyCommands` validation (lowercase letters, digits, underscores only — no hyphens). `buildTelegramBotCommands()` merges those built-ins with bundled skills registered as underscore commands (e.g. `/memory_layers` → skill slug `memory-layers`). Built-ins win on name collisions (`/find_skills`, `/clarify`). Shared slash rewrite lives in `slash-routing.ts` (web REPL + Telegram dispatcher). Web also accepts hyphen skill slugs (`/memory-layers`); Telegram menu and `/skills` output use underscores only.
 - **Refresh script:** `npm run download:whisper`; `npm run check:models` runs before production builds.
 
 See [`src/agent/runtime/voice/README.md`](../src/agent/runtime/voice/README.md).
@@ -75,6 +75,20 @@ The runtime injects a **compact index** each turn (`description` + optional `tri
 - Start `description` with **Use when the user …** and real phrases users type.
 - Add `triggers: […]` with 6–12 short match phrases (see `CAPABILITIES.md`).
 - Keep `## When to Use` bullets aligned with triggers; procedures stay in the body for `skill_view`.
+
+## Tools & skills surface
+
+Contributors should keep docs and runtime signaling aligned with the consolidated surface:
+
+| Layer | Count | Where |
+| --- | --- | --- |
+| Built-in tools | **38** | `src/agent/runtime/tools/builtins/` — regenerated catalog via `npm run build:embed-runtime` |
+| Skill tools (model-facing) | **4** | `skill_list`, `skill_view`, `skill_manage`, `skill_bulk_save` — create/patch/delete/import under **`skill_manage`** |
+| Bundled skills | **16** | `src/capabilities/skills/` — **hub** skills: `memory-layers`, `browser-runtime-map`, `artifact-delivery`, `web-agent-skill` |
+
+**Skill body template** (enforced in `tests/bundled-skills-coverage.test.ts`): `## Tool contract (read first)` · `## When to Use` · `## Relation to other skills` · procedure section · `## Pitfalls` · `## Anti-patterns`. See [CAPABILITIES.md](../CAPABILITIES.md).
+
+**Operator docs:** [use-cases-playbook.md](use-cases-playbook.md) maps 25 scenarios to skills/tools; [README.md](../README.md#personal-helper-playbook) summarizes the quick index.
 
 ## Open-web research (Hermes-style)
 

@@ -50,6 +50,15 @@ function inferToolFromArgumentsOnly(
   );
 }
 
+function looksLikeEmailToolStep(o: Record<string, unknown>): boolean {
+  const args = normalizeCronStepArguments(o);
+  const action = String(args.action ?? o.action ?? "").trim().toLowerCase();
+  if (action === "self_test" || action === "send") return true;
+  const to = String(args.to ?? "").trim();
+  const subject = String(args.subject ?? "").trim();
+  return !!(to && subject);
+}
+
 function coerceDeliveryMisnamedStep(
   o: Record<string, unknown>,
   mistaken: string,
@@ -65,9 +74,13 @@ function coerceDeliveryMisnamedStep(
     const command = `printf '%s\\n' ${shellSingleQuote(text)}`;
     return { tool: "run_shell", arguments: { command } };
   }
+  const emailHint =
+    mistaken === "email"
+      ? ' For sending mail inside a step, use {"tool":"email","arguments":{"to":"…","subject":"…","text":"…"}} — `email` is both a delivery mode and a step tool.'
+      : "";
   throw stepError(
     stepNumber,
-    `"${mistaken}" is a job delivery mode, not a tool. Set top-level "delivery" to "${mistaken}" and set this step's "tool" to a builtin (e.g. web_search or run_shell).`
+    `"${mistaken}" is a job delivery mode, not a step tool. Set top-level "delivery" to "${mistaken}" and set this step's "tool" to a builtin (e.g. web_search or run_shell).${emailHint}`
   );
 }
 
@@ -102,6 +115,9 @@ function coerceOneStep(step: unknown, stepNumber: number): CanonicalCronStep {
   const name = sanitizeCronToolToken(o.tool ?? o.action ?? "");
 
   if (name && JOB_DELIVERY_MODES.has(name)) {
+    if (name === "email" && looksLikeEmailToolStep(o)) {
+      return { tool: "email", arguments: normalizeCronStepArguments(o) };
+    }
     return coerceDeliveryMisnamedStep(o, name, stepNumber);
   }
 

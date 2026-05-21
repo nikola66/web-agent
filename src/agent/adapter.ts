@@ -45,6 +45,7 @@ import runtimeExecutionGuidanceSource from "../../dist/agent-runtime/execution-g
 import runtimeUtilsSource from "../../dist/agent-runtime/utils.js?raw";
 import runtimeBootstrapSource from "../../dist/agent-runtime/bootstrap.js?raw";
 import runtimeTurnSource from "../../dist/agent-runtime/turn.js?raw";
+import runtimeSystemPromptCacheSource from "../../dist/agent-runtime/system-prompt-cache.js?raw";
 import runtimeBackgroundReviewSource from "../../dist/agent-runtime/background-review.js?raw";
 import runtimeSkillProvenanceSource from "../../dist/agent-runtime/skill-provenance.js?raw";
 import runtimeCuratorSource from "../../dist/agent-runtime/curator.js?raw";
@@ -55,6 +56,7 @@ import runtimePlanningSlashSource from "../../dist/agent-runtime/planning-slash.
 import runtimeClarifySlashSource from "../../dist/agent-runtime/clarify-slash.js?raw";
 import runtimeFindSkillsSlashSource from "../../dist/agent-runtime/find-skills-slash.js?raw";
 import runtimeWikiSlashSource from "../../dist/agent-runtime/wiki-slash.js?raw";
+import runtimeSlashRoutingSource from "../../dist/agent-runtime/slash-routing.js?raw";
 import runtimeTerminalFormatSource from "../../dist/agent-runtime/terminal-format.js?raw";
 import runtimeToolResultPreviewSource from "../../dist/agent-runtime/tool-result-preview.js?raw";
 import runtimeTranscriptSource from "../../dist/agent-runtime/transcript.js?raw";
@@ -238,6 +240,9 @@ function nodeboxSpawnArgvNeedsWorkspaceCwd(argv: string[]): boolean {
 }
 
 const DEBUG_LOG_CHUNK_MAX = 2_000;
+const AGENT_OUTPUT_BUFFER_MAX = 512 * 1024;
+const SNAPSHOT_WARN_THROTTLE_MS = 5 * 60_000;
+const snapshotWarnLastAt = new Map<string, number>();
 const VITE_LAUNCH_MODE = normalizeLaunchMode(String(import.meta.env.VITE_WEBAGENT_LAUNCH_MODE || ""));
 const VITE_DEBUG_LOG_ENABLED = String(import.meta.env.VITE_WEBAGENT_DEBUG_LOG || "").trim() === "1";
 const VITE_DEBUG_LOG_DIR = String(import.meta.env.VITE_WEBAGENT_DEBUG_LOG_DIR || "debug-logs").trim();
@@ -363,6 +368,33 @@ function trimChunk(text: string): string {
   return `${text.slice(0, DEBUG_LOG_CHUNK_MAX)}…[truncated:${text.length}]`;
 }
 
+function maybeEmitThrottledSnapshotWarn(profileId: string, onOutput: OutputHandler): void {
+  const now = Date.now();
+  const last = snapshotWarnLastAt.get(profileId) ?? 0;
+  if (now - last < SNAPSHOT_WARN_THROTTLE_MS) return;
+  snapshotWarnLastAt.set(profileId, now);
+  onOutput("\x1b[33m▸ Workspace snapshot save failed — changes may not persist after reload.\x1b[0m\n");
+}
+
+function capAgentOutputBuffer(
+  buffer: string,
+  onFlush: (chunk: string) => void
+): string {
+  if (buffer.length <= AGENT_OUTPUT_BUFFER_MAX) return buffer;
+  const lastMarker = Math.max(buffer.lastIndexOf("<<<WEBAGENT_"), buffer.lastIndexOf(PROXY_REQ_PREFIX));
+  if (lastMarker > 0) {
+    const safe = buffer.slice(0, lastMarker);
+    if (safe.length > 0) {
+      const rendered = stripRenderedPrompt(safe);
+      if (rendered) onFlush(rendered);
+    }
+    return buffer.slice(lastMarker);
+  }
+  const rendered = stripRenderedPrompt(buffer);
+  if (rendered) onFlush(rendered);
+  return "";
+}
+
 function formatBootTimeoutMessage(phase: "boot" | "reboot"): string {
   const offline =
     typeof navigator !== "undefined" && navigator.onLine === false;
@@ -437,6 +469,7 @@ async function writeRuntimeSources(profileId: string): Promise<void> {
   await emulator.fs.writeFile(`${webagentDir}/utils.js`, runtimeUtilsSource);
   await emulator.fs.writeFile(`${webagentDir}/bootstrap.js`, runtimeBootstrapSource);
   await emulator.fs.writeFile(`${webagentDir}/turn.js`, runtimeTurnSource);
+  await emulator.fs.writeFile(`${webagentDir}/system-prompt-cache.js`, runtimeSystemPromptCacheSource);
   await emulator.fs.writeFile(`${webagentDir}/background-review.js`, runtimeBackgroundReviewSource);
   await emulator.fs.writeFile(`${webagentDir}/skill-provenance.js`, runtimeSkillProvenanceSource);
   await emulator.fs.writeFile(`${webagentDir}/curator.js`, runtimeCuratorSource);
@@ -447,6 +480,7 @@ async function writeRuntimeSources(profileId: string): Promise<void> {
   await emulator.fs.writeFile(`${webagentDir}/clarify-slash.js`, runtimeClarifySlashSource);
   await emulator.fs.writeFile(`${webagentDir}/find-skills-slash.js`, runtimeFindSkillsSlashSource);
   await emulator.fs.writeFile(`${webagentDir}/wiki-slash.js`, runtimeWikiSlashSource);
+  await emulator.fs.writeFile(`${webagentDir}/slash-routing.js`, runtimeSlashRoutingSource);
   await emulator.fs.writeFile(`${webagentDir}/terminal-format.js`, runtimeTerminalFormatSource);
   await emulator.fs.writeFile(`${webagentDir}/tool-result-preview.js`, runtimeToolResultPreviewSource);
   await emulator.fs.writeFile(`${webagentDir}/transcript.js`, runtimeTranscriptSource);
@@ -834,7 +868,7 @@ export async function startWebAgent(options: AgentStartOptions): Promise<void> {
       try {
         await saveWorkspaceSnapshot(profileIdForSave);
       } catch {
-        /* best-effort */
+        maybeEmitThrottledSnapshotWarn(profile.id, onOutput);
       }
     } while (snapshotSaveQueued);
     snapshotSaveInFlight = false;
@@ -916,6 +950,13 @@ export async function startWebAgent(options: AgentStartOptions): Promise<void> {
 
     // --- IPC marker parsing ---
     agentOutputBuffer += data;
+    agentOutputBuffer = capAgentOutputBuffer(agentOutputBuffer, (chunk) => {
+      onOutput(chunk);
+      appendAdapterDebugLog(profile.id, "rendered_output_chunk", {
+        bytes: chunk.length,
+        chunk: trimChunk(chunk),
+      });
+    });
     // Strip Nodebox welcome banner whenever it fully accumulates in the buffer.
     if (agentOutputBuffer.includes("Thanks for using Nodebox!")) {
       agentOutputBuffer = agentOutputBuffer.replace(NODEBOX_BANNER_RE, "").replace(NODEBOX_BANNER_RE, "");
@@ -1451,13 +1492,14 @@ export async function stopWebAgent(profileId: string | null): Promise<void> {
   lastResizes.delete(profileId);
 }
 
-export async function writeToWebAgent(profileId: string, data: string): Promise<void> {
+export async function writeToWebAgent(profileId: string, data: string): Promise<boolean> {
   const agentProcess = agentProcesses.get(profileId);
-  if (!agentProcess) return;
+  if (!agentProcess) return false;
   try {
     await agentProcess.write(data);
+    return true;
   } catch {
-    /* ignore write errors */
+    return false;
   }
 }
 

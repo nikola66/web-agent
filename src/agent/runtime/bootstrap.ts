@@ -24,7 +24,6 @@ import {
   buildJobEventsPrompt,
   cleanupSnapshotsNotReferenced,
   drainPendingJobEvents,
-  listSkills,
   sanitizeMessagesMissingSnapshotRefs,
 } from "./memory/index.js";
 import {
@@ -64,10 +63,7 @@ import { notifyMigrationsApplied, runPendingMigrations } from "./migrations/inde
 import { buildToolRowsFromCatalog } from "./slash-command-views.js";
 import { formatHelpForSurface, runSkillsSlashCommand } from "./channel-outbound.js";
 import { SLASH_COMMANDS } from "./commands.js";
-import { buildPlanModeUserPrompt } from "./planning-slash.js";
-import { buildClarifyModeUserPrompt } from "./clarify-slash.js";
-import { resolveFindSkillsUserMessage } from "./find-skills-slash.js";
-import { rewriteWikiSlashUserMessage } from "./wiki-slash.js";
+import { resolveSlashUserMessage } from "./slash-routing.js";
 import {
   compactHistory,
   formatCompactionNotice,
@@ -92,14 +88,6 @@ const AUTO_JOB_EVENT_COOLDOWN_MS = Math.max(
   1000,
   Number(typeof process !== "undefined" ? process.env?.WEBAGENT_AUTO_JOB_EVENT_COOLDOWN_MS : undefined) || 5000
 );
-
-function commandSlug(value) {
-  return String(value || "")
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "");
-}
 
 const STARTUP_AWAITING_MARKER = "<<<WEBAGENT_AWAITING_RESPONSE>>>";
 
@@ -445,37 +433,6 @@ export async function main() {
     return true;
   };
 
-  const skillInvocationPrompt = async (input) => {
-    if (!input.startsWith("/") || input.startsWith("//")) return null;
-    const token = input.split(/\s+/)[0].slice(1);
-    const reserved = new Set([
-      "help",
-      "clear",
-      "compact",
-      "plan",
-      "clarify",
-      "find_skills",
-      "checkpoint",
-      "rollback",
-      "skills",
-      "stop",
-      "exit",
-      "wiki_setup",
-      "wiki_sync",
-      "wiki_search",
-    ]);
-    if (!token || reserved.has(token)) return null;
-    const skills = await listSkills();
-    const skill = skills.find((item) => item.slug === token || commandSlug(item.name) === token);
-    if (!skill) return null;
-    const task = input.slice(token.length + 1).trim();
-    return [
-      `The user invoked the installed skill "${skill.name}" (slug: ${skill.slug}).`,
-      `First call skill_view with {"name":"${skill.slug}"} to load the full SKILL.md, then use it for this task.`,
-      task ? `Task: ${task}` : "Task: Use this skill for the next appropriate workflow and ask one concise clarifying question only if required.",
-    ].join("\n");
-  };
-
   while (true) {
     const line = await rl.question(pink("❯ ") + R);
     let input = (line || "").trim();
@@ -563,21 +520,9 @@ export async function main() {
     }
 
     const displayInput = input;
-    const wikiFromSlash = rewriteWikiSlashUserMessage(input);
-    const findSkillsRewrite = resolveFindSkillsUserMessage(input);
-    if (wikiFromSlash !== null) {
-      input = wikiFromSlash;
-    } else if (findSkillsRewrite !== null) {
-      input = findSkillsRewrite;
-    } else if (input === "/plan" || input.startsWith("/plan ")) {
-      const goal = input === "/plan" ? "" : input.slice("/plan ".length).trim();
-      input = buildPlanModeUserPrompt(goal);
-    } else if (input === "/clarify" || input.startsWith("/clarify ")) {
-      const topic = input === "/clarify" ? "" : input.slice("/clarify ".length).trim();
-      input = buildClarifyModeUserPrompt(topic);
-    } else {
-      const skillPrompt = await skillInvocationPrompt(input);
-      if (skillPrompt) input = skillPrompt;
+    const rewritten = await resolveSlashUserMessage(input);
+    if (rewritten !== null) {
+      input = rewritten;
     }
 
     userDisplayName = cleanSetupName(process.env.WEBAGENT_USER_NAME, userDisplayName || "You");

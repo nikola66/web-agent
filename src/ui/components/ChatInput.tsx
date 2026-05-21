@@ -309,7 +309,7 @@ export function ChatInput() {
     const previousStatus = previousRuntimeStatusRef.current;
     const bootJustFinished =
       runtimeStatus === "running" &&
-      (previousStatus === "booting" || previousStatus === "installing");
+      previousStatus === "booting";
     if (bootJustFinished && activeProfileId) {
       void refreshFileIndex(activeProfileId, true);
       requestAnimationFrame(() => inputRef.current?.focus());
@@ -437,7 +437,12 @@ export function ChatInput() {
       const uploadNote = `User uploaded files: ${readyAttachmentPaths.join(", ")}`;
       message = message ? `${message}\n\n${uploadNote}` : uploadNote;
     }
-    await submitUserInput(message);
+    try {
+      await submitUserInput(message);
+    } catch (err) {
+      setVoiceError(err instanceof Error ? err.message : String(err));
+      return;
+    }
     recordSubmittedLine(message, pid);
     historyBrowseIndexRef.current = null;
     setValue("");

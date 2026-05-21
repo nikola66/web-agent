@@ -22,6 +22,7 @@ import {
   normalizeToolArguments,
   parseToolArguments,
   applyWorkspaceBrowsePathArgs,
+  applyWikiPathArgs,
   resolveInputSchema,
   validateRequiredArguments,
 } from "./argument-normalization.js";
@@ -89,7 +90,6 @@ const PATH_ARG_ALIAS_TOOLS = new Set([
   "make_dir",
   "edit_file",
   "multi_edit",
-  "file_stat",
   "list_dir",
   "tree",
   "grep",
@@ -400,6 +400,7 @@ export function prepareIncomingToolArguments(
   } else {
     argsForNormalize = applyPathArgAliases(name, { ...argsForNormalize });
     argsForNormalize = applyWorkspaceBrowsePathArgs(name, argsForNormalize);
+    argsForNormalize = applyWikiPathArgs(name, argsForNormalize);
     if (name === "write_file") {
       argsForNormalize = applyWriteFileBodyAliases(argsForNormalize);
     }
@@ -551,7 +552,13 @@ async function gatePreparedToolCall(
       ? (baseRaw as { emoji?: string })
       : undefined;
   const summary = summarizeToolApproval(prepared.name, prepared.args, toolEntry?.approvalSummary);
-  const risky = Boolean(toolEntry?.requiresConfirmation);
+  const action =
+    prepared.args && typeof prepared.args === "object" && !Array.isArray(prepared.args)
+      ? String((prepared.args as Record<string, unknown>).action || "").trim()
+      : "";
+  const risky =
+    Boolean(toolEntry?.requiresConfirmation) ||
+    (prepared.name === "skill_manage" && action === "delete");
   return gateToolExecution({
     ctx: prepared.callCtx,
     toolLabel: prepared.name,

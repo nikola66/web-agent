@@ -975,25 +975,6 @@ export async function sessionMemoryRecallTool(args: ToolArgs = {}, _ctx) {
   return { ok: true, entries };
 }
 
-export async function skillSaveTool(args: ToolArgs = {}, ctx) {
-  const memory = memoryServices(ctx);
-  const name = typeof args?.name === "string" ? args.name.trim() : "";
-  if (!name) throw new Error("`name` is required for skill_save.");
-  const content = typeof args?.content === "string" ? args.content.trim() : "";
-  if (!content) throw new Error("`content` is required for skill_save.");
-  const result = await memory.manageSkill({
-    action: "create",
-    name,
-    description: typeof args?.description === "string" ? args.description.trim() : name,
-    version: typeof args?.version === "string" ? args.version.trim() : undefined,
-    category: typeof args?.category === "string" ? args.category.trim() : undefined,
-    tags: Array.isArray(args?.tags) ? args.tags.map(String) : [],
-    content,
-  });
-  await logDebugEvent("skill_save", { name, slug: result.slug });
-  return result;
-}
-
 export async function skillBulkSaveTool(args: ToolArgs = {}, ctx) {
   const memory = memoryServices(ctx);
   const normalized = expandSkillBulkSaveArgs(args);
@@ -1048,24 +1029,6 @@ export async function skillManageTool(args: ToolArgs = {}, ctx) {
     ok: result?.ok ?? null,
     blocked: result?.blocked ?? false,
   });
-  return result;
-}
-
-export async function skillRecallTool(args: ToolArgs = {}, ctx) {
-  const memory = memoryServices(ctx);
-  const name = typeof args?.name === "string" ? args.name.trim() : "";
-  if (!name) throw new Error("`name` is required for skill_recall.");
-  const content = await memory.loadSkill(name);
-  await logDebugEvent("skill_recall", { name });
-  return { ok: true, content };
-}
-
-export async function skillDeleteTool(args: ToolArgs = {}, ctx) {
-  const memory = memoryServices(ctx);
-  const name = typeof args?.name === "string" ? args.name.trim() : "";
-  if (!name) throw new Error("`name` is required for skill_delete.");
-  const result = await memory.manageSkill({ action: "delete", name });
-  await logDebugEvent("skill_delete", { name });
   return result;
 }
 

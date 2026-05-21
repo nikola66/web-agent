@@ -26,7 +26,7 @@
 
 Web Agent وكيل ذكاء اصطناعي مفتوح المصدر يعمل في المتصفح فوق WebContainers. There is nothing to install to use it: no Docker, no VPS, no VM, no Mac mini, no Hostinger box, no local Python stack. Open the app, launch a profile, and start working.
 
-It is designed to feel simple for end users and capable for power users: isolated profiles, browser-local persistence, tools, skills, sessions, reflections, learnings, cron jobs, **planning mode** (`/plan`), a **PARA + Obsidian-style knowledge vault** (`wiki_*` tools and `/wiki_*` slash commands), and a self-improving runtime that stays on the user’s machine.
+It is designed to feel simple for end users and capable for power users: isolated profiles, browser-local persistence, **38 built-in tools**, **16 bundled skills**, sessions, reflections, learnings, cron jobs, **planning mode** (`/plan`), a **PARA + Obsidian-style knowledge vault** (`wiki_*` tools and `/wiki_*` slash commands), and a self-improving runtime that stays on the user’s machine. Start with the **[Personal Helper Playbook](docs/ar/use-cases-playbook.md)** for copy-paste scenarios.
 
 ## المحتويات
 
@@ -271,10 +271,10 @@ Web Agent ships with a broad native tool belt. The built-ins cover workspace man
 
 | Group | Includes | Best for |
 | --- | --- | --- |
-| `📁 Files & Workspace` | `read_file`, `write_file`, `edit_file`, `multi_edit`, `move_file`, `delete_file`, `tree`, `list_dir`, `find_files`, `grep`, `file_diff`, `file_stat`, `make_dir` | Building, editing, inspecting, and organizing project files |
+| `📁 Files & Workspace` | `read_file`, `write_file`, `edit_file`, `multi_edit`, `move_file`, `delete_file`, `tree`, `list_dir`, `find_files`, `grep`, `file_diff`, `make_dir` | Building, editing, inspecting, and organizing project files |
 | `🧠 Memory & Recall` | `memory_save`, `memory_recall`, `memory_search`, `session_memory_append`, `session_memory_list`, `session_search` | Long-lived facts, rolling notes, and recovering prior context |
 | `📓 Knowledge wiki` | `wiki_setup`, `wiki_sync`, `wiki_search` | PARA + Obsidian-friendly vault under the workspace; project facts/session/learnings into markdown; full-text vault search |
-| `📚 Skills` | `skill_list`, `skill_view`, `skill_save`, `skill_manage`, `skill_bulk_save`, `skill_delete`, `skill_recall` | Discovering, reading, creating, importing, and maintaining skills |
+| `📚 Skills` | `skill_list`, `skill_view`, `skill_manage`, `skill_manage`, `skill_bulk_save`, `skill_manage`, `skill_view` | Discovering, reading, creating, importing, and maintaining skills |
 | `⏱️ Automation` | `cron_register`, `cron_list`, `todo_write` | Recurring jobs, heartbeat-driven workflows, and checklists |
 | `🌐 Remote & Multimodal` | `web_search`, `web_fetch`, `vision_analyze`, `youtube_transcribe`, `email` | Research, fetching live content, image analysis, transcripts, and outbound delivery |
 | `🖥️ System & Output` | `run_shell`, `system_info`, `artifact_present`, `apply_patch` | Executing commands, checking environment state, presenting artifacts, and surgical patching |
@@ -292,7 +292,7 @@ Web Agent ships with a broad native tool belt. The built-ins cover workspace man
 | `🛠️ edit_file` | Replace a matching snippet or fully replace file contents. |
 | `✉️ email` | Send outbound email through Resend-configured delivery. |
 | `🧾 file_diff` | Show a line-oriented diff between two UTF-8 workspace files. |
-| `📌 file_stat` | Return filesystem metadata for a workspace path. |
+| `📌 list_dir` | Return filesystem metadata for a workspace path. |
 | `🔎 find_files` | Find files by glob-like name patterns. |
 | `🔍 grep` | Search file contents by text or regex. |
 | `📁 list_dir` | List workspace files and directories with optional recursion and filtering. |
@@ -308,11 +308,11 @@ Web Agent ships with a broad native tool belt. The built-ins cover workspace man
 | `🗂️ session_memory_list` | Read the newest entries from rolling session memory. |
 | `📇 session_search` | Search archived workspace conversations by keywords. |
 | `📚 skill_bulk_save` | Batch import or save multiple skills in one operation. |
-| `🗑️ skill_delete` | Delete a saved skill from the workspace library. |
+| `🗑️ skill_manage` | Delete a saved skill from the workspace library. |
 | `📋 skill_list` | Search and list saved skills. |
 | `🧠 skill_manage` | Create, patch, edit, delete, import, or manage reusable skills. |
-| `🔍 skill_recall` | Load a raw `SKILL.md` by name for backward compatibility. |
-| `📚 skill_save` | Save a reusable `SKILL.md` procedure immediately. |
+| `🔍 skill_view` | Load a raw `SKILL.md` by name for backward compatibility. |
+| `📚 skill_manage` | Save a reusable `SKILL.md` procedure immediately. |
 | `📖 skill_view` | Load a skill's full `SKILL.md` or an allowed support file. |
 | `📟 system_info` | Return a safe system snapshot including time, timezone, uptime, and memory. |
 | `✅ todo_write` | Create or update checklist-style todos. |
@@ -460,8 +460,8 @@ Default vault root: `.webagent/knowledge-vault/`. Legacy `knowledge-vault/` at w
 | ذاكرة | تدوين سياق الجلسة | `/memory-layers` | `session_memory_append`, `session_memory_list` |
 | ذاكرة | mirroring إلى vault بأسلوب Obsidian | `/memory-layers` | `wiki_setup`, `wiki_sync`, `wiki_search` |
 | ذاكرة | البحث في محادثة قديمة | `/memory-layers` | `session_search` |
-| تخطيط | خطة spec-first (بدون تنفيذ) | `/plan`, `/task-planning` | `read_file`, `grep`, `write_file`, `artifact_present` |
-| تخطيط | تقسيم طلب متعدد إلى todos | `/task-planning` | `todo_write`, `skill_view` |
+| تخطيط | خطة spec-first (بدون تنفيذ) | `/plan` | `read_file`, `grep`, `write_file`, `artifact_present` |
+| تخطيط | تقسيم طلب متعدد إلى todos | `/task-execution` | `todo_write`, `skill_view` |
 | تخطيط | تنفيذ خطة متعددة الخطوات | `/task-execution` | `todo_write`, `read_file`, `write_file`, `artifact_present` |
 | أتمتة | digest يومي مع تبويب مفتوح | `/heartbeat-cron` | `cron_register`, `cron_list`, `web_search`, `web_fetch` |
 | مساحة عمل | تهيئة مجلد مشروع جانبي | `/project-scaffold` | `make_dir`, `write_file`, `tree` |
@@ -474,8 +474,8 @@ Default vault root: `.webagent/knowledge-vault/`. Legacy `knowledge-vault/` at w
 | تسليم | إرسال deliverable بالبريد | `/artifact-delivery` | `write_file`, `email`, `artifact_present` |
 | تسليم | مخطط انسيابي للخطة أو التقرير | `/chart` | `artifact_present` |
 | تجربة | توضيح طلب غامض | `/clarify` | *(none)* |
-| أمان | checkpoint قبل حذف جماعي | `/workspace-safety` | `list_dir`, `file_stat`, `delete_file` |
-| أمان | مفتاح API ملصوق / hygiene | `/credential-hygiene` | *(redaction; no secret persistence)* |
+| أمان | checkpoint قبل حذف جماعي | `/workspace-safety` | `list_dir`, `tree`, `delete_file` |
+| أمان | مفتاح API ملصوق / hygiene | `/memory-layers` | *(redaction; no secret persistence)* |
 | Meta | تحسين Web Agent نفسه | `/web-agent-skill` | `read_file`, `grep`, `skill_manage`, `memory_save` |
 
 ## البدء السريع

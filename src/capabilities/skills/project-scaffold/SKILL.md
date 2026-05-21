@@ -28,6 +28,10 @@ triggers: [new app, create project, demo, starter, spike, sandbox, test harness,
 - User wants something **runnable or verifiable** in isolation (smoke test, start command).
 - **Risky or high-value** new trees: pair with **`workspace-safety`**—checkpoint or export before big writes.
 
+## Relation to other skills
+
+- Tool picker: **`browser-runtime-map`**. Safety: **`workspace-safety`**. Diagrams: **`chart`**.
+
 ## Procedure
 
 **Gate — before** the first `write_file`, `apply_patch` (**Add File**), or equivalent for this effort:
@@ -57,3 +61,9 @@ Then:
 ## Show the structure
 
 When the new tree has ≥3 files or non-trivial layering, embed a Mermaid `flowchart` of the folder shape via **`chart`** in the project README — new readers grasp the layout instantly.
+
+## Anti-patterns
+
+- Writing project files at workspace root instead of `projects/` or `work/`.
+- Skipping verification and claiming the scaffold works.
+- Forcing scaffold workflow on single-file edits to an existing tree.

@@ -15,9 +15,7 @@ import {
 } from "../dist/agent-runtime/memory/index.js";
 import {
   skillBulkSaveTool,
-  skillDeleteTool,
   skillManageTool,
-  skillSaveTool,
   skillViewTool,
 } from "../dist/agent-runtime/tools/remote-tools.js";
 
@@ -233,23 +231,14 @@ test("skillBulkSaveTool invokes bulk save path", async (t) => {
   assert.match(await loadSkill(name), /Tool bulk/);
 });
 
-test("skill save and delete tools share the skill_manage write paths", async (t) => {
+test("skill_manage create and delete share the skill write paths", async (t) => {
   const suffix = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
-  const saveName = `Tool Save ${suffix}`;
   const manageName = `Tool Manage ${suffix}`;
 
   t.after(async () => {
-    await deleteSkill(saveName).catch(() => {});
     await deleteSkill(manageName).catch(() => {});
   });
 
-  const fromSave = await skillSaveTool({
-    name: saveName,
-    description: "Created through skill_save",
-    category: "qa",
-    tags: ["tool", "save"],
-    content: "## Procedure\n\n1. Save through the compatibility tool.",
-  });
   const fromManage = await skillManageTool({
     action: "create",
     name: manageName,
@@ -259,14 +248,8 @@ test("skill save and delete tools share the skill_manage write paths", async (t)
     content: "## Procedure\n\n1. Save through the management tool.",
   });
 
-  assert.equal(fromSave.ok, true);
   assert.equal(fromManage.ok, true);
-  assert.equal(fromSave.category, fromManage.category);
-  assert.match(fromSave.path, /\.webagent\/skills\/qa\/tool-save-/);
   assert.match(fromManage.path, /\.webagent\/skills\/qa\/tool-manage-/);
-
-  await skillDeleteTool({ name: fromSave.slug });
-  await assert.rejects(loadSkill(fromSave.slug), /not found/);
 
   await skillManageTool({ action: "delete", name: fromManage.slug });
   await assert.rejects(loadSkill(fromManage.slug), /not found/);
@@ -274,7 +257,8 @@ test("skill save and delete tools share the skill_manage write paths", async (t)
 
 test("skill_view reads allowed support files and rejects unsafe paths", async (t) => {
   const name = `Tool View ${Date.now()}-${Math.random().toString(36).slice(2)}`;
-  const saved = await skillSaveTool({
+  const saved = await skillManageTool({
+    action: "create",
     name,
     description: "Exercise support file viewing",
     category: "qa",

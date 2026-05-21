@@ -58,7 +58,6 @@ test("each builtin tool has a documented execution test path", () => {
     "edit_file",
     "email",
     "file_diff",
-    "file_stat",
     "find_files",
     "grep",
     "list_dir",
@@ -74,11 +73,8 @@ test("each builtin tool has a documented execution test path", () => {
     "session_memory_list",
     "session_search",
     "skill_bulk_save",
-    "skill_delete",
     "skill_list",
     "skill_manage",
-    "skill_recall",
-    "skill_save",
     "skill_view",
     "system_info",
     "todo_write",
@@ -583,6 +579,72 @@ test("cron_register prefers nested arguments over duplicate top-level step args"
       })?.jobs || [];
     const job = jobs.find((entry) => entry.id === id);
     assert.equal(job?.steps?.[0]?.arguments?.command, "node -e \"console.log('right')\"");
+  });
+});
+
+test("cron_register accepts email as a step tool when send args are present", async () => {
+  await withIsolatedWorkspace(async () => {
+    const catalog = await loadToolCatalog();
+    const id = `coverage-cron-email-step-${Date.now()}`;
+    const registered = await runOne(
+      "cron_register",
+      {
+        id,
+        everyMinutes: 1440,
+        delivery: "terminal",
+        steps: [
+          { tool: "web_search", arguments: { query: "web agent github stars", page: 0 } },
+          {
+            tool: "email",
+            to: "lead@example.com",
+            cc: "hello@aratech.ae",
+            subject: "Web Agent — worth a star?",
+            text: "Personalized body here.",
+          },
+          {
+            tool: "write_file",
+            arguments: {
+              path: "work/outreach/cron-log.md",
+              content: "Logged outreach run.",
+            },
+          },
+        ],
+      },
+      catalog
+    );
+    assert.ok(!registered?.error, registered?.error);
+    const listed = await runOne("cron_list", {}, catalog);
+    const jobs =
+      (listed?.result as {
+        jobs?: Array<{
+          id?: string;
+          steps?: Array<{ tool?: string; arguments?: Record<string, unknown> }>;
+        }>;
+      })?.jobs || [];
+    const job = jobs.find((entry) => entry.id === id);
+    assert.equal(job?.steps?.[1]?.tool, "email");
+    assert.equal(job?.steps?.[1]?.arguments?.to, "lead@example.com");
+    assert.equal(job?.steps?.[1]?.arguments?.cc, "hello@aratech.ae");
+  });
+});
+
+test("cron_register still rejects bare email delivery name without send args", async () => {
+  await withIsolatedWorkspace(async () => {
+    const catalog = await loadToolCatalog();
+    const id = `coverage-cron-email-misname-${Date.now()}`;
+    const registered = await runOne(
+      "cron_register",
+      {
+        id,
+        everyMinutes: 60,
+        delivery: "terminal",
+        steps: [{ tool: "email" }],
+      },
+      catalog
+    );
+    assert.ok(registered?.error);
+    assert.match(String(registered?.error), /delivery mode/);
+    assert.match(String(registered?.error), /step tool/);
   });
 });
 

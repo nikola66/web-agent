@@ -25,7 +25,6 @@ const FilesPopup = lazyWithRetry(() => import("./FilesPopup").then((m) => ({ def
 const STATUS_COLORS: Record<string, string> = {
   idle: "#666666",
   booting: "#fbbf24",
-  installing: "#fbbf24",
   running: "#34d399",
   error: "#f87171",
   stopped: "#666666",

@@ -4,7 +4,7 @@ import { webSearchTool } from "../remote-tools.js";
 export default defineTool({
   name: "web_search",
   run: webSearchTool,
-  emoji: "🔍",
+  emoji: "🌍",
   description:
     "Search the web and return ranked results. Query may include operators: site:example.com, \"exact phrase\", -term, OR. Use location (e.g. ae, sa) and language (e.g. en, ar) when relevant. Follow with web_fetch on promising URLs.",
   inputSchema: {

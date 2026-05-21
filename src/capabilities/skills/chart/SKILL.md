@@ -34,8 +34,7 @@ Humans absorb structure faster from a diagram than from prose. Even a 4-node flo
 
 ## Relation to other skills (canonical handoffs)
 
-- Called by **`task-planning`** to render the proposed plan as a flowchart before execution.
-- Called by **`task-execution`** to embed a step-status diagram inside the final run report.
+- Called by **`task-execution`** to render the proposed plan and embed step-status diagrams in run reports.
 - Called by **`systematic-debugging`** to draw the fault tree / hypothesis lattice.
 - Called by **`project-scaffold`** to show the new folder tree as a `graph` or file-tree diagram.
 - Called by **`memory-layers`** wiki flows for PARA / topic-map vault pages.
@@ -104,7 +103,7 @@ For multi-step run reports (see **`task-execution`**), put the chart **above** t
 
 ## Quick recipes
 
-**Plan as flowchart (pair with `task-planning`):**
+**Plan as flowchart (pair with `task-execution` Phase A):**
 
 ````markdown
 ```mermaid

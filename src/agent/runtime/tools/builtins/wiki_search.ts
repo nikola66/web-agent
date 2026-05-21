@@ -4,7 +4,7 @@ import { wikiSearchTool } from "../wiki-tools.js";
 export default defineTool({
   name: "wiki_search",
   run: wikiSearchTool,
-  emoji: "🔎",
+  emoji: "🔖",
   description:
     "Full-text search markdown files under the wiki vault root (default .webagent/knowledge-vault). Returns ranked matches with snippets when memory_search is insufficient.",
   inputSchema: {

@@ -401,8 +401,9 @@ test("runTools leaves read-only skill tools ungated and gates skill_bulk_save ba
   const saveResults = await runTools(
     [
       {
-        name: "skill_save",
+        name: "skill_manage",
         arguments: {
+          action: "create",
           name: savedName,
           description: "Created without approval gate",
           content: "## Procedure\n\n1. Auto-saved.",
@@ -411,16 +412,17 @@ test("runTools leaves read-only skill tools ungated and gates skill_bulk_save ba
     ],
     ctx,
     {
-      skill_save: {
+      skill_manage: {
         requiresConfirmation: false,
         inputSchema: {
           type: "object",
           properties: {
+            action: { type: "string" },
             name: { type: "string" },
             description: { type: "string" },
             content: { type: "string" },
           },
-          required: ["name", "content"],
+          required: ["action", "name", "content"],
           additionalProperties: false,
         },
       },
@@ -428,8 +430,8 @@ test("runTools leaves read-only skill tools ungated and gates skill_bulk_save ba
   );
 
   assert.equal(askCalls.length, 0);
-  assert.equal(saveResults[0].tool, "skill_save");
-  assert.ok(saveResults[0].result?.ok !== false && !saveResults[0].error, "skill_save should succeed");
+  assert.equal(saveResults[0].tool, "skill_manage");
+  assert.ok(saveResults[0].result?.ok !== false && !saveResults[0].error, "skill_manage create should succeed");
   const loaded = await loadSkill(savedName);
   assert.ok(String(loaded).includes("Auto-saved"));
 

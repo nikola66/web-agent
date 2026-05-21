@@ -1,69 +1,71 @@
 ---
 name: Memory Layers
-description: Use when the user says remember this, save a preference, or you must pick memory_save vs session notes vs skill_save vs wiki_* tools.
-version: 1.0.0
+description: Use when the user says remember this, save a preference, paste API keys, or you must pick memory_save vs session notes vs skill_manage vs wiki_* tools.
+version: 1.1.0
 category: bundled
-tags: [memory, session, skills, facts, context, remember, preference]
-triggers: [remember this, save preference, memory_save, session note, store fact, recall later, what do we remember, persistent note, knowledge vault, wiki sync, sync facts to wiki, wiki search, skill_save, wiki_setup]
+tags: [memory, session, skills, facts, context, remember, preference, security, credentials, secrets]
+triggers: [remember this, save preference, session note, store fact, recall later, what do we remember, persistent note, knowledge vault, wiki sync, sync facts to wiki, wiki search, api key, secret, .env, paste key, sk-, bearer, rotate key, commit secrets, redact, password in chat]
 ---
 
 ## Tool contract (read first)
 
-Canonical picker for **what to persist** and **which memory tool**. Maintainer evolution: **`web-agent-skill`**.
+Canonical picker for **what to persist**, **which memory tool**, and **secret handling**. Maintainer evolution: **`web-agent-skill`**.
 
 | Layer | Tools | Use for |
 |-------|--------|---------|
-| **Facts** | `memory_save`, `memory_recall`, `memory_search` | Stable preferences (timezone, stack, env constraints). |
+| **Facts** | `memory_save`, `memory_recall`, `memory_search` | Stable preferences (timezone, stack, env constraints). Never API keys or tokens. |
 | **Session** | `session_memory_append`, `session_memory_list`, `session_search` | Rolling notes, temporary decisions, artifact pointers this session. |
-| **Skills** | `skill_view`, `skill_list`, `skill_save`, `skill_manage`, `skill_bulk_save`, `skill_delete`, `skill_recall` | Repeatable procedures with a clear trigger. |
+| **Skills** | `skill_view`, `skill_list`, `skill_manage`, `skill_bulk_save` | Repeatable procedures with a clear trigger. |
 | **Wiki vault** | `wiki_setup`, `wiki_sync`, `wiki_search` | PARA markdown mirror (default `.webagent/knowledge-vault/`). Also `/wiki_setup`, `/wiki_sync`, `/wiki_search`. |
 
-**Non-negotiable:** One-off facts → `memory_save`. Debugging trail → `session_memory_append`. Repeatable recipe → `skill_save` after `skill_view`. No secrets in memory — **`credential-hygiene`**.
+**Non-negotiable:** One-off facts → `memory_save`. Debugging trail → `session_memory_append`. Repeatable recipe → `skill_manage` create after `skill_view`. Secrets belong in **Settings / vault** — never in memory, session, skills, or workspace prose.
 
 ## Canonical scope
 
-This skill is the **single guide** for choosing among durable facts, rolling session notes, and procedural skills. Maintainer-only evolution of Web Agent is covered in **`web-agent-skill`**—invoke that for self-maintenance; use this document for everyday layer choice.
+Single guide for choosing among durable facts, rolling session notes, procedural skills, and wiki projections. Maintainer-only Web Agent evolution: **`web-agent-skill`**.
 
 ## When to Use
 
-- User asks "remember this" vs "save a reusable workflow" or "for next session."
-- Deciding between `memory_save`, `session_memory_append`, and `skill_save`.
+- User asks "remember this" vs "save a reusable workflow" or "for next session".
+- User pastes keys, asks to commit `.env`, or where to store credentials.
+- Deciding between `memory_save`, `session_memory_append`, and `skill_manage`.
 - Reducing duplicate or contradictory stored context; wiki_sync vs facts.
 
-## Layers (user-facing)
+## Relation to other skills
 
-| Layer | Tools | Use for |
-|-------|--------|---------|
-| **Facts** | `memory_save`, `memory_recall`, `memory_search` | Stable preferences (timezone, stack choices, env constraints that stay true). |
-| **Session** | `session_memory_append`, `session_memory_list`, `session_search` | Rolling investigation notes, temporary decisions, pointers to artifacts this session. |
-| **Skills** | `skill_view`, `skill_list`, `skill_save`, `skill_manage`, `skill_bulk_save`, `skill_delete`, `skill_recall` | Repeatable **procedures** with a clear trigger — not one-off facts. |
-| **Wiki vault** | `wiki_setup`, `wiki_sync`, `wiki_search` | PARA markdown mirror (Obsidian-friendly; default `.webagent/knowledge-vault/`). Use **`/wiki_setup`**, **`/wiki_sync`**, **`/wiki_search`** or the matching tools. `wiki_sync` **projects** facts/session/learnings — canonical structured facts stay in memory tools unless you intentionally archive prose there. |
+- Delivery redaction before `artifact_present` / `email`: **`artifact-delivery`** Secrets subsection.
+- Maintainer evolution: **`web-agent-skill`**.
 
-## Wiki vault
+## Procedure
 
-1. **Scaffold once** — `wiki_setup` or `/wiki_setup` (legacy `knowledge-vault/` migrates when `root_path` is omitted).
-2. **Project runtime** — `wiki_sync` or `/wiki_sync [facts|session|all]` after facts/session exist.
-3. **Browse/search** — `wiki_search` or `/wiki_search <query>` when memory tools are not enough.
-
-Optional PARA or topic-map diagrams: pair with **`chart`** when vault pages benefit from structure visuals.
-
-## Heuristics
+### Layer choice
 
 1. **One-off fact** ("I use pnpm") → `memory_save` (or update existing key).
 2. **Debugging trail** ("tried X, failed Y") → session memory until resolved.
-3. **Repeatable recipe** ("how we deploy previews") → draft a skill when the user wants it reusable; call `skill_view` before relying on skill bodies.
+3. **Repeatable recipe** ("how we deploy previews") → `skill_manage` create when the user wants it reusable; call `skill_view` first.
 
-## Reflections / learnings
+### Wiki vault
 
-- System may surface reflections or learnings — treat as **hints**; confirm against current code/runtime before promoting into facts or skills.
+1. **Scaffold once** — `wiki_setup` or `/wiki_setup`.
+2. **Project runtime** — `wiki_sync` or `/wiki_sync [facts|session|all]`.
+3. **Browse/search** — `wiki_search` or `/wiki_search <query>`.
+
+### Secrets (never in memory layers)
+
+1. **Settings / vault** — provider keys per profile (encrypted local vault), not workspace files the model edits casually.
+2. **Never echo secrets** in chat, `artifact_present`, email, or logs — redact (`sk-…`, bearer tokens, long hex).
+3. **`read_file` on secrets** — only when the user explicitly asked to inspect their own config path.
+4. Direct users to Settings when they ask where to put keys — not `memory_save`.
 
 ## Pitfalls
 
-- Storing secrets in memory — see **`credential-hygiene`**.
+- Storing secrets in memory, session, or skills.
 - Duplicating the same content in facts and a skill — pick one layer.
-- Mirroring the same long content in both `memory_save` and synced wiki pages — prefer facts/skills as source of truth and keep vault entries as summaries or links unless you need an archival copy.
+- Mirroring long content in both `memory_save` and synced wiki pages — prefer facts/skills as source of truth.
+- Huge dumps into `memory_save` — summarize; long prose belongs in skills or session.
 
 ## Anti-patterns
 
-- Huge dumps into `memory_save` — summarize; long prose belongs in skills or session.
-- Maintainer-only workflows — for self-evolution of Web Agent itself, follow **`web-agent-skill`**; everyday tasks use this document only.
+- "Paste your API key here so I can test" — direct to Settings.
+- Duplicating the same secret in skills, memory, and files — one vault source of truth.
+- Maintainer-only workflows here — use **`web-agent-skill`** for self-evolution of Web Agent itself.

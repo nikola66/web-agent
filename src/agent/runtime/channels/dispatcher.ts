@@ -19,10 +19,13 @@ import {
 } from "../channel-outbound.js";
 import { buildToolRowsFromCatalog } from "../slash-command-views.js";
 import { loadToolCatalog } from "../tools/registry.js";
-import { buildPlanModeUserPrompt } from "../planning-slash.js";
-import { buildClarifyModeUserPrompt } from "../clarify-slash.js";
-import { resolveFindSkillsUserMessage } from "../find-skills-slash.js";
-import { rewriteWikiSlashUserMessage } from "../wiki-slash.js";
+import { parseLocalSlashCommand, resolveSlashUserMessage } from "../slash-routing.js";
+import { archiveCurrentHistoryForSessionSearch } from "../startup-context.js";
+import {
+  listCheckpoints,
+  loadCheckpoint,
+  saveCheckpoint,
+} from "../state/persistence.js";
 import { downloadTelegramVoice } from "../voice/telegram-voice.js";
 import { audioAnalyzeTool } from "../tools/audio-tools.js";
 
@@ -184,6 +187,18 @@ export function createChannelInboundHandler(deps) {
         });
     }
 
+    const localSlash = parseLocalSlashCommand(trimmed);
+    if (localSlash.kind === "exit") {
+      return enqueueByChat(chatId, async () => {
+        const surface = outboundSurfaceForChannel(channel);
+        const msg =
+          surface === "telegram"
+            ? "Telegram chats stay open — use `/clear` for a fresh thread. `/exit` only closes the web terminal session."
+            : "Exit is only available in the web terminal session.";
+        await sendReply(chatId, msg);
+      });
+    }
+
     return enqueueByChat(chatId, async () => {
       await logDebugEvent("channel_inbound", {
         channel,
@@ -193,7 +208,61 @@ export function createChannelInboundHandler(deps) {
       let history = await refreshChannelHistoryWithLatestSystemPrompt(
         await loadChannelHistory(channel, chatId)
       );
-      if (trimmed === "/compact") {
+      const surface = outboundSurfaceForChannel(channel);
+
+      if (localSlash.kind === "clear") {
+        await archiveCurrentHistoryForSessionSearch(history).catch(() => {});
+        history = await refreshChannelHistoryWithLatestSystemPrompt([]);
+        history = await sanitizeMessagesMissingSnapshotRefs(history);
+        await saveChannelHistory(channel, chatId, history);
+        await sendReply(chatId, "Conversation cleared (identity unchanged).");
+        return;
+      }
+
+      if (localSlash.kind === "checkpoint") {
+        const result = await saveCheckpoint(localSlash.name, history);
+        await sendReply(
+          chatId,
+          `Checkpoint saved: ${result.name} (${result.messageCount} messages).`
+        );
+        return;
+      }
+
+      if (localSlash.kind === "rollback") {
+        if (!localSlash.name) {
+          const checkpoints = await listCheckpoints();
+          if (!checkpoints.length) {
+            await sendReply(chatId, "No checkpoints saved. Use `/checkpoint [name]` to create one.");
+          } else {
+            const lines = checkpoints.map(
+              (c) => `• ${c.name} (${c.createdAt.slice(0, 10)}, ${Math.round(c.sizeBytes / 1024)}KB)`
+            );
+            await sendReply(
+              chatId,
+              `Saved checkpoints:\n${lines.join("\n")}\n\nUse \`/rollback <name>\` to restore.`
+            );
+          }
+          return;
+        }
+        try {
+          const restored = await loadCheckpoint(localSlash.name);
+          history = await refreshChannelHistoryWithLatestSystemPrompt(restored);
+          history = await sanitizeMessagesMissingSnapshotRefs(history);
+          await saveChannelHistory(channel, chatId, history);
+          await sendReply(
+            chatId,
+            `Rolled back to checkpoint '${localSlash.name}' (${history.length} messages).`
+          );
+        } catch {
+          await sendReply(
+            chatId,
+            `Checkpoint '${localSlash.name}' not found. Use \`/rollback\` to list available checkpoints.`
+          );
+        }
+        return;
+      }
+
+      if (localSlash.kind === "compact") {
         const result = await compactHistory(history, cfg, {
           ...contextCompaction,
           onWarning: async (warning, error) => {
@@ -223,19 +292,21 @@ export function createChannelInboundHandler(deps) {
         }
         return;
       }
-      const surface = outboundSurfaceForChannel(channel);
-      if (trimmed === "/help") {
+
+      if (localSlash.kind === "help") {
         const catalog = await loadToolCatalog();
         const toolRows = buildToolRowsFromCatalog(catalog);
         await sendReply(chatId, formatHelpForSurface(surface, SLASH_COMMANDS, toolRows));
         return;
       }
-      if (trimmed === "/skills" || trimmed.startsWith("/skills ")) {
-        await runSkillsSlashCommand(trimmed, surface, (msg) => sendReply(chatId, msg));
+
+      if (localSlash.kind === "skills") {
+        await runSkillsSlashCommand(localSlash.input, surface, (msg) => sendReply(chatId, msg));
         return;
       }
-      if (trimmed === "/voice" || trimmed.startsWith("/voice ")) {
-        const arg = trimmed.slice("/voice".length).trim().toLowerCase();
+
+      if (localSlash.kind === "voice") {
+        const arg = localSlash.arg;
         const status =
           channel === "telegram"
             ? arg === "on" || arg === "off"
@@ -245,6 +316,7 @@ export function createChannelInboundHandler(deps) {
         await sendReply(chatId, status);
         return;
       }
+
       let voiceUserPrompt: string | null = null;
       if (voice && channel === "telegram") {
         const token = String(process.env.WEBAGENT_TELEGRAM_BOT_TOKEN || "").trim();
@@ -300,21 +372,11 @@ export function createChannelInboundHandler(deps) {
         }
       }
 
-      const wikiRewrite = rewriteWikiSlashUserMessage(trimmed);
-      const findSkillsRewrite = resolveFindSkillsUserMessage(trimmed);
+      const slashRewrite = await resolveSlashUserMessage(trimmed);
       let userContent =
         voiceUserPrompt ??
-        wikiRewrite ??
-        findSkillsRewrite ??
-        (trimmed === "/plan" || trimmed.startsWith("/plan ")
-          ? buildPlanModeUserPrompt(
-              trimmed === "/plan" ? "" : trimmed.slice("/plan ".length).trim()
-            )
-          : trimmed === "/clarify" || trimmed.startsWith("/clarify ")
-            ? buildClarifyModeUserPrompt(
-                trimmed === "/clarify" ? "" : trimmed.slice("/clarify ".length).trim()
-              )
-            : trimmed);
+        slashRewrite ??
+        trimmed;
       history.push({ role: "user", content: userContent });
       const compaction = await maybeCompactHistory(history, cfg, {
         ...contextCompaction,

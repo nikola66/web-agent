@@ -13,7 +13,6 @@ const EXPECTED_TOOLS = [
   "edit_file",
   "email",
   "file_diff",
-  "file_stat",
   "find_files",
   "grep",
   "list_dir",
@@ -29,11 +28,8 @@ const EXPECTED_TOOLS = [
   "session_memory_list",
   "session_search",
   "skill_bulk_save",
-  "skill_delete",
   "skill_list",
   "skill_manage",
-  "skill_recall",
-  "skill_save",
   "skill_view",
   "system_info",
   "todo_write",
@@ -97,11 +93,11 @@ test("source tool capabilities have manifests and handlers", async () => {
 
 test("skill catalog separates read-only vs guarded skill writes", async () => {
   const browser = await import("../dist/agent-runtime/tools/registry-browser.js");
-  const readTools = ["skill_list", "skill_view", "skill_recall", "skill_save", "skill_manage"];
-  const guardedWrites = ["skill_delete", "skill_bulk_save"];
+  const readTools = ["skill_list", "skill_view", "skill_manage"];
+  const guardedWrites = ["skill_bulk_save"];
 
   for (const name of readTools) {
-    assert.ok(!browser.BUILTIN_TOOLS[name].requiresConfirmation, `${name} should stay read-only`);
+    assert.ok(!browser.BUILTIN_TOOLS[name].requiresConfirmation, `${name} should stay read-only by default`);
   }
 
   for (const name of guardedWrites) {

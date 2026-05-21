@@ -16,7 +16,7 @@ Maintainer scope only — not everyday user tasks. Do **not** embed the full too
 | Runtime environment | `system_info` |
 | Installed capability folders | `capability_list` |
 | Read bundled skill bodies | `skill_list`, `skill_view` |
-| Patch / install skills | `skill_manage`, `skill_bulk_save`, `skill_save`, `skill_delete` |
+| Patch / install skills | `skill_manage`, `skill_bulk_save` |
 | Inspect repo files | `read_file`, `grep`, `list_dir` — see **`browser-runtime-map`** |
 | Facts / session / wiki | **`memory-layers`** |
 | Deliverables / artifacts | **`artifact-delivery`**, **`chart`** |
@@ -30,7 +30,11 @@ Maintainer scope only — not everyday user tasks. Do **not** embed the full too
 - Work is about **Web Agent itself**: capabilities, runtime tools, bundled skills, adapter, UI, or this repository.
 - Debugging runtime behavior, improving procedural knowledge, or adapting external agent packs into Web Agent.
 - User asks for self-maintenance, skill improvement, or installing remote `SKILL.md` URLs correctly.
-- Not for everyday user tasks—use sibling skills (`memory-layers`, `browser-runtime-map`, etc.) unless maintainer scope applies. For multi-step goal decomposition use **`task-planning`**; for diagnosis loops use **`systematic-debugging`**.
+- Not for everyday user tasks—use sibling skills unless maintainer scope applies. For multi-step plan+execute use **`task-execution`**; for diagnosis loops use **`systematic-debugging`**.
+
+## Relation to other skills
+
+- Tool picker: **`browser-runtime-map`**. Persistence: **`memory-layers`**. Delivery: **`artifact-delivery`**. Cron authoring: **`heartbeat-cron`**.
 
 This skill is for self-maintenance. It is not a static tool catalog and it does not grant new permissions.
 
@@ -69,7 +73,7 @@ After complex turns (todo/plan gates or high step count), the runtime may spawn 
 - Skill review interval defaults to every **10 tool iterations** without a foreground skill write (`WEBAGENT_SKILL_REVIEW_INTERVAL`).
 - Memory review interval defaults to every **10 user turns** (`WEBAGENT_MEMORY_REVIEW_INTERVAL`).
 - Skills created in background review are marked `created_by: agent` in `.webagent/skills/.usage.json` and are eligible for curator consolidation.
-- Foreground `skill_save` / `skill_manage` resets the skill counter (same as Hermes).
+- Foreground `skill_manage` / `skill_bulk_save` resets the skill counter (same as Hermes).
 - User-visible summary lines look like: `Self-improvement review: Skill 'x' updated · Memory updated`.
 
 ### Curator (skill library maintenance)
@@ -140,3 +144,13 @@ After skill maintenance:
 2. Confirm the full document or support file loads with `skill_view`.
 3. Confirm the compact skills context still contains metadata only, not the full procedural body.
 4. If Web Agent runtime behavior changed, run the smallest relevant tests first, then broader validation if needed.
+
+## Pitfalls
+
+- Patching bundled skills instead of user skills in `.webagent/skills/`.
+- Installing skills via shell instead of HTTPS URL imports.
+
+## Anti-patterns
+
+- Maintaining a static copy of the full tool catalog inside this skill.
+- Creating parallel memory or capability inventory systems.

@@ -161,8 +161,17 @@ export async function emailTool(args = {}, ctx) {
           ? enrichedArgs.from.trim()
           : cfg.resendFrom || "agent@resend.dev";
 
-      const body = { from, to, subject, text };
+      const body: Record<string, unknown> = { from, to, subject, text };
       if (typeof enrichedArgs?.html === "string") body.html = enrichedArgs.html;
+      const cc = enrichedArgs?.cc;
+      if (Array.isArray(cc) && cc.length) {
+        body.cc = cc.map((entry) => String(entry).trim()).filter(Boolean);
+      } else if (typeof cc === "string" && cc.trim()) {
+        body.cc = cc
+          .split(/[,;]/)
+          .map((entry) => entry.trim())
+          .filter(Boolean);
+      }
 
       const result = await postResendEmails(cfg, body);
       return { ok: true, id: result.id };

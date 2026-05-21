@@ -29,11 +29,10 @@ const MEMORY_TOOLS = new Set([
   "session_memory_list",
 ]);
 const SKILL_TOOLS = new Set([
-  "skill_save",
   "skill_manage",
   "skill_list",
   "skill_view",
-  "skill_recall",
+  "skill_bulk_save",
 ]);
 
 let itersSinceSkill = 0;
@@ -146,7 +145,7 @@ const MEMORY_REVIEW_PROMPT =
   "- Investigation trail, temporary decisions, artifact pointers → `session_memory_append`\n" +
   "- Do NOT save task progress, PR/issue numbers, or stale-in-a-week artifacts to `memory_save`; " +
   "use `session_search` to recall those from archives.\n" +
-  "- Repeatable workflows → skills (`skill_save` / `skill_manage`), not memory facts.\n\n" +
+  "- Repeatable workflows → skills (`skill_manage` create/patch), not memory facts.\n\n" +
   "If something stands out, save it with the appropriate tool. " +
   "If nothing is worth saving, reply 'Nothing to save.' and stop.";
 
@@ -204,7 +203,7 @@ export function summarizeBackgroundReviewActionsDetailed(
     if (item.status !== "ok" || item.error) continue;
     const tool = String(item.tool || "");
     const result = item.result && typeof item.result === "object" ? (item.result as Record<string, unknown>) : {};
-    if (tool === "skill_save" || (tool === "skill_manage" && result.action === "create")) {
+    if (tool === "skill_manage" && result.action === "create") {
       const name = String(result.name || result.slug || "skill");
       lines.push(`Skill '${name}' created`);
       skillsCreated += 1;

@@ -447,6 +447,23 @@ export function applyWorkspaceBrowsePathArgs(
   return out;
 }
 
+const WIKI_PATH_TOOLS = new Set(["wiki_setup", "wiki_sync", "wiki_search"]);
+
+export function applyWikiPathArgs(
+  toolName: string,
+  argsObj: Record<string, unknown>
+): Record<string, unknown> {
+  if (!WIKI_PATH_TOOLS.has(toolName) || !argsObj || typeof argsObj !== "object") {
+    return argsObj;
+  }
+  const out = { ...argsObj };
+  const rootPath = typeof out.root_path === "string" ? out.root_path.trim() : "";
+  const path = typeof out.path === "string" ? out.path.trim() : "";
+  if (!rootPath && path) out.root_path = coerceWorkspaceBrowsePath(path);
+  else if (rootPath) out.root_path = coerceWorkspaceBrowsePath(rootPath);
+  return out;
+}
+
 export function validateRequiredArguments(
   toolName: string,
   args: unknown,

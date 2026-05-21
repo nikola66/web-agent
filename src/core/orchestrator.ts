@@ -24,6 +24,7 @@ import { TOOL_CATALOG } from "@/agent/tool-catalog";
 import { buildToolRowsFromCatalog, renderHelpView } from "@/agent/runtime/slash-command-views";
 import { encodeUserInputLineForAgent } from "@/agent/runtime/user-input-framing";
 import {
+  disposeTypewriter,
   enqueueTerminalTypewriter,
   flushTerminalTypewriter,
 } from "./terminal-typewriter";
@@ -349,7 +350,24 @@ export async function submitUserInput(raw: string): Promise<void> {
 
   state.agentReadyForInput = false;
   useRuntimeStore.getState().setAwaitingResponse(targetProfileId, true);
-  await writeToWebAgent(targetProfileId, encodeUserInputLineForAgent(input));
+  const sent = await writeToWebAgent(targetProfileId, encodeUserInputLineForAgent(input));
+  if (!sent) {
+    state.agentReadyForInput = true;
+    useRuntimeStore.getState().setAwaitingResponse(targetProfileId, false);
+    write("\r\x1b[33m▸ Failed to send input to agent — retry or relaunch from the sidebar.\x1b[0m\r\n\n");
+    throw new Error("Failed to send input to agent");
+  }
+}
+
+/** Release orchestrator maps and typewriter state when a profile is deleted. */
+export function disposeProfileRuntime(profileId: string): void {
+  flushTerminalTypewriter(profileId, getTerminal);
+  disposeTypewriter(profileId);
+  agentStates.delete(profileId);
+  profileTerminals.delete(profileId);
+  promptReadyInFlight.delete(profileId);
+  runningProfileIds.delete(profileId);
+  if (activeProfileId === profileId) activeProfileId = null;
 }
 
 export async function initialize(): Promise<void> {
@@ -370,7 +388,10 @@ export async function initialize(): Promise<void> {
 
   startStorageMonitoring();
 
+  let lastApiKeysRef = useSettingsStore.getState().apiKeys;
   useSettingsStore.subscribe(async (state) => {
+    if (state.apiKeys === lastApiKeysRef) return;
+    lastApiKeysRef = state.apiKeys;
     await saveApiKeys(state.apiKeys);
   });
 }

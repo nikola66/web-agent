@@ -26,6 +26,10 @@ triggers: [find youtubers, list creators, who posts about, discover, search for,
 - "Who makes videos about…", list creators, competitors, or niche communities—not academic papers (use `research-pack`).
 - User asks to search the web for entities, profiles, or regional lists before concluding.
 
+## Relation to other skills
+
+- Ambiguous intent: **`clarify`**. Row shaping: **`structured-extraction`**. Delivery: **`artifact-delivery`**. Papers: **`research-pack`**.
+
 ## Intent vs evidence
 
 If **what to research** is still ambiguous (topic, region, platform, or success criteria), follow **`clarify`** and emit one `<<<CLARIFY>>>` block first — no tools; wait for the user’s choice. Once intent is settled, meet the minimum-effort bar below—do not stall search/fetch behind extra open questions.
@@ -94,3 +98,13 @@ When the user asked to show/see/display an image or thumbnail, call `artifact_pr
 - Do not conclude "none exist" or "zero" after only exact-match niche queries or search-only rounds.
 - Do not substitute generic "AI influencers" unless the user asked for a broad list.
 - Continue searching with broader queries (`AI agent`, `LLM`, regional tech) before giving up.
+
+## Pitfalls
+
+- Stopping after search-only rounds without `web_fetch`.
+- Treating sparse niche hits as proof nothing exists.
+
+## Anti-patterns
+
+- Answering from training memory without live search + fetch.
+- Using **`research-pack`** for creator/competitor lists.

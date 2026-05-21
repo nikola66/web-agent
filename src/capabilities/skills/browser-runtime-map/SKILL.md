@@ -1,75 +1,65 @@
 ---
 name: Browser Runtime Map
-description: Use when shell commands fail, npx/curl/git won’t run, or you must choose run_shell vs web_fetch vs file tools in Nodebox vs host.
-version: 1.0.0
+description: Use when shell commands fail, npx/curl/git won't run, or you must choose run_shell vs web_fetch vs file tools in Nodebox vs host.
+version: 1.1.0
 category: bundled
 tags: [nodebox, shell, runtime, tools, webcontainer, run_shell, command-failed]
-triggers: [shell failed, command failed, npx, curl, git clone, nodebox, run_shell error, no such file, not found in path, webcontainer, read_file, web_fetch, grep, write_file]
+triggers: [shell failed, command failed, npx, curl, git clone, nodebox, no such file, not found in path, webcontainer, run this command]
 ---
 
 ## Tool contract (read first)
 
-This skill is the **canonical built-in tool picker**. Other skills defer here for filesystem vs HTTP vs shell vs cron.
+Canonical built-in tool picker. Other skills defer here for filesystem vs HTTP vs shell vs cron.
 
 | Need | Use first |
 |------|-----------|
 | Read a file | `read_file` |
 | Search file contents | `grep` |
-| Find files by name/pattern | `find_files` |
-| List or tree a directory | `list_dir`, `tree` |
-| Create or overwrite a file | `write_file` |
+| Find files by name (cross-tree) | `find_files` |
+| List one directory | `list_dir` |
+| Directory tree view | `tree` |
+| Create or overwrite | `write_file` |
 | Patch or multi-edit | `apply_patch`, `edit_file`, `multi_edit` |
 | Move / delete | `move_file`, `delete_file` |
-| Compare files | `file_diff`, `file_stat` |
+| Compare files | `file_diff` |
 | HTTP(S) GET / API | `web_fetch` |
 | Web search | `web_search` |
 | Environment facts | `system_info` |
-| Recurring jobs | `cron_register`, `cron_list` — see **`heartbeat-cron`** |
-| Show file to user | `artifact_present` — see **`artifact-delivery`** |
-| Image / audio / video input | `vision_analyze`, `audio_analyze`, `youtube_transcribe` — see **`multimodal-ingest`** |
-| Memory / skills / wiki | `memory_*`, `session_*`, `skill_*`, `wiki_*` — see **`memory-layers`** |
+| Recurring jobs | `cron_register`, `cron_list` — **`heartbeat-cron`** |
+| Show file to user | `artifact_present` — **`artifact-delivery`** |
+| Image / audio / video | `vision_analyze`, `audio_analyze`, `youtube_transcribe` — **`multimodal-ingest`** |
+| Memory / skills / wiki | see **`memory-layers`** (`memory_*`, `session_*`, `skill_list`, `skill_view`, `skill_manage`, `skill_bulk_save`, `wiki_*`) |
 | One-off shell (last resort) | `run_shell` — host only; Nodebox: **`node …`** only |
 
-**Non-negotiable:** `run_shell` is not a catch-all — no `curl`/`npx`/`git clone` when a row above fits. Nodebox has **no** POSIX shell (no pipes). Skill installs: `skill_bulk_save` / `skill_manage`, never shell.
-
-## Canonical scope
-
-This skill is the **single quick-reference** for choosing tools in Web Agent (filesystem vs HTTP vs search vs cron vs narrow `run_shell`). Other bundled skills defer here instead of repeating the full table.
+**Non-negotiable:** No `curl`/`npx`/`git clone` when a row above fits. Nodebox has **no** POSIX shell. Skill installs: `skill_bulk_save` / `skill_manage`, never shell.
 
 ## When to Use
 
-- User hits "shell" or command errors in the browser agent (`npx`, `curl`, `git`, pipes).
-- Choosing between `run_shell`, `web_fetch`, built-in file tools, or `cron_register`.
-- Explaining why POSIX tutorials or OpenClaw-style terminal steps fail in chat.
-- Any "run this command" request—check surface before defaulting to shell.
+- Shell or command errors in the browser agent (`npx`, `curl`, `git`, pipes).
+- Choosing between `run_shell`, `web_fetch`, file tools, or `cron_register`.
+- Any "run this command" request — check surface before defaulting to shell.
+
+## Relation to other skills
+
+- Scheduled jobs: **`heartbeat-cron`**. Deliverables: **`artifact-delivery`**. Persistence: **`memory-layers`**.
 
 ## Surfaces
 
-- **Nodebox / WebContainer** (`WEBAGENT_RUNTIME=nodebox`): there is **no** POSIX `sh -c`. `run_shell` only runs **`node …`** (single-node invocation). No pipes, no `npx`, `npm`, `curl`, arbitrary binaries.
-- **Host / full runtime**: real `run_shell` via `sh -c` when available — still prefer dedicated tools first.
+- **Nodebox / WebContainer**: no POSIX `sh -c`. `run_shell` only runs **`node …`**. No pipes, `npx`, `npm`, `curl`.
+- **Host runtime**: real `run_shell` via `sh -c` when available — still prefer dedicated tools first.
 
-## Decision table
+## Procedure
 
-| Need | Use first |
-|------|-----------|
-| Read/search workspace files | `read_file`, `grep`, `find_files`, `list_dir`, `tree` |
-| HTTP(S) page or API GET | `web_fetch` |
-| Web search | `web_search` |
-| Recurring work | `cron_register` (not host crontab) |
-| Package installs, git, one-off shell you truly need | `run_shell` only when host shell exists and no dedicated tool fits |
-
-## Rules
-
-1. **`run_shell` is not a catch-all** — runtime text already lists preferred tools; follow that order.
-2. **Nodebox**: use small `node -e` snippets if you must run JS; otherwise avoid shell entirely.
-3. **Cron / heartbeat**: avoid `run_shell` in scheduled steps in Nodebox; `cron_register` examples use search/write/memory tools for a reason (see **`heartbeat-cron`**).
+1. Match the need to the table above before calling `run_shell`.
+2. On Nodebox, use `web_fetch` instead of curl, dedicated file tools instead of shell file ops.
+3. For cron, use `cron_register` — not host crontab or shell wrappers.
 
 ## Pitfalls
 
-- Treating OpenClaw-style terminal tutorials as literal — they assume a full Linux shell.
-- Using `run_shell` for skill installs — use `skill_bulk_save` / `skill_manage` with HTTPS URLs.
+- Treating POSIX tutorials as literal in Nodebox.
+- Using `run_shell` for skill installs — use HTTPS URL + `skill_manage` / `skill_bulk_save`.
 
 ## Anti-patterns
 
-- Piping curl to bash when `web_fetch` or search tools exist.
+- Piping curl to bash when `web_fetch` exists.
 - Putting `crontab`/`at` in shell — use `cron_register`.

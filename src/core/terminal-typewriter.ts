@@ -9,6 +9,17 @@ interface TypewriterState {
 
 const states = new Map<string, TypewriterState>();
 
+let graphemeSegmenter: Intl.Segmenter | null = null;
+function getGraphemeSegmenter(): Intl.Segmenter | null {
+  if (graphemeSegmenter) return graphemeSegmenter;
+  try {
+    graphemeSegmenter = new Intl.Segmenter(undefined, { granularity: "grapheme" });
+    return graphemeSegmenter;
+  } catch {
+    return null;
+  }
+}
+
 function stateFor(profileId: string): TypewriterState {
   let s = states.get(profileId);
   if (!s) {
@@ -59,14 +70,12 @@ function peelNextAtomicUnit(buffer: string): Peel {
     return { kind: "unit", unit: buffer.slice(0, 2), rest: buffer.slice(2) };
   }
 
-  try {
-    const seg = new Intl.Segmenter(undefined, { granularity: "grapheme" });
+  const seg = getGraphemeSegmenter();
+  if (seg) {
     const first = seg.segment(buffer)[Symbol.iterator]().next().value;
     if (first?.segment) {
       return { kind: "unit", unit: first.segment, rest: buffer.slice(first.segment.length) };
     }
-  } catch {
-    /* no Segmenter */
   }
   const cp = buffer.codePointAt(0);
   if (cp === undefined) return { kind: "unit", unit: "", rest: "" };
@@ -128,6 +137,14 @@ export function enqueueTerminalTypewriter(
   s.pending += chunk;
   s.lastArrivalAt = performance.now();
   schedule(profileId, resolveTerminal);
+}
+
+/** Drop queued typewriter state when a profile is removed. */
+export function disposeTypewriter(profileId: string): void {
+  const s = states.get(profileId);
+  if (!s) return;
+  if (s.rafId !== null) cancelAnimationFrame(s.rafId);
+  states.delete(profileId);
 }
 
 /** Write any pending bytes immediately (e.g. agent stopped). */

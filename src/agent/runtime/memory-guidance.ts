@@ -24,7 +24,8 @@ export const SESSION_SEARCH_GUIDANCE =
 export const WORKSPACE_BROWSE_GUIDANCE =
   "Workspace paths in `list_dir`, `read_file`, `find_files`, `grep`, and `tree` are **relative to " +
   "the project root**. Use `.` to list the workspace root — never pass `/` or a host absolute path " +
-  "(e.g. `/home/...`); those are rejected as escaping the workspace.";
+  "(e.g. `/home/...`); those are rejected as escaping the workspace. " +
+  "Use `list_dir` for one directory (optional single-level filter); use `find_files` for cross-tree name/glob search.";
 
 export const TOOL_JSON_ARGS_GUIDANCE =
   "Tool arguments must be plain JSON objects with normal keys: {\"query\":\"keywords\"}, " +
@@ -39,7 +40,7 @@ export const SESSION_MEMORY_GUIDANCE =
 
 export const SKILLS_GUIDANCE =
   "After completing a complex task (5+ tool calls), fixing a tricky error, or discovering a " +
-  "non-trivial workflow, save the approach with `skill_save` or `skill_manage` so you can reuse " +
+  "non-trivial workflow, save the approach with `skill_manage` so you can reuse " +
   "it next time. When using a skill and finding it outdated or wrong, patch it immediately — " +
   "don't wait to be asked. Skills capture procedures; memory captures durable facts.";
 
@@ -72,7 +73,7 @@ export function buildMemoryLayerGuidanceBlock(toolNames: string[] = []): string 
   ) {
     parts.push(WORKSPACE_BROWSE_GUIDANCE);
   }
-  if (tools.has("skill_save") || tools.has("skill_manage")) {
+  if (tools.has("skill_manage") || tools.has("skill_bulk_save")) {
     parts.push(SKILLS_GUIDANCE);
   }
   if (!parts.length) return "";

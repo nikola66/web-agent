@@ -29,7 +29,6 @@ const SMOKE_TIERS = {
   edit_file: "local-setup",
   email: "network-proxy",
   file_diff: "local-setup",
-  file_stat: "local-setup",
   find_files: "local-setup",
   grep: "local-setup",
   list_dir: "local",
@@ -45,11 +44,8 @@ const SMOKE_TIERS = {
   session_memory_append: "local",
   session_memory_list: "local",
   skill_bulk_save: "manual",
-  skill_delete: "manual",
   skill_list: "local",
   skill_manage: "manual",
-  skill_recall: "local-setup",
-  skill_save: "manual",
   skill_view: "local-setup",
   system_info: "local",
   todo_write: "local",
@@ -276,7 +272,6 @@ test("local-setup smoke tier tools execute on an isolated workspace tree", async
       args: { path: `${relRoot}/nested/file.txt`, content: "alpha\nbeta\n" },
     },
     { name: "read_file", args: { path: `${relRoot}/nested/file.txt` } },
-    { name: "file_stat", args: { path: `${relRoot}/nested/file.txt` } },
     { name: "list_dir", args: { path: relRoot, recursive: true } },
     { name: "tree", args: { path: relRoot, maxDepth: 3 } },
     { name: "find_files", args: { pattern: "*.txt", root: relRoot } },
@@ -439,17 +434,6 @@ test("local-setup smoke tier tools execute on an isolated workspace tree", async
     assert.ok(!out?.error, out?.error);
   });
 
-  await t.test("skill_recall when skills exist", async () => {
-    const listed = await runOne("skill_list", { query: "" }, catalog);
-    const skills = (listed?.result as { skills?: Array<{ name?: string }> })?.skills || [];
-    if (!skills.length) {
-      t.skip("no skills in workspace");
-      return;
-    }
-    const name = String(skills[0]?.name || "").trim();
-    const out = await runOne("skill_recall", { name }, catalog);
-    assert.ok(!out?.error, out?.error);
-  });
 });
 
 test("network-proxy tier is opt-in via WEBAGENT_TOOL_SMOKE_NETWORK=1", async (t) => {
@@ -494,9 +478,7 @@ test("smoke tier manifest documents manual and proxy-only tools", () => {
   assert.deepEqual(manual, [
     "audio_analyze",
     "skill_bulk_save",
-    "skill_delete",
     "skill_manage",
-    "skill_save",
   ]);
   assert.deepEqual(proxy, ["email", "vision_analyze", "web_fetch", "web_search", "youtube_transcribe"]);
 });

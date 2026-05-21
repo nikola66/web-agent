@@ -1,11 +1,33 @@
-import { defineTool } from "../definition.js";
+import { defineTool, strictObjectSchema } from "../definition.js";
 import { skillManageTool } from "../remote-tools.js";
 
 export default defineTool({
   name: "skill_manage",
   run: skillManageTool,
-  emoji: "🧠",
+  emoji: "🧩",
   description:
-    "Create, patch, edit, delete, import, or manage support files for reusable SKILL.md skills. Applies immediately without a confirmation prompt. Import one remote SKILL.md with `action: install_url` or `import_url` and `url`. When adding two or more skills or URLs in one user request, prefer skill_bulk_save (one approval). When the user should explicitly confirm removal of a saved skill by name, use skill_delete instead of delete here.",
-  inputSchema: { type: "object", properties: {}, additionalProperties: true },
+    "Create, patch, edit, delete, import, or manage support files for reusable SKILL.md skills. " +
+    "Actions: create (name+content), patch/edit (name+content), delete (name — requires user approval), " +
+    "install_url/import_url (url). Applies immediately except delete. " +
+    "For two or more skills or URLs in one request, prefer skill_bulk_save (one approval).",
+  inputSchema: strictObjectSchema(
+    {
+      action: {
+        type: "string",
+        enum: ["create", "patch", "edit", "delete", "install_url", "import_url", "write_file"],
+        description: "Operation to perform.",
+      },
+      name: { type: "string", description: "Skill name or slug." },
+      content: { type: "string", description: "SKILL.md body for create/patch/edit." },
+      description: { type: "string", description: "Short discovery description for create." },
+      url: { type: "string", description: "HTTPS URL to remote SKILL.md for install_url." },
+      file_path: { type: "string", description: "Support file path relative to skill folder." },
+    },
+    ["action"],
+    [
+      { action: "create", name: "deploy-checklist", content: "# Deploy\n\n1. Run tests\n2. Ship" },
+      { action: "delete", name: "obsolete-skill" },
+      { action: "install_url", url: "https://example.com/SKILL.md" },
+    ]
+  ),
 });

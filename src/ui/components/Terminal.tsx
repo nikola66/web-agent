@@ -116,7 +116,7 @@ export function Terminal() {
   const instancesRef = useRef<Map<string, TerminalEntry>>(new Map());
   const prevProfileId = useRef<string | null>(null);
   const activeProfileId = useProfileStore((s) => s.activeProfileId);
-  const [, setIsOnboarding] = useState(false);
+  const profiles = useProfileStore((s) => s.profiles);
 
   function getOrCreateEntry(profileId: string): TerminalEntry {
     if (instancesRef.current.has(profileId)) {
@@ -184,6 +184,16 @@ export function Terminal() {
     instancesRef.current.set(profileId, entry);
     return entry;
   }
+
+  useEffect(() => {
+    const ids = new Set(profiles.map((p) => p.id));
+    for (const [id, entry] of instancesRef.current) {
+      if (ids.has(id)) continue;
+      entry.terminal.dispose();
+      entry.container.remove();
+      instancesRef.current.delete(id);
+    }
+  }, [profiles]);
 
   // On activeProfileId change: switch terminal
   useEffect(() => {

@@ -6,7 +6,7 @@
 
 **浏览器原生 AI 代理：隔离工作区、持久记忆、零安装摩擦。**
 
-[在线演示](https://webagent.aratech.ae) · [GitHub](https://github.com/nikola66/web-agent) · [Ko-fi 支持](http://ko-fi.com/nikola66) · [贡献指南](CONTRIBUTING.zh-CN.md) · [安全](SECURITY.zh-CN.md)
+[在线演示](https://webagent.aratech.ae) · [GitHub](https://github.com/nikola66/web-agent) · [个人助手 Playbook](docs/zh-CN/use-cases-playbook.md) · [Ko-fi 支持](http://ko-fi.com/nikola66) · [贡献指南](CONTRIBUTING.zh-CN.md) · [安全](SECURITY.zh-CN.md)
 
 **语言：** [English](README.md) · [简体中文](README.zh-CN.md) · [Español](README.es.md) · [العربية](README.ar.md)
 
@@ -26,7 +26,7 @@
 
 Web Agent 是在 WebContainers 上直接在浏览器中运行的开源 AI 代理。终端用户无需安装：无 Docker、无 VPS、无 VM、无 Mac mini、无 Hostinger、无本地 Python 栈。打开应用、启动 profile 即可工作。
 
-面向普通用户简单、面向高级用户强大：隔离 profile、浏览器本地持久化、工具、技能、会话、反思、学习、cron、**规划模式**（`/plan`）、**PARA + Obsidian 风格知识库**（`wiki_*` 工具与 `/wiki_*` 斜杠命令），以及留在用户机器上的自改进运行时。
+面向普通用户简单、面向高级用户强大：隔离 profile、浏览器本地持久化、**38 个内置工具**、**16 个 bundled 技能**、会话、反思、学习、cron、**规划模式**（`/plan`）、**PARA + Obsidian 风格知识库**（`wiki_*` 工具与 `/wiki_*` 斜杠命令），以及留在用户机器上的自改进运行时。可复制场景见 **[个人助手 Playbook](docs/zh-CN/use-cases-playbook.md)**。
 
 ## 目录
 
@@ -271,10 +271,10 @@ Web Agent ships with a broad native tool belt. The built-ins cover workspace man
 
 | Group | Includes | Best for |
 | --- | --- | --- |
-| `📁 Files & Workspace` | `read_file`, `write_file`, `edit_file`, `multi_edit`, `move_file`, `delete_file`, `tree`, `list_dir`, `find_files`, `grep`, `file_diff`, `file_stat`, `make_dir` | Building, editing, inspecting, and organizing project files |
+| `📁 Files & Workspace` | `read_file`, `write_file`, `edit_file`, `multi_edit`, `move_file`, `delete_file`, `tree`, `list_dir`, `find_files`, `grep`, `file_diff`, `make_dir` | Building, editing, inspecting, and organizing project files |
 | `🧠 Memory & Recall` | `memory_save`, `memory_recall`, `memory_search`, `session_memory_append`, `session_memory_list`, `session_search` | Long-lived facts, rolling notes, and recovering prior context |
 | `📓 Knowledge wiki` | `wiki_setup`, `wiki_sync`, `wiki_search` | PARA + Obsidian-friendly vault under the workspace; project facts/session/learnings into markdown; full-text vault search |
-| `📚 Skills` | `skill_list`, `skill_view`, `skill_save`, `skill_manage`, `skill_bulk_save`, `skill_delete`, `skill_recall` | Discovering, reading, creating, importing, and maintaining skills |
+| `📚 Skills` | `skill_list`, `skill_view`, `skill_manage`, `skill_manage`, `skill_bulk_save`, `skill_manage`, `skill_view` | Discovering, reading, creating, importing, and maintaining skills |
 | `⏱️ Automation` | `cron_register`, `cron_list`, `todo_write` | Recurring jobs, heartbeat-driven workflows, and checklists |
 | `🌐 Remote & Multimodal` | `web_search`, `web_fetch`, `vision_analyze`, `youtube_transcribe`, `email` | Research, fetching live content, image analysis, transcripts, and outbound delivery |
 | `🖥️ System & Output` | `run_shell`, `system_info`, `artifact_present`, `apply_patch` | Executing commands, checking environment state, presenting artifacts, and surgical patching |
@@ -292,7 +292,7 @@ Web Agent ships with a broad native tool belt. The built-ins cover workspace man
 | `🛠️ edit_file` | Replace a matching snippet or fully replace file contents. |
 | `✉️ email` | Send outbound email through Resend-configured delivery. |
 | `🧾 file_diff` | Show a line-oriented diff between two UTF-8 workspace files. |
-| `📌 file_stat` | Return filesystem metadata for a workspace path. |
+| `📌 list_dir` | Return filesystem metadata for a workspace path. |
 | `🔎 find_files` | Find files by glob-like name patterns. |
 | `🔍 grep` | Search file contents by text or regex. |
 | `📁 list_dir` | List workspace files and directories with optional recursion and filtering. |
@@ -308,11 +308,11 @@ Web Agent ships with a broad native tool belt. The built-ins cover workspace man
 | `🗂️ session_memory_list` | Read the newest entries from rolling session memory. |
 | `📇 session_search` | Search archived workspace conversations by keywords. |
 | `📚 skill_bulk_save` | Batch import or save multiple skills in one operation. |
-| `🗑️ skill_delete` | Delete a saved skill from the workspace library. |
+| `🗑️ skill_manage` | Delete a saved skill from the workspace library. |
 | `📋 skill_list` | Search and list saved skills. |
 | `🧠 skill_manage` | Create, patch, edit, delete, import, or manage reusable skills. |
-| `🔍 skill_recall` | Load a raw `SKILL.md` by name for backward compatibility. |
-| `📚 skill_save` | Save a reusable `SKILL.md` procedure immediately. |
+| `🔍 skill_view` | Load a raw `SKILL.md` by name for backward compatibility. |
+| `📚 skill_manage` | Save a reusable `SKILL.md` procedure immediately. |
 | `📖 skill_view` | Load a skill's full `SKILL.md` or an allowed support file. |
 | `📟 system_info` | Return a safe system snapshot including time, timezone, uptime, and memory. |
 | `✅ todo_write` | Create or update checklist-style todos. |
@@ -460,8 +460,8 @@ Default vault root: `.webagent/knowledge-vault/`. Legacy `knowledge-vault/` at w
 | 记忆 | 记录滚动会话上下文 | `/memory-layers` | `session_memory_append`, `session_memory_list` |
 | 记忆 | 同步到 Obsidian 风格知识库 | `/memory-layers` | `wiki_setup`, `wiki_sync`, `wiki_search` |
 | 记忆 | 从旧对话中查找 | `/memory-layers` | `session_search` |
-| 规划 | 先写规格再实现 | `/plan`, `/task-planning` | `read_file`, `grep`, `write_file`, `artifact_present` |
-| 规划 | 拆解多步请求为 todos | `/task-planning` | `todo_write`, `skill_view` |
+| 规划 | 先写规格再实现 | `/plan` | `read_file`, `grep`, `write_file`, `artifact_present` |
+| 规划 | 拆解多步请求为 todos | `/task-execution` | `todo_write`, `skill_view` |
 | 规划 | 执行已批准的多步计划 | `/task-execution` | `todo_write`, `read_file`, `write_file`, `artifact_present` |
 | 自动化 | 标签页打开时的每日摘要 | `/heartbeat-cron` | `cron_register`, `cron_list`, `web_search`, `web_fetch` |
 | 工作区 | 新建副项目目录 | `/project-scaffold` | `make_dir`, `write_file`, `tree` |
@@ -474,8 +474,8 @@ Default vault root: `.webagent/knowledge-vault/`. Legacy `knowledge-vault/` at w
 | 交付 | 邮件发送交付物 | `/artifact-delivery` | `write_file`, `email`, `artifact_present` |
 | 交付 | 计划或报告的流程图 | `/chart` | `artifact_present` |
 | 体验 | 澄清模糊需求 | `/clarify` | *(none)* |
-| 安全 | 批量删除前检查点 | `/workspace-safety` | `list_dir`, `file_stat`, `delete_file` |
-| 安全 | 粘贴 API 密钥 / 密钥卫生 | `/credential-hygiene` | *(redaction; no secret persistence)* |
+| 安全 | 批量删除前检查点 | `/workspace-safety` | `list_dir`, `tree`, `delete_file` |
+| 安全 | 粘贴 API 密钥 / 密钥卫生 | `/memory-layers` | *(redaction; no secret persistence)* |
 | 元 | 改进 Web Agent 本身 | `/web-agent-skill` | `read_file`, `grep`, `skill_manage`, `memory_save` |
 
 ## 快速开始

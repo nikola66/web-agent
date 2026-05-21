@@ -3,8 +3,9 @@ import assert from "node:assert/strict";
 
 import { formatApprovalTerminalBlock, summarizeToolApproval } from "../dist/agent-runtime/tools/tool-policy.js";
 
-test("summarizeToolApproval skill_save omits raw content body", () => {
-  const summary = summarizeToolApproval("skill_save", {
+test("summarizeToolApproval skill_manage create omits raw content body", () => {
+  const summary = summarizeToolApproval("skill_manage", {
+    action: "create",
     name: "my-skill",
     description: "Short desc",
     content: "x".repeat(50_000),
@@ -16,8 +17,9 @@ test("summarizeToolApproval skill_save omits raw content body", () => {
   assert.ok(summary.length < 300);
 });
 
-test("summarizeToolApproval skill_save truncates long description in summary", () => {
-  const summary = summarizeToolApproval("skill_save", {
+test("summarizeToolApproval skill_manage truncates long description in summary", () => {
+  const summary = summarizeToolApproval("skill_manage", {
+    action: "create",
     name: "n",
     description: `${"word ".repeat(80)}end`,
     content: "a",
@@ -26,8 +28,11 @@ test("summarizeToolApproval skill_save truncates long description in summary", (
   assert.ok(summary.endsWith("content=1 chars"));
 });
 
-test("summarizeToolApproval skill_delete is one line", () => {
-  assert.equal(summarizeToolApproval("skill_delete", { name: "foo-bar" }), "skill_delete: name=foo-bar");
+test("summarizeToolApproval skill_manage delete is one line", () => {
+  assert.equal(
+    summarizeToolApproval("skill_manage", { action: "delete", name: "foo-bar" }),
+    "skill_manage: action=delete; name=foo-bar"
+  );
 });
 
 test("summarizeToolApproval skill_manage reports string field lengths", () => {
@@ -95,22 +100,24 @@ test("formatApprovalTerminalBlock skill_bulk_save is one summary line plus appro
   assert.equal(block.includes("Total items"), false);
 });
 
-test("formatApprovalTerminalBlock skill_save is compact", () => {
+test("formatApprovalTerminalBlock skill_manage create is compact", () => {
   const block = formatApprovalTerminalBlock({
-    toolLabel: "skill_save",
-    summary: summarizeToolApproval("skill_save", {
+    toolLabel: "skill_manage",
+    summary: summarizeToolApproval("skill_manage", {
+      action: "create",
       name: "blog-seo-audit",
       description: "Conduct a comprehensive SEO audit for the blog.",
       content: "x".repeat(4882),
     }),
     args: {
+      action: "create",
       name: "blog-seo-audit",
       description: "Conduct a comprehensive SEO audit for the blog.",
       content: "x".repeat(4882),
     },
   });
   assert.match(block, /Permission required/i);
-  assert.match(block, /skill_save/);
+  assert.match(block, /skill_manage/);
   assert.match(block, /blog-seo-audit/);
   assert.ok(/4(,?)882/.test(block));
   assert.match(block, /\d+ chars/);

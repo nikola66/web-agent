@@ -31,7 +31,7 @@ test("evaluateBackgroundReviewTrigger fires skill review after iteration thresho
     usedPlanningGate: false,
     estimatedStepsOverSix: false,
     finalVisibleText: "Done.",
-    availableToolNames: ["skill_manage", "skill_save", "read_file"],
+    availableToolNames: ["skill_manage", "read_file"],
   });
   assert.equal(result.shouldReviewSkills, true);
   assert.equal(result.kind, "skill");
@@ -49,7 +49,7 @@ test("evaluateBackgroundReviewTrigger skips skill review when foreground already
     usedPlanningGate: false,
     estimatedStepsOverSix: false,
     finalVisibleText: "Done.",
-    availableToolNames: ["skill_manage", "skill_save"],
+    availableToolNames: ["skill_manage"],
   });
   assert.equal(result.shouldReviewSkills, false);
   assert.equal(result.kind, null);
@@ -110,7 +110,7 @@ test("noteForegroundSkillWrite resets skill iteration counter", () => {
 
 test("summarizeBackgroundReviewActions extracts skill and memory updates", () => {
   const lines = summarizeBackgroundReviewActions([
-    { tool: "skill_save", status: "ok", result: { name: "deploy-checklist", slug: "deploy-checklist" } },
+    { tool: "skill_manage", status: "ok", result: { action: "create", name: "deploy-checklist", slug: "deploy-checklist" } },
     { tool: "memory_save", status: "ok", result: { key: "timezone" } },
     { tool: "read_file", status: "ok", result: { ok: true } },
   ]);
@@ -119,7 +119,7 @@ test("summarizeBackgroundReviewActions extracts skill and memory updates", () =>
 
 test("summarizeBackgroundReviewActionsDetailed counts created vs patched", () => {
   const summary = summarizeBackgroundReviewActionsDetailed([
-    { tool: "skill_save", status: "ok", result: { name: "a", slug: "a" } },
+    { tool: "skill_manage", status: "ok", result: { action: "create", name: "a", slug: "a" } },
     { tool: "skill_manage", status: "ok", result: { action: "create", name: "b", slug: "b" } },
     { tool: "skill_manage", status: "ok", result: { action: "patch", name: "c", slug: "c" } },
     { tool: "memory_save", status: "ok", result: { key: "k" } },
@@ -182,7 +182,7 @@ test("hermes parity benchmark: complex-turn fixture triggers skill review more o
     toolRoundCount: 5,
     toolCallCount: 12,
     finalVisibleText: "Implemented and verified.",
-    availableToolNames: ["skill_manage", "skill_save", "memory_save", "read_file"],
+    availableToolNames: ["skill_manage", "memory_save", "read_file"],
   };
 
   resetSelfImproveCounters();

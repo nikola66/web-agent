@@ -443,7 +443,7 @@ export default defineConfig(({ mode }) => {
     },
     optimizeDeps: {
       exclude: ["@huggingface/transformers"],
-      include: ["mermaid", "dayjs"],
+      include: ["dayjs"],
     },
     build: {
       emptyOutDir: false,

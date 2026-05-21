@@ -27,10 +27,7 @@ export function WorkspacePanel() {
   const [confirmDestroy, setConfirmDestroy] = useState(false);
   const [nukeStep, setNukeStep] = useState<"idle" | "confirm" | "working">("idle");
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const isRunning =
-    runtimeStatus === "running" ||
-    runtimeStatus === "booting" ||
-    runtimeStatus === "installing";
+  const isRunning = runtimeStatus === "running" || runtimeStatus === "booting";
 
   const active = profiles.find((p) => p.id === activeProfileId);
   const profileLabel = active?.name ?? "profile";

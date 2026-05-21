@@ -1,6 +1,6 @@
 # Modular Capabilities
 
-Web Agent supports trusted, repo-level capability folders. Add a folder, rebuild, and the host copies it into `.webagent/capabilities/` for the runtime to scan.
+Web Agent ships **38 built-in tools** and **16 bundled skills** under `src/capabilities/`. Add a capability folder, rebuild, and the host copies it into `.webagent/capabilities/` for the runtime to scan.
 
 ## Built-In Tools
 
@@ -79,7 +79,18 @@ category: bundled
 ---
 ```
 
-`triggers` accepts YAML lists or inline `[a, b]` arrays (same as `tags`). The index shows triggers after the description (truncated per skill if needed).
+`triggers` accepts YAML lists or inline `[a, b]` arrays (same as `tags`). Use **6–12 user phrases** — not tool names. The index shows triggers after the description (truncated per skill if needed).
+
+**Body sections (bundled skills):**
+
+```markdown
+## Tool contract (read first)
+## When to Use
+## Relation to other skills
+## Procedure          # or Loop / Checklist / Output Contract
+## Pitfalls
+## Anti-patterns
+```
 
 ## Verification
 

@@ -20,7 +20,7 @@ triggers: [backup, export profile, checkpoint, rollback, before delete, rm -rf, 
 | Risky shell | `run_shell` — prefer `work/` subtree — **`browser-runtime-map`** |
 | Multi-step irreversible plan | **`task-execution`** inserts checkpoint todo as step 0 |
 
-**Non-negotiable:** No wide delete/refactor without checkpoint or export. Redact secrets before export — **`credential-hygiene`**.
+**Non-negotiable:** No wide delete/refactor without checkpoint or export. Redact secrets before export — see **`memory-layers`**.
 
 ## Canonical scope
 
@@ -33,12 +33,16 @@ This skill owns **backup, checkpoint, export, and risk isolation** before destru
 - Recovering from a bad turn without losing everything (`/checkpoint`, `/rollback`).
 - "Delete everything", mass file removal, or irreversible migration.
 
+## Relation to other skills
+
+- Path layout: **`project-scaffold`**. Secrets/redaction: **`memory-layers`**. Multi-step runs: **`task-execution`**.
+
 ## Checklist
 
 1. **Named history checkpoint** — If the UI exposes slash commands (`/checkpoint [name]` per README), save conversation state before big moves; `/rollback` lists or restores.
 2. **Profile / workspace export** — Workspaces tab: **Export** profile snapshot to JSON; **Import** later. Do this before risky migration or "let's wipe and retry."
 3. **Isolate experiments** — New disposable trees under **`work/<purpose-slug>/`**; durable demos under **`projects/<slug>/`**. Call `skill_view` **`project-scaffold`** when layout is unclear.
-4. **Secrets** — Never checkpoint or export and share without redacting; see **`credential-hygiene`**.
+4. **Secrets** — Never checkpoint or export and share without redacting; see **`memory-layers`**.
 5. **Destructive tools** — Confirm scope before `delete_file`, wide patches, or shell that removes files.
 6. **Inside multi-step runs** — **`task-execution`** inserts a checkpoint todo as step 0 when the approved plan contains an irreversible step; do not skip it.
 

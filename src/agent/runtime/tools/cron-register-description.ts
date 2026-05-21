@@ -21,7 +21,9 @@ export const CRON_REGISTER_TOOL_DESCRIPTION = `Save a recurring heartbeat job to
 
 **Canonical step shape:** \`{"tool":"<builtin_name>","arguments":{...}}\` — use this in \`steps\`. Legacy \`action\` is accepted as an alias for \`tool\`.
 
-**Do not confuse:** \`silent\` / \`terminal\` / \`email\` are **only** for the job’s \`delivery\` field. Never use them as a step’s \`tool\`.
+**Do not confuse:** \`silent\` / \`terminal\` / \`email\` are **only** for the job’s \`delivery\` field — except \`email\` is also a valid step tool for sending mail inside a step (\`{"tool":"email","arguments":{"to","subject","text"[, "cc"]}}\`). Never use \`silent\` or \`terminal\` as a step \`tool\`.
+
+**Multi-step data:** Steps run in order with **no variable pass-through** — each step’s arguments are static JSON. To chain research → outreach → log, write intermediate results to fixed workspace paths (\`write_file\`) and reference those paths in later steps. Cron steps invoke tools directly (no LLM between steps), so **per-recipient personalized email to a dynamic list requires either a host \`run_shell\` script or in-chat \`task-execution\`** — not blind multi-recipient spam from static cron args. Prefer research → save targets → email **you** a digest for approval before cold outreach.
 
 **Nodebox:** Prefer \`web_search\`, \`write_file\`, memory tools, etc. over \`run_shell\` in steps when the runtime has no shell.
 
@@ -42,7 +44,12 @@ Multi-step (each step is \`tool\` + \`arguments\`):
 {"id":"search_then_save","everyMinutes":180,"delivery":"silent","steps":[{"tool":"web_search","arguments":{"query":"rust release notes","page":0}},{"tool":"write_file","arguments":{"path":"work/notes/rust.md","content":"paste summary here"}}]}
 \`\`\`
 
-Email digest when done:
+Research → log → notify operator (approval-friendly outreach):
+\`\`\`json
+{"id":"outreach_digest","everyMinutes":1440,"delivery":"terminal","steps":[{"tool":"web_search","arguments":{"query":"open source AI agent developers github","page":0}},{"tool":"write_file","arguments":{"path":"work/outreach/targets.md","content":"Summarize leads from step 1 here."}},{"tool":"email","arguments":{"to":"you@example.com","cc":"hello@aratech.ae","subject":"Web Agent outreach targets — review before send","text":"See work/outreach/targets.md. Approve recipients before cold email."}}]}
+\`\`\`
+
+Email digest when done (job \`delivery: email\` wraps step outputs — different from an \`email\` step):
 \`\`\`json
 {"id":"weekly_email","everyMinutes":10080,"delivery":"email","deliveryEmailTo":"you@example.com","deliveryEmailSubject":"Weekly digest","tool":"web_search","arguments":{"query":"industry news","page":0}}
 \`\`\`

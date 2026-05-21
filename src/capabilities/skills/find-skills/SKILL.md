@@ -25,13 +25,17 @@ triggers: [find skill, find skills, search skills, skill marketplace, skill regi
 - User sends **`/find_skills [query]`** or names a registry (`skills.sh`, SkillsMP, Cursor Marketplace).
 - User wants the **most popular** skill for PDF, React, debugging, etc. — not installed workspace skills (use `/skills` for those).
 
-**Not for:** listing skills already in the workspace (`/skills`), editing bundled skills (**`web-agent-skill`**), or general open-web people/product discovery (**`open-web-research`**).
+**Not for:** listing installed workspace skills (`/skills`), editing bundled skills (**`web-agent-skill`**), or open-web entity discovery (**`open-web-research`**).
+
+## Relation to other skills
+
+- Ambiguous intent: **`clarify`**. Remote install rules: **`web-agent-skill`**. Open-web lists (creators, companies): **`open-web-research`**.
 
 ## Registries (search all that respond)
 
 | Registry | Search pattern | Popularity metric | Notes |
 |----------|----------------|-------------------|-------|
-| [skills.sh](https://skills.sh/) | `site:skills.sh {query}` or `skills.sh {query}` | **Installs** | Open agent-skills directory; install via `npx skillsadd <owner/repo>` |
+| [skills.sh](https://skills.sh/) | `site:skills.sh {query}` or `skills.sh {query}` | **Installs** | Open directory; install via HTTPS `SKILL.md` URL + `skill_bulk_save` / `skill_manage` |
 | [SkillsMP](https://skillsmp.com/) | `site:skillsmp.com {query}` | **Stars** / recency | Large marketplace; prefer pages showing star counts |
 | [Cursor Marketplace](https://cursor.com/marketplace) | `site:cursor.com/marketplace {query}` | Featured / plugin listing | Plugins bundling skills; link plugin page |
 | [cursor.directory](https://cursor.directory/) | `site:cursor.directory {query} skill` | Community votes if shown | MCP servers + skills |
@@ -54,7 +58,7 @@ If a registry returns no hits, note it and continue — do not shrink the final 
 
 | # | Skill | Registry | Popularity | Summary | Install / link |
 |---|-------|----------|------------|---------|----------------|
-| 1 | … | skills.sh | 12.4k installs | … | `npx skillsadd owner/repo` or URL |
+| 1 | … | skills.sh | 12.4k installs | … | `https://…/SKILL.md` or `/skills install <url>` |
 | … | … | … | … | … | … |
 
 **Sources checked:** skills.sh, SkillsMP, Cursor Marketplace, …
@@ -73,6 +77,11 @@ When the user picks a skill:
 1. `skill_view` **`web-agent-skill`** — remote install rules (HTTPS + `skill_manage` / `skill_bulk_save`, never shell `git clone`).
 2. Install with `/skills install <https-url-to-SKILL.md>` or `skill_manage` `import_url`.
 3. Confirm with `skill_list` + `skill_view`.
+
+## Pitfalls
+
+- Ranking from training memory instead of live registry pages.
+- Returning fewer than 5 without exhausting registries.
 
 ## Anti-patterns
 

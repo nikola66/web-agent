@@ -4,7 +4,12 @@ import { Square, Plus, Pencil, Trash2 } from "lucide-react";
 import { useProfileStore } from "../stores/profile-store";
 import { useRuntimeStore } from "../stores/runtime-store";
 import { useSettingsStore, LLM_PROVIDERS } from "../stores/settings-store";
-import { refreshStorageUsage, startAgent, stopAgent } from "@/core/orchestrator";
+import {
+  disposeProfileRuntime,
+  refreshStorageUsage,
+  startAgent,
+  stopAgent,
+} from "@/core/orchestrator";
 import type { Profile } from "@/core/profiles";
 import { ErrorBoundary } from "./ErrorBoundary";
 import { lazyWithRetry } from "../lazy-with-retry";
@@ -19,7 +24,6 @@ import { clearProfileCredentials, loadProfileCredentials } from "@/core/credenti
 const STATUS_DOT_COLOR: Record<string, string> = {
   idle: "#444",
   booting: "#fbbf24",
-  installing: "#fbbf24",
   running: "#34d399",
   error: "#f87171",
   stopped: "#444",
@@ -148,6 +152,10 @@ export function ProfileSelector() {
   const handleDeleteConfirm = async (e: React.MouseEvent, profileId: string) => {
     e.stopPropagation();
     setConfirmDeleteId(null);
+    if (runningProfileIds.includes(profileId)) {
+      await stopAgent(profileId);
+    }
+    disposeProfileRuntime(profileId);
     await removeProfile(profileId);
     await Promise.all([
       destroyWorkspace(profileId).catch(() => {}),
@@ -187,7 +195,7 @@ export function ProfileSelector() {
         const runtimeStatus = runtimeStatusByProfile[p.id] ?? "idle";
         const isActive = activeProfileId === p.id;
         const isThisRunning = runningProfileIds.includes(p.id);
-        const anyBusy = runtimeStatus === "booting" || runtimeStatus === "installing";
+        const anyBusy = runtimeStatus === "booting";
         const isThisBusy = isThisRunning && anyBusy;
         const cardStatus = isThisRunning ? runtimeStatus : "idle";
         const cardBorder = isActive ? p.accentColor : "var(--color-border)";

@@ -6,7 +6,7 @@
 
 **Browser-native AI agent with isolated workspaces, persistent memory, and zero setup friction.**
 
-[Live demo](https://webagent.aratech.ae) · [GitHub](https://github.com/nikola66/web-agent) · [Support on Ko-fi](http://ko-fi.com/nikola66) · [Contributing](CONTRIBUTING.md) · [Security](SECURITY.md)
+[Live demo](https://webagent.aratech.ae) · [GitHub](https://github.com/nikola66/web-agent) · [Personal Helper Playbook](docs/use-cases-playbook.md) · [Support on Ko-fi](http://ko-fi.com/nikola66) · [Contributing](CONTRIBUTING.md) · [Security](SECURITY.md)
 
 **Languages:** [English](README.md) · [简体中文](README.zh-CN.md) · [Español](README.es.md) · [العربية](README.ar.md)
 
@@ -24,7 +24,7 @@
 
 Web Agent is an open-source AI agent that runs directly in the browser on top of WebContainers. There is nothing to install to use it: no Docker, no VPS, no VM, no Mac mini, no Hostinger box, no local Python stack. Open the app, launch a profile, and start working.
 
-It is designed to feel simple for end users and capable for power users: isolated profiles, browser-local persistence, tools, skills, sessions, reflections, learnings, cron jobs, **planning mode** (`/plan`), a **PARA + Obsidian-style knowledge vault** (`wiki_*` tools and `/wiki_*` slash commands), and a self-improving runtime that stays on the user’s machine.
+It is designed to feel simple for end users and capable for power users: isolated profiles, browser-local persistence, **38 built-in tools**, **16 bundled skills**, sessions, reflections, learnings, cron jobs, **planning mode** (`/plan`), a **PARA + Obsidian-style knowledge vault** (`wiki_*` tools and `/wiki_*` slash commands), and a self-improving runtime that stays on the user’s machine. For copy-paste scenarios mapped to skills and tools, start with the **[Personal Helper Playbook](docs/use-cases-playbook.md)**.
 
 ## Contents
 
@@ -71,6 +71,7 @@ It is designed to feel simple for end users and capable for power users: isolate
 - Export and import flows for long-lived browser-local workspaces
 - Hosted demo for zero-friction trial usage
 - **Tool loop guardrails** (default on): Hermes-style deterministic detection of repeated tool failures and idempotent no-progress reads per turn; configure via `VITE_WEBAGENT_TOOL_LOOP_*` (see [docs/agent-notes.md](docs/agent-notes.md))
+- **Personal Helper Playbook**: [docs/use-cases-playbook.md](docs/use-cases-playbook.md) — 25 copy-paste scenarios with bundled skills and typical tools
 
 ## Capability Surface
 
@@ -79,6 +80,14 @@ Web Agent is not just a chat box. It is a browser-native agent runtime with thre
 - `⌨️ Slash commands` for fast operator control
 - `🛠️ Tools` for concrete actions in the workspace and on the web
 - `📚 Skills` for reusable procedures and higher-level behavior
+
+### At a glance
+
+| Layer | Count | Notes |
+| --- | --- | --- |
+| Built-in tools | **38** | Seven groups below; skill CRUD consolidated into **`skill_manage`** (plus list, view, bulk import) |
+| Bundled skills | **16** | Four **hub** skills route related workflows; twelve **workflow** skills cover research, planning, delivery, and ops |
+| Playbook scenarios | **25** | Full prompts in **[docs/use-cases-playbook.md](docs/use-cases-playbook.md)** |
 
 ```mermaid
 flowchart TB
@@ -267,16 +276,16 @@ These power built-in web actions from the Settings panel:
 
 ## Tooling
 
-Web Agent ships with a broad native tool belt. The built-ins cover workspace manipulation, search, memory, automation, skill management, and browser-routed remote actions.
+Web Agent ships with **38 native built-in tools** in seven groups. The surface was consolidated so models see four skill tools (`skill_list`, `skill_view`, `skill_manage`, `skill_bulk_save`) instead of seven overlapping names; `list_dir` lists one directory level while `find_files` searches by glob pattern.
 
 ### Tool Groups
 
 | Group | Includes | Best for |
 | --- | --- | --- |
-| `📁 Files & Workspace` | `read_file`, `write_file`, `edit_file`, `multi_edit`, `move_file`, `delete_file`, `tree`, `list_dir`, `find_files`, `grep`, `file_diff`, `file_stat`, `make_dir` | Building, editing, inspecting, and organizing project files |
+| `📁 Files & Workspace` | `read_file`, `write_file`, `edit_file`, `multi_edit`, `move_file`, `delete_file`, `tree`, `list_dir`, `find_files`, `grep`, `file_diff`, `make_dir` | Building, editing, inspecting, and organizing project files |
 | `🧠 Memory & Recall` | `memory_save`, `memory_recall`, `memory_search`, `session_memory_append`, `session_memory_list`, `session_search` | Long-lived facts, rolling notes, and recovering prior context |
 | `📓 Knowledge wiki` | `wiki_setup`, `wiki_sync`, `wiki_search` | PARA + Obsidian-friendly vault under the workspace; project facts/session/learnings into markdown; full-text vault search |
-| `📚 Skills` | `skill_list`, `skill_view`, `skill_save`, `skill_manage`, `skill_bulk_save`, `skill_delete`, `skill_recall` | Discovering, reading, creating, importing, and maintaining skills |
+| `📚 Skills` | `skill_list`, `skill_view`, `skill_manage`, `skill_bulk_save` | Discovering, reading, creating, importing, and maintaining skills |
 | `⏱️ Automation` | `cron_register`, `cron_list`, `todo_write` | Recurring jobs, heartbeat-driven workflows, and checklists |
 | `🌐 Remote & Multimodal` | `web_search`, `web_fetch`, `vision_analyze`, `youtube_transcribe`, `email` | Research, fetching live content, image analysis, transcripts, and outbound delivery |
 | `🖥️ System & Output` | `run_shell`, `system_info`, `artifact_present`, `apply_patch` | Executing commands, checking environment state, presenting artifacts, and surgical patching |
@@ -294,12 +303,11 @@ Web Agent ships with a broad native tool belt. The built-ins cover workspace man
 | `🛠️ edit_file` | Replace a matching snippet or fully replace file contents. |
 | `✉️ email` | Send outbound email through Resend-configured delivery. |
 | `🧾 file_diff` | Show a line-oriented diff between two UTF-8 workspace files. |
-| `📌 file_stat` | Return filesystem metadata for a workspace path. |
 | `🔎 find_files` | Find files by glob-like name patterns. |
 | `🔍 grep` | Search file contents by text or regex. |
 | `📁 list_dir` | List workspace files and directories with optional recursion and filtering. |
 | `📂 make_dir` | Create directories recursively inside the workspace. |
-| `🧠 memory_recall` | Recall a saved memory fact by exact key. |
+| `💭 memory_recall` | Recall a saved memory fact by exact key. |
 | `💾 memory_save` | Save a durable memory fact under a stable key. |
 | `🔮 memory_search` | Search saved memory facts by substring. |
 | `📦 move_file` | Move or rename a workspace path. |
@@ -310,21 +318,19 @@ Web Agent ships with a broad native tool belt. The built-ins cover workspace man
 | `🗂️ session_memory_list` | Read the newest entries from rolling session memory. |
 | `📇 session_search` | Search archived workspace conversations by keywords. |
 | `📚 skill_bulk_save` | Batch import or save multiple skills in one operation. |
-| `🗑️ skill_delete` | Delete a saved skill from the workspace library. |
 | `📋 skill_list` | Search and list saved skills. |
-| `🧠 skill_manage` | Create, patch, edit, delete, import, or manage reusable skills. |
-| `🔍 skill_recall` | Load a raw `SKILL.md` by name for backward compatibility. |
-| `📚 skill_save` | Save a reusable `SKILL.md` procedure immediately. |
+| `🧩 skill_manage` | Create, patch, edit, delete, import, or manage reusable skills. |
 | `📖 skill_view` | Load a skill's full `SKILL.md` or an allowed support file. |
 | `📟 system_info` | Return a safe system snapshot including time, timezone, uptime, and memory. |
 | `✅ todo_write` | Create or update checklist-style todos. |
 | `🌲 tree` | Render a bounded directory tree view. |
 | `🖼️ vision_analyze` | Analyze an image with the configured vision model. |
 | `🌐 web_fetch` | Fetch and summarize content from a URL. |
-| `🔍 web_search` | Search the web and return ranked results. |
-| `📓 wiki_search` | Search markdown files under the wiki vault root; ranked snippets when `memory_search` is not enough. |
+| `🌍 web_search` | Search the web and return ranked results. |
+| `🔖 wiki_search` | Search markdown files under the wiki vault root; ranked snippets when `memory_search` is not enough. |
 | `📓 wiki_setup` | Create the PARA + `Resources/KnowledgeVault/` scaffold (idempotent). |
-| `🔄 wiki_sync` | Update vault `index.md` / `log.md` and write `ops/wiki-sync-*.md` from facts, session tail, and/or learnings. |
+| `🔁 wiki_sync` | Update vault `index.md` / `log.md` and write `ops/wiki-sync-*.md` from facts, session tail, and/or learnings. |
+| `🎙️ audio_analyze` | Transcribe workspace audio via the browser STT worker (Telegram voice notes, uploaded audio). |
 | `✍️ write_file` | Write text to a file and create parent folders as needed. |
 | `📹 youtube_transcribe` | Fetch a full YouTube transcript with timestamps. |
 
@@ -334,19 +340,37 @@ Web Agent ships with a broad native tool belt. The built-ins cover workspace man
 
 Skills are reusable procedures stored as `SKILL.md` files. They let Web Agent switch from raw tool usage to structured workflows that can be invoked on demand.
 
-### Bundled Skills
+### Bundled Skills (16)
 
-| Slash command | Name | What it is for | Tags |
-| --- | --- | --- | --- |
-| `/find_skills` | Find Skills | Search online skill registries and return the top 5 matches by installs, stars, or votes. | `skills`, `discovery`, `registry`, `marketplace`, `install` |
-| `/clarify` | Clarify | Emit one structured clarification block when user intent is ambiguous, so the UI can present choices instead of guessing. | `ux`, `ambiguity`, `clarification`, `dialog` |
-| `/project-scaffold` | Project Scaffold | Create an isolated workspace folder for a new app, demo, spike, sandbox, or test harness before file generation begins. | `project`, `scaffold`, `verification` |
-| `/research-pack` | Research Pack | Run scholarly research workflows using existing web tools such as arXiv and Semantic Scholar paths. | `research`, `papers`, `citations`, `academic`, `arxiv`, `semantic-scholar` |
-| `/systematic-debugging` | Systematic Debugging | Use a lightweight hypothesis-and-experiment loop for bugs and flaky behavior. | `debugging`, `reliability`, `investigation`, `science` |
-| `/memory-layers` | Memory Layers | Pick the right layer among facts, session notes, skills, and wiki projections — avoid duplicate or contradictory stored context. | `memory`, `session`, `skills`, `facts`, `context` |
-| `/web-agent-skill` | Web Agent Skill | Evolve Web Agent safely using its runtime, memory layers, cron, bundled skills, and repository truth. | `web-agent`, `self-evolution`, `maintenance`, `skills`, `memory`, `cron` |
+**Hub skills** — route related workflows and cross-skill tables:
 
-Additional bundled skills appear under `/skills`; the table above highlights common starting points.
+| Slash command | Hub for |
+| --- | --- |
+| `/memory-layers` | Facts, session notes, wiki mirror, secret hygiene, `session_search` |
+| `/browser-runtime-map` | WebContainer limits, shell failures, file layout |
+| `/artifact-delivery` | Reports, email, charts, presentation patterns |
+| `/web-agent-skill` | Evolving Web Agent itself (runtime, skills, cron, repo truth) |
+
+**Workflow skills** — focused procedures (invoke with `/<slug> [task]` or pick from `/skills`):
+
+| Slash command | What it is for |
+| --- | --- |
+| `/open-web-research` | Fan-out web discovery with verified fetches |
+| `/research-pack` | Scholarly / citation-heavy research |
+| `/structured-extraction` | Tables or JSON from live pages |
+| `/find_skills` | Search online skill registries (top 5 matches) |
+| `/task-execution` | In-session plan (`todo_write`) then execute |
+| `/heartbeat-cron` | Recurring jobs while the tab is open |
+| `/project-scaffold` | Isolated folder before generating files |
+| `/workspace-safety` | Checkpoints, bulk ops, safe reorganize |
+| `/systematic-debugging` | Hypothesis-and-experiment debug loop |
+| `/multimodal-ingest` | Vision, YouTube transcripts, audio paths |
+| `/chart` | Mermaid flowcharts via `artifact_present` |
+| `/clarify` | One structured clarification block (no tools) |
+
+> `📌 Tip:` **`/plan`** is a slash **mode** (spec under `plans/`, execute on the next turn), not a bundled skill. Pair it with **`/task-execution`** when you want todos inside the same session.
+
+See **[docs/use-cases-playbook.md](docs/use-cases-playbook.md)** for all 25 scenarios mapped to these skills.
 
 ### Why Skills Matter
 
@@ -462,9 +486,8 @@ Twenty-five personal-helper scenarios with copy-paste prompts, bundled skills, a
 | Memory | Capture rolling session context | `/memory-layers` | `session_memory_append`, `session_memory_list` |
 | Memory | Mirror memory into Obsidian-style vault | `/memory-layers` | `wiki_setup`, `wiki_sync`, `wiki_search` |
 | Memory | Find something from an old chat | `/memory-layers` | `session_search` |
-| Planning | Spec-first feature plan (no execution yet) | `/plan`, `/task-planning` | `read_file`, `grep`, `write_file`, `artifact_present` |
-| Planning | Break a stacked request into todos | `/task-planning` | `todo_write`, `skill_view` |
-| Planning | Execute an approved multi-step plan | `/task-execution` | `todo_write`, `read_file`, `write_file`, `artifact_present` |
+| Planning | Spec-first feature plan (no execution yet) | `/plan` | `read_file`, `grep`, `write_file`, `artifact_present` |
+| Planning | Plan and execute multi-step work | `/task-execution` | `todo_write`, `write_file`, `artifact_present` |
 | Automation | Daily digest while tab is open | `/heartbeat-cron` | `cron_register`, `cron_list`, `web_search`, `web_fetch` |
 | Workspace | Bootstrap a new side project folder | `/project-scaffold` | `make_dir`, `write_file`, `tree` |
 | Workspace | Reorganize files safely | `/workspace-safety`, `/browser-runtime-map` | `list_dir`, `find_files`, `move_file`, `tree` |
@@ -476,8 +499,8 @@ Twenty-five personal-helper scenarios with copy-paste prompts, bundled skills, a
 | Delivery | Email a deliverable | `/artifact-delivery` | `write_file`, `email`, `artifact_present` |
 | Delivery | Flowchart for a plan or report | `/chart` | `artifact_present` |
 | UX | Disambiguate a vague ask | `/clarify` | *(none)* |
-| Safety | Checkpoint before bulk delete | `/workspace-safety` | `list_dir`, `file_stat`, `delete_file` |
-| Safety | Pasted API key / secret hygiene | `/credential-hygiene` | *(redaction; no secret persistence)* |
+| Safety | Checkpoint before bulk delete | `/workspace-safety` | `list_dir`, `delete_file` |
+| Safety | Pasted API key / secret hygiene | `/memory-layers` | *(redaction; no secret persistence)* |
 | Meta | Improve Web Agent itself | `/web-agent-skill` | `read_file`, `grep`, `skill_manage`, `memory_save` |
 
 ## Quick Start
@@ -511,6 +534,7 @@ npm run test:browser
 Contributor-facing docs:
 
 - [docs/README.md](docs/README.md) — docs hub (English + translations)
+- [docs/use-cases-playbook.md](docs/use-cases-playbook.md) — 25 personal-helper scenarios (prompts, skills, tools)
 - [CONTRIBUTING.md](CONTRIBUTING.md)
 - [AGENTS.md](AGENTS.md) — rules for AI coding agents
 - [CAPABILITIES.md](CAPABILITIES.md)
