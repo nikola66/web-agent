@@ -39,6 +39,10 @@ const SKILL_TOOLS = new Set([
 let itersSinceSkill = 0;
 let turnsSinceMemory = 0;
 
+export function getSelfImproveCounters(): { itersSinceSkill: number; turnsSinceMemory: number } {
+  return { itersSinceSkill, turnsSinceMemory };
+}
+
 export function resetSelfImproveCounters(): void {
   itersSinceSkill = 0;
   turnsSinceMemory = 0;
@@ -70,6 +74,8 @@ export type BackgroundReviewTriggerInput = {
   usedTodoWrite?: boolean;
   usedPlanningGate?: boolean;
   estimatedStepsOverSix?: boolean;
+  toolRoundCount?: number;
+  toolCallCount?: number;
   finalVisibleText?: string;
   availableToolNames?: string[];
 };
@@ -93,6 +99,15 @@ export function evaluateBackgroundReviewTrigger(
   const complex =
     !!input.executedToolsInTurn &&
     (input.usedTodoWrite || input.usedPlanningGate || input.estimatedStepsOverSix);
+  const toolRoundCount = Math.max(0, Number(input.toolRoundCount || 0));
+  const toolCallCount = Math.max(0, Number(input.toolCallCount || 0));
+  const toolHeavy = toolCallCount >= 5 || toolRoundCount >= 3;
+  const missedSkillOpportunity =
+    completed &&
+    hasSkillTools &&
+    !input.skillMutatingCalled &&
+    !!input.executedToolsInTurn &&
+    (complex || toolHeavy);
 
   let shouldReviewMemory = false;
   let shouldReviewSkills = false;
@@ -101,13 +116,16 @@ export function evaluateBackgroundReviewTrigger(
     shouldReviewMemory = true;
     turnsSinceMemory = 0;
   }
-  if (
+  const acceleratedSkillThreshold = Math.max(3, DEFAULT_SKILL_REVIEW_INTERVAL - 4);
+  const skillReviewDue =
     completed &&
-    complex &&
     hasSkillTools &&
     !input.skillMutatingCalled &&
-    itersSinceSkill >= DEFAULT_SKILL_REVIEW_INTERVAL
-  ) {
+    missedSkillOpportunity &&
+    (itersSinceSkill >= DEFAULT_SKILL_REVIEW_INTERVAL ||
+      toolCallCount >= 8 ||
+      (toolHeavy && itersSinceSkill >= acceleratedSkillThreshold));
+  if (skillReviewDue) {
     shouldReviewSkills = true;
     itersSinceSkill = 0;
   }
@@ -160,10 +178,28 @@ function allowedToolsForKind(kind: BackgroundReviewKind): string[] {
   return [...new Set([...MEMORY_TOOLS, ...SKILL_TOOLS])];
 }
 
+export type BackgroundReviewActionSummary = {
+  lines: string[];
+  skillsCreated: number;
+  skillsPatched: number;
+  memoryUpdates: number;
+  sessionMemoryUpdates: number;
+};
+
 export function summarizeBackgroundReviewActions(
   toolResults: Array<{ tool?: string; status?: string; error?: string; result?: unknown }>
 ): string[] {
+  return summarizeBackgroundReviewActionsDetailed(toolResults).lines;
+}
+
+export function summarizeBackgroundReviewActionsDetailed(
+  toolResults: Array<{ tool?: string; status?: string; error?: string; result?: unknown }>
+): BackgroundReviewActionSummary {
   const lines: string[] = [];
+  let skillsCreated = 0;
+  let skillsPatched = 0;
+  let memoryUpdates = 0;
+  let sessionMemoryUpdates = 0;
   for (const item of toolResults) {
     if (item.status !== "ok" || item.error) continue;
     const tool = String(item.tool || "");
@@ -171,15 +207,19 @@ export function summarizeBackgroundReviewActions(
     if (tool === "skill_save" || (tool === "skill_manage" && result.action === "create")) {
       const name = String(result.name || result.slug || "skill");
       lines.push(`Skill '${name}' created`);
+      skillsCreated += 1;
     } else if (tool === "skill_manage" && ["patch", "edit", "write_file"].includes(String(result.action || ""))) {
       lines.push(`Skill '${String(result.name || result.slug || "skill")}' updated`);
+      skillsPatched += 1;
     } else if (tool === "memory_save") {
       lines.push("Memory updated");
+      memoryUpdates += 1;
     } else if (tool === "session_memory_append") {
       lines.push("Session memory updated");
+      sessionMemoryUpdates += 1;
     }
   }
-  return lines;
+  return { lines, skillsCreated, skillsPatched, memoryUpdates, sessionMemoryUpdates };
 }
 
 export type ScheduleBackgroundReviewInput = {
@@ -242,20 +282,28 @@ export async function runBackgroundReview({
     });
   });
 
-  const actions = summarizeBackgroundReviewActions(capturedResults);
-  if (!actions.length) {
+  const actionSummary = summarizeBackgroundReviewActionsDetailed(capturedResults);
+  if (!actionSummary.lines.length) {
     await logDebugEvent("background_review_completed", { kind, runId, actions: [] });
     return null;
   }
 
-  const summary = `Self-improvement review: ${actions.join(" · ")}`;
+  const summary = `Self-improvement review: ${actionSummary.lines.join(" · ")}`;
   process.stdout.write(dim(`💾 ${summary}\n\n`));
   emitSelfImprovementSummary({
     summary,
     kind,
     source: writeOrigin,
   });
-  await logDebugEvent("background_review_completed", { kind, runId, actions, summary });
+  await logDebugEvent("background_review_completed", {
+    kind,
+    runId,
+    actions: actionSummary.lines,
+    skillsCreated: actionSummary.skillsCreated,
+    skillsPatched: actionSummary.skillsPatched,
+    memoryUpdates: actionSummary.memoryUpdates,
+    summary,
+  });
   if (typeof onSummary === "function") {
     await onSummary(summary);
   }

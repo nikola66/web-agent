@@ -97,8 +97,10 @@ export type AgentMemorySnapshot = {
 export type CuratorSnapshot = {
   paused: boolean;
   lastRunAt: string | null;
+  lastCheckedAt: string | null;
   lastRunSummary: string | null;
   lastReportPath: string | null;
+  lastSkipReason: string | null;
   runCount: number;
   latestReport: Record<string, unknown> | null;
 };
@@ -387,8 +389,15 @@ async function loadCuratorSnapshot(
   return {
     paused: state.paused === true,
     lastRunAt: typeof state.last_run_at === "string" ? state.last_run_at : null,
+    lastCheckedAt:
+      typeof state.last_checked_at === "string"
+        ? state.last_checked_at
+        : typeof state.last_run_at === "string"
+          ? state.last_run_at
+          : null,
     lastRunSummary: typeof state.last_run_summary === "string" ? state.last_run_summary : null,
     lastReportPath: typeof state.last_report_path === "string" ? state.last_report_path : null,
+    lastSkipReason: typeof state.last_skip_reason === "string" ? state.last_skip_reason : null,
     runCount: Number(state.run_count || 0),
     latestReport,
   };

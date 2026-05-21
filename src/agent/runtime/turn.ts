@@ -328,6 +328,7 @@ export async function agentTurn(
   } as CreateToolContextInput);
 
   let round = 0;
+  let toolCallCountInTurn = 0;
   let executedToolsInTurn = false;
   let webSearchCountInTurn = 0;
   let webFetchCountInTurn = 0;
@@ -761,7 +762,10 @@ export async function agentTurn(
       }
 
       lastToolExecutions = exec;
-      if (exec.length > 0) executedToolsInTurn = true;
+      if (exec.length > 0) {
+        executedToolsInTurn = true;
+        toolCallCountInTurn += exec.length;
+      }
       if (exec.length > 0 && !turnMeta?.backgroundReview) noteToolIteration();
       for (let i = 0; i < tools.length; i++) {
         const tname = String(tools[i]?.name || "");
@@ -895,6 +899,8 @@ export async function agentTurn(
         usedTodoWrite: usedTodoWriteInTurn,
         usedPlanningGate: usedPlanningGateForSkill,
         estimatedStepsOverSix: complexityEstimate.estimatedSteps > 6,
+        toolRoundCount: round,
+        toolCallCount: toolCallCountInTurn,
         finalVisibleText: run.final_visible_assistant_text,
         availableToolNames: allToolNames,
       });

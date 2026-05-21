@@ -371,9 +371,11 @@ export function MemoryTab({
                     snapshot.curator
                       ? snapshot.curator.paused
                         ? "paused"
-                        : snapshot.curator.lastRunAt
-                          ? "active"
-                          : "idle"
+                        : snapshot.curator.runCount > 0
+                          ? `${snapshot.curator.runCount} run(s)`
+                          : snapshot.curator.lastCheckedAt
+                            ? "checking"
+                            : "idle"
                       : "—"
                   }
                 />
@@ -721,9 +723,19 @@ export function MemoryTab({
                       Curator
                     </p>
                     <div className="grid grid-cols-2 gap-x-3 gap-y-0.5 text-[10px] text-text-muted">
-                      <span>status: {snapshot.curator.paused ? "paused" : "running"}</span>
-                      <span>runs: {snapshot.curator.runCount}</span>
-                      <span>last run: {formatTimestamp(snapshot.curator.lastRunAt)}</span>
+                      <span>status: {snapshot.curator.paused ? "paused" : "enabled"}</span>
+                      <span>successful runs: {snapshot.curator.runCount}</span>
+                      <span>
+                        last successful run: {formatTimestamp(snapshot.curator.lastRunAt)}
+                      </span>
+                      <span>
+                        last check: {formatTimestamp(snapshot.curator.lastCheckedAt)}
+                      </span>
+                      {snapshot.curator.lastSkipReason ? (
+                        <span className="col-span-2 truncate">
+                          last skip: {snapshot.curator.lastSkipReason}
+                        </span>
+                      ) : null}
                       <span className="col-span-2 truncate">
                         summary: {snapshot.curator.lastRunSummary || "—"}
                       </span>

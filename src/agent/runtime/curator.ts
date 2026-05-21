@@ -38,8 +38,10 @@ export const DEFAULT_CURATOR_ARCHIVE_AFTER_DAYS = Math.max(
 
 type CuratorState = {
   last_run_at: string | null;
+  last_checked_at: string | null;
   last_run_summary: string | null;
   last_report_path: string | null;
+  last_skip_reason: string | null;
   paused: boolean;
   run_count: number;
 };
@@ -47,11 +49,22 @@ type CuratorState = {
 function defaultState(): CuratorState {
   return {
     last_run_at: null,
+    last_checked_at: null,
     last_run_summary: null,
     last_report_path: null,
+    last_skip_reason: null,
     paused: false,
     run_count: 0,
   };
+}
+
+async function recordCuratorCheck(
+  state: CuratorState,
+  skipReason: string
+): Promise<void> {
+  state.last_checked_at = new Date().toISOString();
+  state.last_skip_reason = skipReason;
+  await saveCuratorState(state);
 }
 
 export async function loadCuratorState(): Promise<CuratorState> {
@@ -118,28 +131,31 @@ export async function maybeRunCurator({
   idleForMs = Number.POSITIVE_INFINITY,
   force = false,
   onSummary,
-}: MaybeRunCuratorInput): Promise<{ ran: boolean; summary?: string }> {
+}: MaybeRunCuratorInput): Promise<{ ran: boolean; summary?: string; skipReason?: string }> {
   const state = await loadCuratorState();
-  if (state.paused && !force) return { ran: false };
+  if (state.paused && !force) {
+    await recordCuratorCheck(state, "paused");
+    return { ran: false, skipReason: "paused" };
+  }
 
-  if (!state.last_run_at && !force) {
-    state.last_run_at = new Date().toISOString();
-    await saveCuratorState(state);
-    return { ran: false };
+  if (!state.last_run_at && !state.last_checked_at && !force) {
+    await recordCuratorCheck(state, "initial_probe");
+    return { ran: false, skipReason: "initial_probe" };
   }
 
   if (!force && msSince(state.last_run_at) < DEFAULT_CURATOR_INTERVAL_MS) {
-    return { ran: false };
+    await recordCuratorCheck(state, "interval_not_elapsed");
+    return { ran: false, skipReason: "interval_not_elapsed" };
   }
   if (!force && idleForMs < 2 * 60 * 60 * 1000) {
-    return { ran: false };
+    await recordCuratorCheck(state, "not_idle");
+    return { ran: false, skipReason: "not_idle" };
   }
 
   const agentCreated = await listAgentCreatedSkillSlugs();
   if (!agentCreated.length && !force) {
-    state.last_run_at = new Date().toISOString();
-    await saveCuratorState(state);
-    return { ran: false };
+    await recordCuratorCheck(state, "no_agent_created_skills");
+    return { ran: false, skipReason: "no_agent_created_skills" };
   }
 
   const transitions = await applyAutomaticSkillTransitions({
@@ -172,7 +188,8 @@ export async function maybeRunCurator({
     });
   } catch (err) {
     await logDebugEvent("curator_failed", { error: errorMessage(err) });
-    return { ran: false };
+    await recordCuratorCheck(state, `failed:${errorMessage(err)}`);
+    return { ran: false, skipReason: "failed" };
   }
 
   const report = {
@@ -186,8 +203,10 @@ export async function maybeRunCurator({
   await fs.writeFile(reportPath, JSON.stringify(report, null, 2), "utf8");
 
   state.last_run_at = report.at;
+  state.last_checked_at = report.at;
   state.last_run_summary = report.summary;
   state.last_report_path = reportPath;
+  state.last_skip_reason = null;
   state.run_count = Number(state.run_count || 0) + 1;
   await saveCuratorState(state);
 

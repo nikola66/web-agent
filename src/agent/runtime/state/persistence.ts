@@ -582,14 +582,14 @@ export async function runHeartbeatTick(
   process.stdout.write(dim(`🫀 heartbeat: checking periodic tasks (${reason})...\n`));
 
   const cron = await loadCronJobs();
-  if (!Array.isArray(cron.jobs) || cron.jobs.length === 0) {
-    process.stdout.write(dim("▸ no cron jobs registered\n\n"));
-    return;
+  const hasCronJobs = Array.isArray(cron.jobs) && cron.jobs.length > 0;
+  if (!hasCronJobs) {
+    process.stdout.write(dim("▸ no cron jobs registered\n"));
   }
 
   let ran = 0;
   let dirty = false;
-  for (const job of cron.jobs) {
+  for (const job of hasCronJobs ? cron.jobs : []) {
     if (!job || typeof job !== "object" || job.enabled === false) continue;
     const everyMinutes = Math.max(1, Number(job.everyMinutes || 30));
     const lastRunAt = Number(job.lastRunAt || 0);
@@ -628,7 +628,7 @@ export async function runHeartbeatTick(
   }
 
   if (dirty) await saveCronJobs(cron);
-  process.stdout.write(dim(`▸ heartbeat done, ran ${ran} job(s)\n\n`));
+  process.stdout.write(dim(`▸ heartbeat done, ran ${ran} job(s)\n`));
 
   if (opts.cfg && typeof opts.cfg === "object") {
     await maybeRunCurator({
@@ -638,6 +638,7 @@ export async function runHeartbeatTick(
       process.stdout.write(red(`▸ curator error: ${errorMessage(err)}\n`));
     });
   }
+  process.stdout.write("\n");
 }
 
 // ---------------------------------------------------------------------------

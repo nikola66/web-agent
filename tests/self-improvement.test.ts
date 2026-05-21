@@ -7,14 +7,17 @@ import os from "node:os";
 import {
   evaluateBackgroundReviewTrigger,
   summarizeBackgroundReviewActions,
+  summarizeBackgroundReviewActionsDetailed,
   noteToolIteration,
   noteForegroundSkillWrite,
   noteUserTurnStarted,
   resetSelfImproveCounters,
+  getSelfImproveCounters,
   DEFAULT_SKILL_REVIEW_INTERVAL,
   DEFAULT_MEMORY_REVIEW_INTERVAL,
 } from "../dist/agent-runtime/background-review.js";
-import { loadCuratorState } from "../dist/agent-runtime/curator.js";
+import { loadCuratorState, maybeRunCurator } from "../dist/agent-runtime/curator.js";
+import { runHeartbeatTick } from "../dist/agent-runtime/state/persistence.js";
 
 test("evaluateBackgroundReviewTrigger fires skill review after iteration threshold on complex turn", () => {
   resetSelfImproveCounters();
@@ -112,6 +115,127 @@ test("summarizeBackgroundReviewActions extracts skill and memory updates", () =>
     { tool: "read_file", status: "ok", result: { ok: true } },
   ]);
   assert.deepEqual(lines, ["Skill 'deploy-checklist' created", "Memory updated"]);
+});
+
+test("summarizeBackgroundReviewActionsDetailed counts created vs patched", () => {
+  const summary = summarizeBackgroundReviewActionsDetailed([
+    { tool: "skill_save", status: "ok", result: { name: "a", slug: "a" } },
+    { tool: "skill_manage", status: "ok", result: { action: "create", name: "b", slug: "b" } },
+    { tool: "skill_manage", status: "ok", result: { action: "patch", name: "c", slug: "c" } },
+    { tool: "memory_save", status: "ok", result: { key: "k" } },
+  ]);
+  assert.equal(summary.skillsCreated, 2);
+  assert.equal(summary.skillsPatched, 1);
+  assert.equal(summary.memoryUpdates, 1);
+  assert.ok(summary.lines.length >= 3);
+});
+
+test("evaluateBackgroundReviewTrigger accelerates skill review on tool-heavy turns", () => {
+  resetSelfImproveCounters();
+  const accelerated = Math.max(3, DEFAULT_SKILL_REVIEW_INTERVAL - 4);
+  for (let i = 0; i < accelerated; i += 1) noteToolIteration();
+  const result = evaluateBackgroundReviewTrigger({
+    status: "completed",
+    aborted: false,
+    executedToolsInTurn: true,
+    skillMutatingCalled: false,
+    usedTodoWrite: false,
+    usedPlanningGate: false,
+    estimatedStepsOverSix: false,
+    toolRoundCount: 4,
+    toolCallCount: 6,
+    finalVisibleText: "Done.",
+    availableToolNames: ["skill_manage", "read_file"],
+  });
+  assert.equal(result.shouldReviewSkills, true);
+  assert.equal(result.kind, "skill");
+});
+
+test("evaluateBackgroundReviewTrigger fires skill review at 8+ tool calls without full interval", () => {
+  resetSelfImproveCounters();
+  noteToolIteration();
+  const result = evaluateBackgroundReviewTrigger({
+    status: "completed",
+    aborted: false,
+    executedToolsInTurn: true,
+    skillMutatingCalled: false,
+    usedTodoWrite: true,
+    usedPlanningGate: false,
+    estimatedStepsOverSix: false,
+    toolRoundCount: 3,
+    toolCallCount: 8,
+    finalVisibleText: "Done.",
+    availableToolNames: ["skill_manage"],
+  });
+  assert.equal(result.shouldReviewSkills, true);
+});
+
+test("hermes parity benchmark: complex-turn fixture triggers skill review more often", () => {
+  const complexTurnFixture = {
+    status: "completed",
+    aborted: false,
+    executedToolsInTurn: true,
+    skillMutatingCalled: false,
+    usedTodoWrite: true,
+    usedPlanningGate: true,
+    estimatedStepsOverSix: true,
+    toolRoundCount: 5,
+    toolCallCount: 12,
+    finalVisibleText: "Implemented and verified.",
+    availableToolNames: ["skill_manage", "skill_save", "memory_save", "read_file"],
+  };
+
+  resetSelfImproveCounters();
+  for (let i = 0; i < DEFAULT_SKILL_REVIEW_INTERVAL; i += 1) noteToolIteration();
+  const webAgent = evaluateBackgroundReviewTrigger(complexTurnFixture);
+  assert.equal(webAgent.shouldReviewSkills, true, "web-agent should review skills on Hermes-like complex turn");
+
+  resetSelfImproveCounters();
+  for (let i = 0; i < DEFAULT_SKILL_REVIEW_INTERVAL; i += 1) noteToolIteration();
+  const hermesBaseline = evaluateBackgroundReviewTrigger({
+    ...complexTurnFixture,
+    toolRoundCount: undefined,
+    toolCallCount: undefined,
+  });
+  assert.equal(hermesBaseline.shouldReviewSkills, true, "baseline interval gate still passes");
+
+  const counters = getSelfImproveCounters();
+  assert.equal(counters.itersSinceSkill, 0, "counter resets after skill review trigger");
+});
+
+test("maybeRunCurator records check without incrementing run_count on skip", async () => {
+  const tmp = await fs.mkdtemp(nodePath.join(os.tmpdir(), "webagent-curator-check-"));
+  process.env.WEBAGENT_WORKSPACE_ROOT = tmp;
+  const result = await maybeRunCurator({ cfg: {}, force: false });
+  assert.equal(result.ran, false);
+  assert.ok(result.skipReason);
+  const state = await loadCuratorState();
+  assert.equal(state.run_count, 0);
+  assert.ok(state.last_checked_at);
+  assert.equal(state.last_run_at, null);
+  delete process.env.WEBAGENT_WORKSPACE_ROOT;
+});
+
+test("runHeartbeatTick polls curator when no cron jobs exist", async () => {
+  const tmp = await fs.mkdtemp(nodePath.join(os.tmpdir(), "webagent-heartbeat-curator-"));
+  process.env.WEBAGENT_WORKSPACE_ROOT = tmp;
+  const skillsDir = nodePath.join(tmp, ".webagent", "skills");
+  await fs.mkdir(skillsDir, { recursive: true });
+  const heartbeatPath = nodePath.join(tmp, ".webagent", "heartbeat-state.json");
+  await fs.writeFile(
+    heartbeatPath,
+    JSON.stringify({ lastHeartbeatAt: 0 }, null, 2),
+    "utf8"
+  );
+  await fs.writeFile(nodePath.join(tmp, ".webagent", "cronjobs.json"), JSON.stringify({ jobs: [] }), "utf8");
+
+  const runTool = async () => ({ ok: true });
+  await runHeartbeatTick(runTool, "test", { cfg: {}, idleForMs: Number.POSITIVE_INFINITY });
+
+  const state = await loadCuratorState();
+  assert.ok(state.last_checked_at, "curator should be checked on heartbeat without cron jobs");
+
+  delete process.env.WEBAGENT_WORKSPACE_ROOT;
 });
 
 test("applyAutomaticSkillTransitions marks stale and archived agent-created skills", async () => {
