@@ -237,7 +237,7 @@ export function createChannelInboundHandler(deps) {
         const status =
           channel === "telegram"
             ? arg === "on" || arg === "off"
-              ? "Voice playback (/voice on|off) is only in the web app (browser speechSynthesis). On Telegram, send voice notes — they are transcribed locally and answered in text."
+              ? "Voice playback (/voice on|off) is only in the web app (Edge TTS). On Telegram, send voice notes — they are transcribed locally and answered in text."
               : "Telegram: inbound voice notes → local Whisper STT → text replies. Spoken agent replies: web app, /voice on or the speaker control."
             : "Voice playback is a web-app feature: /voice on or /voice off, or the speaker control next to Files.";
         await sendReply(chatId, status);

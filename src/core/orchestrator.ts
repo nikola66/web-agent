@@ -30,12 +30,18 @@ import {
 import {
   cancelVoicePlayback,
   flushVoiceBuffer,
-  primeVoiceEngine,
-  pushVoiceChunk,
+  flushAgentVoiceLineCarry,
+  getVoicePlaybackStatus,
+  markAgentVoiceTurnStart,
+  pushAgentVoiceChunk,
   resetVoicePlaybackBackendCache,
+  resolveVoicePlaybackBackend,
+  setAgentVoiceNarration,
+  speakBootPromo,
   speakConfirmation,
 } from "./voice-playback";
 import { isVoiceEnabled, useVoiceStore } from "@/ui/stores/voice-store";
+import { resolveProfileTtsVoice } from "@/core/voice/edge-tts-client";
 import { snapXtermViewportToLatest } from "./terminal-viewport-sync";
 import { fitTerminalForViewport } from "./xterm-fit-viewport";
 
@@ -146,7 +152,7 @@ function write(data: string): void {
 function writeToProfile(profileId: string, data: string): void {
   appendBrowserTranscript(profileId, data, "agent");
   enqueueTerminalTypewriter(profileId, data, getTerminal);
-  pushVoiceChunk(profileId, data, isVoiceEnabled);
+  pushAgentVoiceChunk(profileId, data, isVoiceEnabled);
 }
 
 function appendBrowserTranscript(
@@ -210,6 +216,8 @@ async function onAgentPromptReady(profileId: string): Promise<void> {
   promptReadyInFlight.add(profileId);
   try {
     flushVoiceBuffer(profileId, isVoiceEnabled);
+    flushAgentVoiceLineCarry(profileId, isVoiceEnabled);
+    markAgentVoiceTurnStart(profileId);
     const state = getOrCreateAgentState(profileId);
     state.agentReadyForInput = true;
     const rt = useRuntimeStore.getState();
@@ -255,9 +263,8 @@ export async function submitUserInput(raw: string): Promise<void> {
     if (arg === "on") {
       voice.setEnabled(true);
       resetVoicePlaybackBackendCache();
-      primeVoiceEngine();
       speakConfirmation("Voice mode on.");
-      write("\r\n\x1b[32m▸ Voice mode ON — agent replies will be spoken via your OS voice (local, no network).\x1b[0m\r\n");
+      write("\r\n\x1b[32m▸ Voice mode ON — agent replies will be spoken via Edge TTS (free cloud).\x1b[0m\r\n");
     } else if (arg === "off") {
       voice.setEnabled(false);
       resetVoicePlaybackBackendCache();
@@ -265,14 +272,16 @@ export async function submitUserInput(raw: string): Promise<void> {
       write("\r\n\x1b[90m▸ Voice mode OFF.\x1b[0m\r\n");
     } else if (arg === "" || arg === "status") {
       const state = voice.enabled ? "ON" : "OFF";
-      const supports =
-        typeof window !== "undefined" && !!window.speechSynthesis
-          ? "speech-synthesis available"
-          : "speech-synthesis NOT available in this browser";
-      write(
-        `\r\n\x1b[36m▸ Voice mode: ${state}\x1b[0m\r\n` +
-          `\x1b[90m  ${supports}. Toggle with /voice on or /voice off, or the mic button next to Files.\x1b[0m\r\n`
-      );
+      void resolveVoicePlaybackBackend().then((backend) => {
+        const profile = useProfileStore.getState().profiles.find(
+          (p) => p.id === useProfileStore.getState().activeProfileId
+        );
+        const hint = getVoicePlaybackStatus(backend, resolveProfileTtsVoice(profile)).hint;
+        write(
+          `\r\n\x1b[36m▸ Voice mode: ${state}\x1b[0m\r\n` +
+            `\x1b[90m  ${hint}. Toggle with /voice on or /voice off, or the speaker control next to Files.\x1b[0m\r\n`
+        );
+      });
     } else {
       write(`\r\n\x1b[33mUnknown /voice argument "${arg}". Use /voice on | /voice off | /voice.\x1b[0m\r\n`);
     }
@@ -364,8 +373,6 @@ export async function initialize(): Promise<void> {
   useSettingsStore.subscribe(async (state) => {
     await saveApiKeys(state.apiKeys);
   });
-
-  if (isVoiceEnabled()) primeVoiceEngine();
 }
 
 /** Start the Web Agent for a profile (or currently selected if not specified) */
@@ -455,6 +462,9 @@ export async function startAgent(profileId?: string): Promise<void> {
     try {
       rt.setError(profile.id, null);
       rt.setRuntimeStatus(profile.id, "booting");
+      setAgentVoiceNarration(profile.id, false);
+      cancelVoicePlayback(profile.id);
+      if (isVoiceEnabled()) speakBootPromo();
       await startWebAgent({
         profile,
         apiKeys,
@@ -507,6 +517,7 @@ export async function startAgent(profileId?: string): Promise<void> {
             s.setProfileRunning(profile.id, true);
             s.markWebContainerWarm();
             runningProfileIds.add(profile.id);
+            setAgentVoiceNarration(profile.id, true);
           } else if (status === "stopped") {
             s.setRuntimeStatus(profile.id, "stopped");
             s.setProfileRunning(profile.id, false);
@@ -520,6 +531,7 @@ export async function startAgent(profileId?: string): Promise<void> {
             agentState.agentReadyForInput = false;
             agentState.onboardingActive = false;
             agentState.onboardingField = "agent";
+            setAgentVoiceNarration(profile.id, false);
           } else if (status === "error") {
             s.setError(profile.id, "Web Agent runtime error");
             s.setProfileRunning(profile.id, false);
@@ -528,6 +540,7 @@ export async function startAgent(profileId?: string): Promise<void> {
             s.setArtifactOffer(profile.id, null);
             s.setClarifyOffer(profile.id, null);
             runningProfileIds.delete(profile.id);
+            setAgentVoiceNarration(profile.id, false);
           }
         },
       });

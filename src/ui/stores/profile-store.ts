@@ -41,6 +41,7 @@ interface ProfileState {
     provider: Profile["provider"];
     model?: string;
     accentColor: string;
+    ttsVoice?: string;
   }, options?: { setActive?: boolean }) => Promise<Profile>;
   updateProfile: (id: string, patch: Partial<Profile>) => Promise<void>;
   removeProfile: (id: string) => Promise<void>;
@@ -81,6 +82,7 @@ export const useProfileStore = create<ProfileState>((set, get) => ({
       provider: partial.provider,
       model: partial.model ?? "",
       accentColor: partial.accentColor,
+      ttsVoice: partial.ttsVoice,
       createdAt: t,
       updatedAt: t,
     };

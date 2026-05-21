@@ -2,16 +2,19 @@ import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { Folder, Volume2, VolumeX } from "lucide-react";
 import { profileAgentWorking, useActiveProfileRuntime, useRuntimeStore } from "../stores/runtime-store";
 import { useVoiceStore } from "../stores/voice-store";
+import { useProfileStore } from "../stores/profile-store";
 import {
   cancelVoicePlayback,
+  getVoicePlaybackActivity,
   getVoicePlaybackStatus,
-  primeVoiceEngine,
   resetVoicePlaybackBackendCache,
   resolveVoicePlaybackBackend,
   speakConfirmation,
+  subscribeVoicePlaybackActivity,
+  type VoicePlaybackActivity,
   type VoicePlaybackBackend,
 } from "@/core/voice-playback";
-import { useProfileStore } from "../stores/profile-store";
+import { resolveProfileTtsVoice } from "@/core/voice/edge-tts-client";
 import { TOOL_CATALOG } from "@/agent/tool-catalog";
 import { ErrorBoundary } from "./ErrorBoundary";
 import { lazyWithRetry } from "../lazy-with-retry";
@@ -211,7 +214,21 @@ export function StatusBar() {
 function VoiceToggleButton() {
   const enabled = useVoiceStore((s) => s.enabled);
   const setEnabled = useVoiceStore((s) => s.setEnabled);
+  const activeProfile = useProfileStore((s) =>
+    s.profiles.find((p) => p.id === s.activeProfileId)
+  );
+  const ttsVoice = resolveProfileTtsVoice(activeProfile);
   const [backend, setBackend] = useState<VoicePlaybackBackend | null>(null);
+  const [activity, setActivity] = useState<VoicePlaybackActivity>("idle");
+
+  useEffect(() => {
+    if (!enabled) {
+      setActivity("idle");
+      return;
+    }
+    setActivity(getVoicePlaybackActivity());
+    return subscribeVoicePlaybackActivity(setActivity);
+  }, [enabled]);
 
   useEffect(() => {
     if (!enabled) {
@@ -240,7 +257,6 @@ function VoiceToggleButton() {
     setEnabled(next);
     if (next) {
       resetVoicePlaybackBackendCache();
-      primeVoiceEngine();
       speakConfirmation("Voice mode on.");
       void resolveVoicePlaybackBackend().then(setBackend);
     } else {
@@ -251,21 +267,21 @@ function VoiceToggleButton() {
   };
 
   const statusHint =
-    enabled && backend ? getVoicePlaybackStatus(backend).hint : null;
+    enabled && backend ? getVoicePlaybackStatus(backend, ttsVoice).hint : null;
   const label = enabled
     ? backend === "none"
       ? `Voice ON but playback unavailable. ${statusHint ?? ""}`
       : statusHint
         ? `Voice mode: ON — ${statusHint}`
         : "Voice mode: ON — agent replies spoken aloud. Click to disable."
-    : "Voice mode: OFF — click to enable spoken replies (local OS voice).";
+    : "Voice mode: OFF — click to enable spoken replies (Edge TTS).";
 
   return (
     <button
       type="button"
       onClick={onClick}
       className={[
-        "inline-flex h-4 w-4 items-center justify-center transition-colors disabled:cursor-not-allowed disabled:opacity-40",
+        "inline-flex min-h-4 flex-col items-center justify-center gap-0.5 transition-colors disabled:cursor-not-allowed disabled:opacity-40",
         enabled
           ? "text-brand-magenta-light hover:text-text-primary"
           : "text-text-muted hover:text-text-primary",
@@ -275,6 +291,20 @@ function VoiceToggleButton() {
       title={label}
     >
       {enabled ? <Volume2 size={12} strokeWidth={1.7} /> : <VolumeX size={12} strokeWidth={1.7} />}
+      {enabled && activity === "loading" ? (
+        <span className="webagent-voice-loading-dots shrink-0" aria-hidden="true">
+          <span />
+          <span />
+          <span />
+        </span>
+      ) : null}
+      {enabled && activity === "playing" ? (
+        <span className="webagent-voice-bars shrink-0" aria-hidden="true">
+          <span />
+          <span />
+          <span />
+        </span>
+      ) : null}
     </button>
   );
 }

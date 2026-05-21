@@ -1,11 +1,12 @@
 /**
- * Same-origin JSON CORS proxy for static + Caddy production deploys.
- * Contract matches vite.config.ts `corsProxyGate` (POST /api/proxy).
- * Bind locally only; this endpoint relays arbitrary URLs from the request body.
+ * Same-origin sidecar for static + Caddy production deploys.
+ * - POST /api/proxy — JSON CORS proxy (matches vite.config.ts corsProxyGate)
+ * - POST /api/edge-tts — free Edge TTS synthesis (matches vite.config.ts edgeTtsGate)
  */
 import http from "node:http";
+import { EDGE_TTS_PATH, handleEdgeTtsHttp, isEdgeTtsPath, requestPathname } from "./edge-tts-handler.mjs";
 
-const PATH = "/api/proxy";
+const PROXY_PATH = "/api/proxy";
 const host = process.env.WEBAGENT_CORS_PROXY_HOST || "127.0.0.1";
 const port = Number(process.env.WEBAGENT_CORS_PROXY_PORT || "8799") || 8799;
 
@@ -18,8 +19,12 @@ function setCors(res) {
 
 const server = http.createServer((req, res) => {
   try {
-    const u = new URL(req.url || "", `http://${host}`);
-    if (u.pathname !== PATH) {
+    const pathname = requestPathname(req.url);
+    if (isEdgeTtsPath(pathname)) {
+      void handleEdgeTtsHttp(req, res, { pathname });
+      return;
+    }
+    if (pathname !== PROXY_PATH) {
       res.statusCode = 404;
       res.end();
       return;
@@ -81,5 +86,7 @@ const server = http.createServer((req, res) => {
 });
 
 server.listen(port, host, () => {
-  console.error(`[cors-proxy-server] listening on http://${host}:${port}${PATH}`);
+  console.error(
+    `[cors-proxy-server] listening on http://${host}:${port} (${PROXY_PATH}, ${EDGE_TTS_PATH}, /api/edge-tts/voices)`,
+  );
 });

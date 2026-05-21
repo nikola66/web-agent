@@ -9,6 +9,14 @@ import {
 } from "../stores/runtime-store";
 import { startAgent, stopAgent } from "@/core/orchestrator";
 import { createAgentName, type Profile } from "@/core/profiles";
+import {
+  DEFAULT_EDGE_TTS_VOICE,
+  EDGE_TTS_LOCALE_LABEL,
+  fetchEdgeTtsVoices,
+  formatEdgeTtsVoiceOption,
+  resolveProfileTtsVoice,
+  type EdgeTtsVoiceOption,
+} from "@/core/voice/edge-tts-client";
 import { LLM_PROVIDERS, useSettingsStore } from "../stores/settings-store";
 import { loadProfileCredentials, saveProfileCredentials } from "@/core/credential-vault";
 import { DEFAULT_PROVIDER_ID } from "@/core/providers";
@@ -74,6 +82,9 @@ export function ProfileEditor(props: {
   const [provider, setProvider] = useState<Profile["provider"]>(DEFAULT_PROVIDER_ID);
   const [model, setModel] = useState("");
   const [accentColor, setAccentColor] = useState(DEFAULT_ACCENT_COLOR);
+  const [ttsVoice, setTtsVoice] = useState(DEFAULT_EDGE_TTS_VOICE);
+  const [ttsVoiceOptions, setTtsVoiceOptions] = useState<EdgeTtsVoiceOption[]>([]);
+  const [ttsVoicesLoading, setTtsVoicesLoading] = useState(false);
   const [apiKey, setApiKey] = useState("");
   const [apiKeyVisible, setApiKeyVisible] = useState(false);
   const [customBaseUrl, setCustomBaseUrl] = useState("");
@@ -95,6 +106,25 @@ export function ProfileEditor(props: {
 
   useEffect(() => {
     if (!open) return;
+    let cancelled = false;
+    setTtsVoicesLoading(true);
+    void fetchEdgeTtsVoices()
+      .then((voices) => {
+        if (!cancelled) setTtsVoiceOptions(voices);
+      })
+      .catch(() => {
+        if (!cancelled) setTtsVoiceOptions([]);
+      })
+      .finally(() => {
+        if (!cancelled) setTtsVoicesLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
     setPersonalityExpanded(false);
     setActiveTab("profile");
     (async () => {
@@ -113,6 +143,7 @@ export function ProfileEditor(props: {
         const storedModel = (editing.model || "").trim();
         setModel(storedModel && storedModel !== providerDefaultModel ? storedModel : "");
         setAccentColor(editing.accentColor);
+        setTtsVoice(resolveProfileTtsVoice(editing));
         const creds = await loadProfileCredentials(editing.id);
         setApiKey(creds.apiKey || "");
         setCustomBaseUrl(creds.customBaseUrl || "");
@@ -125,6 +156,7 @@ export function ProfileEditor(props: {
         setProvider(DEFAULT_PROVIDER_ID);
         setModel("");
         setAccentColor(randomAccentColor());
+        setTtsVoice(DEFAULT_EDGE_TTS_VOICE);
         setApiKey("");
         setCustomBaseUrl("");
         setChannelTokens({});
@@ -156,6 +188,7 @@ export function ProfileEditor(props: {
         provider,
         model: model.trim(),
         accentColor,
+        ttsVoice,
       });
     } else {
       const keepActiveProfile =
@@ -170,6 +203,7 @@ export function ProfileEditor(props: {
         provider,
         model: model.trim(),
         accentColor,
+        ttsVoice,
       }, { setActive: !keepActiveProfile });
       profileId = created.id;
     }
@@ -456,6 +490,30 @@ export function ProfileEditor(props: {
                   </>
                 );
               })()}
+
+              <Field
+                label={
+                  <span className="flex items-center justify-between gap-2">
+                    <span>Voice</span>
+                    <span className="font-normal text-text-muted">{EDGE_TTS_LOCALE_LABEL}</span>
+                  </span>
+                }
+              >
+                <SearchableSelect
+                  value={ttsVoice}
+                  options={
+                    ttsVoiceOptions.length > 0
+                      ? ttsVoiceOptions.map((v) => ({
+                          value: v.id,
+                          label: formatEdgeTtsVoiceOption(v),
+                        }))
+                      : [{ value: ttsVoice, label: ttsVoice.replace(/^en-US-/, "").replace(/Neural.*$/i, "") }]
+                  }
+                  searchPlaceholder={ttsVoicesLoading ? "Loading voices…" : "Search voice…"}
+                  className="w-full"
+                  onChange={setTtsVoice}
+                />
+              </Field>
 
               <Field label="Accent">
                 <div className="flex flex-wrap gap-1.5">

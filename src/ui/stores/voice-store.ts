@@ -7,7 +7,7 @@
  *   - the `/voice [on|off]` slash command
  *
  * When `enabled === true`, the orchestrator pipes finalised assistant text
- * to `window.speechSynthesis` for spoken playback. Mic input uses local
+ * to Edge TTS via `/api/edge-tts` for spoken playback. Mic input uses local
  * Whisper STT; Telegram voice uses the same STT path via `audio_analyze`.
  */
 

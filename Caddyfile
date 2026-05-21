@@ -56,6 +56,13 @@
 		}
 	}
 
+	# Edge TTS synthesis + voice list (same contract as Vite edgeTtsGate).
+	handle /api/edge-tts* {
+		reverse_proxy http://{$WEBAGENT_CORS_PROXY_HOST:127.0.0.1}:{$WEBAGENT_CORS_PROXY_PORT:8799} {
+			flush_interval -1
+		}
+	}
+
 	# WASM / ONNX: skip gzip/zstd — compressed binaries break ORT/sql.js in the browser.
 	@wasm {
 		path_regexp wasm \.wasm$

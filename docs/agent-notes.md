@@ -58,7 +58,7 @@ Multi-step turns end when the model produces a final answer without tool calls. 
 ## Voice (STT / playback)
 
 - **Browser mic:** `src/core/voice/stt-worker.ts` + `stt-client.ts` run vendored whisper-tiny.en (WASM). Mic input in `ChatInput` submits transcribed text directly — no LLM provider required for STT.
-- **Browser playback:** `src/core/voice-playback.ts` — `speechSynthesis` (OS voices). Toggle with `/voice on|off` or the speaker control.
+- **Browser playback:** `src/core/voice-playback.ts` — Edge TTS (free cloud, `en-US-AvaNeural`, +25% rate) via same-origin `/api/edge-tts`. Toggle with `/voice on|off` or the speaker control. Dev: Vite middleware; prod: `scripts/cors-proxy-server.mjs` + Caddy.
 - **Telegram / workspace audio:** `audio_analyze` sends bytes to the STT worker over IPC (`WEBAGENT_STT_REQ` in `adapter.ts`). Telegram voice notes are transcribed and answered in **text** only.
 - **Refresh script:** `npm run download:whisper`; `npm run check:models` runs before production builds.
 

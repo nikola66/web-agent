@@ -1,7 +1,7 @@
 {
   "name": "web-agent",
   "private": true,
-  "version": "0.0.18",
+  "version": "0.0.19",
   "type": "module",
   "scripts": {
     "build:embed-runtime": "node scripts/build-embed-runtime.mjs",
@@ -44,6 +44,7 @@
     "@vitejs/plugin-react": "^4.4.1",
     "concurrently": "^9.2.1",
     "dotenv": "^17.4.2",
+    "edge-tts-universal": "^1.4.0",
     "tailwindcss": "^4.1.7",
     "tsx": "^4.21.0",
     "typescript": "^5.8.3",

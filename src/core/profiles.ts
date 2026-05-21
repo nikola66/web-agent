@@ -2,6 +2,7 @@ import { get, set } from "idb-keyval";
 import { getDefaultPersonalityPrompt } from "@/core/personalities";
 import { DEFAULT_PROVIDER_ID, PROVIDERS } from "@/core/providers";
 import { DEFAULT_ACCENT_COLOR } from "@/core/mascots";
+import { DEFAULT_EDGE_TTS_VOICE } from "@/core/voice/edge-tts-client";
 
 const STORAGE_KEY = "profiles:v1";
 const STORAGE_SCHEMA_VERSION = 2;
@@ -77,6 +78,8 @@ export interface Profile {
   /** Optional model id override for the chosen provider */
   model?: string;
   accentColor: string;
+  /** Edge TTS voice id (en-US only), e.g. en-US-AvaNeural */
+  ttsVoice?: string;
   createdAt: number;
   updatedAt: number;
 }
@@ -92,9 +95,16 @@ function normalizeProfiles(input: unknown): Profile[] {
     .map((entry) => ({
       ...entry,
       userName: String(entry.userName || "User"),
+      ttsVoice: resolveProfileTtsVoiceStored(entry.ttsVoice),
       provider:
         entry.provider === "auto" ? DEFAULT_PROVIDER_ID : entry.provider,
     }));
+}
+
+function resolveProfileTtsVoiceStored(value: unknown): string {
+  const v = String(value ?? "").trim();
+  if (/^en-US-[A-Za-z0-9-]+$/.test(v)) return v;
+  return DEFAULT_EDGE_TTS_VOICE;
 }
 
 async function readAll(): Promise<Profile[]> {
@@ -167,6 +177,7 @@ export function createDefaultProfile(): Profile {
     provider: DEFAULT_PROVIDER_ID,
     model: defaultProvider?.model || "",
     accentColor: DEFAULT_ACCENT_COLOR,
+    ttsVoice: DEFAULT_EDGE_TTS_VOICE,
     createdAt: now(),
     updatedAt: now(),
   };
