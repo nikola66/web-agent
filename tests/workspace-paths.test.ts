@@ -64,6 +64,32 @@ test("writeFileTool rejects top-level stray path", async () => {
   await assert.rejects(writeFileTool({ path: stray, content: "x" }, {}), /Refusing to write at workspace root/);
 });
 
+test("matchPathPattern matches bare tokens as filename substrings", async () => {
+  const { matchPathPattern } = await import("../dist/agent-runtime/workspace-paths.js");
+  assert.equal(
+    matchPathPattern("outreach_plan.md", "projects/ainex-sales-outreach/outreach_plan.md", "outreach_plan"),
+    true
+  );
+  assert.equal(matchPathPattern("readme.md", "docs/readme.md", "*.md"), true);
+  assert.equal(matchPathPattern("foo.ts", "src/foo.ts", "bar"), false);
+});
+
+test("find_files finds outreach_plan.md from bare token pattern", async (t) => {
+  const { findFilesTool } = await import("../dist/agent-runtime/tools/filesystem-tools.js");
+  const slug = `_find_files_${Date.now()}`;
+  const planDir = nodePath.join(process.cwd(), "projects", slug, "ainex-sales-outreach");
+  await fs.mkdir(planDir, { recursive: true });
+  await fs.writeFile(nodePath.join(planDir, "outreach_plan.md"), "# plan\n", "utf8");
+  t.after(async () => {
+    await fs.rm(nodePath.join(process.cwd(), "projects", slug), { recursive: true, force: true });
+  });
+  const result = await findFilesTool({ pattern: "outreach_plan", root: `projects/${slug}` }, {});
+  assert.ok(
+    result.files.some((file: string) => file.endsWith(`${slug}/ainex-sales-outreach/outreach_plan.md`)),
+    JSON.stringify(result)
+  );
+});
+
 test("writeFileTool accepts path under subdirectory", async (t) => {
   const { writeFileTool } = await import("../dist/agent-runtime/tools/filesystem-tools.js");
   const rootTmp = nodePath.join(process.cwd(), "tmp");

@@ -8,7 +8,6 @@ import { takeFramedUserInput } from "./user-input-framing.js";
 import {
   AGENT_MD,
   HEARTBEAT_INTERVAL_MS,
-  MEMORY_RUNS_DIR,
   USER_MD,
   WS,
   workspaceStatePath,
@@ -25,11 +24,7 @@ import {
   buildJobEventsPrompt,
   cleanupSnapshotsNotReferenced,
   drainPendingJobEvents,
-  getAllFacts,
-  getPromotableLearnings,
-  getReflections,
   listSkills,
-  readJsonFilesNewestFirst,
   sanitizeMessagesMissingSnapshotRefs,
 } from "./memory/index.js";
 import {
@@ -82,6 +77,10 @@ import { startChannelSidecar } from "./channels/index.js";
 import { errorMessage } from "./utils.js";
 import { createRunId } from "./stream-output.js";
 import {
+  archiveCurrentHistoryForSessionSearch,
+  buildStartupGreetingContext,
+} from "./startup-context.js";
+import {
   agentTurn,
   createTurnMutex,
   abortCurrentTurn,
@@ -103,142 +102,6 @@ function commandSlug(value) {
 }
 
 const STARTUP_AWAITING_MARKER = "<<<WEBAGENT_AWAITING_RESPONSE>>>";
-const GREETING_CONTEXT_MAX_CHARS = 1100;
-const GREETING_TRANSCRIPT_LIMIT = 8;
-const GREETING_SESSION_NOTES_LIMIT = 5;
-const GREETING_FACTS_LIMIT = 4;
-
-function clipGreetingText(text, max) {
-  const t = String(text ?? "")
-    .replace(/\s+/g, " ")
-    .trim();
-  if (!t) return "";
-  return t.length <= max ? t : `${t.slice(0, max - 1)}…`;
-}
-
-function greetingMessageText(message) {
-  return typeof message?.content === "string" ? message.content : "";
-}
-
-export function isStartupGreetingNoise(content) {
-  const text = String(content ?? "").trim();
-  if (!text) return true;
-  if (text === "(session opened)") return true;
-  if (text.includes("Session startup — you speak first")) return true;
-  return false;
-}
-
-export function extractGreetingTranscriptMessages(historyMessages, limit = GREETING_TRANSCRIPT_LIMIT) {
-  if (!Array.isArray(historyMessages)) return [];
-  const transcript = [];
-  for (const message of historyMessages) {
-    if (message?.role !== "user" && message?.role !== "assistant") continue;
-    const content = greetingMessageText(message);
-    if (isStartupGreetingNoise(content)) continue;
-    transcript.push({ role: message.role, content });
-  }
-  return transcript.slice(-limit);
-}
-
-async function loadRecentSessionMemoryNotes(limit = GREETING_SESSION_NOTES_LIMIT) {
-  try {
-    const raw = await fs.readFile(workspaceStatePath(".webagent/session-memory.jsonl"), "utf8");
-    const notes = [];
-    for (const line of raw.split("\n").filter((entry) => entry.trim()).slice(-limit)) {
-      try {
-        const text = String(JSON.parse(line)?.text ?? "").trim();
-        if (text) notes.push(text);
-      } catch {
-        /* skip malformed line */
-      }
-    }
-    return notes;
-  } catch {
-    return [];
-  }
-}
-
-async function loadLatestRunSnippet() {
-  try {
-    const runs = await readJsonFilesNewestFirst(MEMORY_RUNS_DIR, 1, "run");
-    const run = runs[0];
-    if (!run || typeof run !== "object") return "";
-    const goal = clipGreetingText(String(run.goal || run.input || ""), 180);
-    const reply = clipGreetingText(String(run.final_visible_assistant_text || ""), 220);
-    const parts = [];
-    if (goal) parts.push(`Last task: ${goal}`);
-    if (reply) parts.push(`Last reply: ${reply}`);
-    return parts.join("\n");
-  } catch {
-    return "";
-  }
-}
-
-async function appendLightMemoryFallback(lines) {
-  if (lines.length >= 3) return;
-  try {
-    const facts = await getAllFacts(GREETING_FACTS_LIMIT);
-    if (facts.length) {
-      const factStr = facts
-        .map((f) => {
-          const v =
-            typeof f.value === "object" ? JSON.stringify(f.value) : String(f.value ?? "");
-          return `${f.key}: ${clipGreetingText(v, 100)}`;
-        })
-        .join(" · ");
-      lines.push(`Facts: ${factStr}`);
-    }
-  } catch {
-    /* ignore */
-  }
-  if (lines.length >= 2) return;
-  try {
-    for (const row of (await getPromotableLearnings(3)).slice(0, 2)) {
-      const st = String(row.statement || "").trim();
-      if (st) lines.push(`Learning: ${clipGreetingText(st, 200)}`);
-    }
-  } catch {
-    /* ignore */
-  }
-  if (lines.length >= 2) return;
-  try {
-    for (const reflection of (await getReflections(1)).slice(0, 1)) {
-      const merged = [reflection.what_worked, reflection.what_failed, reflection.improvement]
-        .map((part) => String(part || "").trim())
-        .filter(Boolean)
-        .join(" — ");
-      if (merged) lines.push(`Reflection: ${clipGreetingText(merged, 220)}`);
-    }
-  } catch {
-    /* ignore */
-  }
-}
-
-export function mergeStartupGreetingContextLines(lines, maxChars = GREETING_CONTEXT_MAX_CHARS) {
-  let merged = lines.join("\n").trim();
-  if (merged.length > maxChars) merged = `${merged.slice(0, maxChars - 1)}…`;
-  return merged;
-}
-
-async function buildStartupGreetingContext() {
-  const [savedHistory, sessionNotes, runSnippet] = await Promise.all([
-    loadHistory(),
-    loadRecentSessionMemoryNotes(),
-    loadLatestRunSnippet(),
-  ]);
-
-  const lines = [];
-  for (const message of extractGreetingTranscriptMessages(savedHistory)) {
-    const clipped = clipGreetingText(message.content, 280);
-    lines.push(`${message.role === "user" ? "User" : "Agent"}: ${clipped}`);
-  }
-  for (const note of sessionNotes) {
-    lines.push(`Session note: ${clipGreetingText(note, 200)}`);
-  }
-  if (runSnippet && lines.length < 4) lines.push(runSnippet);
-  await appendLightMemoryFallback(lines);
-  return mergeStartupGreetingContextLines(lines);
-}
 
 export async function main() {
   let cfg = await resolveLlm();
@@ -630,6 +493,7 @@ export async function main() {
       break;
     }
     if (input === "/clear") {
+      await archiveCurrentHistoryForSessionSearch(history).catch(() => {});
       history = await refreshHistoryWithLatestSystemPrompt([]);
       history = await sanitizeMessagesMissingSnapshotRefs(history);
       await cleanupSnapshotsNotReferenced(history).catch(() => {});

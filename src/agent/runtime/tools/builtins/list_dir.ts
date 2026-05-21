@@ -5,6 +5,8 @@ export default defineTool({
   name: "list_dir",
   run: listDirTool,
   emoji: "📁",
-  description: "List and find workspace entries (files/directories) with optional recursion and glob-like filtering.",
+  description:
+    "List workspace entries with optional recursion. Bare `pattern` matches filename substrings; " +
+    "use * globs for extension filters. Skips heavy directories (e.g. node_modules, dist).",
   inputSchema: { type: "object", properties: {}, additionalProperties: true },
 });

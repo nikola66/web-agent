@@ -499,6 +499,14 @@ export async function memorySearchTool(args: ToolArgs = {}, ctx) {
 const SESSION_SEARCH_CONTEXT = 200;
 const SESSION_SEARCH_RECENCY_QUERY_RE =
   /\b(last|previous|recent|lately|before)\b[\s\S]{0,80}\b(work|task|project|topic|conversation|chat)\b|\bwhat did we (last|previously)\b|\bwhat we worked on\b/i;
+const SESSION_SEARCH_RECENCY_ONLY_RE =
+  /^(?:recent|latest|last|prior|previous)(?:\s+(?:session|sessions|work|chat|conversation|thread|messages?))?s?$/i;
+
+function isRecencyOnlySessionSearchQuery(query) {
+  const q = String(query || "").trim();
+  if (!q) return true;
+  return SESSION_SEARCH_RECENCY_ONLY_RE.test(q) || SESSION_SEARCH_RECENCY_QUERY_RE.test(q);
+}
 
 function sessionSearchTokenize(q) {
   return String(q || "")
@@ -520,12 +528,13 @@ function firstTokenOffset(haystackLc, tokens) {
 /** Full-text search persisted conversation JSON files (memory/conversations). */
 export async function sessionSearchTool(args: ToolArgs = {}, _ctx) {
   const query = typeof args?.query === "string" ? args.query.trim() : "";
-  if (!query) {
+  const recencyOnly = isRecencyOnlySessionSearchQuery(query);
+  if (!recencyOnly && !query) {
     throw new Error("`query` is required for session_search.");
   }
-  const tokens = sessionSearchTokenize(query);
-  const recencyQuery = SESSION_SEARCH_RECENCY_QUERY_RE.test(query);
-  if (!tokens.length) {
+  const tokens = recencyOnly ? [] : sessionSearchTokenize(query);
+  const recencyQuery = recencyOnly || SESSION_SEARCH_RECENCY_QUERY_RE.test(query);
+  if (!recencyOnly && !tokens.length) {
     throw new Error("`query` must include at least one word with 2+ characters.");
   }
 
@@ -574,6 +583,16 @@ export async function sessionSearchTool(args: ToolArgs = {}, _ctx) {
     let score = 0;
     for (const t of tokens) {
       if (low.includes(t)) score += 1;
+    }
+    if (recencyOnly) {
+      recentCandidates.push({
+        score: 0,
+        id,
+        snippet: text.slice(0, SESSION_SEARCH_CONTEXT * 2),
+        relPath: `memory/conversations/${name}`,
+        mtime,
+      });
+      continue;
     }
     if (score === 0) {
       if (recencyQuery) {
@@ -686,6 +705,16 @@ export async function sessionSearchTool(args: ToolArgs = {}, _ctx) {
     for (const t of tokens) {
       if (low.includes(t)) score += 1;
     }
+    if (recencyOnly) {
+      recentCandidates.push({
+        score: 0,
+        id,
+        snippet: searchable.slice(0, SESSION_SEARCH_CONTEXT * 2),
+        relPath: `memory/runs/${name}`,
+        mtime,
+      });
+      continue;
+    }
     if (score === 0) {
       if (recencyQuery) {
         const offAny = firstTokenOffset(low, tokens);
@@ -763,6 +792,17 @@ export async function sessionSearchTool(args: ToolArgs = {}, _ctx) {
       for (const t of tokens) {
         if (low.includes(t)) score += 1;
       }
+      const rowTs = Date.parse(String(row?.ts || ""));
+      if (recencyOnly) {
+        recentCandidates.push({
+          score: 0,
+          id: String(row?.ts || "session-memory"),
+          snippet: searchable.slice(0, SESSION_SEARCH_CONTEXT * 2),
+          relPath: ".webagent/session-memory.jsonl",
+          mtime: Number.isFinite(rowTs) ? rowTs : stat?.mtimeMs || 0,
+        });
+        continue;
+      }
       if (score === 0) {
         if (recencyQuery) {
           const offAny = firstTokenOffset(low, tokens);
@@ -793,7 +833,6 @@ export async function sessionSearchTool(args: ToolArgs = {}, _ctx) {
         if (start > 0) snippet = "…" + snippet;
         if (end < searchable.length) snippet = snippet + "…";
       }
-      const rowTs = Date.parse(String(row?.ts || ""));
       scored.push({
         score,
         id: String(row?.ts || "session-memory"),

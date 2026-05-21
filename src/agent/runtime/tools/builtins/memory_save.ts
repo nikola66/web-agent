@@ -11,7 +11,11 @@ export default defineTool({
   run: memorySaveTool,
   emoji: "💾",
   description:
-    "Save a durable memory fact under a stable key. Required: `key` (short snake_case id, e.g. `user_timezone`) and `value` (string, number, boolean, object, or array). Examples (arguments JSON only): " +
+    "Save a durable memory fact under a stable key. Required: `key` (short snake_case id) and `value`. " +
+    "Use for user preferences, stable env facts, and conventions that will still matter later. " +
+    "Do NOT save task progress, PR/issue numbers, or artifacts stale in ~7 days — use `session_search` " +
+    "or `session_memory_append`. Repeatable workflows belong in skills, not memory. " +
+    "Examples (arguments JSON only): " +
     JSON.stringify(MEMORY_SAVE_EXAMPLES[0]) +
     " | " +
     JSON.stringify(MEMORY_SAVE_EXAMPLES[1]),

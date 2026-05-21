@@ -5,7 +5,7 @@
 import fs from "node:fs/promises";
 import nodePath from "node:path";
 import {
-  globMatch,
+  matchPathPattern,
   resolveWorkspacePath,
   shouldSkipDir,
   toWorkspaceRelative,
@@ -42,14 +42,14 @@ export async function listDirTool(
       if (e.isDirectory()) {
         if (
           includeDirs &&
-          (!resolvedPattern || globMatch(e.name, resolvedPattern) || globMatch(relP, resolvedPattern))
+          (!resolvedPattern || matchPathPattern(e.name, relP, resolvedPattern))
         ) {
           out.push({ path: relP, kind: "dir" });
         }
         if (recursive && !shouldSkipDir(e.name)) await walk(p);
       } else if (
         includeFiles &&
-        (!resolvedPattern || globMatch(e.name, resolvedPattern) || globMatch(relP, resolvedPattern))
+        (!resolvedPattern || matchPathPattern(e.name, relP, resolvedPattern))
       ) {
         out.push({ path: relP, kind: "file" });
       }
@@ -76,8 +76,8 @@ export async function findFilesTool(
     query,
     root = ".",
     path,
-    maxResults = 500,
-    maxFilesScanned = 5000,
+    maxResults = 1000,
+    maxFilesScanned = 15000,
   } = {},
   ctx
 ) {
@@ -97,9 +97,16 @@ export async function findFilesTool(
     },
     ctx
   );
+  const files = listing.entries.map((entry) => entry.path);
   return {
-    files: listing.entries.map((entry) => entry.path),
+    files,
     scanned: listing.scanned,
     truncated: listing.truncated,
+    ...(files.length === 0
+      ? {
+          note:
+            "No matches. Bare patterns match filename substrings (e.g. outreach_plan matches outreach_plan.md). Use * for globs (*.md, **/plan.md).",
+        }
+      : {}),
   };
 }

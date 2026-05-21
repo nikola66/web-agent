@@ -196,6 +196,34 @@ export function globMatch(name, pattern) {
   return new RegExp(`^${esc}$`).test(name);
 }
 
+/** Match a workspace path against a user/agent pattern (glob or bare substring). */
+export function matchPathPattern(basename, relPath, pattern) {
+  const raw = String(pattern ?? "").trim();
+  if (!raw) return true;
+  const base = String(basename ?? "");
+  const rel = String(relPath ?? "").replace(/\\/g, "/");
+
+  if (/[*?]/.test(raw)) {
+    if (globMatch(base, raw) || globMatch(rel, raw)) return true;
+    if (!raw.includes("/") && globMatch(rel, `**/${raw}`)) return true;
+    const stripped = raw.replace(/^\*\*\//, "");
+    if (stripped !== raw && globMatch(rel, stripped)) return true;
+    return false;
+  }
+
+  if (raw.includes("/") || raw.includes("\\")) {
+    const norm = raw.replace(/\\/g, "/").replace(/^\.\//, "").replace(/\/+$/, "");
+    if (!norm) return true;
+    if (rel === norm || rel.endsWith(`/${norm}`) || rel.includes(norm)) return true;
+    return globMatch(rel, norm) || globMatch(rel, `**/${norm}`);
+  }
+
+  const lowBase = base.toLowerCase();
+  const lowPat = raw.toLowerCase();
+  if (lowBase.includes(lowPat)) return true;
+  return globMatch(base, `*${raw}*`) || globMatch(rel, `**/*${raw}*`);
+}
+
 export function shellCwd(cwd) {
   const c = String(cwd ?? WORKSPACE_LABEL).trim();
   if (c === "." || c === WS || c === WORKSPACE_LABEL) return WS;

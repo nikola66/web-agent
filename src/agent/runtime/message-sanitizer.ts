@@ -139,6 +139,96 @@ export function dropThinkingOnlyAndMergeUsers(messages: ChatMsg[]): ChatMsg[] {
   return merged;
 }
 
+export function repairMessageSequence(messages: ChatMsg[]): ChatMsg[] {
+  const input = Array.isArray(messages) ? messages : [];
+  if (!input.length) return input;
+
+  let repairs = 0;
+  let knownToolIds = new Set<string>();
+  const filtered: ChatMsg[] = [];
+
+  for (const msg of input) {
+    if (!msg || typeof msg !== "object") {
+      filtered.push(msg);
+      continue;
+    }
+    const role = String(msg.role || "");
+    if (role === "assistant") {
+      knownToolIds = new Set<string>();
+      for (const tc of msg.tool_calls || []) {
+        const id = toolCallId(tc);
+        if (id) knownToolIds.add(id);
+      }
+      filtered.push(msg);
+    } else if (role === "tool") {
+      const id = String(msg.tool_call_id || "").trim();
+      if (id && knownToolIds.has(id)) {
+        filtered.push(msg);
+      } else {
+        repairs += 1;
+      }
+    } else {
+      if (role === "user") knownToolIds = new Set<string>();
+      filtered.push(msg);
+    }
+  }
+
+  const merged: ChatMsg[] = [];
+  for (const msg of filtered) {
+    const prev = merged[merged.length - 1];
+    if (
+      prev?.role === "user" &&
+      msg.role === "user" &&
+      typeof prev.content === "string" &&
+      typeof msg.content === "string" &&
+      !isToolResultsUserMessage(prev.content) &&
+      !isToolResultsUserMessage(msg.content) &&
+      !String(msg.content || "").startsWith("[System:")
+    ) {
+      prev.content = mergeAdjacentUserContent(prev.content, msg.content) as string;
+      repairs += 1;
+      continue;
+    }
+    merged.push({ ...msg });
+  }
+
+  void repairs;
+  return merged;
+}
+
+function isToolResultsUserMessage(content: unknown): boolean {
+  return typeof content === "string" && content.startsWith("Tool results (compact JSON)");
+}
+
+function isEmptyRecoverySynthetic(msg: ChatMsg | undefined): boolean {
+  if (!msg || typeof msg !== "object") return false;
+  return Boolean((msg as { _empty_recovery_synthetic?: boolean })._empty_recovery_synthetic);
+}
+
+/** Port of Hermes run_agent._drop_trailing_empty_response_scaffolding */
+export function dropTrailingEmptyResponseScaffolding(messages: ChatMsg[]): ChatMsg[] {
+  const out = [...messages];
+  let droppedScaffolding = false;
+
+  while (out.length && isEmptyRecoverySynthetic(out[out.length - 1])) {
+    out.pop();
+    droppedScaffolding = true;
+  }
+
+  if (!droppedScaffolding) return out;
+
+  while (out.length && out[out.length - 1]?.role === "tool") {
+    out.pop();
+  }
+
+  const last = out[out.length - 1];
+  if (last?.role === "assistant" && Array.isArray(last.tool_calls) && last.tool_calls.length) {
+    out.pop();
+  }
+
+  return out;
+}
+
 export function sanitizeMessagesForLlm(messages: ChatMsg[]): ChatMsg[] {
-  return dropThinkingOnlyAndMergeUsers(sanitizeApiMessages(messages));
+  return dropThinkingOnlyAndMergeUsers(repairMessageSequence(sanitizeApiMessages(messages)));
 }

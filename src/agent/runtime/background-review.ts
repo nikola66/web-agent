@@ -122,8 +122,14 @@ export function evaluateBackgroundReviewTrigger(
 
 const MEMORY_REVIEW_PROMPT =
   "Review the conversation above and consider saving to memory if appropriate.\n\n" +
-  "Focus on durable user preferences, persona details, and expectations about how you should behave. " +
-  "If something stands out, save it with memory tools or session_memory_append. " +
+  "Focus on durable user preferences, persona details, and expectations about how you should behave.\n\n" +
+  "Layer choice:\n" +
+  "- Durable facts (preferences, stable environment) → `memory_save`\n" +
+  "- Investigation trail, temporary decisions, artifact pointers → `session_memory_append`\n" +
+  "- Do NOT save task progress, PR/issue numbers, or stale-in-a-week artifacts to `memory_save`; " +
+  "use `session_search` to recall those from archives.\n" +
+  "- Repeatable workflows → skills (`skill_save` / `skill_manage`), not memory facts.\n\n" +
+  "If something stands out, save it with the appropriate tool. " +
   "If nothing is worth saving, reply 'Nothing to save.' and stop.";
 
 const SKILL_REVIEW_PROMPT =
@@ -136,7 +142,8 @@ const SKILL_REVIEW_PROMPT =
 
 const COMBINED_REVIEW_PROMPT =
   "Review the conversation above and update memory and skills.\n\n" +
-  "**Memory**: save durable user preferences and persona facts.\n\n" +
+  "**Memory**: save durable user preferences and persona facts with `memory_save`. " +
+  "Use `session_memory_append` only for rolling session notes — not durable facts.\n\n" +
   "**Skills**: patch or create class-level procedural skills; prefer updates over new files; " +
   "do not edit bundled skills.\n\n" +
   "If nothing is worth saving, reply 'Nothing to save.' and stop.";

@@ -3,7 +3,9 @@ import assert from "node:assert/strict";
 
 import {
   dropThinkingOnlyAndMergeUsers,
+  dropTrailingEmptyResponseScaffolding,
   isThinkingOnlyAssistant,
+  repairMessageSequence,
   sanitizeApiMessages,
   sanitizeMessagesForLlm,
 } from "../dist/agent-runtime/message-sanitizer.js";
@@ -40,6 +42,30 @@ test("dropThinkingOnlyAndMergeUsers merges adjacent user messages", () => {
   assert.equal(out.length, 1);
   assert.match(String(out[0].content), /first/);
   assert.match(String(out[0].content), /second/);
+});
+
+test("repairMessageSequence drops orphan tool messages and merges users", () => {
+  const out = repairMessageSequence([
+    { role: "assistant", tool_calls: [{ id: "call_1", function: { name: "read_file" } }] },
+    { role: "tool", tool_call_id: "orphan", content: "stale" },
+    { role: "user", content: "a" },
+    { role: "user", content: "b" },
+  ]);
+  assert.equal(out.length, 2);
+  assert.equal(out[0].role, "assistant");
+  assert.equal(out[1].role, "user");
+  assert.match(String(out[1].content), /a/);
+  assert.match(String(out[1].content), /b/);
+});
+
+test("dropTrailingEmptyResponseScaffolding removes synthetic recovery tail", () => {
+  const out = dropTrailingEmptyResponseScaffolding([
+    { role: "assistant", content: "final" },
+    { role: "assistant", content: "(empty)", _empty_recovery_synthetic: true },
+    { role: "user", content: "nudge", _empty_recovery_synthetic: true },
+  ]);
+  assert.equal(out.length, 1);
+  assert.equal(out[0].content, "final");
 });
 
 test("sanitizeMessagesForLlm applies both passes without mutating input", () => {

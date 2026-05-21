@@ -8,6 +8,7 @@ import { getReflections, MEMORY_REFLECTION_LIMIT } from "./reflection.js";
 import { getAllFacts, searchFactsForContext } from "./facts.js";
 import { getToolStats } from "./tool-stats.js";
 import { getPromotableLearnings } from "./learnings.js";
+import { buildPriorSessionContextBlock } from "../startup-context.js";
 
 export const MEMORY_CONTEXT_CHAR_BUDGET = 4_000;
 
@@ -95,9 +96,13 @@ export async function buildMemoryContextBlock(options: { goal?: string } = {}) {
       );
     }
   }
-  if (!lines.length) return "";
+  const priorSessionBlock = await buildPriorSessionContextBlock().catch(() => "");
+  if (!lines.length && !priorSessionBlock) return "";
 
-  let block = `\n\nRuntime memory (compact, profile-local):\n${lines.join("\n")}`;
+  let block = priorSessionBlock;
+  if (lines.length) {
+    block += `\n\nRuntime memory (compact, profile-local):\n${lines.join("\n")}`;
+  }
   if (block.length <= MEMORY_CONTEXT_CHAR_BUDGET) return block;
 
   while (block.length > MEMORY_CONTEXT_CHAR_BUDGET && lines.length > 2) {

@@ -11,14 +11,15 @@ import {
 } from "../../workspace-paths.js";
 
 export async function grepTool(
-  { pattern, root = ".", regex = false, maxResults = 200, maxFilesScanned = 5000 } = {},
+  { pattern, root = ".", regex = false, maxResults = 200, maxFilesScanned = 10000 } = {},
   ctx
 ) {
   const needle = String(pattern ?? "").trim();
   if (!needle) throw new Error("`pattern` is required for grep.");
   const base = resolveWorkspacePath(ctx, root);
   const safeMaxResults = Math.max(1, Math.min(2000, Number(maxResults) || 200));
-  const safeMaxFilesScanned = Math.max(100, Math.min(20000, Number(maxFilesScanned) || 5000));
+  const safeMaxFilesScanned = Math.max(100, Math.min(20000, Number(maxFilesScanned) || 10000));
+  const needleLc = needle.toLowerCase();
   const hits = [];
   let scanned = 0;
   const matcher = regex ? new RegExp(needle) : null;
@@ -43,7 +44,7 @@ export async function grepTool(
         const lines = txt.split(/\r?\n/);
         lines.forEach((line, idx) => {
           if (hits.length >= safeMaxResults) return;
-          const ok = matcher ? matcher.test(line) : line.includes(needle);
+          const ok = matcher ? matcher.test(line) : line.toLowerCase().includes(needleLc);
           if (ok) {
             hits.push({
               file: toWorkspaceRelative(p),

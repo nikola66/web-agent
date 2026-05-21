@@ -69,12 +69,18 @@ import {
   getSkillSelfImproveNudgeState,
   isExecutionContinuationIntent,
 } from "./turn-sequencing.js";
+import { buildExecutionGuidanceBlock } from "./execution-guidance.js";
+import { buildMemoryLayerGuidanceBlock } from "./memory-guidance.js";
 import {
   buildContinuationNudge,
+  buildEmptyRecoveryUserMessage,
+  buildSyntheticEmptyAssistantMessage,
   shouldContinueEmptyAfterTools,
   shouldContinueIntermediateAck,
+  shouldContinuePostToolStall,
+  shouldContinuePreToolPromiseStall,
 } from "./turn-continuation.js";
-import { sanitizeMessagesForLlm } from "./message-sanitizer.js";
+import { dropTrailingEmptyResponseScaffolding, sanitizeMessagesForLlm } from "./message-sanitizer.js";
 import { errorMessage } from "./utils.js";
 import { WS } from "./constants.js";
 import {
@@ -275,12 +281,16 @@ export async function agentTurn(
     !turnMeta?.textOnly && originalUserInput
       ? buildPlanExecutionContextPrefix(originalUserInput)
       : null;
+  const memoryLayerGuidance = buildMemoryLayerGuidanceBlock(toolNames);
   const toolHint =
+    buildExecutionGuidanceBlock(
+      typeof cfg.model === "string" ? cfg.model : null
+    ) +
+    memoryLayerGuidance +
     "\n\nTools: prefer native tool calls and respect each tool's schema (especially `required` fields). For files/URLs/shell/external/memory data, use tools first, then answer. Never copy terminal status lines (e.g. lines starting with ✓ or parenthetical summaries) into tool arguments—use real paths, URLs, and queries only. When the user asks for a sequence (for example, testing tools one by one), continue step-by-step without waiting for another user nudge: after you announce a step, immediately emit the corresponding tool call. No fake <tool_call> markup. Text fallback: <<<TOOL>>>{\"name\":\"read_file\",\"arguments\":{\"path\":\"relative/path\"}}<<<END>>>. Memory example: <<<TOOL>>>{\"name\":\"memory_save\",\"arguments\":{\"key\":\"user_timezone\",\"value\":\"America/New_York\"}}<<<END>>> — never call memory_save without both `key` and `value`. Tool results (compact JSON batches): each entry may contain `result` (full inlined payload when it stayed under the size cap — read this first) or `result_ref` (workspace-relative spill file such as \"memory/snapshots/run_xxx_r0_0.json\" when the payload was too large — call read_file on that exact path only). Never call read_file on memory/snapshots/run_* paths when `result` is already present or when no `result_ref` was supplied. If read_file fails or snapshot files disappeared, rerun the originating tool (`web_fetch`, etc.)." +
     "\n\nExact text discipline: when the user asks for an exact string, token, filename, identifier, code symbol, JSON key, or command output, copy it byte-for-byte. Preserve underscores, hyphens, slashes, capitalization, digits, punctuation, and spacing. Never normalize or prettify exact tokens such as FOO_BAR_TOKEN." +
     "\n\nTopic discipline: when the user's latest message changes the subject or starts a new request, treat that as the active task. Do not continue earlier plans, files, or tools from older turns unless the user explicitly asks you to resume them." +
-    "\n\nContinuation discipline: when a multi-step task is in progress, do not stop after narrating intent. If you write phrases like \"Next:\", \"Now I'll…\", \"Let me check…\", \"Step 3:\", or any forward-looking plan, the very same response must include the actual tool call that performs that step — not just the description. Only stop and produce a final answer when (a) the task is fully complete, (b) you need a piece of information only the user can provide, or (c) you have hit an unrecoverable error. \"I'll keep reading\" or \"Next: list the directory\" without the corresponding tool call is a bug." +
-    "\n\nSkill discipline: skills are procedural knowledge, separate from memory facts. The prompt contains only a compact skills index; call `skill_view` before relying on detailed skill instructions. Layer choice (`memory_save` vs session vs skills): `skill_view` **`memory-layers`**. Saving or installing skills: `skill_view` **`web-agent-skill`**." +
+    "\n\nSkill discipline: skills are procedural knowledge, separate from memory facts. The prompt contains only a compact skills index; call `skill_view` before relying on detailed skill instructions. Memory layer boundaries are in **Memory layers** above; for the full picker table call `skill_view` **`memory-layers`**. Saving or installing skills: `skill_view` **`web-agent-skill`**." +
     "\n\nDomain tool discipline: bundled skills own tool choice—call `skill_view` for the matching skill before fan-out. Hubs: **`find-skills`** (online skill registries → top 5 by installs/stars/votes), **`browser-runtime-map`** (filesystem/HTTP/shell), **`memory-layers`** (memory/session/skills/wiki), **`artifact-delivery`** + **`chart`** (present/show/Mermaid), **`clarify`** (ambiguous intent → `<<<CLARIFY>>>` option buttons, no tools), **`open-web-research`** (discovery), **`heartbeat-cron`** (scheduled jobs), **`project-scaffold`** (projects/work paths), **`task-planning`** / **`task-execution`** (multi-step runs). Prefer GitHub-flavored Markdown pipe tables in assistant-visible text." +
     " Names: " +
     toolNames.join(", ") +
@@ -362,6 +372,8 @@ export async function agentTurn(
   let skillImproveNudgeSent = false;
   let intermediateAckContinuations = 0;
   let emptyAfterToolsContinuations = 0;
+  let postToolStallContinuations = 0;
+  let preToolPromiseContinuations = 0;
   let continuationRecoveriesFired = 0;
 
   const agentName = process.env.WEBAGENT_AGENT_NAME || process.env.WEBAGENT_PROFILE_NAME || "Agent";
@@ -540,7 +552,15 @@ export async function agentTurn(
       }
 
       if (!tools.length) {
-        if (shouldContinueIntermediateAck(visible, intermediateAckContinuations)) {
+        if (
+          shouldContinueIntermediateAck(
+            originalUserInput,
+            visible,
+            conv,
+            executedToolsInTurn,
+            intermediateAckContinuations
+          )
+        ) {
           intermediateAckContinuations++;
           continuationRecoveriesFired++;
           conv.pop();
@@ -558,10 +578,45 @@ export async function agentTurn(
         ) {
           emptyAfterToolsContinuations++;
           continuationRecoveriesFired++;
-          conv.push({ role: "user", content: buildContinuationNudge("empty_after_tools") });
+          if (conv.length && (conv[conv.length - 1] as ChatTurnMsg).role === "assistant") {
+            conv.pop();
+          }
+          conv.push(buildSyntheticEmptyAssistantMessage());
+          conv.push(buildEmptyRecoveryUserMessage());
           await logDebugEvent("turn_empty_after_tools_continuation", {
             round,
             count: emptyAfterToolsContinuations,
+          });
+          continue;
+        }
+        if (
+          shouldContinuePostToolStall(visible, executedToolsInTurn, postToolStallContinuations)
+        ) {
+          postToolStallContinuations++;
+          continuationRecoveriesFired++;
+          conv.push({ role: "user", content: buildContinuationNudge("post_tool_stall") });
+          await logDebugEvent("turn_post_tool_stall_continuation", {
+            round,
+            count: postToolStallContinuations,
+            visiblePreview: String(visible || "").slice(0, 200),
+          });
+          continue;
+        }
+        if (
+          shouldContinuePreToolPromiseStall(
+            visible,
+            conv,
+            executedToolsInTurn,
+            preToolPromiseContinuations
+          )
+        ) {
+          preToolPromiseContinuations++;
+          continuationRecoveriesFired++;
+          conv.push({ role: "user", content: buildContinuationNudge("pre_tool_promise") });
+          await logDebugEvent("turn_pre_tool_promise_continuation", {
+            round,
+            count: preToolPromiseContinuations,
+            visiblePreview: String(visible || "").slice(0, 200),
           });
           continue;
         }
@@ -821,7 +876,7 @@ export async function agentTurn(
         });
       }
     }
-    return conv.slice(fullMessages.length);
+    return dropTrailingEmptyResponseScaffolding(conv.slice(fullMessages.length));
   } catch (error) {
     run.status = "failed";
     run.rounds = round;

@@ -5,7 +5,7 @@ import {
   extractGreetingTranscriptMessages,
   isStartupGreetingNoise,
   mergeStartupGreetingContextLines,
-} from "../dist/agent-runtime/bootstrap.js";
+} from "../dist/agent-runtime/startup-context.js";
 
 test("isStartupGreetingNoise filters boot markers and empty content", () => {
   assert.equal(isStartupGreetingNoise(""), true);

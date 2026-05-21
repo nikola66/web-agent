@@ -5,6 +5,9 @@ export default defineTool({
   name: "find_files",
   run: findFilesTool,
   emoji: "🔎",
-  description: "Find files by glob-like name pattern with bounded scan defaults. Skips heavy directories (e.g. node_modules, dist).",
+  description:
+    "Find workspace files by name. Bare tokens match substrings (outreach_plan → outreach_plan.md). " +
+    "Use globs for extension/path filters (*.md, **/plan.md). Skips node_modules, dist, etc. " +
+    "Accepts `pattern` or `query`; optional `root`/`path` (default `.`).",
   inputSchema: { type: "object", properties: {}, additionalProperties: true },
 });

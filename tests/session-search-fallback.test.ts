@@ -121,3 +121,37 @@ test("session_search returns recent work for recency query even with weak keywor
     assert.match(String(matches[0]?.context || ""), /snapshot persistence bug/i);
   });
 });
+
+test("session_search returns recent work for recency-only query tokens", async () => {
+  await withIsolatedWorkspace(async (root) => {
+    await fs.mkdir(nodePath.join(root, "memory", "runs"), { recursive: true });
+    await fs.writeFile(
+      nodePath.join(root, "memory", "runs", "run_recent_only.json"),
+      JSON.stringify(
+        {
+          id: "run_recent_only",
+          goal: "Ainex outreach target domains",
+          input: "Continue outreach planning",
+          final_visible_assistant_text: "Built initial domain list.",
+        },
+        null,
+        2
+      ),
+      "utf8"
+    );
+
+    const catalog = await loadToolCatalog();
+    const ctx = createToolContext({ runId: "session_search_recency_only", autoApprove: true });
+    const [out] = await runTools(
+      [{ name: "session_search", arguments: { query: "recent" } }],
+      ctx,
+      catalog
+    );
+    assert.ok(!out?.error, out?.error);
+    const matches =
+      (out?.result as { matches?: Array<{ path?: string; context?: string }> })?.matches || [];
+    assert.ok(matches.length >= 1);
+    assert.equal(matches[0]?.path, "memory/runs/run_recent_only.json");
+    assert.match(String(matches[0]?.context || ""), /Ainex outreach/i);
+  });
+});

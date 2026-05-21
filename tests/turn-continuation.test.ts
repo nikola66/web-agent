@@ -2,38 +2,70 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 import {
-  looksLikeIntermediateAck,
+  looksLikeCodexIntermediateAck,
   looksLikeEmptyAfterTools,
+  looksLikePostToolStall,
+  looksLikePreToolPromiseStall,
+  matchesFutureActionIntent,
+  matchesUserInputRequest,
+  matchesTaskCompletionOrFinalState,
+  shouldSuppressContinuationNudge,
+  hasToolContextInConversation,
   buildContinuationNudge,
   shouldContinueIntermediateAck,
   shouldContinueEmptyAfterTools,
+  shouldContinuePostToolStall,
+  shouldContinuePreToolPromiseStall,
   MAX_INTERMEDIATE_ACK_CONTINUATIONS,
 } from "../dist/agent-runtime/turn-continuation.js";
 
-test("looksLikeIntermediateAck detects narration without tools", () => {
-  assert.equal(looksLikeIntermediateAck("Starting the search now."), true);
-  assert.equal(looksLikeIntermediateAck("I'm installing the skills now."), true);
-  assert.equal(looksLikeIntermediateAck("Executing the fetch now."), true);
-});
+const NO_TOOLS: never[] = [];
 
-test("looksLikeIntermediateAck detects post-tool promise to continue", () => {
-  assert.equal(looksLikeIntermediateAck("Starting the hunt now."), true);
+test("looksLikeCodexIntermediateAck matches Hermes workspace + future ack pattern", () => {
   assert.equal(
-    looksLikeIntermediateAck(
-      `${"x".repeat(2000)}\n\nStarting the hunt now.`
+    looksLikeCodexIntermediateAck(
+      "check the repo readme",
+      "I'll read the file in the project and summarize it.",
+      NO_TOOLS,
+      false
     ),
     true
   );
 });
 
-test("looksLikeIntermediateAck rejects vague post-tool lines without action", () => {
-  assert.equal(looksLikeIntermediateAck("Let me know if you have questions."), false);
+test("looksLikeCodexIntermediateAck rejects without workspace context", () => {
+  assert.equal(
+    looksLikeCodexIntermediateAck(
+      "find SEO skills online",
+      "I'll search for the best skills and summarize them.",
+      NO_TOOLS,
+      false
+    ),
+    false
+  );
 });
 
-test("looksLikeIntermediateAck rejects genuine final answers", () => {
+test("looksLikeCodexIntermediateAck rejects after tool context in turn", () => {
+  const conv = [{ role: "user", content: "Tool results (compact JSON):\n[]" }];
   assert.equal(
-    looksLikeIntermediateAck(
-      "Here is the SEO audit summary with five prioritized fixes."
+    looksLikeCodexIntermediateAck(
+      "hunt leads",
+      "Give me the list of domains and I'll start pulling contacts.",
+      conv,
+      true
+    ),
+    false
+  );
+  assert.equal(hasToolContextInConversation(conv, true), true);
+});
+
+test("looksLikeCodexIntermediateAck rejects long assistant text", () => {
+  assert.equal(
+    looksLikeCodexIntermediateAck(
+      "check /workspace",
+      `${"x".repeat(1300)} I'll read the file.`,
+      NO_TOOLS,
+      false
     ),
     false
   );
@@ -41,25 +73,284 @@ test("looksLikeIntermediateAck rejects genuine final answers", () => {
 
 test("looksLikeEmptyAfterTools detects empty post-tool responses", () => {
   assert.equal(looksLikeEmptyAfterTools("", true), true);
-  assert.equal(looksLikeEmptyAfterTools("   ", true), true);
   assert.equal(looksLikeEmptyAfterTools("Done.", true), false);
-  assert.equal(looksLikeEmptyAfterTools("", false), false);
 });
 
-test("buildContinuationNudge returns expected recovery text", () => {
+test("buildContinuationNudge matches Hermes recovery text", () => {
   assert.match(buildContinuationNudge("intermediate_ack"), /Continue now/i);
   assert.match(buildContinuationNudge("empty_after_tools"), /empty response/i);
 });
 
 test("shouldContinueIntermediateAck respects cap", () => {
   assert.equal(
-    shouldContinueIntermediateAck("Starting now.", MAX_INTERMEDIATE_ACK_CONTINUATIONS),
+    shouldContinueIntermediateAck(
+      "check repo",
+      "I'll read the file.",
+      NO_TOOLS,
+      false,
+      MAX_INTERMEDIATE_ACK_CONTINUATIONS
+    ),
     false
   );
-  assert.equal(shouldContinueIntermediateAck("Starting now.", 0), true);
 });
 
 test("shouldContinueEmptyAfterTools respects cap", () => {
   assert.equal(shouldContinueEmptyAfterTools("", true, 1), false);
-  assert.equal(shouldContinueEmptyAfterTools("", true, 0), true);
+});
+
+test("looksLikePostToolStall detects promise-only post-tool responses", () => {
+  assert.equal(
+    looksLikePostToolStall(
+      "Since you want me to continue, I'll start by searching for high-growth companies.",
+      true
+    ),
+    true
+  );
+});
+
+test("looksLikePostToolStall rejects user-input prompts", () => {
+  assert.equal(
+    looksLikePostToolStall("Give me the list of domains and I'll start pulling contacts.", true),
+    false
+  );
+});
+
+test("shouldContinuePostToolStall respects cap", () => {
+  assert.equal(
+    shouldContinuePostToolStall("I'll search for the positioning first.", true, 1),
+    false
+  );
+});
+
+test("looksLikePostToolStall detects I'm going to search after tools", () => {
+  assert.equal(
+    looksLikePostToolStall(
+      "Since I don't have the value prop, I'm going to search for any internal docs or previous memories.",
+      true
+    ),
+    true
+  );
+});
+
+test("looksLikePreToolPromiseStall detects research promise without workspace paths", () => {
+  assert.equal(
+    looksLikePreToolPromiseStall(
+      "First, I'll search for a list of trending AI Agent startups to get a high-quality seed list.",
+      NO_TOOLS,
+      false
+    ),
+    true
+  );
+});
+
+test("looksLikePreToolPromiseStall rejects when asking user for input", () => {
+  assert.equal(
+    looksLikePreToolPromiseStall(
+      "Give me the list of domains and I'll start pulling contacts.",
+      NO_TOOLS,
+      false
+    ),
+    false
+  );
+});
+
+test("shouldContinuePreToolPromiseStall respects cap", () => {
+  assert.equal(
+    shouldContinuePreToolPromiseStall(
+      "I'll search for companies in the target niche.",
+      NO_TOOLS,
+      false,
+      1
+    ),
+    false
+  );
+});
+
+test("buildContinuationNudge includes post-tool stall recovery", () => {
+  assert.match(buildContinuationNudge("post_tool_stall"), /continue now/i);
+});
+
+test("matchesFutureActionIntent covers common English commitment phrases", () => {
+  const shouldMatch = [
+    "I'll start by searching the workspace.",
+    "I'm going to hunt for target domains.",
+    "I'll begin by reading the plan file.",
+    "I have to find at least 10 companies first.",
+    "I need to research the ICP before we scrape.",
+    "I'm about to run a web search for fintech startups.",
+    "I'm ready to dive in and explore the repo.",
+    "I'm planning to inspect the outreach plan next.",
+    "Let me check memory for prior Ainex notes.",
+    "Allow me to fetch the latest stakeholder list.",
+    "Go ahead and search for Series B automation companies.",
+    "First, I'll pull a seed list from internal docs.",
+    "Next, I'll dig into session memory for context.",
+    "Then I'll compile a list of 10 domains.",
+    "I'll proceed to verify each company website.",
+    "I'll kick off the domain hunt now.",
+    "I've got to track down their positioning pages.",
+    "I must validate these domains before Hunter.io.",
+    "I should search for AI agent startups in fintech.",
+  ];
+  for (const phrase of shouldMatch) {
+    assert.equal(matchesFutureActionIntent(phrase), true, phrase);
+  }
+});
+
+test("matchesFutureActionIntent rejects non-commitment phrasing", () => {
+  const shouldReject = [
+    "",
+    "Done — here are the 10 domains.",
+    "The plan file is empty.",
+    "Would you like me to search?",
+  ];
+  for (const phrase of shouldReject) {
+    assert.equal(matchesFutureActionIntent(phrase), false, phrase);
+  }
+});
+
+test("looksLikePostToolStall covers expanded future-intent + action pairs", () => {
+  const cases = [
+    "I'll begin by researching high-growth fintech companies.",
+    "I have to gather at least 10 target domains before Hunter.io.",
+    "I'm about to fetch a seed list from the web.",
+    "Go ahead and compile the initial ICP shortlist.",
+  ];
+  for (const text of cases) {
+    assert.equal(looksLikePostToolStall(text, true), true, text);
+  }
+});
+
+test("looksLikePostToolStall still rejects ask-first tails", () => {
+  assert.equal(
+    looksLikePostToolStall("I need to ask you for the target niche before I search.", true),
+    false
+  );
+});
+
+test("matchesUserInputRequest covers common ask / decide / choose patterns", () => {
+  const shouldMatch = [
+    "Give me the list of domains and I'll start pulling contacts.",
+    "Please provide the target niche before I begin research.",
+    "What would you like me to focus on first?",
+    "Which option should I take: Hunter.io now or build the ICP first?",
+    "Shall I proceed with the fintech niche or wait for your approval?",
+    "Do you want me to search internal docs or start with web research?",
+    "Can you clarify what Ainex's core value proposition is?",
+    "I need more information about your ICP before I can hunt domains.",
+    "Let me know which segment you prefer.",
+    "Your call — enterprise SaaS or high-growth fintech?",
+    "Pick one: A) scrape contacts now B) refine ICP first.",
+    "Please confirm before I run the Hunter.io lookup.",
+    "Reply with the niche you want me to target.",
+    "Would you prefer I start with memory_search or web_search?",
+    "I'm missing details on the value prop — could you share that?",
+    "Before I proceed, which geography should I prioritize?",
+    "Option 1: internal docs. Option 2: web research. Which do you want?",
+    "Up to you — should I draft the ICP or hunt domains first?",
+  ];
+  for (const phrase of shouldMatch) {
+    assert.equal(matchesUserInputRequest(phrase), true, phrase);
+  }
+});
+
+test("matchesUserInputRequest rejects pure action promises", () => {
+  const shouldReject = [
+    "I'll search for AI agent startups in fintech.",
+    "I'm going to compile a list of 10 target domains.",
+    "Let me check the outreach plan and report back.",
+    "Done — here are the domains you asked for.",
+  ];
+  for (const phrase of shouldReject) {
+    assert.equal(matchesUserInputRequest(phrase), false, phrase);
+  }
+});
+
+test("looksLikePreToolPromiseStall rejects expanded ask patterns", () => {
+  assert.equal(
+    looksLikePreToolPromiseStall(
+      "Which niche should I target? I'll search once you confirm fintech vs SaaS.",
+      NO_TOOLS,
+      false
+    ),
+    false
+  );
+});
+
+test("looksLikeCodexIntermediateAck rejects when asking user even with workspace context", () => {
+  assert.equal(
+    looksLikeCodexIntermediateAck(
+      "check projects/ainex/outreach_plan.md",
+      "What should I put in the ICP field? Give me the value prop and I'll fill the plan.",
+      NO_TOOLS,
+      false
+    ),
+    false
+  );
+});
+
+test("matchesTaskCompletionOrFinalState covers conclusions, blockers, and wrap-up", () => {
+  const shouldMatch = [
+    "Task complete. Here are the 10 target domains.",
+    "Research finished — final list below.",
+    "Here's the final shortlist of companies for outreach.",
+    "In summary, these are the best-fit targets.",
+    "Bottom line: we can't proceed without a Hunter.io API key.",
+    "The blocker is the missing Ainex value proposition.",
+    "Unable to proceed without internal positioning docs.",
+    "That completes the domain hunt for this phase.",
+    "All set — ready for your review.",
+    "Nothing else needed on my side.",
+    "Done. Let me know if you'd like me to run Hunter.io next.",
+    "Here are your 10 companies:",
+  ];
+  for (const phrase of shouldMatch) {
+    assert.equal(matchesTaskCompletionOrFinalState(phrase), true, phrase);
+  }
+});
+
+test("matchesTaskCompletionOrFinalState rejects in-progress promises", () => {
+  const shouldReject = [
+    "I'll search for companies next.",
+    "I'm going to compile the list now.",
+  ];
+  for (const phrase of shouldReject) {
+    assert.equal(matchesTaskCompletionOrFinalState(phrase), false, phrase);
+  }
+});
+
+test("shouldSuppressContinuationNudge blocks completion but not chained next steps", () => {
+  assert.equal(
+    shouldSuppressContinuationNudge(
+      "Domain hunt complete. Here are the 10 targets you asked for."
+    ),
+    true
+  );
+  assert.equal(
+    shouldSuppressContinuationNudge(
+      "Research complete. I'll now run Hunter.io to find stakeholders."
+    ),
+    false
+  );
+});
+
+test("looksLikePostToolStall rejects final deliverables and blockers", () => {
+  const cases = [
+    "Search complete. Here are the 10 companies in your target niche.",
+    "Final blocker: outreach_plan.md is empty and we lack the Ainex value prop.",
+    "That completes this phase. Ready for your review.",
+  ];
+  for (const text of cases) {
+    assert.equal(looksLikePostToolStall(text, true), false, text);
+  }
+});
+
+test("looksLikePostToolStall still nudges when completion is followed by a next-step promise", () => {
+  assert.equal(
+    looksLikePostToolStall(
+      "I've read the plan and it's empty. I'll search internal docs for the Ainex value prop next.",
+      true
+    ),
+    true
+  );
 });
