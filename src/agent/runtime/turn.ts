@@ -83,8 +83,29 @@ import {
   toolExecutionKey,
 } from "./stream-output.js";
 import { buildPlanModeUserPrompt } from "./planning-slash.js";
+import {
+  evaluateBackgroundReviewTrigger,
+  noteForegroundMemoryWrite,
+  noteForegroundSkillWrite,
+  noteToolIteration,
+  noteUserTurnStarted,
+  scheduleBackgroundReview,
+} from "./background-review.js";
 
 const MAX_AGENT_ROUNDS = Math.max(1, Number(typeof process !== "undefined" ? process.env?.WEBAGENT_MAX_AGENT_ROUNDS : undefined) || 64);
+
+function resolveMaxAgentRounds(turnMeta: Record<string, unknown>): number {
+  const custom = Number(turnMeta?.maxAgentRounds);
+  if (Number.isFinite(custom) && custom > 0) return Math.floor(custom);
+  return MAX_AGENT_ROUNDS;
+}
+
+function filterToolNames(allNames: string[], turnMeta: Record<string, unknown>): string[] {
+  const allowed = turnMeta?.allowedToolNames;
+  if (!Array.isArray(allowed) || !allowed.length) return allNames;
+  const set = new Set(allowed.map((name) => String(name || "").trim()).filter(Boolean));
+  return allNames.filter((name) => set.has(name));
+}
 
 function emitTurnStopLine(message: string): void {
   if (!isDebugLogEnabled()) return;
@@ -225,11 +246,16 @@ export async function agentTurn(
   if (!_cachedSystemPrompt) _cachedSystemPrompt = await loadSystemPrompt();
   const sys = _cachedSystemPrompt;
   if (!_cachedToolNames) _cachedToolNames = await getToolNamesAsync();
-  const toolNames = _cachedToolNames;
+  const allToolNames = _cachedToolNames;
+  const toolNames = filterToolNames(allToolNames, turnMeta);
   const memoryBlock = await buildMemoryContextBlock();
   const skillsBlock = await buildSkillsContextBlock(toolNames);
   const toolCatalog = await loadToolCatalog();
-  const openAiTools = await buildOpenAiToolDefinitions(toolCatalog);
+  const filteredCatalog =
+    toolNames.length === allToolNames.length
+      ? toolCatalog
+      : Object.fromEntries(Object.entries(toolCatalog).filter(([name]) => toolNames.includes(name)));
+  const openAiTools = await buildOpenAiToolDefinitions(filteredCatalog);
   const streamTools = turnMeta?.textOnly === true ? [] : openAiTools;
   const safeMessages = await sanitizeMessagesMissingSnapshotRefs(messages);
   type ChatTurnMsg = { role?: string; content?: unknown };
@@ -296,6 +322,14 @@ export async function agentTurn(
   let conv = [...fullMessages];
 
   const complexityEstimate = estimateTaskComplexity(originalUserInput);
+  const maxAgentRounds = resolveMaxAgentRounds(turnMeta);
+  const quietTurn = turnMeta?.quiet === true;
+  const skipBackgroundReview = turnMeta?.skipBackgroundReview === true || turnMeta?.backgroundReview === true;
+  const skipSkillNudge = turnMeta?.skipSkillNudge === true || turnMeta?.backgroundReview === true;
+
+  if (!turnMeta?.backgroundReview && !turnMeta?.textOnly) {
+    noteUserTurnStarted();
+  }
   let injectedPlanningGate = false;
   if (!turnMeta?.textOnly && originalUserInput && !isPlanningModePrompt(originalUserInput)) {
     if (complexityEstimate.tier === "plan") {
@@ -335,7 +369,7 @@ export async function agentTurn(
   const toolGuardrails = new ToolCallGuardrailController(readToolLoopGuardrailConfig());
   let lastToolExecutions: Array<Record<string, unknown>> = [];
   try {
-    while (round < MAX_AGENT_ROUNDS) {
+    while (round < maxAgentRounds) {
       if (turnController.signal.aborted) {
         run.errors.push("turn aborted");
         break;
@@ -422,7 +456,7 @@ export async function agentTurn(
         visible = sanitizeAssistantVisibleText(streamedVisible, toolNames);
       }
       visible = repairExactResponseText(originalUserInput, visible);
-      if (visible.trim()) {
+      if (visible.trim() && !quietTurn) {
         run.final_visible_assistant_text = visible;
         const rendered = renderMarkdownToAnsi(visible);
         let branchBelowName = false;
@@ -484,7 +518,7 @@ export async function agentTurn(
       }
 
       if (!tools.length) {
-        if (!turnMeta?.textOnly) {
+        if (!turnMeta?.textOnly && !skipSkillNudge) {
           const skillState = getSkillSelfImproveNudgeState({
             executedToolsInTurn,
             usedTodoWrite: usedTodoWriteInTurn,
@@ -555,7 +589,7 @@ export async function agentTurn(
       }
 
       const runResults =
-        runnableTools.length > 0 ? await runTools(runnableTools, turnCtx, toolCatalog) : [];
+        runnableTools.length > 0 ? await runTools(runnableTools, turnCtx, filteredCatalog) : [];
       let resultIdx = 0;
       for (let i = 0; i < exec.length; i++) {
         if (!exec[i]?.__pending) continue;
@@ -599,6 +633,7 @@ export async function agentTurn(
 
       lastToolExecutions = exec;
       if (exec.length > 0) executedToolsInTurn = true;
+      if (exec.length > 0 && !turnMeta?.backgroundReview) noteToolIteration();
       for (let i = 0; i < tools.length; i++) {
         const tname = String(tools[i]?.name || "");
         const item = exec[i];
@@ -607,7 +642,11 @@ export async function agentTurn(
           if (tname === "web_search") webSearchCountInTurn += 1;
           if (tname === "web_fetch") webFetchCountInTurn += 1;
           if (tname === "todo_write") usedTodoWriteInTurn = true;
-          if (/^skill_(save|manage|bulk_save)$/.test(tname)) skillMutatingCalledInTurn = true;
+          if (/^skill_(save|manage|bulk_save)$/.test(tname) && !turnMeta?.backgroundReview) {
+            noteForegroundSkillWrite();
+            skillMutatingCalledInTurn = true;
+          }
+          if (tname === "memory_save" && !turnMeta?.backgroundReview) noteForegroundMemoryWrite();
         }
       }
       run.tool_calls.push(
@@ -616,11 +655,20 @@ export async function agentTurn(
           arguments: tool.arguments,
         }))
       );
-      run.tool_results.push(...exec.map((item) => ({
+      const mappedResults = exec.map((item) => ({
         tool: String(item.tool ?? ""),
         status: item.error ? "error" : "ok",
         error: item.error != null ? String(item.error) : undefined,
-      })));
+        result: item.result,
+      }));
+      run.tool_results.push(...mappedResults);
+      if (typeof turnMeta?.onToolResults === "function") {
+        try {
+          turnMeta.onToolResults(mappedResults);
+        } catch {
+          /* ignore review callback errors */
+        }
+      }
       const execForCompress = unwrapSnapshotReadFileExecutions(exec);
       const turnInlineBudget = createTurnInlineBudgetState();
       const snapshotRefs = await saveCompressedToolResults({
@@ -680,19 +728,45 @@ export async function agentTurn(
       rounds: round,
       emittedMessages: conv.slice(fullMessages.length).length,
     });
-    if (round >= MAX_AGENT_ROUNDS && !turnController.signal.aborted) {
-      run.errors.push(`agent round cap reached (${MAX_AGENT_ROUNDS})`);
-      emitTurnStopLine(`max_rounds (${MAX_AGENT_ROUNDS})`);
+    if (round >= maxAgentRounds && !turnController.signal.aborted) {
+      run.errors.push(`agent round cap reached (${maxAgentRounds})`);
+      emitTurnStopLine(`max_rounds (${maxAgentRounds})`);
       await logDebugEvent("agent_turn_round_cap_reached", {
         rounds: round,
-        maxRounds: MAX_AGENT_ROUNDS,
+        maxRounds: maxAgentRounds,
       });
     }
     run.status = turnController.signal.aborted ? "aborted" : "completed";
     run.rounds = round;
     run.duration_ms = Date.now() - runStartedAt;
     run.completed_at = new Date().toISOString();
-    await persistCompletedRun(run);
+    if (!turnMeta?.backgroundReview) {
+      await persistCompletedRun(run);
+    }
+    if (!skipBackgroundReview && !turnMeta?.textOnly) {
+      const reviewTrigger = evaluateBackgroundReviewTrigger({
+        status: run.status,
+        aborted: turnController.signal.aborted,
+        executedToolsInTurn,
+        skillMutatingCalled: skillMutatingCalledInTurn,
+        usedTodoWrite: usedTodoWriteInTurn,
+        usedPlanningGate: usedPlanningGateForSkill,
+        estimatedStepsOverSix: complexityEstimate.estimatedSteps > 6,
+        finalVisibleText: run.final_visible_assistant_text,
+        availableToolNames: allToolNames,
+      });
+      if (reviewTrigger.kind) {
+        scheduleBackgroundReview({
+          kind: reviewTrigger.kind,
+          messagesSnapshot: conv,
+          cfg,
+          runId: run.id,
+          onSummary: typeof turnMeta?.onSelfImprovementSummary === "function"
+            ? turnMeta.onSelfImprovementSummary
+            : undefined,
+        });
+      }
+    }
     return conv.slice(fullMessages.length);
   } catch (error) {
     run.status = "failed";

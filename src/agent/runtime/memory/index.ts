@@ -88,6 +88,39 @@ export {
   invalidateSkillsContextCache,
 } from "./skills.js";
 
+export {
+  getSkillWriteOrigin,
+  runWithSkillWriteOrigin,
+  markAgentCreated,
+  recordSkillView,
+  recordSkillPatch,
+  recordSkillUse,
+  getSkillUsage,
+  listSkillUsage,
+  isAgentCreatedSkill,
+  isPinnedSkill,
+  setSkillPinned,
+  applyAutomaticSkillTransitions,
+  archiveSkillDirectory,
+} from "../skill-provenance.js";
+
+export {
+  evaluateBackgroundReviewTrigger,
+  scheduleBackgroundReview,
+  summarizeBackgroundReviewActions,
+  noteUserTurnStarted,
+  noteToolIteration,
+  noteForegroundSkillWrite,
+  noteForegroundMemoryWrite,
+  resetSelfImproveCounters,
+} from "../background-review.js";
+
+export {
+  maybeRunCurator,
+  loadCuratorState,
+  setCuratorPaused,
+} from "../curator.js";
+
 // Context blocks
 export {
   buildMemoryContextBlock,

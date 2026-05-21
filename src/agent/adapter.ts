@@ -41,6 +41,9 @@ import runtimeTurnSequencingSource from "../../dist/agent-runtime/turn-sequencin
 import runtimeUtilsSource from "../../dist/agent-runtime/utils.js?raw";
 import runtimeBootstrapSource from "../../dist/agent-runtime/bootstrap.js?raw";
 import runtimeTurnSource from "../../dist/agent-runtime/turn.js?raw";
+import runtimeBackgroundReviewSource from "../../dist/agent-runtime/background-review.js?raw";
+import runtimeSkillProvenanceSource from "../../dist/agent-runtime/skill-provenance.js?raw";
+import runtimeCuratorSource from "../../dist/agent-runtime/curator.js?raw";
 import runtimeMessageSanitizerSource from "../../dist/agent-runtime/message-sanitizer.js?raw";
 import runtimeStreamOutputSource from "../../dist/agent-runtime/stream-output.js?raw";
 import runtimeContextCompressionSource from "../../dist/agent-runtime/context-compression.js?raw";
@@ -402,6 +405,9 @@ async function writeRuntimeSources(profileId: string): Promise<void> {
   await emulator.fs.writeFile(`${webagentDir}/utils.js`, runtimeUtilsSource);
   await emulator.fs.writeFile(`${webagentDir}/bootstrap.js`, runtimeBootstrapSource);
   await emulator.fs.writeFile(`${webagentDir}/turn.js`, runtimeTurnSource);
+  await emulator.fs.writeFile(`${webagentDir}/background-review.js`, runtimeBackgroundReviewSource);
+  await emulator.fs.writeFile(`${webagentDir}/skill-provenance.js`, runtimeSkillProvenanceSource);
+  await emulator.fs.writeFile(`${webagentDir}/curator.js`, runtimeCuratorSource);
   await emulator.fs.writeFile(`${webagentDir}/message-sanitizer.js`, runtimeMessageSanitizerSource);
   await emulator.fs.writeFile(`${webagentDir}/stream-output.js`, runtimeStreamOutputSource);
   await emulator.fs.writeFile(`${webagentDir}/context-compression.js`, runtimeContextCompressionSource);

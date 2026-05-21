@@ -12,7 +12,7 @@ Web Agent 的公开贡献者与操作者文档。
 
 | 文档 | 说明 |
 | --- | --- |
-| [agent-notes.md](agent-notes.md) | WebContainer、工具循环护栏、持久化、研究 |
+| [agent-notes.md](agent-notes.md) | WebContainer、工具循环护栏、持久化、研究、自改进循环 |
 | [ARCHITECTURE.md](ARCHITECTURE.md) | 系统结构、IPC、存储、代理循环 |
 | [testing-checklist.md](testing-checklist.md) | 手动回归清单 |
 | [test-prompts.md](test-prompts.md) | 冒烟测试提示词（指令中文，提示词英文） |

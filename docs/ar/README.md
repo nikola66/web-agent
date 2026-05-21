@@ -12,7 +12,7 @@
 
 | الملف | الوصف |
 | --- | --- |
-| [agent-notes.md](agent-notes.md) | WebContainer، tool guardrails، الاستمرار، البحث |
+| [agent-notes.md](agent-notes.md) | WebContainer، tool guardrails، الاستمرار، البحث، حلقة التحسين الذاتي |
 | [ARCHITECTURE.md](ARCHITECTURE.md) | خريطة النظام، IPC، التخزين، حلقة الوكيل |
 | [testing-checklist.md](testing-checklist.md) | قائمة اختبار يدوي |
 | [test-prompts.md](test-prompts.md) | مطالبات دخان (تعليمات عربية، المطالبات بالإنجليزية) |

@@ -314,7 +314,7 @@ export async function main() {
   }
 
   const turnMutex = createTurnMutex();
-  const heartbeatSkipOpts = { shouldSkipTick: () => turnMutex.isBusy() };
+  const heartbeatSkipOpts = { shouldSkipTick: () => turnMutex.isBusy(), cfg };
 
   const heartbeatRunTool = async (toolName, args) => {
     const heartbeatController = new AbortController();

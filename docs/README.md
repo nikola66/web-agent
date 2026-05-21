@@ -10,7 +10,7 @@ Public contributor and operator documentation for Web Agent.
 
 | Doc | Description |
 | --- | --- |
-| [agent-notes.md](agent-notes.md) | WebContainer, tool guardrails, persistence, research |
+| [agent-notes.md](agent-notes.md) | WebContainer, tool guardrails, persistence, research, self-improvement loop |
 | [ARCHITECTURE.md](ARCHITECTURE.md) | System map, IPC, storage, agent loop |
 | [testing-checklist.md](testing-checklist.md) | Manual regression checklist |
 | [test-prompts.md](test-prompts.md) | Copy/paste smoke prompts |

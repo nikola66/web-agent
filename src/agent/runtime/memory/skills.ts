@@ -10,6 +10,13 @@ import {
   WS,
 } from "../constants.js";
 import { errorMessage } from "../utils.js";
+import {
+  getSkillWriteOrigin,
+  markAgentCreated,
+  recordSkillPatch,
+  isPinnedSkill,
+  archiveSkillDirectory,
+} from "../skill-provenance.js";
 
 const SKILLS_CONTEXT_CHAR_BUDGET = 8_000;
 const SKILL_INDEX_TRIGGERS_MAX_CHARS = 160;
@@ -299,6 +306,15 @@ async function collectSkillRecords(): Promise<SkillRecord[]> {
   return records.sort((a, b) => a.name.localeCompare(b.name));
 }
 
+async function assertSkillWritable(record: SkillRecord | null, action: string): Promise<void> {
+  if (!record) return;
+  const origin = getSkillWriteOrigin();
+  if (!origin || origin === "foreground") return;
+  if (record.source === "bundled" || record.category === "bundled") {
+    throw new Error(`skill ${action}: bundled skill '${record.name}' is protected.`);
+  }
+}
+
 async function findSkillRecord(name: string): Promise<SkillRecord | null> {
   const slug = skillSlug(name);
   if (!slug) throw new Error("skill: `name` is required.");
@@ -343,6 +359,10 @@ export async function saveSkill({
   const filePath = nodePath.join(skillDir, SKILL_FILE_NAME);
   await fs.writeFile(filePath, raw.endsWith("\n") ? raw : `${raw}\n`, "utf8");
   invalidateSkillsContextCache();
+  const origin = getSkillWriteOrigin();
+  if (origin === "background_review" || origin === "curator") {
+    await markAgentCreated(validated.slug);
+  }
   return {
     ok: true,
     name: validated.meta.name || name,
@@ -417,6 +437,13 @@ export async function viewSkill({ name, file_path }: { name?: string; file_path?
 export async function deleteSkill(name) {
   const record = await findSkillRecord(name);
   if (!record) throw new Error(`skill_delete: skill "${name}" not found.`);
+  const origin = getSkillWriteOrigin();
+  if ((origin === "background_review" || origin === "curator") && record.source !== "bundled") {
+    if (await isPinnedSkill(record.slug)) {
+      throw new Error(`skill_delete: skill "${name}" is pinned.`);
+    }
+    return archiveSkillDirectory(record.dir, record.slug, null);
+  }
   await fs.rm(record.dir, { recursive: true, force: true });
   invalidateSkillsContextCache();
   return { ok: true, name: record.name, slug: record.slug, category: record.category };
@@ -643,21 +670,38 @@ export async function manageSkill(args: Record<string, unknown> = {}) {
       category: typeof args.category === "string" ? args.category : undefined,
     });
   }
-  if (action === "delete") return deleteSkill(String(args.name || ""));
 
   const manageName = String(args.name || "").trim();
-  const record = await findSkillRecord(manageName);
+  const record = manageName ? await findSkillRecord(manageName) : null;
+
+  if (action === "delete") {
+    if (!record) throw new Error(`skill_manage: skill "${manageName}" not found.`);
+    const absorbedInto =
+      typeof args.absorbed_into === "string" ? String(args.absorbed_into).trim() : null;
+    const origin = getSkillWriteOrigin();
+    if (origin === "background_review" || origin === "curator") {
+      if (await isPinnedSkill(record.slug)) {
+        throw new Error(`skill_manage delete: skill "${manageName}" is pinned.`);
+      }
+      return archiveSkillDirectory(record.dir, record.slug, absorbedInto);
+    }
+    return deleteSkill(manageName);
+  }
+
   if (!record) throw new Error(`skill_manage: skill "${manageName}" not found.`);
 
   if (action === "edit") {
+    await assertSkillWritable(record, "edit");
     const content = String(args.content || "");
     validateSkillDocument(content);
     await fs.writeFile(record.skillPath, content.endsWith("\n") ? content : `${content}\n`, "utf8");
     invalidateSkillsContextCache();
+    await recordSkillPatch(record.slug);
     return { ok: true, action, name: record.name, slug: record.slug, path: skillPublicPath(record.skillPath) };
   }
 
   if (action === "patch") {
+    await assertSkillWritable(record, "patch");
     const oldString = String(args.old_string || "");
     const newString = String(args.new_string ?? "");
     if (!oldString) throw new Error("skill_manage patch: `old_string` is required.");
@@ -676,10 +720,12 @@ export async function manageSkill(args: Record<string, unknown> = {}) {
     if (filePath === SKILL_FILE_NAME) validateSkillDocument(next);
     await fs.writeFile(targetPath, next, "utf8");
     if (filePath === SKILL_FILE_NAME) invalidateSkillsContextCache();
+    await recordSkillPatch(record.slug);
     return { ok: true, action, name: record.name, slug: record.slug, file_path: filePath };
   }
 
   if (action === "write_file") {
+    await assertSkillWritable(record, "write_file");
     const filePath = String(args.file_path || "");
     if (!isSafeSkillRelativePath(filePath, { allowSkillMd: true })) {
       throw new Error("skill_manage write_file: unsafe `file_path`.");
@@ -691,6 +737,8 @@ export async function manageSkill(args: Record<string, unknown> = {}) {
       : nodePath.join(record.dir, nodePath.posix.normalize(filePath.replace(/\\/g, "/")));
     await fs.mkdir(nodePath.dirname(targetPath), { recursive: true });
     await fs.writeFile(targetPath, content, "utf8");
+    if (filePath === SKILL_FILE_NAME) invalidateSkillsContextCache();
+    await recordSkillPatch(record.slug);
     return { ok: true, action, name: record.name, slug: record.slug, file_path: filePath };
   }
 

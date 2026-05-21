@@ -51,7 +51,7 @@ It is designed to feel simple for end users and capable for power users: isolate
 
 - **Click and run**. Launch from the browser with no install step for end users.
 - **Isolated by default**. Every profile gets its own workspace, memory, and runtime state.
-- **Self-learning**. Skills, reflections, learnings, facts, session memory, and optional wiki projections help the agent improve over time without losing browser-local control.
+- **Self-learning**. Skills, reflections, learnings, facts, and session memory improve over time; **Hermes-style post-turn background review** can auto-create or patch skills after complex work; a **curator** consolidates agent-created skills on heartbeat while the tab is open — all browser-local.
 - **Local-first persistence**. Workspaces, memory, sessions, and skills live in browser storage and can be exported or re-imported later.
 - **Hosted without server-side user state**. The hosted demo serves the app, while user files and agent state stay in the browser.
 - **Open source**. Free to use, fork, modify, and distribute under the MIT License.
@@ -64,6 +64,7 @@ It is designed to feel simple for end users and capable for power users: isolate
 - **`/plan` planning mode**: research the workspace, save a dated markdown plan under `plans/`, present it with `artifact_present`, then execute on a **follow-up** message
 - **`/wiki_setup` · `/wiki_sync` · `/wiki_search`**: deterministic shortcuts that route to the wiki tools (default vault root: `.webagent/knowledge-vault/`)
 - Persistent fact store, rolling session memory, reflections, and learnings
+- **Hermes-style self-improvement**: post-turn background review (skill + memory capture on complex turns), skill provenance (`.webagent/skills/.usage.json`), and periodic curator consolidation while the app tab is open
 - Uploads into the live workspace with image handoff to vision tools
 - Encrypted API keys stored locally in the browser
 - Export and import flows for long-lived browser-local workspaces
@@ -110,7 +111,7 @@ flowchart TB
 
 ### Planning, wiki vault, and self-learning
 
-These three loops sit beside the main capability diagram: **planning** produces reviewable specs before implementation; the **wiki** mirrors runtime memory into browseable markdown (Obsidian-friendly); **self-learning** ties facts, session notes, skills, and reflections together over time.
+These three loops sit beside the main capability diagram: **planning** produces reviewable specs before implementation; the **wiki** mirrors runtime memory into browseable markdown (Obsidian-friendly); **self-learning** ties facts, session notes, skills, reflections, and **autonomous post-turn review** together over time.
 
 #### Planning (`/plan`)
 
@@ -148,12 +149,17 @@ flowchart TB
 flowchart TB
   subgraph run ["🤖 Every turn"]
     X["🤖 Tools & conversation"]
+    BR["💾 Post-turn background review"]
   end
   subgraph store ["🧠 What gets remembered"]
     F["💾 memory_* · durable facts"]
     SM["📝 session_memory_* · rolling notes"]
     SK["📚 skill_* · reusable SKILL.md"]
     RF["💡 reflections · promotable learnings"]
+    U["📊 .usage.json · skill provenance"]
+  end
+  subgraph maintain ["🧹 Periodic maintenance"]
+    C["🧹 Curator · consolidate & archive"]
   end
   subgraph mirror ["📓 Optional human mirror"]
     W2["📓 wiki_sync projection"]
@@ -162,11 +168,23 @@ flowchart TB
   X --> SM
   X --> SK
   X --> RF
+  X -->|complex turn| BR
+  BR --> SK
+  BR --> F
+  SK --> U
+  U --> C
+  C --> SK
   RF -.->|💡 hints| F
   RF -.->|💡 hints| SK
   F --> W2
   SM --> W2
 ```
+
+**Every turn:** tool results feed facts, session notes, reflections, and learnings. Reflections and learnings surface as **hints** in later prompts (not automatic promotion).
+
+**After complex turns** (todo/plan gates or high step count), a **post-turn background review** may run — non-blocking, after the user-visible reply — with restricted `skill_*` and `memory_*` tools. Defaults: skill review every **10 tool iterations** without a foreground skill write (`WEBAGENT_SKILL_REVIEW_INTERVAL`); memory review every **10 user turns** (`WEBAGENT_MEMORY_REVIEW_INTERVAL`). Terminal summary example: `Self-improvement review: Skill 'deploy-checklist' updated · Memory updated`.
+
+**Skill provenance:** skills created in background review are tagged `created_by: agent` in `.webagent/skills/.usage.json` (usage counters, lifecycle state). **Curator** runs on heartbeat (~weekly while the tab is open): stale/archive idle agent-created skills, consolidate overlaps; pinned skills opt out; archives go to `.webagent/skills/.archive/` (no hard delete). Tune with `WEBAGENT_CURATOR_INTERVAL_MS`, `WEBAGENT_CURATOR_STALE_AFTER_DAYS`, `WEBAGENT_CURATOR_ARCHIVE_AFTER_DAYS`.
 
 For choosing **facts vs session vs skills vs vault**, use the bundled **`/memory-layers`** skill.
 
@@ -181,7 +199,7 @@ For choosing **facts vs session vs skills vs vault**, use the bundled **`/memory
 | `📋 Planning` | `/plan` + `write_file` into `plans/` + `artifact_present` | Spec-first workflows: plan now, implement on the next turn |
 | `⏱️ Automation tools` | Heartbeat cron jobs and todos | Recurring tasks while the app is open |
 | `🌐 Remote tools` | Search, fetch, email, vision, YouTube transcript | Web-aware and multimodal task execution |
-| `📚 Skills` | Reusable `SKILL.md` procedures | Higher-level workflows without retraining the model |
+| `📚 Skills` | Reusable `SKILL.md` procedures | Higher-level workflows; background review and curator maintain agent-created skills |
 
 ## Slash Commands
 
@@ -326,6 +344,7 @@ Additional bundled skills appear under `/skills`; the table above highlights com
 - `🛡️ Safer`: skills encode preferred patterns before the agent starts changing files.
 - `⚡ Faster`: `/skill-slug [task]` is quicker than re-explaining a workflow every session.
 - `🧠 Teachable`: users can grow the agent by saving new procedures directly into the workspace.
+- `🔄 Self-improving`: after complex turns, background review can patch or create skills automatically; curator keeps the library consolidated over time.
 
 ### Wiki vs memory (short)
 
@@ -357,7 +376,7 @@ Every profile gets its own isolated workspace rooted in browser storage. The wor
 
 ## How Persistence Works
 
-Web Agent keeps user state in browser storage on the user’s machine. That includes workspaces, sessions, memory, facts, learnings, skills, todos, cron metadata, saved **`/plan`** markdown under **`plans/`** (legacy `.webagent/plans/` paths remain readable), wiki vault files under **`.webagent/knowledge-vault/`** by default (legacy **`knowledge-vault/`** at the workspace root is automatically moved there when wiki tools run without an explicit `root_path`), and local credentials. Nothing in that persistent agent state is meant to live on the server.
+Web Agent keeps user state in browser storage on the user’s machine. That includes workspaces, sessions, memory, facts, learnings, skills (including `.webagent/skills/.usage.json` provenance and `.archive/` for curator moves), todos, cron metadata, curator state under `.webagent/skills/.curator_state`, saved **`/plan`** markdown under **`plans/`** (legacy `.webagent/plans/` paths remain readable), wiki vault files under **`.webagent/knowledge-vault/`** by default (legacy **`knowledge-vault/`** at the workspace root is automatically moved there when wiki tools run without an explicit `root_path`), and local credentials. Nothing in that persistent agent state is meant to live on the server.
 
 As long as the browser keeps its local storage and OPFS data, the agent keeps its history and workspace. When you want portability, export the workspace or browser-local state and import it later on the same machine or another one.
 
@@ -465,6 +484,7 @@ Contributor-facing docs:
 - **Model access**: OpenRouter or OpenAI-compatible providers
 - **Plans & vault**: timestamped plans under `plans/` (legacy `.webagent/plans/` readable); optional PARA wiki tree (default `.webagent/knowledge-vault/`) synchronized via `wiki_*` tools
 - **Tool loop guardrails**: per-turn deterministic detection of repeated tool failures and idempotent no-progress reads; thresholds in `.env.example`
+- **Self-improvement loop**: post-turn background review + skill provenance + heartbeat curator (Hermes-inspired; see [Self-learning loop](#self-learning-loop))
 
 The agent runtime is embedded into the browser app, mounted into a live workspace, and launched inside a terminal-backed Node environment. Profiles keep personalities, settings, workspace state, and memory separated.
 

@@ -968,6 +968,8 @@ export async function skillViewTool(args: ToolArgs = {}, ctx) {
     name,
     file_path: typeof args?.file_path === "string" ? args.file_path.trim() : undefined,
   });
+  const { recordSkillView } = await import("../skill-provenance.js");
+  if (result.slug) await recordSkillView(String(result.slug));
   await logDebugEvent("skill_view", { name, filePath: result.file_path });
   return result;
 }

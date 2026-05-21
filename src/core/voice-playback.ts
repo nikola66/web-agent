@@ -81,6 +81,8 @@ function isNonNarratableVoiceLine(line: string): boolean {
   if (/^[▸▶✓✗⚠🫀❯]/.test(t)) return true;
   if (/\bstopped:/i.test(t)) return true;
   if (/\bheartbeat:/i.test(t)) return true;
+  if (/self-improvement review:/i.test(t)) return true;
+  if (/curator:/i.test(t)) return true;
   if (/no cron jobs/i.test(t)) return true;
   if (/heartbeat done/i.test(t)) return true;
   if (/^tool guardrail/i.test(t)) return true;

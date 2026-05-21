@@ -44,6 +44,25 @@ Call `skill_view` **`memory-layers`** for facts vs session vs skills. Reference 
 5. Capture the reusable lesson in the correct persistence layer.
 6. Patch this skill or a sibling skill only when the lesson is procedural, repeatable, and worth reusing in future sessions.
 
+### Hermes-style background self-improvement
+
+After complex turns (todo/plan gates or high step count), the runtime may spawn a **post-turn background review** that replays the conversation snapshot with a restricted tool set (`skill_*`, `memory_*`). This runs **after** the user-visible response and does not block the main turn.
+
+- Skill review interval defaults to every **10 tool iterations** without a foreground skill write (`WEBAGENT_SKILL_REVIEW_INTERVAL`).
+- Memory review interval defaults to every **10 user turns** (`WEBAGENT_MEMORY_REVIEW_INTERVAL`).
+- Skills created in background review are marked `created_by: agent` in `.webagent/skills/.usage.json` and are eligible for curator consolidation.
+- Foreground `skill_save` / `skill_manage` resets the skill counter (same as Hermes).
+- User-visible summary lines look like: `Self-improvement review: Skill 'x' updated · Memory updated`.
+
+### Curator (skill library maintenance)
+
+On heartbeat ticks (tab open), a curator pass may run about weekly (`WEBAGENT_CURATOR_INTERVAL_MS`, default 7 days):
+
+- Auto-marks stale/archived agent-created skills by idle age.
+- Spawns a consolidation review to merge overlapping session skills into class-level umbrellas.
+- Never hard-deletes; archives move to `.webagent/skills/.archive/`.
+- Pinned skills (`.usage.json`) skip auto transitions.
+
 ## Skill Write Autonomy
 
 When the user explicitly asks for self-evolution, self-maintenance, or skill improvement, Web Agent may patch or create skills directly without asking for a second approval step for the skill file itself.

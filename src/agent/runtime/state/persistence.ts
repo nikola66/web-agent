@@ -11,6 +11,7 @@ import { dim, green, red } from "../terminal-format.js";
 import { emailTool } from "../tools/email-tools.js";
 import { ensureParentDir } from "../workspace-paths.js";
 import { errorMessage } from "../utils.js";
+import { maybeRunCurator } from "../curator.js";
 
 /** Heartbeat cron result routing — must match `cron_register` tool schema. */
 const CRON_DELIVERY_MODES = new Set(["silent", "terminal", "email"]);
@@ -550,7 +551,11 @@ function deliverCronFailure(job, err) {
 export async function runHeartbeatTick(
   runTool,
   reason = "interval",
-  opts: { shouldSkipTick?: () => boolean } = {}
+  opts: {
+    shouldSkipTick?: () => boolean;
+    cfg?: Record<string, unknown>;
+    idleForMs?: number;
+  } = {}
 ) {
   const now = Date.now();
   const state = await loadHeartbeatState();
@@ -611,6 +616,15 @@ export async function runHeartbeatTick(
 
   if (dirty) await saveCronJobs(cron);
   process.stdout.write(dim(`▸ heartbeat done, ran ${ran} job(s)\n\n`));
+
+  if (opts.cfg && typeof opts.cfg === "object") {
+    await maybeRunCurator({
+      cfg: opts.cfg,
+      idleForMs: opts.idleForMs ?? Number.POSITIVE_INFINITY,
+    }).catch((err) => {
+      process.stdout.write(red(`▸ curator error: ${errorMessage(err)}\n`));
+    });
+  }
 }
 
 // ---------------------------------------------------------------------------
