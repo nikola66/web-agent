@@ -1,7 +1,7 @@
 {
   "name": "web-agent",
   "private": true,
-  "version": "0.0.24",
+  "version": "0.0.25",
   "type": "module",
   "scripts": {
     "build:embed-runtime": "node scripts/build-embed-runtime.mjs",
@@ -13,6 +13,7 @@
     "cors-proxy-server": "node scripts/cors-proxy-server.mjs",
     "test": "npm run build:embed-runtime && tsx --test tests/*.test.ts",
     "test:tool-guardrails-benchmark": "npm run build:embed-runtime && tsx --test tests/tool-guardrails-benchmark.test.ts",
+    "test:quality-benchmark": "npm run build:embed-runtime && tsx --test tests/tool-guardrails-benchmark.test.ts tests/tool-argument-repair-benchmark.test.ts tests/loop-recovery-benchmark.test.ts tests/tool-registry-preparation.test.ts tests/turn-continuation.test.ts tests/tool-argument-normalization.test.ts",
     "test:tools": "node scripts/run-tool-smoke.mjs",
     "test:tools:network": "node scripts/run-tool-smoke.mjs --network",
     "test:browser": "PLAYWRIGHT_BROWSERS_PATH=0 playwright test",

@@ -4,9 +4,11 @@ import assert from "node:assert/strict";
 import {
   createToolAwareStreamWriter,
   extractClarifyMarkers,
+  extractLooseCallToolLines,
   extractPlainToolCommandLines,
   extractJsonToolCallPayloads,
   normalizeToolCalls,
+  resolveKnownToolName,
   sanitizeAssistantVisibleText,
   stripPseudoToolCallLines,
   stripReasoningPlaceholderLines,
@@ -165,6 +167,43 @@ Trailing.`;
     sanitizeAssistantVisibleText(raw, []),
     sanitizeAssistantVisibleText(visible, []),
   );
+});
+
+test("resolveKnownToolName maps find_find_files to find_files", () => {
+  assert.equal(resolveKnownToolName("find_find_files", ["find_files", "list_dir"]), "find_files");
+});
+
+test("extractLooseCallToolLines parses call:tool wire with name= typos", () => {
+  const raw = `Queued prose.
+
+call:tool{"name="find_find_files"arguments={"patterns":["outreach","sequence"],"matchMode":"any"}}
+
+Done.`;
+  const parsed = extractLooseCallToolLines(raw, ["find_files"]);
+  assert.equal(parsed.tools.length, 1);
+  assert.equal(parsed.tools[0].name, "find_files");
+  assert.deepEqual(parsed.tools[0].arguments.patterns, ["outreach", "sequence"]);
+  assert.ok(!parsed.visible.includes("call:tool"));
+  assert.ok(parsed.visible.includes("Done."));
+});
+
+test("normalizeToolCalls accepts duplicated find_find_files name", () => {
+  const { normalized, rejected } = normalizeToolCalls(
+    [{ name: "find_find_files", arguments: { patterns: ["outreach"] } }],
+    ["find_files"]
+  );
+  assert.equal(rejected.length, 0);
+  assert.equal(normalized[0].name, "find_files");
+});
+
+test("sanitizeAssistantVisibleText strips call:tool loose lines", () => {
+  const raw = `Intro
+call:tool{"name="find_find_files"arguments={"patterns":["x"]}}
+Outro`;
+  const out = sanitizeAssistantVisibleText(raw, ["find_files"]);
+  assert.ok(out.includes("Intro"));
+  assert.ok(out.includes("Outro"));
+  assert.ok(!out.includes("call:tool"));
 });
 
 test("normalizeToolCalls rejects duplicate same-turn tool calls with identical args", () => {

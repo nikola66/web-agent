@@ -10,6 +10,10 @@ import {
   shouldSkipDir,
   toWorkspaceRelative,
 } from "../../workspace-paths.js";
+import {
+  coerceFindFilesArguments,
+  coerceWorkspaceBrowsePath,
+} from "../argument-normalization.js";
 
 export async function listDirTool(
   {
@@ -22,7 +26,8 @@ export async function listDirTool(
   } = {},
   ctx
 ) {
-  const abs = resolveWorkspacePath(ctx, rel);
+  const relPath = coerceWorkspaceBrowsePath(rel);
+  const abs = resolveWorkspacePath(ctx, relPath);
   const resolvedPattern = String(pattern ?? "").trim();
   const safeMaxResults = Math.max(1, Math.min(20000, Number(maxResults) || 2000));
   const safeMaxEntriesScanned = Math.max(100, Math.min(100000, Number(maxEntriesScanned) || 10000));
@@ -59,7 +64,7 @@ export async function listDirTool(
     await walk(abs);
   } catch (err) {
     if (err?.code === "ENOENT") {
-      throw new Error(`Path not found: ${rel}. Confirm path via list_dir before retrying.`);
+      throw new Error(`Path not found: ${relPath}. Confirm path via list_dir before retrying.`);
     }
     throw err;
   }
@@ -70,42 +75,85 @@ export async function listDirTool(
   };
 }
 
-export async function findFilesTool(
-  {
-    pattern,
-    query,
+function pathMatchesPatterns(
+  basename: string,
+  relPath: string,
+  patterns: string[],
+  matchMode: "all" | "any" | "single"
+): boolean {
+  if (matchMode === "any") {
+    return patterns.some((part) => matchPathPattern(basename, relPath, part));
+  }
+  return patterns.every((part) => matchPathPattern(basename, relPath, part));
+}
+
+export async function findFilesTool(rawArgs = {}, ctx) {
+  const args = coerceFindFilesArguments(
+    rawArgs && typeof rawArgs === "object" && !Array.isArray(rawArgs)
+      ? (rawArgs as Record<string, unknown>)
+      : {}
+  );
+  const {
     root = ".",
     path,
     maxResults = 1000,
     maxFilesScanned = 15000,
-  } = {},
-  ctx
-) {
-  const resolvedPattern = String(pattern ?? query ?? "").trim();
-  if (!resolvedPattern) {
-    throw new Error("`pattern` is required for find_files.");
+  } = args;
+  const resolvedPatterns = Array.isArray(args.patterns)
+    ? (args.patterns as unknown[]).map((p) => String(p ?? "").trim()).filter(Boolean)
+    : [];
+  const matchMode = String(args.matchMode ?? "single") as "all" | "any" | "single";
+  if (!resolvedPatterns.length) {
+    throw new Error(
+      "`pattern` (or `query` / `patterns`) is required for find_files. " +
+        "Use patterns: [\"ainex\",\"outreach\"] to require all substrings, or pattern: \"*.md\" for globs."
+    );
   }
-  const resolvedRoot = String(path ?? root ?? ".").trim() || ".";
-  const listing = await listDirTool(
-    {
-      path: resolvedRoot,
-      recursive: true,
-      pattern: resolvedPattern,
-      kind: "file",
-      maxResults,
-      maxEntriesScanned: maxFilesScanned,
-    },
-    ctx
-  );
-  const files = listing.entries.map((entry) => entry.path);
+  const resolvedRoot = coerceWorkspaceBrowsePath(String(path ?? root ?? "."));
+  const abs = resolveWorkspacePath(ctx, resolvedRoot);
+  const safeMaxResults = Math.max(1, Math.min(20000, Number(maxResults) || 1000));
+  const safeMaxFilesScanned = Math.max(100, Math.min(100000, Number(maxFilesScanned) || 15000));
+  const files: string[] = [];
+  let scanned = 0;
+
+  async function walk(d: string) {
+    if (files.length >= safeMaxResults || scanned >= safeMaxFilesScanned) return;
+    const ents = await fs.readdir(d, { withFileTypes: true });
+    for (const e of ents) {
+      if (files.length >= safeMaxResults || scanned >= safeMaxFilesScanned) return;
+      const p = nodePath.join(d, e.name);
+      const relP = toWorkspaceRelative(p);
+      scanned += 1;
+      if (e.isDirectory()) {
+        if (!shouldSkipDir(e.name)) await walk(p);
+      } else if (pathMatchesPatterns(e.name, relP, resolvedPatterns, matchMode)) {
+        files.push(relP);
+      }
+    }
+  }
+
+  try {
+    await walk(abs);
+  } catch (err) {
+    if (err?.code === "ENOENT") {
+      throw new Error(`Path not found: ${resolvedRoot}. Confirm path via list_dir before retrying.`);
+    }
+    throw err;
+  }
+
+  const truncated = files.length >= safeMaxResults || scanned >= safeMaxFilesScanned;
   return {
     files,
-    scanned: listing.scanned,
-    truncated: listing.truncated,
+    patterns: resolvedPatterns,
+    matchMode,
+    scanned,
+    truncated,
     ...(files.length === 0
       ? {
           note:
-            "No matches. Bare patterns match filename substrings (e.g. outreach_plan matches outreach_plan.md). Use * for globs (*.md, **/plan.md).",
+            "No matches. Each pattern is a substring on the filename/path unless it contains * or ? (glob). " +
+            'AND: patterns: ["ainex","outreach"]. OR: patterns: ["outreach","sequence"], matchMode: "any". ' +
+            "Comma-separated AND: pattern: \"ainex,outreach\". Glob: pattern: \"*.md\".",
         }
       : {}),
   };

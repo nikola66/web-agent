@@ -21,6 +21,16 @@ export const SESSION_SEARCH_GUIDANCE =
   "or `last session` for recency-only browse. Prior-session transcript may already appear in the " +
   "prompt — search when you need older or keyword-specific detail.";
 
+export const WORKSPACE_BROWSE_GUIDANCE =
+  "Workspace paths in `list_dir`, `read_file`, `find_files`, `grep`, and `tree` are **relative to " +
+  "the project root**. Use `.` to list the workspace root — never pass `/` or a host absolute path " +
+  "(e.g. `/home/...`); those are rejected as escaping the workspace.";
+
+export const TOOL_JSON_ARGS_GUIDANCE =
+  "Tool arguments must be plain JSON objects with normal keys: {\"query\":\"keywords\"}, " +
+  "{\"path\":\".\"}. Do not escape property names (wrong: {\"\\\"query\\\"\":\"...\"}) and do not " +
+  "wrap string values in extra quote layers.";
+
 export const SESSION_MEMORY_GUIDANCE =
   "Use `session_memory_append` for rolling investigation notes, temporary decisions, and artifact " +
   "pointers during the current stretch of work. Call `session_memory_list` to read recent session " +
@@ -46,6 +56,21 @@ export function buildMemoryLayerGuidanceBlock(toolNames: string[] = []): string 
   }
   if (tools.has("session_memory_append") || tools.has("session_memory_list")) {
     parts.push(SESSION_MEMORY_GUIDANCE);
+  }
+  if (
+    tools.has("session_search") ||
+    tools.has("session_memory_append") ||
+    tools.has("session_memory_list")
+  ) {
+    parts.push(TOOL_JSON_ARGS_GUIDANCE);
+  }
+  if (
+    tools.has("list_dir") ||
+    tools.has("find_files") ||
+    tools.has("grep") ||
+    tools.has("tree")
+  ) {
+    parts.push(WORKSPACE_BROWSE_GUIDANCE);
   }
   if (tools.has("skill_save") || tools.has("skill_manage")) {
     parts.push(SKILLS_GUIDANCE);

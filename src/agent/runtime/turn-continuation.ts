@@ -61,6 +61,10 @@ const FUTURE_ACTION_INTENT_RES: RegExp[] = [
   /\b(?:first|next|then|now|so),?\s+i['']?m going to\b/i,
   /\b(?:first|next|then|now|so),?\s+i am going to\b/i,
   /\b(?:first|next|then|now|so),?\s+let me\b/i,
+  /\blet's\b/i,
+  /\btrying\b/i,
+  /\battempting\b/i,
+  /\bnext,?\s+(?:trying|attempting)\b/i,
   /\bi['']?m (?:now )?(?:executing|implementing|applying|patching|updating|registering|refreshing|re-registering|configuring|working on|locking in)\b/i,
   /\bi am (?:now )?(?:executing|implementing|applying|patching|updating|registering|refreshing|re-registering|configuring|working on|locking in)\b/i,
   /\b(?:executing|implementing|applying|patching|updating|registering|refreshing|configuring) now\b/i,
@@ -121,9 +125,11 @@ const USER_INPUT_REQUEST_RES: RegExp[] = [
   /\bwho should\b/i,
   /\bwhere should i\b/i,
   /\bhow should i\b/i,
-  /\bchoose (?:one|between|from|which|your)\b/i,
-  /\bpick (?:one|between|from|which|your)\b/i,
-  /\bselect (?:one|from|which|your|an option)\b/i,
+  /\bchoose (?:one|between|which|your)(?!\s+(?:of|from|among|within|between)\b)/i,
+  /\bpick (?:one|between|which|your)(?!\s+(?:of|from|among|within|between)\b)/i,
+  /\bselect (?:one|which|your|an option)(?!\s+(?:of|from|among|within)\b)/i,
+  /\bpick from (?:these|the following|your|our|below|above)\b/i,
+  /\bselect from (?:these|the following|your|our|below|above)\b/i,
   /\bwhich option\b/i,
   /\byour call\b/i,
   /\bup to you\b/i,
@@ -246,6 +252,19 @@ function tailPromisesFurtherAction(text: string): boolean {
   return ACTION_MARKERS.some((marker) => tail.includes(marker));
 }
 
+/** Agent plans to choose from a found set — not asking the user to choose. */
+function looksLikeAgentSelfSelection(low: string): boolean {
+  return (
+    /\bpick (?:one|a|an) (?:of|from|among|within)\b/i.test(low) ||
+    /\bselect (?:one|a|an) (?:of|from|among|within)\b/i.test(low)
+  );
+}
+
+/** Closing sentences commit to an imminent tool step (overrides mid-text false positives). */
+function tailHasStrongToolCommitment(text: string): boolean {
+  return tailPromisesFurtherAction(text);
+}
+
 /** True when the turn should end — user ask, final deliverable, blocker, or wrap-up. */
 export function shouldSuppressContinuationNudge(text: string): boolean {
   const raw = String(text || "").trim();
@@ -314,6 +333,10 @@ const ACTION_MARKERS = [
   "email",
   "personalize",
   "log",
+  "finish",
+  "wider",
+  "narrow",
+  "expand",
 ] as const;
 
 const WORKSPACE_MARKERS = [
@@ -394,8 +417,12 @@ function looksLikeActionPromiseStall(visible: string): boolean {
   if (!text) return false;
   const low = text.toLowerCase();
   if (low.length > 1200) return false;
-  if (shouldSuppressContinuationNudge(text)) return false;
-  if (!matchesFutureActionIntent(low)) return false;
+  const tailCommit = tailHasStrongToolCommitment(text);
+  if (shouldSuppressContinuationNudge(text)) {
+    if (!(looksLikeAgentSelfSelection(low) && tailCommit)) return false;
+  }
+  if (!matchesFutureActionIntent(low) && !tailCommit) return false;
+  if (tailCommit) return true;
   return ACTION_MARKERS.some((marker) => low.includes(marker));
 }
 

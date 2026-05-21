@@ -90,6 +90,49 @@ test("find_files finds outreach_plan.md from bare token pattern", async (t) => {
   );
 });
 
+test("find_files matches all patterns in patterns array", async (t) => {
+  const { findFilesTool } = await import("../dist/agent-runtime/tools/filesystem-tools.js");
+  const slug = `_find_files_multi_${Date.now()}`;
+  const planDir = nodePath.join(process.cwd(), "projects", slug, "ainex-sales-outreach");
+  await fs.mkdir(planDir, { recursive: true });
+  await fs.writeFile(nodePath.join(planDir, "ainex_outreach_plan.md"), "# plan\n", "utf8");
+  const otherDir = nodePath.join(process.cwd(), "projects", slug, "misc");
+  await fs.mkdir(otherDir, { recursive: true });
+  await fs.writeFile(nodePath.join(otherDir, "notes.md"), "# other\n", "utf8");
+  t.after(async () => {
+    await fs.rm(nodePath.join(process.cwd(), "projects", slug), { recursive: true, force: true });
+  });
+  const result = await findFilesTool(
+    { patterns: ["ainex", "outreach"], root: `projects/${slug}` },
+    {}
+  );
+  assert.deepEqual(result.patterns, ["ainex", "outreach"]);
+  assert.equal(result.matchMode, "all");
+  assert.ok(result.files.some((file: string) => file.includes("ainex_outreach_plan.md")));
+  assert.equal(result.files.some((file: string) => file.endsWith("misc/notes.md")), false);
+});
+
+test("find_files matchMode any matches either pattern", async (t) => {
+  const { findFilesTool } = await import("../dist/agent-runtime/tools/filesystem-tools.js");
+  const slug = `_find_files_or_${Date.now()}`;
+  const root = nodePath.join(process.cwd(), "projects", slug);
+  await fs.mkdir(nodePath.join(root, "email-sequence"), { recursive: true });
+  await fs.writeFile(nodePath.join(root, "email-sequence", "flow.md"), "# seq\n", "utf8");
+  await fs.mkdir(nodePath.join(root, "misc"), { recursive: true });
+  await fs.writeFile(nodePath.join(root, "misc", "outreach_notes.md"), "# out\n", "utf8");
+  t.after(async () => {
+    await fs.rm(root, { recursive: true, force: true });
+  });
+  const result = await findFilesTool(
+    { patterns: ["*outreach*", "*sequence*"], matchMode: "any", root: `projects/${slug}` },
+    {}
+  );
+  assert.equal(result.matchMode, "any");
+  assert.deepEqual(result.patterns, ["outreach", "sequence"]);
+  assert.ok(result.files.some((f: string) => f.includes("outreach")));
+  assert.ok(result.files.some((f: string) => f.includes("sequence")));
+});
+
 test("writeFileTool accepts path under subdirectory", async (t) => {
   const { writeFileTool } = await import("../dist/agent-runtime/tools/filesystem-tools.js");
   const rootTmp = nodePath.join(process.cwd(), "tmp");

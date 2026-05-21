@@ -20,6 +20,13 @@ test("buildMemoryLayerGuidanceBlock includes session guidance when session tools
   ]);
   assert.match(block, /session_memory_append/);
   assert.match(block, /past conversation/);
+  assert.match(block, /plain JSON objects/);
+});
+
+test("buildMemoryLayerGuidanceBlock includes workspace browse guidance for list_dir", () => {
+  const block = buildMemoryLayerGuidanceBlock(["list_dir", "read_file"]);
+  assert.match(block, /never pass `\//);
+  assert.match(block, /Use `\./);
 });
 
 test("buildMemoryLayerGuidanceBlock returns empty when no memory layer tools", () => {

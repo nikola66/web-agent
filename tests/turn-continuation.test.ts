@@ -118,6 +118,24 @@ test("looksLikePostToolStall rejects user-input prompts", () => {
   );
 });
 
+test("looksLikePostToolStall continues when agent picks from findings then I'll fetch", () => {
+  const text = `Found a goldmine. jscraik/unfinished-cemetery.
+
+I'm going to dive into the unfinished-cemetery repo, pick one of the documented dead projects from its archive, and then execute the full excavation procedure on that specific target.
+
+Step 1: Surface Mapping (The Perimeter) begins now. I'll fetch the cemetery's contents to pick a victim.`;
+  assert.equal(looksLikePostToolStall(text, true), true);
+  assert.equal(shouldContinuePostToolStall(text, true, 0), true);
+});
+
+test("matchesUserInputRequest ignores agent self-selection pick one of", () => {
+  assert.equal(
+    matchesUserInputRequest("I'll pick one of the documented projects from the archive."),
+    false
+  );
+  assert.equal(matchesUserInputRequest("Pick one: fintech outreach or general SaaS?"), true);
+});
+
 test("shouldContinuePostToolStall respects cap", () => {
   assert.equal(
     shouldContinuePostToolStall("I'll search for the positioning first.", true, 1),
@@ -218,10 +236,23 @@ test("looksLikePostToolStall covers expanded future-intent + action pairs", () =
     "I have to gather at least 10 target domains before Hunter.io.",
     "I'm about to fetch a seed list from the web.",
     "Go ahead and compile the initial ICP shortlist.",
+    'Trying a wider search for any "Ainex" or "outreach" files.',
+    "Let's get back into the Ainex sales outreach plan and finish up those assets.",
   ];
   for (const text of cases) {
     assert.equal(looksLikePostToolStall(text, true), true, text);
   }
+});
+
+test("looksLikePreToolPromiseStall covers let's resume phrasing without tools", () => {
+  assert.equal(
+    looksLikePreToolPromiseStall(
+      "Let's get back into the Ainex sales outreach plan and finish up those assets.",
+      NO_TOOLS,
+      false
+    ),
+    true
+  );
 });
 
 test("looksLikePostToolStall still rejects ask-first tails", () => {

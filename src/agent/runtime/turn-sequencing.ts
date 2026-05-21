@@ -59,7 +59,17 @@ const TOOL_SEQUENCE_USER_INTENT_RE =
   /(?:\btest(?:ing|s)?\b|re-?test|\btry\b|continue testing|one\s+(?:by|bye|bie)\s+one|systematically|\ball tools\b|tool tests|sequentially|without stopping)/;
 
 const EXECUTION_CONTINUATION_INTENT_RE =
-  /\b(?:continue\s+until(?:\s+completion)?|go\s+ahead|^\s*(?:start|yes|ok|okay|proceed|do\s+it|run\s+it|execute)\s*[.!?]?\s*$|plan\s+approved|approved\s+plan|execute\s+(?:the\s+)?(?:plan|audit|pipeline)|proceed\s+with\s+(?:the\s+)?(?:plan|execution|audit)|start\s+(?:the\s+)?(?:plan|audit|pipeline)|run\s+(?:the\s+)?(?:plan|audit|pipeline))\b/i;
+  /\b(?:continue\s+until(?:\s+completion)?|^\s*continue\s*[.!?]?\s*$|^\s*(?:resume|keep\s+going|carry\s+on|go\s+on|pick\s+up(?:\s+where)?)\s*[.!?]?\s*$|go\s+ahead|^\s*(?:start|yes|ok|okay|proceed|do\s+it|run\s+it|execute)\s*[.!?]?\s*$|plan\s+approved|approved\s+plan|execute\s+(?:the\s+)?(?:plan|audit|pipeline)|proceed\s+with\s+(?:the\s+)?(?:plan|execution|audit)|start\s+(?:the\s+)?(?:plan|audit|pipeline)|run\s+(?:the\s+)?(?:plan|audit|pipeline))\b/i;
+
+/** One-shot prefix when the user is resuming prior work (Continue / resume / keep going). */
+export function buildExecutionContinuationContextPrefix(input) {
+  if (!isExecutionContinuationIntent(input)) return null;
+  return (
+    "[Continuation] The user is resuming prior work—not starting a new task. " +
+    "Do not stop after narration or a single search; call tools until you locate the relevant files or hit a real blocker. " +
+    "Use find_files with patterns: [\"token1\",\"token2\"] (all must match) or grep for content search."
+  );
+}
 
 function isToolSequenceIntent(input) {
   return TOOL_SEQUENCE_USER_INTENT_RE.test(String(input || "").toLowerCase());

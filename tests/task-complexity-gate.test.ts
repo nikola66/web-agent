@@ -79,6 +79,8 @@ test("extractPlanningGoalFromPrompt parses **Goal:** from synthetic prompt", () 
 
 test("estimateTaskComplexity stays simple for continuation directives", () => {
   assert.equal(isExecutionContinuationIntent("Continue until completion"), true);
+  assert.equal(isExecutionContinuationIntent("Continue"), true);
+  assert.equal(isExecutionContinuationIntent("keep going"), true);
   const r = estimateTaskComplexity("Continue until completion");
   assert.equal(r.tier, "simple");
   assert.equal(r.estimatedSteps, 1);

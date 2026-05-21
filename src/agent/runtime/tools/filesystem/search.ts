@@ -9,6 +9,7 @@ import {
   shouldSkipDir,
   toWorkspaceRelative,
 } from "../../workspace-paths.js";
+import { coerceWorkspaceBrowsePath } from "../argument-normalization.js";
 
 export async function grepTool(
   { pattern, root = ".", regex = false, maxResults = 200, maxFilesScanned = 10000 } = {},
@@ -16,7 +17,8 @@ export async function grepTool(
 ) {
   const needle = String(pattern ?? "").trim();
   if (!needle) throw new Error("`pattern` is required for grep.");
-  const base = resolveWorkspacePath(ctx, root);
+  const browseRoot = coerceWorkspaceBrowsePath(root);
+  const base = resolveWorkspacePath(ctx, browseRoot);
   const safeMaxResults = Math.max(1, Math.min(2000, Number(maxResults) || 200));
   const safeMaxFilesScanned = Math.max(100, Math.min(20000, Number(maxFilesScanned) || 10000));
   const needleLc = needle.toLowerCase();
@@ -60,7 +62,7 @@ export async function grepTool(
     await walk(base);
   } catch (err) {
     if (err?.code === "ENOENT") {
-      throw new Error(`Path not found: ${root}. Confirm path via list_dir before retrying.`);
+      throw new Error(`Path not found: ${browseRoot}. Confirm path via list_dir before retrying.`);
     }
     throw err;
   }
@@ -80,7 +82,8 @@ export async function treeTool(
   } = {},
   ctx
 ) {
-  const abs = resolveWorkspacePath(ctx, rel);
+  const relPath = coerceWorkspaceBrowsePath(rel);
+  const abs = resolveWorkspacePath(ctx, relPath);
   const lines = [];
   const safeMaxDepth = Math.max(0, Math.min(20, Number(maxDepth) || 4));
   const safeMaxEntries = Math.max(1, Math.min(20000, Number(maxEntries) || 3000));
@@ -107,7 +110,7 @@ export async function treeTool(
     await walk(abs, 0, "");
   } catch (err) {
     if (err?.code === "ENOENT") {
-      throw new Error(`Path not found: ${rel}. Confirm path via list_dir before retrying.`);
+      throw new Error(`Path not found: ${relPath}. Confirm path via list_dir before retrying.`);
     }
     throw err;
   }

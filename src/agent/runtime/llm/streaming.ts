@@ -3,6 +3,51 @@ import { ipcProxyStreamRequest, ipcProxyRequest } from "../ipc.js";
 import { logDebugEvent } from "../logging/debug-log.js";
 import { reasoningDisableExtras } from "./provider-config.js";
 import { classifyLlmProviderError, formatClassifiedLlmError } from "./llm-error-classifier.js";
+import {
+  parseToolArguments,
+  repairLooseToolCallObject,
+} from "../tools/argument-normalization.js";
+
+function levenshtein(a: string, b: string): number {
+  const m = a.length;
+  const n = b.length;
+  if (!m) return n;
+  if (!n) return m;
+  const dp = Array.from({ length: m + 1 }, (_, i) => {
+    const row = new Array<number>(n + 1);
+    row[0] = i;
+    return row;
+  });
+  for (let j = 1; j <= n; j++) dp[0][j] = j;
+  for (let i = 1; i <= m; i++) {
+    for (let j = 1; j <= n; j++) {
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+      dp[i][j] = Math.min(dp[i - 1][j] + 1, dp[i][j - 1] + 1, dp[i - 1][j - 1] + cost);
+    }
+  }
+  return dp[m][n];
+}
+
+/** Map duplicated/typo tool names (`find_find_files`) to a registered built-in. */
+export function resolveKnownToolName(name: string, knownTools: Iterable<string>): string {
+  const trimmed = String(name || "").trim();
+  if (!trimmed) return "";
+  const set = knownTools instanceof Set ? knownTools : new Set(knownTools);
+  if (set.has(trimmed)) return trimmed;
+  const lower = trimmed.toLowerCase();
+  for (const tool of set) {
+    if (lower === tool.toLowerCase()) return tool;
+  }
+  for (const tool of set) {
+    const prefix = tool.split("_")[0];
+    if (trimmed === `${prefix}_${tool}`) return tool;
+  }
+  const close = [...set].filter(
+    (tool) => trimmed.length <= tool.length + 6 && levenshtein(trimmed, tool) <= 2
+  );
+  if (close.length === 1) return close[0];
+  return trimmed;
+}
 
 const STREAM_CHUNK_TIMEOUT_MS = 45_000;
 /** Never treat sub-second read waits as an idle stall (avoids bogus "0s" near total deadline). */
@@ -750,8 +795,9 @@ const PSEUDO_TOOL_LINE_GENERIC_RE =
   /^\s*[a-z][a-z0-9_]{1,48}\s*\{[^}]*"[\w$]+"\s*:\s*[^}]+\}\s*$/i;
 
 function lineLooksLikePseudoToolCall(line, exactNameRe) {
-  const t = String(line || "");
+  const t = String(line || "").replace(/^call:\s*tool\s*/i, "").trim();
   if (exactNameRe?.test(t)) return true;
+  if (/^call:\s*tool\s*\{/i.test(String(line || ""))) return true;
   return PSEUDO_TOOL_LINE_GENERIC_RE.test(t);
 }
 
@@ -932,6 +978,33 @@ export function extractPlainToolCommandLines(text, toolNames) {
   return { tools, visible: visibleLines.join("\n").trimEnd() };
 }
 
+/** Lines like `call:tool{"name="find_find_files"arguments={...}`. */
+export function extractLooseCallToolLines(text, toolNames) {
+  const known = toolNames?.length ? new Set(toolNames) : null;
+  const tools: Array<{ name: string; arguments: Record<string, unknown> }> = [];
+  const visibleLines: string[] = [];
+  for (const line of String(text || "").split("\n")) {
+    const trimmed = line.trim();
+    if (!/^call:\s*tool/i.test(trimmed) && !/^(?:name|tool)\s*=/i.test(trimmed)) {
+      visibleLines.push(line);
+      continue;
+    }
+    const payload = trimmed.replace(/^call:\s*tool\s*/i, "").trim();
+    const repaired = repairLooseToolCallObject(payload.startsWith("{") ? payload : `{${payload}}`);
+    if (!repaired?.name) {
+      visibleLines.push(line);
+      continue;
+    }
+    const name = resolveKnownToolName(repaired.name, known || []);
+    if (known && !known.has(name)) {
+      visibleLines.push(line);
+      continue;
+    }
+    tools.push({ name, arguments: repaired.arguments });
+  }
+  return { tools, visible: visibleLines.join("\n").trimEnd() };
+}
+
 export function stripModelControlTokens(text) {
   if (!text) return "";
   return String(text)
@@ -969,6 +1042,7 @@ export function sanitizeAssistantVisibleText(text, knownToolNames) {
   let out = stripXmlToolArtifacts(withoutMarkers).trim();
   const names = Array.isArray(knownToolNames) ? knownToolNames : [];
   out = stripJsonToolCallPayloads(out, names).trim();
+  out = extractLooseCallToolLines(out, names).visible.trim();
   out = extractPlainToolCommandLines(out, names).visible.trim();
   out = stripPseudoToolCallLines(out, names).trim();
   out = stripModelControlTokens(out).trim();
@@ -1052,11 +1126,12 @@ export function normalizeToolCalls(
       rejected.push({ reason: "too_many_calls", call: raw });
       continue;
     }
-    const name = String(raw?.name || "").trim();
-    if (!name) {
+    const rawName = String(raw?.name || "").trim();
+    if (!rawName) {
       rejected.push({ reason: "missing_name", call: raw });
       continue;
     }
+    const name = resolveKnownToolName(rawName, knownTools);
     if (!knownTools.has(name)) {
       rejected.push({ reason: "unknown_tool", call: raw });
       continue;
@@ -1066,12 +1141,7 @@ export function normalizeToolCalls(
       const trimmed = args.trim();
       if (!trimmed) args = {};
       else {
-        try {
-          args = JSON.parse(trimmed);
-        } catch {
-          rejected.push({ reason: "invalid_arguments_json", call: raw });
-          continue;
-        }
+        args = parseToolArguments(trimmed, name);
       }
     }
     if (!args || typeof args !== "object" || Array.isArray(args)) args = {};

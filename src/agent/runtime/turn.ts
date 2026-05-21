@@ -42,6 +42,7 @@ import {
   extractClarifyMarkers,
   extractJsonToolCallPayloads,
   extractMarkerTools,
+  extractLooseCallToolLines,
   extractPlainToolCommandLines,
   extractToolCallTagPayloads,
   normalizeToolCalls,
@@ -66,6 +67,7 @@ import {
   MIN_RESEARCH_FETCHES,
   MIN_RESEARCH_SEARCHES,
   buildPlanExecutionContextPrefix,
+  buildExecutionContinuationContextPrefix,
   getSkillSelfImproveNudgeState,
   isExecutionContinuationIntent,
 } from "./turn-sequencing.js";
@@ -284,6 +286,10 @@ export async function agentTurn(
     !turnMeta?.textOnly && originalUserInput
       ? buildPlanExecutionContextPrefix(originalUserInput)
       : null;
+  const continuationPrefix =
+    !turnMeta?.textOnly && originalUserInput
+      ? buildExecutionContinuationContextPrefix(originalUserInput)
+      : null;
   const memoryLayerGuidance = buildMemoryLayerGuidanceBlock(toolNames);
   const toolHint =
     buildExecutionGuidanceBlock(
@@ -370,6 +376,9 @@ export async function agentTurn(
   if (planExecutionPrefix) {
     conv.push({ role: "user", content: planExecutionPrefix });
   }
+  if (continuationPrefix) {
+    conv.push({ role: "user", content: continuationPrefix });
+  }
 
   let usedTodoWriteInTurn = false;
   let skillMutatingCalledInTurn = false;
@@ -444,15 +453,22 @@ export async function agentTurn(
         ? extractJsonToolCallPayloads(toolCallTagParsed.visible, toolNames)
         : { tools: [], visible: toolCallTagParsed.visible };
       const jsonFallbackCalls = jsonFallbackParsed.tools;
-      const plainCommandParsed =
+      const looseCallParsed =
         nativeOrMarkerCount === 0 && jsonFallbackCalls.length === 0
-          ? extractPlainToolCommandLines(jsonFallbackParsed.visible, toolNames)
+          ? extractLooseCallToolLines(jsonFallbackParsed.visible, toolNames)
           : { tools: [], visible: jsonFallbackParsed.visible };
+      const plainCommandParsed =
+        nativeOrMarkerCount === 0 &&
+        jsonFallbackCalls.length === 0 &&
+        looseCallParsed.tools.length === 0
+          ? extractPlainToolCommandLines(looseCallParsed.visible, toolNames)
+          : { tools: [], visible: looseCallParsed.visible };
       const rawToolCalls = [
         ...(streamResult?.toolCalls || []),
         ...markerParsed.tools,
         ...toolCallTagParsed.tools,
         ...jsonFallbackCalls,
+        ...looseCallParsed.tools,
         ...plainCommandParsed.tools,
       ];
       let { normalized: tools, rejected } = normalizeToolCalls(rawToolCalls, toolNames);

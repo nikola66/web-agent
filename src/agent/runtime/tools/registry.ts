@@ -20,6 +20,8 @@ import { BUILTIN_TOOL_DEFINITIONS } from "./builtins/index.js";
 import type { ToolDefinition, ToolImplementFn } from "./definition.js";
 import {
   normalizeToolArguments,
+  parseToolArguments,
+  applyWorkspaceBrowsePathArgs,
   resolveInputSchema,
   validateRequiredArguments,
 } from "./argument-normalization.js";
@@ -88,6 +90,10 @@ const PATH_ARG_ALIAS_TOOLS = new Set([
   "edit_file",
   "multi_edit",
   "file_stat",
+  "list_dir",
+  "tree",
+  "grep",
+  "find_files",
 ]);
 
 function applyPathArgAliases(toolName, argsObj) {
@@ -374,6 +380,39 @@ type FinishToolCallErrorOptions = {
   httpStatus?: number | null;
 };
 
+/** Shared registry prep path (wire repair → aliases → schema normalize). Exported for benchmarks. */
+export function prepareIncomingToolArguments(
+  toolName: string,
+  rawArgs: unknown,
+  catalogEntry?: { inputSchema?: Record<string, unknown> } | null
+): { schema: ReturnType<typeof resolveInputSchema>; args: Record<string, unknown> } {
+  const name = String(toolName || "").trim();
+  let parsed = parseToolArguments(rawArgs, name);
+  parsed = hoistNestedToolArguments(name, parsed) as Record<string, unknown>;
+
+  if (name === "email") {
+    parsed = inferEmailActionArgument(parsed) as Record<string, unknown>;
+  }
+
+  let argsForNormalize = parsed;
+  if (!argsForNormalize || typeof argsForNormalize !== "object" || Array.isArray(argsForNormalize)) {
+    argsForNormalize = {};
+  } else {
+    argsForNormalize = applyPathArgAliases(name, { ...argsForNormalize });
+    argsForNormalize = applyWorkspaceBrowsePathArgs(name, argsForNormalize);
+    if (name === "write_file") {
+      argsForNormalize = applyWriteFileBodyAliases(argsForNormalize);
+    }
+    if (name === "skill_bulk_save") {
+      argsForNormalize = expandSkillBulkSaveArgs(argsForNormalize);
+    }
+  }
+
+  const schema = resolveInputSchema(catalogEntry);
+  const args = normalizeToolArguments(argsForNormalize, schema, name);
+  return { schema, args };
+}
+
 function prepareToolCall({
   call,
   ctx,
@@ -386,35 +425,8 @@ function prepareToolCall({
   index: number;
 }): PreparedToolCall {
   const name = typeof call?.name === "string" ? call.name : "";
-  let rawArgs = call.arguments;
-  if (typeof rawArgs === "string") {
-    try {
-      rawArgs = JSON.parse(rawArgs);
-    } catch {
-      rawArgs = {};
-    }
-  }
-  rawArgs = hoistNestedToolArguments(name, rawArgs);
-
-  if (name === "email") {
-    rawArgs = inferEmailActionArgument(rawArgs);
-  }
-
-  let argsForNormalize = rawArgs;
-  if (!argsForNormalize || typeof argsForNormalize !== "object" || Array.isArray(argsForNormalize)) {
-    argsForNormalize = {};
-  } else {
-    argsForNormalize = applyPathArgAliases(name, { ...argsForNormalize });
-    if (name === "write_file") {
-      argsForNormalize = applyWriteFileBodyAliases(argsForNormalize);
-    }
-    if (name === "skill_bulk_save") {
-      argsForNormalize = expandSkillBulkSaveArgs(argsForNormalize);
-    }
-  }
-
-  const schema = resolveInputSchema(toolCatalog?.[name]);
-  const args = normalizeToolArguments(argsForNormalize, schema);
+  const catalogEntry = toolCatalog?.[name] as { inputSchema?: Record<string, unknown> } | undefined;
+  const { schema, args } = prepareIncomingToolArguments(name, call.arguments, catalogEntry);
   const { argsPreview, argsPreviewTruncated } = buildArgsPreview(args);
   const callCtx = withCallId(ctx, nextCallId(ctx.runId, index));
   return {

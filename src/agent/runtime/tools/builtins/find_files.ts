@@ -6,8 +6,31 @@ export default defineTool({
   run: findFilesTool,
   emoji: "🔎",
   description:
-    "Find workspace files by name. Bare tokens match substrings (outreach_plan → outreach_plan.md). " +
-    "Use globs for extension/path filters (*.md, **/plan.md). Skips node_modules, dist, etc. " +
-    "Accepts `pattern` or `query`; optional `root`/`path` (default `.`).",
-  inputSchema: { type: "object", properties: {}, additionalProperties: true },
+    "Find workspace files by name/path. One pattern: substring or glob (*.md, **/plan.md). " +
+    "Multiple tokens: patterns: [\"ainex\",\"outreach\"] (AND) or matchMode: \"any\" for OR. " +
+    "Comma-separated AND: pattern: \"ainex,outreach\". Avoid *token* globs—use patterns without stars. " +
+    "Optional root/path (default `.`). Skips node_modules, dist, etc.",
+  inputSchema: {
+    type: "object",
+    properties: {
+      pattern: {
+        type: "string",
+        description:
+          "Single substring/glob, or comma-separated substrings (ainex,outreach) when no * or ?.",
+      },
+      query: { type: "string", description: "Alias for pattern." },
+      patterns: {
+        type: "array",
+        items: { type: "string" },
+        description: "Substring/glob tokens. Default AND; use matchMode \"any\" for OR.",
+      },
+      matchMode: {
+        type: "string",
+        description: "Optional: \"any\" (OR) or default AND when multiple patterns.",
+      },
+      root: { type: "string", description: "Search root (default `.`)." },
+      path: { type: "string", description: "Alias for root." },
+    },
+    additionalProperties: true,
+  },
 });
