@@ -68,7 +68,7 @@ It is designed to feel simple for end users and capable for power users: isolate
 - Encrypted API keys stored locally in the browser
 - Export and import flows for long-lived browser-local workspaces
 - Hosted demo for zero-friction trial usage
-- **Loop Guard** (default on): browser-side MobileBERT MNLI classifier decides continue / stop / ask_user after each agent step; disable with `VITE_WEBAGENT_LOOP_GUARD=0` (see [docs/agent-notes.md](docs/agent-notes.md))
+- **Tool loop guardrails** (default on): Hermes-style deterministic detection of repeated tool failures and idempotent no-progress reads per turn; configure via `VITE_WEBAGENT_TOOL_LOOP_*` (see [docs/agent-notes.md](docs/agent-notes.md))
 
 ## Capability Surface
 
@@ -387,11 +387,11 @@ Recommended model on OpenRouter: **Gemma 4** (good speed, price, and tool callin
 git clone https://github.com/nikola66/web-agent.git
 cd web-agent
 npm install
-cp .env.example .env.local   # optional: Loop Guard, debug log, launch mode
+cp .env.example .env.local   # optional: tool guardrails, debug log, launch mode
 npm run dev
 ```
 
-Open `http://localhost:5173`. Loop Guard env vars are documented in [.env.example](.env.example).
+Open `http://localhost:5173`. Tool guardrail env vars are documented in [.env.example](.env.example).
 
 ### Operator workflows
 
@@ -452,7 +452,7 @@ Contributor-facing docs:
 - [AGENTS.md](AGENTS.md) — rules for AI coding agents
 - [CAPABILITIES.md](CAPABILITIES.md)
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — system map, IPC protocol, storage layers
-- [docs/agent-notes.md](docs/agent-notes.md) — Loop Guard, WebContainer, persistence
+- [docs/agent-notes.md](docs/agent-notes.md) — tool guardrails, WebContainer, persistence
 - [docs/testing-checklist.md](docs/testing-checklist.md)
 - [docs/GLOSSARY.md](docs/GLOSSARY.md) · [docs/TRANSLATING.md](docs/TRANSLATING.md)
 
@@ -464,7 +464,7 @@ Contributor-facing docs:
 - **Isolation**: profile-scoped workspaces and runtime state
 - **Model access**: OpenRouter or OpenAI-compatible providers
 - **Plans & vault**: timestamped plans under `plans/` (legacy `.webagent/plans/` readable); optional PARA wiki tree (default `.webagent/knowledge-vault/`) synchronized via `wiki_*` tools
-- **Loop Guard**: after each assistant step, the embedded runtime asks the browser adapter to score recent messages (local MobileBERT MNLI via Transformers.js) and choose continue, stop, or ask_user; thresholds in `.env.example`
+- **Tool loop guardrails**: per-turn deterministic detection of repeated tool failures and idempotent no-progress reads; thresholds in `.env.example`
 
 The agent runtime is embedded into the browser app, mounted into a live workspace, and launched inside a terminal-backed Node environment. Profiles keep personalities, settings, workspace state, and memory separated.
 

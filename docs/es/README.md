@@ -12,7 +12,7 @@ Documentación pública para contribuidores y operadores de Web Agent.
 
 | Doc | Descripción |
 | --- | --- |
-| [agent-notes.md](agent-notes.md) | WebContainer, Loop Guard, persistencia, investigación |
+| [agent-notes.md](agent-notes.md) | WebContainer, tool guardrails, persistencia, investigación |
 | [ARCHITECTURE.md](ARCHITECTURE.md) | Mapa del sistema, IPC, almacenamiento, bucle del agente |
 | [testing-checklist.md](testing-checklist.md) | Lista de regresión manual |
 | [test-prompts.md](test-prompts.md) | Prompts de humo (instrucciones en español, prompts en inglés) |

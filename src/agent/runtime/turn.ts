@@ -23,10 +23,12 @@ import {
   runTools,
 } from "./tools/registry.js";
 import {
-  createToolFailureStreakState,
-  guardBeforeToolBatch,
-  updateToolFailureStreakAfterResults,
-} from "./tools/tool-failure-streak.js";
+  appendToolGuardrailGuidance,
+  executionResultText,
+  readToolLoopGuardrailConfig,
+  ToolCallGuardrailController,
+  toolGuardrailSyntheticResult,
+} from "./tools/tool-loop-guardrails.js";
 import { createToolContext, type CreateToolContextInput } from "./tools/context.js";
 import {
   emitContextUpdate,
@@ -52,7 +54,7 @@ import {
   prefixBlock,
   renderMarkdownToAnsi,
 } from "./terminal-format.js";
-import { logDebugEvent } from "./logging/debug-log.js";
+import { isDebugLogEnabled, logDebugEvent } from "./logging/debug-log.js";
 import { createReflectionFromRun, derivePromotableLearning } from "./reflection.js";
 import {
   estimateTaskComplexity,
@@ -63,6 +65,7 @@ import {
   MIN_RESEARCH_FETCHES,
   MIN_RESEARCH_SEARCHES,
   buildPlanExecutionContextPrefix,
+  getSkillSelfImproveNudgeState,
 } from "./turn-sequencing.js";
 import { errorMessage } from "./utils.js";
 import { WS } from "./constants.js";
@@ -73,17 +76,6 @@ import {
 } from "./transcript.js";
 import { emitTranscriptEvent } from "./transcript-delivery.js";
 import {
-  requestLoopGuardDecision,
-  shouldContinueFromLoopGuard,
-  shouldRejectPendingToolsFromLoopGuard,
-  shouldSuppressPostToolNudgeFromExecutions,
-  getSkillSelfImproveNudgeState,
-  emitLoopStopLine,
-  emitLoopGuardDecisionLine,
-  resolveMaxAutoContinueNudges,
-  LOOP_GUARD_CONTINUE_NUDGE,
-} from "./loop-guard.js";
-import {
   summarizeToolExecutions,
   writeStdoutSmoothed,
   createRunId,
@@ -92,6 +84,12 @@ import {
 import { buildPlanModeUserPrompt } from "./planning-slash.js";
 
 const MAX_AGENT_ROUNDS = Math.max(1, Number(typeof process !== "undefined" ? process.env?.WEBAGENT_MAX_AGENT_ROUNDS : undefined) || 64);
+
+function emitTurnStopLine(message: string): void {
+  if (!isDebugLogEnabled()) return;
+  process.stdout.write(dim(`▸ stopped: ${message}\n\n`));
+}
+
 const MAX_TOOL_RESULT_INLINE_CHARS = Math.max(
   200,
   Number(process.env.WEBAGENT_MAX_TOOL_RESULT_INLINE_CHARS) || 10_000
@@ -289,12 +287,10 @@ export async function agentTurn(
   } as CreateToolContextInput);
 
   let round = 0;
-  let autoContinueNudges = 0;
   let executedToolsInTurn = false;
   let webSearchCountInTurn = 0;
   let webFetchCountInTurn = 0;
   const researchIntent = isResearchIntent(originalUserInput);
-  const maxAutoContinueNudges = resolveMaxAutoContinueNudges(originalUserInput);
   const successfulToolKeysInTurn = new Set<string>();
   let conv = [...fullMessages];
 
@@ -335,7 +331,7 @@ export async function agentTurn(
 
   const agentName = process.env.WEBAGENT_AGENT_NAME || process.env.WEBAGENT_PROFILE_NAME || "Agent";
   let turnHeaderPrinted = false;
-  const toolFailureStreak = createToolFailureStreakState();
+  const toolGuardrails = new ToolCallGuardrailController(readToolLoopGuardrailConfig());
   let lastToolExecutions: Array<Record<string, unknown>> = [];
   try {
     while (round < MAX_AGENT_ROUNDS) {
@@ -376,7 +372,7 @@ export async function agentTurn(
         });
       }
       if (streamAborted) {
-        emitLoopStopLine("stream_aborted");
+        emitTurnStopLine("stream_aborted");
         break;
       }
       streamWriter.flush();
@@ -486,140 +482,17 @@ export async function agentTurn(
         );
       }
 
-      const loopGuardCtx = {
-        userRequest: originalUserInput,
-        webSearchCount: webSearchCountInTurn,
-        webFetchCount: webFetchCountInTurn,
-        toolsExecutedInTurn: executedToolsInTurn,
-        visible,
-        round,
-        autoContinueNudges,
-        lastReplyHadToolCalls: tools.length > 0,
-      };
-
-      if (tools.length && executedToolsInTurn) {
-        const pendingToolNames = tools.map((t) => t.name);
-        const postToolGuard = await requestLoopGuardDecision(conv, {
-          ...loopGuardCtx,
-          loopPhase: "post_tool_stale_calls",
-          pendingToolNames,
-          visible,
-        });
-        const postToolRejectCtx = {
-          ...loopGuardCtx,
-          visible,
-          pendingToolNames,
-        };
-        const rejectPending = shouldRejectPendingToolsFromLoopGuard(postToolGuard, postToolRejectCtx);
-        await logDebugEvent("turn_loop_guard", {
-          round,
-          phase: "post_tool_stale_calls",
-          decision: postToolGuard.decision,
-          scores: postToolGuard.scores,
-          reason: postToolGuard.reason,
-          pendingTools: pendingToolNames,
-          rejectPending,
-        });
-        emitLoopGuardDecisionLine({
-          round,
-          phase: "post_tool_stale_calls",
-          result: postToolGuard,
-          rejectPending,
-          pendingTools: pendingToolNames,
-        });
-        if (rejectPending) {
-          run.rejected_tool_calls.push(
-            ...tools.map((tool) => ({
-              name: tool.name,
-              reason: "post_tool_final_answer",
-            }))
-          );
-          await logDebugEvent("skipped_post_final_tool_calls", {
-            round,
-            toolCount: tools.length,
-            toolNames: tools.map((tool) => tool.name),
-            visiblePreview: String(visible || "").slice(0, 200),
-          });
-          await logDebugEvent("turn_completed", {
-            round,
-            durationMs: Date.now() - roundStartedAt,
-            continued: false,
-            skippedPostFinalTools: tools.length,
-          });
-          emitLoopStopLine("post_tool_final_answer_skipped_tools");
-          break;
-        }
-      }
-
       if (!tools.length) {
         if (!turnMeta?.textOnly) {
-          const suppressFromShell = shouldSuppressPostToolNudgeFromExecutions(lastToolExecutions);
-          const loopGuard = suppressFromShell
-            ? { decision: "stop", scores: { continue: 0, stop: 1, ask_user: 0 }, reason: "nodebox_shell" }
-            : await requestLoopGuardDecision(conv, { ...loopGuardCtx, loopPhase: "no_tools" });
-          await logDebugEvent("turn_loop_guard", {
-            round,
-            phase: "no_tools",
-            decision: loopGuard.decision,
-            scores: loopGuard.scores,
-            reason: loopGuard.reason,
-          });
-          emitLoopGuardDecisionLine({
-            round,
-            phase: "no_tools",
-            result: loopGuard,
-          });
-          const wantsContinue = shouldContinueFromLoopGuard(loopGuard, loopGuardCtx);
-          if (wantsContinue && autoContinueNudges >= maxAutoContinueNudges) {
-            process.stdout.write(
-              dim(
-                `▸ Loop Guard cap reached (${autoContinueNudges}/${maxAutoContinueNudges} nudges); stopping. Increase WEBAGENT_MAX_AUTO_CONTINUE_NUDGES to allow more recovery nudges.\n`
-              )
-            );
-            emitLoopStopLine("loop_guard_cap");
-            await logDebugEvent("turn_completed", {
-              round,
-              durationMs: Date.now() - roundStartedAt,
-              continued: false,
-              autoContinueCap: true,
-            });
-            break;
-          }
-          if (wantsContinue) {
-            autoContinueNudges += 1;
-            conv.push({ role: "user", content: LOOP_GUARD_CONTINUE_NUDGE });
-            emitLoopGuardDecisionLine({
-              round,
-              phase: "no_tools",
-              result: loopGuard,
-              action: `nudge ${autoContinueNudges}/${maxAutoContinueNudges}`,
-            });
-            await logDebugEvent("turn_loop_guard_nudge", {
-              round,
-              nudgeIndex: autoContinueNudges,
-              visiblePreview: String(visible || "").slice(0, 200),
-            });
-            continue;
-          }
-
           const skillState = getSkillSelfImproveNudgeState({
-            loopGuardDecision: loopGuard.decision,
             executedToolsInTurn,
             usedTodoWrite: usedTodoWriteInTurn,
             usedPlanningGate: usedPlanningGateForSkill,
             estimatedStepsOverSix: complexityEstimate.estimatedSteps > 6,
             skillMutatingCalled: skillMutatingCalledInTurn,
-            autoContinueNudges,
-            maxNudges: maxAutoContinueNudges,
+            skillImproveNudgeSent,
           });
-          if (skillState.want && !skillState.underCap) {
-            process.stdout.write(
-              dim(
-                `▸ skill self-improve nudge skipped (Loop Guard cap ${autoContinueNudges}/${skillState.maxNudges})\n`
-              )
-            );
-          } else if (skillState.shouldNudge && !skillImproveNudgeSent) {
-            autoContinueNudges += 1;
+          if (skillState.shouldNudge) {
             skillImproveNudgeSent = true;
             conv.push({
               role: "user",
@@ -628,7 +501,6 @@ export async function agentTurn(
             });
             await logDebugEvent("turn_skill_self_improve_nudge", {
               round,
-              nudgeIndex: autoContinueNudges,
               visiblePreview: String(visible || "").slice(0, 200),
             });
             continue;
@@ -639,7 +511,7 @@ export async function agentTurn(
           durationMs: Date.now() - roundStartedAt,
           continued: false,
         });
-        emitLoopStopLine(
+        emitTurnStopLine(
           executedToolsInTurn ? "post_tool_no_continue" : "no_tools_no_continue"
         );
         break;
@@ -651,36 +523,91 @@ export async function agentTurn(
         break;
       }
 
-      const guardCheck = guardBeforeToolBatch(toolFailureStreak, tools);
-      if (!guardCheck.ok) {
-        run.errors.push(guardCheck.reason);
-        process.stdout.write(dim(`▸ ${guardCheck.reason}\n`));
-        await logDebugEvent("loop_guard_halt_before_tools", { round, reason: guardCheck.reason });
-        await emitTranscriptEvent(
-          turnMeta,
-          createSystemLineTranscriptEvent({ round, text: guardCheck.reason }),
-          { round }
-        );
-        emitLoopStopLine("loop_guard");
-        break;
+      const runnableTools: typeof tools = [];
+      const exec: Array<Record<string, unknown>> = [];
+      let guardrailHalt = false;
+
+      for (const tool of tools) {
+        const args =
+          tool.arguments && typeof tool.arguments === "object" && !Array.isArray(tool.arguments)
+            ? (tool.arguments as Record<string, unknown>)
+            : {};
+        const before = toolGuardrails.beforeCall(tool.name, args);
+        if (before.action === "block") {
+          exec.push({
+            tool: tool.name,
+            error: before.message,
+            result: toolGuardrailSyntheticResult(before),
+            guardrail: before.code,
+          });
+          await logDebugEvent("tool_guardrail_block", {
+            round,
+            tool: tool.name,
+            code: before.code,
+            count: before.count,
+          });
+          process.stdout.write(dim(`▸ tool guardrail blocked ${tool.name}: ${before.message}\n`));
+          continue;
+        }
+        runnableTools.push(tool);
+        exec.push({ __pending: true, tool: tool.name });
       }
 
-      const exec = await runTools(tools, turnCtx, toolCatalog);
+      const runResults =
+        runnableTools.length > 0 ? await runTools(runnableTools, turnCtx, toolCatalog) : [];
+      let resultIdx = 0;
+      for (let i = 0; i < exec.length; i++) {
+        if (!exec[i]?.__pending) continue;
+        const tool = runnableTools[resultIdx];
+        const result = runResults[resultIdx] ?? {
+          tool: tool?.name ?? "unknown",
+          error: "missing tool result",
+        };
+        resultIdx++;
+        const args =
+          tool.arguments && typeof tool.arguments === "object" && !Array.isArray(tool.arguments)
+            ? (tool.arguments as Record<string, unknown>)
+            : {};
+        const failed = !!result.error;
+        const after = toolGuardrails.afterCall(
+          tool.name,
+          args,
+          executionResultText(result),
+          failed
+        );
+        if (after.action === "warn" || after.action === "halt") {
+          const guided = appendToolGuardrailGuidance(executionResultText(result), after);
+          if (result.error != null) {
+            result.error = guided;
+          } else {
+            result.result = guided;
+          }
+          process.stdout.write(dim(`▸ tool guardrail ${after.code} (${tool.name})\n`));
+          await logDebugEvent("tool_guardrail_warning", {
+            round,
+            tool: tool.name,
+            code: after.code,
+            count: after.count,
+          });
+        }
+        if (after.action === "halt") {
+          guardrailHalt = true;
+        }
+        exec[i] = result;
+      }
+
       lastToolExecutions = exec;
       if (exec.length > 0) executedToolsInTurn = true;
       for (let i = 0; i < tools.length; i++) {
         const tname = String(tools[i]?.name || "");
-        if (!exec[i]?.error) {
+        const item = exec[i];
+        if (!item?.error) {
           successfulToolKeysInTurn.add(toolExecutionKey(tools[i]));
           if (tname === "web_search") webSearchCountInTurn += 1;
           if (tname === "web_fetch") webFetchCountInTurn += 1;
           if (tname === "todo_write") usedTodoWriteInTurn = true;
           if (/^skill_(save|manage|bulk_save)$/.test(tname)) skillMutatingCalledInTurn = true;
         }
-      }
-      const guardWarn = updateToolFailureStreakAfterResults(toolFailureStreak, tools, exec);
-      if (guardWarn) {
-        process.stdout.write(dim(`${guardWarn}\n`));
       }
       run.tool_calls.push(
         ...tools.map((tool) => ({
@@ -713,6 +640,18 @@ export async function agentTurn(
         role: "user",
         content: "Tool results (compact JSON):\n" + JSON.stringify(summarized, null, 2),
       });
+      if (guardrailHalt) {
+        const reason = toolGuardrails.haltDecision?.message || "Tool loop guardrail halt";
+        run.errors.push(reason);
+        await logDebugEvent("tool_guardrail_halt_after_tools", { round, reason });
+        await emitTranscriptEvent(
+          turnMeta,
+          createSystemLineTranscriptEvent({ round, text: reason }),
+          { round }
+        );
+        emitTurnStopLine("tool_guardrail");
+        break;
+      }
       if (
         researchIntent &&
         webFetchCountInTurn < MIN_RESEARCH_FETCHES &&
@@ -742,12 +681,10 @@ export async function agentTurn(
     });
     if (round >= MAX_AGENT_ROUNDS && !turnController.signal.aborted) {
       run.errors.push(`agent round cap reached (${MAX_AGENT_ROUNDS})`);
-      emitLoopStopLine(`max_rounds (${MAX_AGENT_ROUNDS})`);
+      emitTurnStopLine(`max_rounds (${MAX_AGENT_ROUNDS})`);
       await logDebugEvent("agent_turn_round_cap_reached", {
         rounds: round,
         maxRounds: MAX_AGENT_ROUNDS,
-        autoContinueNudges,
-        maxAutoContinueNudges,
       });
     }
     run.status = turnController.signal.aborted ? "aborted" : "completed";

@@ -9,6 +9,9 @@ dist/
 .vite/
 *.tsbuildinfo
 
+# Vendored ML model trees (refresh via npm run download:*)
+public/models/loop-guard/
+
 # Environment & secrets
 .env
 .env.*

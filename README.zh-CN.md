@@ -70,7 +70,7 @@ Web Agent 是在 WebContainers 上直接在浏览器中运行的开源 AI 代理
 - Encrypted API keys stored locally in the browser
 - Export and import flows for long-lived browser-local workspaces
 - Hosted demo for zero-friction trial usage
-- **Loop Guard**（默认开启）：浏览器端 MobileBERT MNLI 分类器在每步后决定 continue / stop / ask_user；`VITE_WEBAGENT_LOOP_GUARD=0` 可禁用（见 [docs/zh-CN/agent-notes.md](docs/zh-CN/agent-notes.md)）
+- **工具循环护栏**（默认开启）：Hermes 风格确定性检测每轮内重复工具失败与幂等无进展读取；通过 `VITE_WEBAGENT_TOOL_LOOP_*` 配置（见 [docs/zh-CN/agent-notes.md](docs/zh-CN/agent-notes.md)）
 
 ## 能力概览
 
@@ -389,11 +389,11 @@ Recommended model on OpenRouter: **Gemma 4** (good speed, price, and tool callin
 git clone https://github.com/nikola66/web-agent.git
 cd web-agent
 npm install
-cp .env.example .env.local   # optional: Loop Guard, debug log, launch mode
+cp .env.example .env.local   # optional: tool guardrails, debug log, launch mode
 npm run dev
 ```
 
-Open `http://localhost:5173`. Loop Guard env vars are documented in [.env.example](.env.example).
+Open `http://localhost:5173`. Tool guardrail env vars are documented in [.env.example](.env.example).
 
 ### 操作者工作流
 
@@ -466,7 +466,7 @@ npm run test:browser
 - **Isolation**: profile-scoped workspaces and runtime state
 - **Model access**: OpenRouter or OpenAI-compatible providers
 - **Plans & vault**: timestamped plans under `plans/` (legacy `.webagent/plans/` readable); optional PARA wiki tree (default `.webagent/knowledge-vault/`) synchronized via `wiki_*` tools
-- **Loop Guard**: after each assistant step, the embedded runtime asks the browser adapter to score recent messages (local MobileBERT MNLI via Transformers.js) and choose continue, stop, or ask_user; thresholds in `.env.example`
+- **Tool loop guardrails**: per-turn deterministic detection of repeated tool failures and idempotent no-progress reads; thresholds in `.env.example`
 
 The agent runtime is embedded into the browser app, mounted into a live workspace, and launched inside a terminal-backed Node environment. Profiles keep personalities, settings, workspace state, and memory separated.
 

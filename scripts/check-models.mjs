@@ -3,8 +3,7 @@
  * Build-time sanity check: confirms the ML model trees committed to the
  * repo are intact before Vite builds the production bundle.
  *
- * The Whisper-tiny tree is shipped with the repository (alongside the
- * Loop-Guard model), so a `git clone && npm run build` produces a fully
+ * The Whisper-tiny tree is shipped with the repository, so a `git clone && npm run build` produces a fully
  * functional STT pipeline without any network access. If a contributor
  * accidentally deletes the tree, or git-lfs is later introduced and a
  * pull is forgotten, this script fails fast with a single actionable
@@ -36,19 +35,6 @@ const MODELS = [
       "voices/af_bella.bin",
     ],
     refreshHint: "npm run download:kokoro && git add public/models/onnx-community && git commit",
-  },
-  {
-    label: "loop-guard",
-    dir: "public/models/loop-guard",
-    files: [
-      "config.json",
-      "tokenizer.json",
-      "tokenizer_config.json",
-      "vocab.txt",
-      "special_tokens_map.json",
-      "onnx/model_q4f16.onnx",
-    ],
-    refreshHint: "npm run download:loop-guard-model && git add public/models/loop-guard && git commit",
   },
   {
     label: "whisper-tiny-en",

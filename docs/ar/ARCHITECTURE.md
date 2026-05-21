@@ -79,7 +79,7 @@ The same framing is used for streaming LLM responses (`ipcProxyStreamRequest` in
 4. Streamed chunks parsed → tool calls extracted.
 5. `runTools()` (registry.ts) executes built-ins or capability tools.
 6. Result spillover > 10 KB → written to workspace file (inline cap `MAX_TOOL_RESULT_INLINE_CHARS`).
-7. Loop Guard (`loop-guard.ts` + browser `supervisor/`) scores recent messages via IPC and decides continue / stop / ask_user (local MobileBERT MNLI in the adapter). Enabled by default; configure via `VITE_WEBAGENT_LOOP_GUARD*` in `.env` (see `.env.example` and `docs/agent-notes.md`).
+7. Tool loop guardrails (`tool-loop-guardrails.ts`) detect repeated tool failures and idempotent no-progress reads per turn (Hermes-style deterministic guardrails). Configure via `VITE_WEBAGENT_TOOL_LOOP_*` in `.env` (see `.env.example` and `docs/agent-notes.md`).
 8. Max 64 rounds per turn (`WEBAGENT_MAX_AGENT_ROUNDS`).
 
 `AbortController` per turn; `/stop` triggers `abortCurrentTurn()`.

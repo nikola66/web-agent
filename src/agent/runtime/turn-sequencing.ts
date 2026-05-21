@@ -156,3 +156,26 @@ export function buildPlanExecutionContextPrefix(content) {
   if (!isExplicitPlanExecutionRequest(content)) return null;
   return "[Approved plan execution context] The user already approved execution of an existing plan. Do not ask them to restate or paste the plan again. If the user message includes `plans/*.md` or legacy `.webagent/plans/*.md`, read that file first. Otherwise list `plans/`, pick the newest markdown plan file; if none, check `.webagent/plans/`, then execute.";
 }
+
+export function getSkillSelfImproveNudgeState({
+  executedToolsInTurn,
+  usedTodoWrite,
+  usedPlanningGate,
+  estimatedStepsOverSix,
+  skillMutatingCalled,
+  skillImproveNudgeSent,
+}: {
+  executedToolsInTurn?: boolean;
+  usedTodoWrite?: boolean;
+  usedPlanningGate?: boolean;
+  estimatedStepsOverSix?: boolean;
+  skillMutatingCalled?: boolean;
+  skillImproveNudgeSent?: boolean;
+}) {
+  const eligible =
+    executedToolsInTurn &&
+    !skillMutatingCalled &&
+    !skillImproveNudgeSent &&
+    (usedTodoWrite || usedPlanningGate || estimatedStepsOverSix);
+  return { shouldNudge: !!eligible };
+}

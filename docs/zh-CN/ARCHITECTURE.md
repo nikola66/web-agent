@@ -77,7 +77,7 @@
 4. 解析流式块 → 提取工具调用。
 5. `runTools()`（registry.ts）执行内置或能力工具。
 6. 结果超过 10 KB → 写入工作区文件（内联上限 `MAX_TOOL_RESULT_INLINE_CHARS`）。
-7. Loop Guard（`loop-guard.ts` + 浏览器 `supervisor/`）经 IPC 对最近消息打分并决定 continue / stop / ask_user（适配器内本地 MobileBERT MNLI）。默认开启；通过 `.env` 中 `VITE_WEBAGENT_LOOP_GUARD*` 配置（见 `.env.example` 与 [agent-notes.md](agent-notes.md)）。
+7. Tool loop guardrails（`tool-loop-guardrails.ts`）在每轮内检测重复工具失败与幂等无进展读取（Hermes 风格确定性护栏）。通过 `.env` 中 `VITE_WEBAGENT_TOOL_LOOP_*` 配置（见 `.env.example` 与 [agent-notes.md](agent-notes.md)）。
 8. 每轮最多 64 轮（`WEBAGENT_MAX_AGENT_ROUNDS`）。
 
 每轮使用 `AbortController`；`/stop` 触发 `abortCurrentTurn()`。

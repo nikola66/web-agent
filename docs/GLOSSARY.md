@@ -16,7 +16,7 @@ Use this list when translating or editing localized docs. Terms in the **keep as
 | OPFS | Yes | Origin Private File System |
 | IndexedDB | Yes | Browser API |
 | Transformers.js | Yes | Library name |
-| Loop Guard | Yes | Feature name; may add short gloss in parentheses once per doc |
+| Loop Guard | Deprecated | Replaced by tool loop guardrails |
 | PARA | Yes | Method acronym (Projects, Areas, Resources, Archives) |
 | Obsidian | Yes | Product name when referring to wikilinks |
 

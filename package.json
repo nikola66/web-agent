@@ -12,11 +12,11 @@
     "preview": "vite preview",
     "cors-proxy-server": "node scripts/cors-proxy-server.mjs",
     "test": "npm run build:embed-runtime && tsx --test tests/*.test.ts",
+    "test:tool-guardrails-benchmark": "npm run build:embed-runtime && tsx --test tests/tool-guardrails-benchmark.test.ts",
     "test:tools": "node scripts/run-tool-smoke.mjs",
     "test:tools:network": "node scripts/run-tool-smoke.mjs --network",
     "test:browser": "PLAYWRIGHT_BROWSERS_PATH=0 playwright test",
     "test:browser:headed": "PLAYWRIGHT_BROWSERS_PATH=0 playwright test --headed",
-    "download:loop-guard-model": "node scripts/download-loop-guard-model.mjs",
     "download:kokoro": "node scripts/download-kokoro.mjs",
     "download:whisper": "node scripts/download-whisper-model.mjs"
   },
