@@ -196,6 +196,27 @@ test("normalizeToolCalls accepts duplicated find_find_files name", () => {
   assert.equal(normalized[0].name, "find_files");
 });
 
+test("resolveKnownToolName maps skill_save to skill_manage in review toolsets", () => {
+  const reviewTools = ["skill_list", "skill_view", "skill_manage"];
+  assert.equal(resolveKnownToolName("skill_save", reviewTools), "skill_manage");
+  assert.equal(resolveKnownToolName("skill_create", reviewTools), "skill_manage");
+});
+
+test("normalizeToolCalls maps skill_save to skill_manage create", () => {
+  const { normalized, rejected } = normalizeToolCalls(
+    [
+      {
+        name: "skill_save",
+        arguments: { name: "json-editing", content: "---\nname: JSON\n---\n\nUse 2 spaces." },
+      },
+    ],
+    ["skill_manage", "skill_list"]
+  );
+  assert.equal(rejected.length, 0);
+  assert.equal(normalized[0].name, "skill_manage");
+  assert.equal(normalized[0].arguments.action, "create");
+});
+
 test("sanitizeAssistantVisibleText strips call:tool loose lines", () => {
   const raw = `Intro
 call:tool{"name="find_find_files"arguments={"patterns":["x"]}}

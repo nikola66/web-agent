@@ -139,6 +139,8 @@ test("skill import blocks dangerous SKILL.md content", async () => {
   const originalFetch = globalThis.fetch;
   globalThis.fetch = async () => ({
     ok: true,
+    status: 200,
+    headers: { get: () => "text/plain" },
     text: async () => dangerous,
   });
   try {
@@ -198,6 +200,8 @@ test("bulkSaveSkills continues after per-item failures and records blocked URL i
   const originalFetch = globalThis.fetch;
   globalThis.fetch = async () => ({
     ok: true,
+    status: 200,
+    headers: { get: () => "text/plain" },
     text: async () => dangerous,
   });
   try {

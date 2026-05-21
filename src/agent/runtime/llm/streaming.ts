@@ -28,6 +28,13 @@ function levenshtein(a: string, b: string): number {
   return dp[m][n];
 }
 
+const SKILL_MANAGE_NAME_ALIASES = new Set([
+  "skill_save",
+  "skill_create",
+  "skill_patch",
+  "skill_edit",
+]);
+
 /** Map duplicated/typo tool names (`find_find_files`) to a registered built-in. */
 export function resolveKnownToolName(name: string, knownTools: Iterable<string>): string {
   const trimmed = String(name || "").trim();
@@ -35,6 +42,10 @@ export function resolveKnownToolName(name: string, knownTools: Iterable<string>)
   const set = knownTools instanceof Set ? knownTools : new Set(knownTools);
   if (set.has(trimmed)) return trimmed;
   const lower = trimmed.toLowerCase();
+  if (set.has("skill_manage")) {
+    if (SKILL_MANAGE_NAME_ALIASES.has(lower)) return "skill_manage";
+    if (lower === "write_file" && !set.has("write_file")) return "skill_manage";
+  }
   for (const tool of set) {
     if (lower === tool.toLowerCase()) return tool;
   }
@@ -47,6 +58,21 @@ export function resolveKnownToolName(name: string, knownTools: Iterable<string>)
   );
   if (close.length === 1) return close[0];
   return trimmed;
+}
+
+function inferSkillManageAction(
+  rawName: string,
+  args: Record<string, unknown>
+): Record<string, unknown> {
+  if (args.action) return args;
+  const from = String(rawName || "").trim().toLowerCase();
+  if (from === "skill_save" || from === "skill_create") return { ...args, action: "create" };
+  if (from === "skill_patch") return { ...args, action: "patch" };
+  if (from === "skill_edit") return { ...args, action: "edit" };
+  if (from === "write_file") return { ...args, action: "write_file" };
+  if (typeof args.content === "string" && args.content.trim()) return { ...args, action: "create" };
+  if (typeof args.old_string === "string") return { ...args, action: "patch" };
+  return args;
 }
 
 const STREAM_CHUNK_TIMEOUT_MS = 45_000;
@@ -1145,6 +1171,10 @@ export function normalizeToolCalls(
       }
     }
     if (!args || typeof args !== "object" || Array.isArray(args)) args = {};
+    if (name === "skill_manage") {
+      args = inferSkillManageAction(rawName, args as Record<string, unknown>);
+      if (!args.file_path && typeof args.path === "string") args.file_path = args.path;
+    }
     // Common alias normalization (inspired by opencrabs param aliases).
     // Keeps tool handlers simple and improves cross-model reliability.
     if (name === "edit_file") {

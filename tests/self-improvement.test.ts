@@ -15,11 +15,12 @@ import {
   getSelfImproveCounters,
   DEFAULT_SKILL_REVIEW_INTERVAL,
   DEFAULT_MEMORY_REVIEW_INTERVAL,
+  SKILL_REVIEW_PROMPT,
 } from "../dist/agent-runtime/background-review.js";
 import { loadCuratorState, maybeRunCurator } from "../dist/agent-runtime/curator.js";
 import { runHeartbeatTick } from "../dist/agent-runtime/state/persistence.js";
 
-test("evaluateBackgroundReviewTrigger fires skill review after iteration threshold on complex turn", () => {
+test("evaluateBackgroundReviewTrigger fires skill review after iteration threshold", () => {
   resetSelfImproveCounters();
   for (let i = 0; i < DEFAULT_SKILL_REVIEW_INTERVAL; i += 1) noteToolIteration();
   const result = evaluateBackgroundReviewTrigger({
@@ -130,77 +131,67 @@ test("summarizeBackgroundReviewActionsDetailed counts created vs patched", () =>
   assert.ok(summary.lines.length >= 3);
 });
 
-test("evaluateBackgroundReviewTrigger accelerates skill review on tool-heavy turns", () => {
+test("evaluateBackgroundReviewTrigger skips skill review before iteration threshold", () => {
   resetSelfImproveCounters();
-  const accelerated = Math.max(3, DEFAULT_SKILL_REVIEW_INTERVAL - 4);
-  for (let i = 0; i < accelerated; i += 1) noteToolIteration();
+  for (let i = 0; i < 3; i += 1) noteToolIteration();
   const result = evaluateBackgroundReviewTrigger({
     status: "completed",
     aborted: false,
     executedToolsInTurn: true,
     skillMutatingCalled: false,
-    usedTodoWrite: false,
-    usedPlanningGate: false,
-    estimatedStepsOverSix: false,
-    toolRoundCount: 4,
-    toolCallCount: 6,
+    usedTodoWrite: true,
+    toolCallCount: 3,
+    finalVisibleText: "Lead list is empty.",
+    availableToolNames: ["skill_manage", "skill_view", "read_file"],
+  });
+  assert.equal(result.shouldReviewSkills, false);
+  assert.equal(result.kind, null);
+});
+
+test("evaluateBackgroundReviewTrigger fires at interval without todo or complexity gates", () => {
+  resetSelfImproveCounters();
+  for (let i = 0; i < DEFAULT_SKILL_REVIEW_INTERVAL; i += 1) noteToolIteration();
+  const result = evaluateBackgroundReviewTrigger({
+    status: "completed",
+    aborted: false,
+    skillMutatingCalled: false,
     finalVisibleText: "Done.",
-    availableToolNames: ["skill_manage", "read_file"],
+    availableToolNames: ["skill_manage"],
   });
   assert.equal(result.shouldReviewSkills, true);
   assert.equal(result.kind, "skill");
 });
 
-test("evaluateBackgroundReviewTrigger fires skill review at 8+ tool calls without full interval", () => {
-  resetSelfImproveCounters();
-  noteToolIteration();
-  const result = evaluateBackgroundReviewTrigger({
+test("hermes parity: skill review is interval-only", () => {
+  const fixture = {
     status: "completed",
     aborted: false,
-    executedToolsInTurn: true,
     skillMutatingCalled: false,
     usedTodoWrite: true,
-    usedPlanningGate: false,
-    estimatedStepsOverSix: false,
-    toolRoundCount: 3,
-    toolCallCount: 8,
-    finalVisibleText: "Done.",
-    availableToolNames: ["skill_manage"],
-  });
-  assert.equal(result.shouldReviewSkills, true);
-});
-
-test("hermes parity benchmark: complex-turn fixture triggers skill review more often", () => {
-  const complexTurnFixture = {
-    status: "completed",
-    aborted: false,
-    executedToolsInTurn: true,
-    skillMutatingCalled: false,
-    usedTodoWrite: true,
-    usedPlanningGate: true,
-    estimatedStepsOverSix: true,
-    toolRoundCount: 5,
     toolCallCount: 12,
     finalVisibleText: "Implemented and verified.",
     availableToolNames: ["skill_manage", "memory_save", "read_file"],
   };
 
   resetSelfImproveCounters();
-  for (let i = 0; i < DEFAULT_SKILL_REVIEW_INTERVAL; i += 1) noteToolIteration();
-  const webAgent = evaluateBackgroundReviewTrigger(complexTurnFixture);
-  assert.equal(webAgent.shouldReviewSkills, true, "web-agent should review skills on Hermes-like complex turn");
+  for (let i = 0; i < 3; i += 1) noteToolIteration();
+  assert.equal(
+    evaluateBackgroundReviewTrigger(fixture).shouldReviewSkills,
+    false,
+    "complex turn alone must not trigger review"
+  );
 
   resetSelfImproveCounters();
   for (let i = 0; i < DEFAULT_SKILL_REVIEW_INTERVAL; i += 1) noteToolIteration();
-  const hermesBaseline = evaluateBackgroundReviewTrigger({
-    ...complexTurnFixture,
-    toolRoundCount: undefined,
-    toolCallCount: undefined,
-  });
-  assert.equal(hermesBaseline.shouldReviewSkills, true, "baseline interval gate still passes");
+  const atInterval = evaluateBackgroundReviewTrigger(fixture);
+  assert.equal(atInterval.shouldReviewSkills, true);
+  assert.equal(getSelfImproveCounters().itersSinceSkill, 0);
+});
 
-  const counters = getSelfImproveCounters();
-  assert.equal(counters.itersSinceSkill, 0, "counter resets after skill review trigger");
+test("SKILL_REVIEW_PROMPT retains Hermes action bias", () => {
+  assert.match(SKILL_REVIEW_PROMPT, /missed learning opportunity/);
+  assert.match(SKILL_REVIEW_PROMPT, /FIRST-CLASS skill signals/);
+  assert.match(SKILL_REVIEW_PROMPT, /should NOT be the default/);
 });
 
 test("maybeRunCurator records check without incrementing run_count on skip", async () => {

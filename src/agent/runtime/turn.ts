@@ -69,7 +69,6 @@ import {
   MIN_RESEARCH_SEARCHES,
   buildPlanExecutionContextPrefix,
   buildExecutionContinuationContextPrefix,
-  getSkillSelfImproveNudgeState,
   isExecutionContinuationIntent,
 } from "./turn-sequencing.js";
 import { buildExecutionGuidanceBlock } from "./execution-guidance.js";
@@ -88,6 +87,7 @@ import {
   looksLikeFalseManualCronPromise,
   shouldContinueCronVerification,
   shouldContinueEmptyAfterTools,
+  shouldContinueIncompleteTodosAsync,
   shouldContinueIntermediateAck,
   shouldContinuePostToolStall,
   shouldContinuePreToolPromiseStall,
@@ -364,7 +364,6 @@ export async function agentTurn(
   const maxAgentRounds = resolveMaxAgentRounds(turnMeta);
   const quietTurn = turnMeta?.quiet === true;
   const skipBackgroundReview = turnMeta?.skipBackgroundReview === true || turnMeta?.backgroundReview === true;
-  const skipSkillNudge = turnMeta?.skipSkillNudge === true || turnMeta?.backgroundReview === true;
 
   if (!turnMeta?.backgroundReview && !turnMeta?.textOnly) {
     noteUserTurnStarted();
@@ -400,12 +399,12 @@ export async function agentTurn(
 
   let usedTodoWriteInTurn = false;
   let skillMutatingCalledInTurn = false;
-  let skillImproveNudgeSent = false;
   let intermediateAckContinuations = 0;
   let emptyAfterToolsContinuations = 0;
   let postToolStallContinuations = 0;
   let preToolPromiseContinuations = 0;
   let cronVerifyContinuations = 0;
+  let incompleteTodoContinuations = 0;
   const pendingCronRegisterIds = new Set<string>();
   let continuationRecoveriesFired = 0;
 
@@ -681,34 +680,29 @@ export async function agentTurn(
           });
           continue;
         }
-        const skipChannelSkillNudge = typeof turnMeta?.onTranscript === "function";
-        if (
-          !turnMeta?.textOnly &&
-          !skipSkillNudge &&
-          !skipChannelSkillNudge &&
-          !continuationRecoveriesFired
-        ) {
-          const skillState = getSkillSelfImproveNudgeState({
-            executedToolsInTurn,
-            usedTodoWrite: usedTodoWriteInTurn,
-            usedPlanningGate: usedPlanningGateForSkill,
-            estimatedStepsOverSix: complexityEstimate.estimatedSteps > 6,
-            skillMutatingCalled: skillMutatingCalledInTurn,
-            skillImproveNudgeSent,
+        const incompleteTodoGate = await shouldContinueIncompleteTodosAsync(
+          originalUserInput,
+          executedToolsInTurn,
+          incompleteTodoContinuations,
+          visible
+        );
+        if (incompleteTodoGate.continue) {
+          incompleteTodoContinuations++;
+          continuationRecoveriesFired++;
+          conv.push({
+            role: "user",
+            content: buildContinuationNudge("incomplete_todos", {
+              openTodos: incompleteTodoGate.stats.open,
+              totalTodos: incompleteTodoGate.stats.total,
+            }),
           });
-          if (skillState.shouldNudge) {
-            skillImproveNudgeSent = true;
-            conv.push({
-              role: "user",
-              content:
-                "Web Agent self-improve (one shot): If this turn produced a repeatable checklist, recovery, or shortcut worth reusing next time, call skill_manage once (action create) with a compact procedural SKILL.md body (name + bullets). If nothing is reusable, reply one sentence: no skill warranted.",
-            });
-            await logDebugEvent("turn_skill_self_improve_nudge", {
-              round,
-              visiblePreview: String(visible || "").slice(0, 200),
-            });
-            continue;
-          }
+          await logDebugEvent("turn_incomplete_todos_continuation", {
+            round,
+            count: incompleteTodoContinuations,
+            open: incompleteTodoGate.stats.open,
+            total: incompleteTodoGate.stats.total,
+          });
+          continue;
         }
         await logDebugEvent("turn_completed", {
           round,

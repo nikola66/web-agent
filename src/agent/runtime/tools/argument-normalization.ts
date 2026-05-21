@@ -420,6 +420,18 @@ function resolveFindFilesMatchMode(
   return "all";
 }
 
+/** Map mistaken `query` (session_search habit) to `pattern` for grep. */
+export function coerceGrepArguments(args: Record<string, unknown>): Record<string, unknown> {
+  const out = { ...args };
+  const pattern = String(out.pattern ?? "").trim();
+  const query = String(out.query ?? "").trim();
+  if (!pattern && query) {
+    out.pattern = query;
+    delete out.query;
+  }
+  return out;
+}
+
 export function coerceFindFilesArguments(
   args: Record<string, unknown>
 ): Record<string, unknown> {
@@ -531,6 +543,9 @@ export function normalizeToolArguments(
 
   if (toolName === "find_files") {
     return applyWorkspaceBrowsePathArgs(toolName, coerceFindFilesArguments(normalized));
+  }
+  if (toolName === "grep") {
+    return applyWorkspaceBrowsePathArgs(toolName, coerceGrepArguments(normalized));
   }
   if (toolName) {
     return applyWorkspaceBrowsePathArgs(toolName, normalized);

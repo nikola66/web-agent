@@ -5,6 +5,16 @@ export default defineTool({
   name: "tree",
   run: treeTool,
   emoji: "🌲",
-  description: "Render a directory tree view with bounded traversal. Skips heavy directories (e.g. node_modules, dist).",
-  inputSchema: { type: "object", properties: {}, additionalProperties: true },
+  description:
+    "Render a directory tree (bounded depth). Use on `.` first to learn workspace layout before read_file. " +
+    "Skips node_modules, dist, etc.",
+  inputSchema: {
+    type: "object",
+    properties: {
+      path: { type: "string", description: "Workspace-relative root (default `.`)." },
+      maxDepth: { type: "number" },
+      maxEntries: { type: "number" },
+    },
+    additionalProperties: true,
+  },
 });

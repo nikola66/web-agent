@@ -17,6 +17,7 @@ import {
   isPinnedSkill,
   archiveSkillDirectory,
 } from "../skill-provenance.js";
+import { fetchSkillImportText, normalizeSkillImportUrl } from "./skill-import-url.js";
 
 const SKILLS_CONTEXT_CHAR_BUDGET = 8_000;
 const SKILL_INDEX_TRIGGERS_MAX_CHARS = 160;
@@ -473,28 +474,12 @@ function scanSkillContent(
   return { ok: dangerous.length === 0, dangerous, warnings };
 }
 
-async function fetchText(url) {
-  const res = await fetch(url, { headers: { "User-Agent": "web-agent-skills" } });
-  if (!res.ok) throw new Error(`skill import: fetch failed (${res.status}) for ${url}`);
-  return res.text();
-}
-
-function normalizeSkillUrl(url) {
-  const raw = String(url || "").trim();
-  const blob = raw.match(/^https:\/\/github\.com\/([^/]+)\/([^/]+)\/blob\/([^/]+)\/(.+)$/);
-  if (blob) {
-    const [, owner, repo, ref, path] = blob;
-    return `https://raw.githubusercontent.com/${owner}/${repo}/${ref}/${path}`;
-  }
-  return raw;
-}
-
 async function installSkillFromUrl({ url, category }) {
-  const normalizedUrl = normalizeSkillUrl(url);
+  const normalizedUrl = normalizeSkillImportUrl(url);
   if (!/^https:\/\/[A-Za-z0-9._~:/?#@!$&'()*+,;=%-]+$/.test(normalizedUrl)) {
     throw new Error("skill import: only valid https URLs are supported.");
   }
-  const raw = await fetchText(normalizedUrl);
+  const raw = await fetchSkillImportText(normalizedUrl);
   const validation = validateSkillDocument(raw);
   const scan = scanSkillContent(raw);
   if (!scan.ok) {

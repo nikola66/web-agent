@@ -3,11 +3,15 @@
  * (looks_like_codex_intermediate_ack) and agent/conversation_loop.py (empty-after-tools nudge).
  */
 
+import fs from "node:fs/promises";
+import { workspaceStatePath } from "./constants.js";
+
 export const MAX_INTERMEDIATE_ACK_CONTINUATIONS = 2;
 export const MAX_EMPTY_AFTER_TOOLS_CONTINUATIONS = 1;
 export const MAX_POST_TOOL_STALL_CONTINUATIONS = 1;
 export const MAX_PRE_TOOL_PROMISE_CONTINUATIONS = 1;
 export const MAX_CRON_VERIFY_CONTINUATIONS = 1;
+export const MAX_INCOMPLETE_TODO_CONTINUATIONS = 2;
 
 export const SYNTHETIC_EMPTY_ASSISTANT_CONTENT = "(empty)";
 
@@ -467,7 +471,76 @@ export type ContinuationNudgeKind =
   | "empty_after_tools"
   | "post_tool_stall"
   | "pre_tool_promise"
-  | "cron_verify";
+  | "cron_verify"
+  | "incomplete_todos";
+
+export type TodoCompletionStats = {
+  total: number;
+  completed: number;
+  open: number;
+};
+
+export async function loadTodoCompletionStats(): Promise<TodoCompletionStats> {
+  const todosPath = workspaceStatePath(".webagent/todos.json");
+  try {
+    const raw = await fs.readFile(todosPath, "utf8");
+    const parsed = JSON.parse(raw);
+    const items = Array.isArray(parsed) ? parsed : [];
+    let completed = 0;
+    for (const item of items) {
+      if (!item || typeof item !== "object") continue;
+      const status = String((item as { status?: string }).status || "pending").trim();
+      if (status === "completed" || status === "cancelled") completed += 1;
+    }
+    const total = items.length;
+    return { total, completed, open: Math.max(0, total - completed) };
+  } catch {
+    return { total: 0, completed: 0, open: 0 };
+  }
+}
+
+function userRequiredFinalLineSatisfied(userMessage: string, visible: string): boolean {
+  const req =
+    /end with exactly(?:\s+this line)?(?:\s+and nothing after it)?[:\s]*["']?([^\n"']+)/i.exec(
+      String(userMessage || "")
+    );
+  if (!req) return false;
+  const line = String(req[1] || "").trim().toLowerCase();
+  if (!line) return false;
+  return String(visible || "").trim().toLowerCase().includes(line);
+}
+
+export function userRequestedStructuredTodos(userMessage: string): boolean {
+  const text = String(userMessage || "").trim().toLowerCase();
+  if (!text) return false;
+  return (
+    /\btodo_write\b/.test(text) ||
+    /\bchecklist\b/.test(text) ||
+    /\bone round per\b/.test(text) ||
+    /\bminimum\s+\d{1,2}\s+tool\s+rounds?\b/.test(text) ||
+    /\b(\d{1,2})\s+items?\b/.test(text) ||
+    /\b(\d{1,2})\s+steps?\b/.test(text) ||
+    /\bexecute each item\b/.test(text)
+  );
+}
+
+export function shouldContinueIncompleteTodos(
+  userMessage: string,
+  executedToolsInTurn: boolean,
+  incompleteTodoContinuations: number,
+  stats: TodoCompletionStats,
+  visible = ""
+): boolean {
+  if (incompleteTodoContinuations >= MAX_INCOMPLETE_TODO_CONTINUATIONS) return false;
+  if (!executedToolsInTurn || !userRequestedStructuredTodos(userMessage)) return false;
+  if (stats.total < 2) return false;
+  if (stats.open <= 0) return false;
+  if (userRequiredFinalLineSatisfied(userMessage, visible)) return false;
+  if (matchesTaskCompletionOrFinalState(String(visible || "")) && !tailPromisesFurtherAction(visible)) {
+    return false;
+  }
+  return true;
+}
 
 export function cronRegisterJobIdFromArgs(args: Record<string, unknown> | null | undefined): string {
   if (String(args?.action ?? "").trim().toLowerCase() === "remove") return "";
@@ -489,7 +562,12 @@ export function cronJobIdsFromListResult(result: unknown): Set<string> {
 
 export function buildContinuationNudge(
   kind: ContinuationNudgeKind,
-  extra?: { pendingCronIds?: string[]; falseManualCron?: boolean }
+  extra?: {
+    pendingCronIds?: string[];
+    falseManualCron?: boolean;
+    openTodos?: number;
+    totalTodos?: number;
+  }
 ): string {
   if (kind === "empty_after_tools") {
     return (
@@ -520,6 +598,16 @@ export function buildContinuationNudge(
     return (
       "You called cron_register but have not verified persistence with cron_list yet. " +
       `Call cron_list now and confirm the job id${idHint} appears in the tool result before telling the user the cron job is registered or active.`
+    );
+  }
+  if (kind === "incomplete_todos") {
+    const open = Math.max(0, Number(extra?.openTodos ?? 0));
+    const total = Math.max(open, Number(extra?.totalTodos ?? 0));
+    return (
+      `Your todo checklist is incomplete (${open} of ${total} items still open). ` +
+      "Continue the next checklist item now with the required tool call(s). " +
+      "Update todo_write as you finish items. Do not stop until all items are completed or cancelled, " +
+      "then send the user's requested final line."
     );
   }
   return (
@@ -594,4 +682,23 @@ export function shouldContinueCronVerification(
 ): boolean {
   if (cronVerifyContinuations >= MAX_CRON_VERIFY_CONTINUATIONS) return false;
   return pendingCronRegisterIds.size > 0;
+}
+
+export async function shouldContinueIncompleteTodosAsync(
+  userMessage: string,
+  executedToolsInTurn: boolean,
+  incompleteTodoContinuations: number,
+  visible = ""
+): Promise<{ continue: boolean; stats: TodoCompletionStats }> {
+  const stats = await loadTodoCompletionStats();
+  return {
+    continue: shouldContinueIncompleteTodos(
+      userMessage,
+      executedToolsInTurn,
+      incompleteTodoContinuations,
+      stats,
+      visible
+    ),
+    stats,
+  };
 }

@@ -35,6 +35,19 @@ for (const tool of BROWSE_TOOLS) {
   });
 }
 
+test("prepareIncomingToolArguments maps grep query alias to pattern", () => {
+  const { args } = prepareIncomingToolArguments(
+    "grep",
+    { query: "TODO|FIXME", root: "/" },
+    BUILTIN_TOOLS.grep
+  );
+  assert.equal(args.pattern, "TODO|FIXME");
+  assert.equal(args.root, ".");
+  assert.equal("query" in args, false);
+  const schema = resolveInputSchema(BUILTIN_TOOLS.grep);
+  assert.equal(validateRequiredArguments("grep", args, schema), null);
+});
+
 test("prepareIncomingToolArguments normalizes find_files patterns array", () => {
   const { args } = prepareIncomingToolArguments(
     "find_files",

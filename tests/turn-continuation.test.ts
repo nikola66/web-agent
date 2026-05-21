@@ -18,6 +18,8 @@ import {
   shouldContinuePostToolStall,
   shouldContinuePreToolPromiseStall,
   shouldContinueCronVerification,
+  shouldContinueIncompleteTodos,
+  userRequestedStructuredTodos,
   cronRegisterJobIdFromArgs,
   cronJobIdsFromListResult,
   MAX_INTERMEDIATE_ACK_CONTINUATIONS,
@@ -465,4 +467,35 @@ test("buildContinuationNudge cron_verify mentions pending ids", () => {
   });
   assert.match(nudge, /cron_list/i);
   assert.match(nudge, /web_agent_hunt_loop/);
+});
+
+test("userRequestedStructuredTodos detects checklist-style probes", () => {
+  assert.equal(
+    userRequestedStructuredTodos("Use todo_write with 12 items; minimum 10 tool rounds."),
+    true
+  );
+  assert.equal(userRequestedStructuredTodos("What is 2+2?"), false);
+});
+
+test("shouldContinueIncompleteTodos nudges when todos remain open", () => {
+  const msg = "Execute each item in its own round via todo_write.";
+  assert.equal(
+    shouldContinueIncompleteTodos(msg, true, 0, { total: 12, completed: 2, open: 10 }),
+    true
+  );
+  assert.equal(
+    shouldContinueIncompleteTodos(msg, true, 0, { total: 12, completed: 12, open: 0 }),
+    false
+  );
+  const exactMsg = "Execute each checklist item. End with exactly: Probe done.";
+  assert.equal(
+    shouldContinueIncompleteTodos(exactMsg, true, 0, { total: 12, completed: 2, open: 10 }, "Probe done."),
+    false
+  );
+});
+
+test("buildContinuationNudge incomplete_todos mentions open count", () => {
+  const nudge = buildContinuationNudge("incomplete_todos", { openTodos: 8, totalTodos: 12 });
+  assert.match(nudge, /8 of 12/i);
+  assert.match(nudge, /todo/i);
 });

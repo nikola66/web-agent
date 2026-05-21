@@ -23,14 +23,20 @@ export const SESSION_SEARCH_GUIDANCE =
 
 export const WORKSPACE_BROWSE_GUIDANCE =
   "Workspace paths in `list_dir`, `read_file`, `find_files`, `grep`, and `tree` are **relative to " +
-  "the project root**. Use `.` to list the workspace root — never pass `/` or a host absolute path " +
-  "(e.g. `/home/...`); those are rejected as escaping the workspace. " +
-  "Use `list_dir` for one directory (optional single-level filter); use `find_files` for cross-tree name/glob search.";
+  "the workspace root** (`.` = top level). Never use `/` or host paths like `/home/...`. " +
+  "**First browse step:** run `list_dir({\"path\":\".\"})` or `tree({\"path\":\".\"})` before assuming " +
+  "files exist — profile workspaces are often agent-centric (AGENT.md, USER.md, projects/, work/) not " +
+  "full app repos unless the user added them. Do not guess paths from training (e.g. src/agent/..., " +
+  ".webagent/package.json); `package.json` when present is usually at `.` not under `.webagent/`. " +
+  "`grep` **`root`** is a directory to recurse (default `.`) or a single file path to search. " +
+  "`grep` / `find_files` use **`pattern`**; **`query`** is only for `session_search`. " +
+  "Use `list_dir` for one directory; `find_files` to locate a file by name.";
 
 export const TOOL_JSON_ARGS_GUIDANCE =
-  "Tool arguments must be plain JSON objects with normal keys: {\"query\":\"keywords\"}, " +
-  "{\"path\":\".\"}. Do not escape property names (wrong: {\"\\\"query\\\"\":\"...\"}) and do not " +
-  "wrap string values in extra quote layers.";
+  "Tool arguments must be plain JSON with the schema keys each tool declares — do not swap names " +
+  "(grep/find_files: `pattern`; session_search: `query`; read_file/list_dir/tree: `path` or `root`). " +
+  "Examples: {\"pattern\":\"TODO\"}, {\"query\":\"last outreach\"}, {\"path\":\".\"}. " +
+  "Do not escape property names and do not wrap values in extra quote layers.";
 
 export const SESSION_MEMORY_GUIDANCE =
   "Use `session_memory_append` for rolling investigation notes, temporary decisions, and artifact " +
@@ -67,6 +73,7 @@ export function buildMemoryLayerGuidanceBlock(toolNames: string[] = []): string 
   }
   if (
     tools.has("list_dir") ||
+    tools.has("read_file") ||
     tools.has("find_files") ||
     tools.has("grep") ||
     tools.has("tree")

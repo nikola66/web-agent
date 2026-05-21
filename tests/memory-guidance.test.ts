@@ -20,15 +20,24 @@ test("buildMemoryLayerGuidanceBlock includes session guidance when session tools
   ]);
   assert.match(block, /session_memory_append/);
   assert.match(block, /past conversation/);
-  assert.match(block, /plain JSON objects/);
+  assert.match(block, /plain JSON with the schema keys/);
+  assert.match(block, /grep\/find_files: `pattern`/);
 });
 
 test("buildMemoryLayerGuidanceBlock includes workspace browse guidance for list_dir", () => {
   const block = buildMemoryLayerGuidanceBlock(["list_dir", "read_file"]);
-  assert.match(block, /never pass `\//);
-  assert.match(block, /Use `\./);
+  assert.match(block, /Never use `\/`/);
+  assert.match(block, /run `list_dir/);
+  assert.match(block, /`pattern`/);
+  assert.match(block, /grep.*`root`/i);
+});
+
+test("buildMemoryLayerGuidanceBlock includes workspace browse guidance for read_file alone", () => {
+  const block = buildMemoryLayerGuidanceBlock(["read_file"]);
+  assert.match(block, /run `list_dir/);
+  assert.match(block, /workspace root/);
 });
 
 test("buildMemoryLayerGuidanceBlock returns empty when no memory layer tools", () => {
-  assert.equal(buildMemoryLayerGuidanceBlock(["read_file", "web_fetch"]), "");
+  assert.equal(buildMemoryLayerGuidanceBlock(["web_fetch"]), "");
 });

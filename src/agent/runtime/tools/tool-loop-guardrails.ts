@@ -228,11 +228,18 @@ function toolFailureRecoveryHint(toolName: string, count: number): string {
       "tool such as read_file/write_file/apply_patch."
     );
   }
-  if (toolName === "read_file" || toolName === "grep" || toolName === "list_dir" || toolName === "find_files") {
+  if (toolName === "grep") {
     return (
       common +
-      "Verify the path exists with list_dir/tree, try an absolute workspace path, check spelling/casing, " +
-      "or use grep/find_files with a broader pattern instead of repeating the same read."
+      "grep root must exist under the workspace (directory `.` or a file path). Run list_dir/tree on `.` first, " +
+      "or find_files to locate a filename before grepping again."
+    );
+  }
+  if (toolName === "read_file" || toolName === "list_dir" || toolName === "find_files") {
+    return (
+      common +
+      "Paths are workspace-relative — run list_dir({\"path\":\".\"}) or tree before retrying. " +
+      "Do not assume src/ or .webagent/package.json; use find_files to locate by name."
     );
   }
   if (toolName === "web_fetch" || toolName === "web_search") {

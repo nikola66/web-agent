@@ -9,7 +9,6 @@ import {
   buildPlanExecutionContextPrefix,
   isExecutionContinuationIntent,
 } from "../dist/agent-runtime/turn-sequencing.js";
-import { getSkillSelfImproveNudgeState } from "../dist/agent-runtime/turn-sequencing.js";
 import { buildPlanModeUserPrompt } from "../dist/agent-runtime/planning-slash.js";
 
 test("estimateTaskComplexity is simple for short asks", () => {
@@ -124,76 +123,4 @@ test("buildPlanExecutionContextPrefix returns prefix only for explicit execution
     buildPlanExecutionContextPrefix("execute the plan") ?? "",
     /\[Approved plan execution context\]/
   );
-});
-
-test("getSkillSelfImproveNudgeState fires when todo used after tools executed", () => {
-  const s = getSkillSelfImproveNudgeState({
-    executedToolsInTurn: true,
-    usedTodoWrite: true,
-    usedPlanningGate: false,
-    estimatedStepsOverSix: false,
-    skillMutatingCalled: false,
-    skillImproveNudgeSent: false,
-  });
-  assert.equal(s.shouldNudge, true);
-});
-
-test("getSkillSelfImproveNudgeState skips when skill mutating tool already ran", () => {
-  const s = getSkillSelfImproveNudgeState({
-    executedToolsInTurn: true,
-    usedTodoWrite: true,
-    usedPlanningGate: false,
-    estimatedStepsOverSix: false,
-    skillMutatingCalled: true,
-    skillImproveNudgeSent: false,
-  });
-  assert.equal(s.shouldNudge, false);
-});
-
-test("getSkillSelfImproveNudgeState skips when nudge already sent", () => {
-  const s = getSkillSelfImproveNudgeState({
-    executedToolsInTurn: true,
-    usedTodoWrite: true,
-    usedPlanningGate: false,
-    estimatedStepsOverSix: false,
-    skillMutatingCalled: false,
-    skillImproveNudgeSent: true,
-  });
-  assert.equal(s.shouldNudge, false);
-});
-
-test("getSkillSelfImproveNudgeState fires when planning gate used", () => {
-  const s = getSkillSelfImproveNudgeState({
-    executedToolsInTurn: true,
-    usedTodoWrite: false,
-    usedPlanningGate: true,
-    estimatedStepsOverSix: false,
-    skillMutatingCalled: false,
-    skillImproveNudgeSent: false,
-  });
-  assert.equal(s.shouldNudge, true);
-});
-
-test("getSkillSelfImproveNudgeState fires when estimated steps over six", () => {
-  const s = getSkillSelfImproveNudgeState({
-    executedToolsInTurn: true,
-    usedTodoWrite: false,
-    usedPlanningGate: false,
-    estimatedStepsOverSix: true,
-    skillMutatingCalled: false,
-    skillImproveNudgeSent: false,
-  });
-  assert.equal(s.shouldNudge, true);
-});
-
-test("getSkillSelfImproveNudgeState skips when no tools executed this turn", () => {
-  const s = getSkillSelfImproveNudgeState({
-    executedToolsInTurn: false,
-    usedTodoWrite: true,
-    usedPlanningGate: false,
-    estimatedStepsOverSix: false,
-    skillMutatingCalled: false,
-    skillImproveNudgeSent: false,
-  });
-  assert.equal(s.shouldNudge, false);
 });

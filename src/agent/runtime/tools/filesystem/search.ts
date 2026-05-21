@@ -10,21 +10,79 @@ import {
   toWorkspaceRelative,
 } from "../../workspace-paths.js";
 import { coerceWorkspaceBrowsePath } from "../argument-normalization.js";
+import { resolveGrepSearchTarget } from "./path-hints.js";
+
+type GrepHit = { file: string; line: number; text: string };
+
+type GrepToolArgs = {
+  pattern?: string;
+  query?: string;
+  root?: string;
+  regex?: boolean;
+  maxResults?: number;
+  maxFilesScanned?: number;
+};
 
 export async function grepTool(
-  { pattern, root = ".", regex = false, maxResults = 200, maxFilesScanned = 10000 } = {},
-  ctx
+  {
+    pattern,
+    query,
+    root = ".",
+    regex = false,
+    maxResults = 200,
+    maxFilesScanned = 10000,
+  }: GrepToolArgs = {},
+  ctx?: unknown
 ) {
-  const needle = String(pattern ?? "").trim();
-  if (!needle) throw new Error("`pattern` is required for grep.");
+  const needle = String(pattern ?? query ?? "").trim();
+  if (!needle) {
+    throw new Error(
+      "`pattern` is required for grep (not `query` — that is for session_search). Example: {\"pattern\":\"TODO|FIXME\"}."
+    );
+  }
   const browseRoot = coerceWorkspaceBrowsePath(root);
-  const base = resolveWorkspacePath(ctx, browseRoot);
+  const target = await resolveGrepSearchTarget(ctx, browseRoot);
   const safeMaxResults = Math.max(1, Math.min(2000, Number(maxResults) || 200));
   const safeMaxFilesScanned = Math.max(100, Math.min(20000, Number(maxFilesScanned) || 10000));
   const needleLc = needle.toLowerCase();
-  const hits = [];
+  const hits: GrepHit[] = [];
   let scanned = 0;
   const matcher = regex ? new RegExp(needle) : null;
+
+  function pushLineHits(fileRel: string, txt: string) {
+    const lines = txt.split(/\r?\n/);
+    lines.forEach((line, idx) => {
+      if (hits.length >= safeMaxResults) return;
+      const ok = matcher ? matcher.test(line) : line.toLowerCase().includes(needleLc);
+      if (ok) {
+        hits.push({
+          file: fileRel,
+          line: idx + 1,
+          text: line.slice(0, 400),
+        });
+      }
+    });
+  }
+
+  if (target.isFile) {
+    let txt;
+    try {
+      txt = await fs.readFile(target.absPath, "utf8");
+    } catch {
+      return { hits: [], scanned: 0, truncated: false, root: target.relPath, searchMode: "file" };
+    }
+    scanned = 1;
+    pushLineHits(toWorkspaceRelative(target.absPath), txt);
+    return {
+      hits,
+      scanned,
+      truncated: hits.length >= safeMaxResults,
+      root: target.relPath,
+      searchMode: "file",
+    };
+  }
+
+  const base = target.absPath;
   async function walk(d) {
     if (hits.length >= safeMaxResults || scanned >= safeMaxFilesScanned) return;
     const ents = await fs.readdir(d, { withFileTypes: true });
@@ -43,33 +101,17 @@ export async function grepTool(
         } catch {
           continue;
         }
-        const lines = txt.split(/\r?\n/);
-        lines.forEach((line, idx) => {
-          if (hits.length >= safeMaxResults) return;
-          const ok = matcher ? matcher.test(line) : line.toLowerCase().includes(needleLc);
-          if (ok) {
-            hits.push({
-              file: toWorkspaceRelative(p),
-              line: idx + 1,
-              text: line.slice(0, 400),
-            });
-          }
-        });
+        pushLineHits(toWorkspaceRelative(p), txt);
       }
     }
   }
-  try {
-    await walk(base);
-  } catch (err) {
-    if (err?.code === "ENOENT") {
-      throw new Error(`Path not found: ${browseRoot}. Confirm path via list_dir before retrying.`);
-    }
-    throw err;
-  }
+  await walk(base);
   return {
     hits,
     scanned,
     truncated: hits.length >= safeMaxResults || scanned >= safeMaxFilesScanned,
+    root: target.relPath,
+    searchMode: "directory",
   };
 }
 
@@ -84,7 +126,7 @@ export async function treeTool(
 ) {
   const relPath = coerceWorkspaceBrowsePath(rel);
   const abs = resolveWorkspacePath(ctx, relPath);
-  const lines = [];
+  const lines: string[] = [];
   const safeMaxDepth = Math.max(0, Math.min(20, Number(maxDepth) || 4));
   const safeMaxEntries = Math.max(1, Math.min(20000, Number(maxEntries) || 3000));
   const safeMaxEntriesScanned = Math.max(100, Math.min(200000, Number(maxEntriesScanned) || 20000));
@@ -108,8 +150,8 @@ export async function treeTool(
   }
   try {
     await walk(abs, 0, "");
-  } catch (err) {
-    if (err?.code === "ENOENT") {
+  } catch (err: unknown) {
+    if (err && typeof err === "object" && "code" in err && (err as { code?: string }).code === "ENOENT") {
       throw new Error(`Path not found: ${relPath}. Confirm path via list_dir before retrying.`);
     }
     throw err;

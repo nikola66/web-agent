@@ -192,7 +192,7 @@ flowchart TB
 
 **Every turn:** tool results feed facts, session notes, reflections, and learnings. Reflections and learnings surface as **hints** in later prompts (not automatic promotion).
 
-**After complex turns** (todo/plan gates or high step count), a **post-turn background review** may run — non-blocking, after the user-visible reply — with restricted `skill_*` and `memory_*` tools. Defaults: skill review every **10 tool iterations** without a foreground skill write (`WEBAGENT_SKILL_REVIEW_INTERVAL`); memory review every **10 user turns** (`WEBAGENT_MEMORY_REVIEW_INTERVAL`). Terminal summary example: `Self-improvement review: Skill 'deploy-checklist' updated · Memory updated`.
+**After enough tool iterations** (default **10** without a foreground skill write, `WEBAGENT_SKILL_REVIEW_INTERVAL`), a **post-turn background review** may run — non-blocking, after the user-visible reply — with restricted `skill_*` and `memory_*` tools. Memory review defaults to every **10 user turns** (`WEBAGENT_MEMORY_REVIEW_INTERVAL`). Terminal summary example: `Self-improvement review: Skill 'deploy-checklist' updated · Memory updated`.
 
 **Skill provenance:** skills created in background review are tagged `created_by: agent` in `.webagent/skills/.usage.json` (usage counters, lifecycle state). **Curator** runs on heartbeat (~weekly while the tab is open): stale/archive idle agent-created skills, consolidate overlaps; pinned skills opt out; archives go to `.webagent/skills/.archive/` (no hard delete). Tune with `WEBAGENT_CURATOR_INTERVAL_MS`, `WEBAGENT_CURATOR_STALE_AFTER_DAYS`, `WEBAGENT_CURATOR_ARCHIVE_AFTER_DAYS`.
 

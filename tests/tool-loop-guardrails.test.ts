@@ -86,7 +86,23 @@ test("read_file failure warnings include path-specific recovery guidance", () =>
   controller.afterCall("read_file", { path: "a.ts" }, '{"error":"missing"}', true);
   const warned = controller.afterCall("read_file", { path: "b.ts" }, '{"error":"missing"}', true);
   assert.equal(warned.action, "warn");
-  assert.match(warned.message, /list_dir|absolute workspace path/i);
+  assert.match(warned.message, /list_dir|find_files/i);
+});
+
+test("grep failure warnings mention directory root requirement", () => {
+  const controller = new ToolCallGuardrailController({
+    ...TOOL_LOOP_GUARDRAIL_DEFAULTS,
+    sameToolFailureWarnAfter: 2,
+  });
+  controller.afterCall("grep", { pattern: "version", root: ".webagent/package.json" }, '{"error":"missing"}', true);
+  const warned = controller.afterCall(
+    "grep",
+    { pattern: "name", root: "src/package.json" },
+    '{"error":"missing"}',
+    true
+  );
+  assert.equal(warned.action, "warn");
+  assert.match(warned.message, /list_dir|find_files|workspace/i);
 });
 
 test("hard stop halts same tool varying args failure streak", () => {
