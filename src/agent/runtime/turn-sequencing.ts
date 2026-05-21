@@ -56,15 +56,24 @@ export function repairExactResponseText(input, visible) {
 }
 
 const TOOL_SEQUENCE_USER_INTENT_RE =
-  /(?:\btest(?:ing|s)?\b|re-?test|\btry\b|continue testing|one\s+(?:by|bye|bie)\s+one|systematically|\ball tools\b|tool tests|sequentially|without stopping|until completion)/;
+  /(?:\btest(?:ing|s)?\b|re-?test|\btry\b|continue testing|one\s+(?:by|bye|bie)\s+one|systematically|\ball tools\b|tool tests|sequentially|without stopping)/;
+
+const EXECUTION_CONTINUATION_INTENT_RE =
+  /\b(?:continue\s+until(?:\s+completion)?|go\s+ahead|^\s*(?:start|yes|ok|okay|proceed|do\s+it|run\s+it|execute)\s*[.!?]?\s*$|plan\s+approved|approved\s+plan|execute\s+(?:the\s+)?(?:plan|audit|pipeline)|proceed\s+with\s+(?:the\s+)?(?:plan|execution|audit)|start\s+(?:the\s+)?(?:plan|audit|pipeline)|run\s+(?:the\s+)?(?:plan|audit|pipeline))\b/i;
 
 function isToolSequenceIntent(input) {
   return TOOL_SEQUENCE_USER_INTENT_RE.test(String(input || "").toLowerCase());
 }
 
+/** Short approval/continuation replies — not new multi-step planning tasks. */
+export function isExecutionContinuationIntent(input) {
+  return EXECUTION_CONTINUATION_INTENT_RE.test(String(input || "").trim());
+}
+
 function estimateTaskStepsFromInput(input) {
   const text = String(input || "").trim().toLowerCase();
   if (!text) return 1;
+  if (isExecutionContinuationIntent(text)) return 1;
 
   let score = 1;
 
@@ -134,7 +143,7 @@ export function extractPlanningGoalFromPrompt(content) {
 }
 
 const PLAN_APPROVAL_EXECUTION_RE =
-  /\b(plan\s+is\s+approved|approved\s+plan|approve(?:d)?\s+(?:the\s+)?plan|execute\s+(?:the\s+)?plan|proceed\s+with\s+(?:the\s+)?plan|start\s+(?:the\s+)?plan|run\s+(?:the\s+)?plan)\b/i;
+  /\b(plan\s+is\s+approved|plan\s+approved|approved\s+plan|approve(?:d)?\s+(?:the\s+)?plan|execute\s+(?:the\s+)?(?:plan|audit|pipeline)|proceed\s+with\s+(?:the\s+)?(?:plan|execution|audit)|start\s+(?:the\s+)?(?:plan|audit|pipeline)|run\s+(?:the\s+)?(?:plan|audit|pipeline)|^\s*(?:start|go\s+ahead|do\s+it|run\s+it|yes|ok|okay)\s*[.!?]?\s*$|continue\s+until(?:\s+completion)?)\b/i;
 
 function extractPlanFilePath(text) {
   const s = String(text || "");

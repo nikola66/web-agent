@@ -21,7 +21,7 @@ import { buildToolRowsFromCatalog } from "../slash-command-views.js";
 import { loadToolCatalog } from "../tools/registry.js";
 import { buildPlanModeUserPrompt } from "../planning-slash.js";
 import { buildClarifyModeUserPrompt } from "../clarify-slash.js";
-import { rewriteFindSkillsSlashUserMessage } from "../find-skills-slash.js";
+import { resolveFindSkillsUserMessage } from "../find-skills-slash.js";
 import { rewriteWikiSlashUserMessage } from "../wiki-slash.js";
 import { downloadTelegramVoice } from "../voice/telegram-voice.js";
 import { audioAnalyzeTool } from "../tools/audio-tools.js";
@@ -301,7 +301,7 @@ export function createChannelInboundHandler(deps) {
       }
 
       const wikiRewrite = rewriteWikiSlashUserMessage(trimmed);
-      const findSkillsRewrite = rewriteFindSkillsSlashUserMessage(trimmed);
+      const findSkillsRewrite = resolveFindSkillsUserMessage(trimmed);
       let userContent =
         voiceUserPrompt ??
         wikiRewrite ??

@@ -1,7 +1,12 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { buildFindSkillsModeUserPrompt, rewriteFindSkillsSlashUserMessage } from "../dist/agent-runtime/find-skills-slash.js";
+import {
+  buildFindSkillsModeUserPrompt,
+  rewriteFindSkillsSlashUserMessage,
+  rewriteFindSkillsIntentUserMessage,
+  resolveFindSkillsUserMessage,
+} from "../dist/agent-runtime/find-skills-slash.js";
 
 test("buildFindSkillsModeUserPrompt includes query, skill_view, and top-5 contract", () => {
   const p = buildFindSkillsModeUserPrompt("pdf extraction");
@@ -23,4 +28,26 @@ test("rewriteFindSkillsSlashUserMessage accepts /find_skills only", () => {
 test("buildFindSkillsModeUserPrompt empty query infers from conversation", () => {
   const p = buildFindSkillsModeUserPrompt("");
   assert.match(p, /Infer the skill-discovery query/);
+});
+
+test("rewriteFindSkillsIntentUserMessage matches natural-language skill discovery", () => {
+  const p = rewriteFindSkillsIntentUserMessage(
+    "Can you find me the best Agent skill for high quality SEO auditing?"
+  );
+  assert.ok(p);
+  assert.match(p!, /find-skills mode/i);
+  assert.match(p!, /SEO auditing/i);
+  assert.match(p!, /skill_view.*find-skills/);
+});
+
+test("rewriteFindSkillsIntentUserMessage rejects unrelated asks", () => {
+  assert.equal(rewriteFindSkillsIntentUserMessage("Fix the typo in README"), null);
+  assert.equal(rewriteFindSkillsIntentUserMessage("He skillfully avoided the issue"), null);
+});
+
+test("resolveFindSkillsUserMessage prefers slash then intent", () => {
+  assert.ok(resolveFindSkillsUserMessage("/find_skills seo audit"));
+  assert.ok(
+    resolveFindSkillsUserMessage("find the best agent skill for pdf extraction")
+  );
 });

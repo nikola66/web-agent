@@ -34,10 +34,10 @@ Companion to **`systematic-debugging`** (which falsifies one hypothesis at a tim
 
 1. **State goal** in one sentence — what "done" looks like and for whom.
 2. **`todo_write`** an ordered list. Each todo names a verifiable exit (file written, test green, URL fetched, message sent). Avoid "look into X".
-3. **Execute sequentially.** Mark a todo done before starting the next; do not batch completions.
+3. **Execute sequentially in the same turn.** Mark a todo done before starting the next; do not batch completions. Do not stop after narrating intent — call tools immediately.
 4. **Re-plan only on falsification** — evidence shows a step is wrong or blocked. Otherwise, follow the plan.
 5. **Cross-link delivery**: if the final todo produces a file or message, route through **`artifact-delivery`**.
-6. **Hand off to execution**: once the user approves scope, switch to **`task-execution`** — it owns gating, status transitions, failure recovery, and the final report.
+6. **Hand off to execution**: when todos are ready, continue with **`task-execution`** in the same turn unless the user explicitly asked for a markdown plan via **`/plan`**.
 7. **Visualize the plan**: include a Mermaid flowchart of the ordered steps via **`chart`** when the plan has branching, dependencies, or ≥4 todos — humans grasp the shape faster from a diagram.
 
 ## Pitfalls

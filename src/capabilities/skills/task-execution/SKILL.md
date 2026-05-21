@@ -40,7 +40,7 @@ triggers: [execute the plan, run the plan, go ahead, proceed with execution, sta
 
 ## Pre-flight gate (run once at start)
 
-1. **Plan present?** If not, call `skill_view` **`task-planning`**, build the list, then stop and re-enter this skill.
+1. **Plan present?** If not, call `skill_view` **`task-planning`**, build the list with `todo_write`, then continue executing — do not stop for approval when the user already said go ahead, yes, ok, or continue until completion.
 2. **Echo the plan.** One line back to the user: `Executing N steps. Stop anytime with /stop.`
 3. **Insert safety step.** If any todo is irreversible (delete, mass overwrite, external send), prepend a checkpoint todo via **`workspace-safety`** as step 0.
 4. **Snapshot start.** `session_memory_append` with `kind: "decision"`, `ref: "task-execution:start"`, and the goal in `text`. The timestamp anchors the duration column in the final report.

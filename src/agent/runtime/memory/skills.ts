@@ -775,7 +775,7 @@ export async function buildSkillsContextBlock(availableToolNames: string[] = [])
     if (!skills.length) return "";
     const lines = [
       "Available skills (procedural knowledge, compact index):",
-      "Match the user's latest message to each skill's description and triggers; call `skill_view` on the best slug before acting. Full procedures load only via `skill_view`. `skill_save` and `skill_manage` apply create/patch/import changes immediately without a confirmation prompt. Use `skill_delete` or `skill_bulk_save` when the user must confirm removal or batched installs (each shows one approval gate). Prefer `skill_bulk_save` when adding many skills in one request.",
+      "Before replying, scan the skills below. If a skill matches or is even partially relevant to the task, you MUST call `skill_view` on the best slug before acting — err on the side of loading. Full procedures load only via `skill_view`. Only proceed without loading a skill if genuinely none are relevant. `skill_save` and `skill_manage` apply create/patch/import changes immediately without a confirmation prompt. Use `skill_delete` or `skill_bulk_save` when the user must confirm removal or batched installs (each shows one approval gate). Prefer `skill_bulk_save` when adding many skills in one request.",
     ];
     let budget = SKILLS_CONTEXT_CHAR_BUDGET;
     for (const skill of skills) {

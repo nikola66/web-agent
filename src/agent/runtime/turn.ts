@@ -67,7 +67,13 @@ import {
   MIN_RESEARCH_SEARCHES,
   buildPlanExecutionContextPrefix,
   getSkillSelfImproveNudgeState,
+  isExecutionContinuationIntent,
 } from "./turn-sequencing.js";
+import {
+  buildContinuationNudge,
+  shouldContinueEmptyAfterTools,
+  shouldContinueIntermediateAck,
+} from "./turn-continuation.js";
 import { sanitizeMessagesForLlm } from "./message-sanitizer.js";
 import { errorMessage } from "./utils.js";
 import { WS } from "./constants.js";
@@ -83,7 +89,6 @@ import {
   createRunId,
   toolExecutionKey,
 } from "./stream-output.js";
-import { buildPlanModeUserPrompt } from "./planning-slash.js";
 import {
   evaluateBackgroundReviewTrigger,
   noteForegroundMemoryWrite,
@@ -327,17 +332,13 @@ export async function agentTurn(
     noteUserTurnStarted();
   }
   let injectedPlanningGate = false;
-  if (!turnMeta?.textOnly && originalUserInput && !isPlanningModePrompt(originalUserInput)) {
-    if (complexityEstimate.tier === "plan") {
-      for (let i = conv.length - 1; i >= 0; i--) {
-        const row = conv[i] as ChatTurnMsg;
-        if (row.role === "user") {
-          conv[i] = { ...row, content: buildPlanModeUserPrompt(originalUserInput) };
-          injectedPlanningGate = true;
-          break;
-        }
-      }
-    } else if (complexityEstimate.tier === "todo") {
+  if (
+    !turnMeta?.textOnly &&
+    originalUserInput &&
+    !isPlanningModePrompt(originalUserInput) &&
+    !isExecutionContinuationIntent(originalUserInput)
+  ) {
+    if (complexityEstimate.tier === "todo") {
       const hint =
         "[Gate] Multi-step task: call `todo_write` first with a minimal checklist (exactly one item `in_progress`), then execute.";
       for (let i = conv.length - 1; i >= 0; i--) {
@@ -359,6 +360,9 @@ export async function agentTurn(
   let usedTodoWriteInTurn = false;
   let skillMutatingCalledInTurn = false;
   let skillImproveNudgeSent = false;
+  let intermediateAckContinuations = 0;
+  let emptyAfterToolsContinuations = 0;
+  let continuationRecoveriesFired = 0;
 
   const agentName = process.env.WEBAGENT_AGENT_NAME || process.env.WEBAGENT_PROFILE_NAME || "Agent";
   let turnHeaderPrinted = false;
@@ -536,7 +540,38 @@ export async function agentTurn(
       }
 
       if (!tools.length) {
-        if (!turnMeta?.textOnly && !skipSkillNudge) {
+        if (shouldContinueIntermediateAck(visible, intermediateAckContinuations)) {
+          intermediateAckContinuations++;
+          continuationRecoveriesFired++;
+          conv.pop();
+          conv.push({ role: "assistant", content: visible });
+          conv.push({ role: "user", content: buildContinuationNudge("intermediate_ack") });
+          await logDebugEvent("turn_intermediate_ack_continuation", {
+            round,
+            count: intermediateAckContinuations,
+            visiblePreview: String(visible || "").slice(0, 200),
+          });
+          continue;
+        }
+        if (
+          shouldContinueEmptyAfterTools(visible, executedToolsInTurn, emptyAfterToolsContinuations)
+        ) {
+          emptyAfterToolsContinuations++;
+          continuationRecoveriesFired++;
+          conv.push({ role: "user", content: buildContinuationNudge("empty_after_tools") });
+          await logDebugEvent("turn_empty_after_tools_continuation", {
+            round,
+            count: emptyAfterToolsContinuations,
+          });
+          continue;
+        }
+        const skipChannelSkillNudge = typeof turnMeta?.onTranscript === "function";
+        if (
+          !turnMeta?.textOnly &&
+          !skipSkillNudge &&
+          !skipChannelSkillNudge &&
+          !continuationRecoveriesFired
+        ) {
           const skillState = getSkillSelfImproveNudgeState({
             executedToolsInTurn,
             usedTodoWrite: usedTodoWriteInTurn,

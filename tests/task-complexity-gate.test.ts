@@ -7,6 +7,7 @@ import {
   extractPlanningGoalFromPrompt,
   isExplicitPlanExecutionRequest,
   buildPlanExecutionContextPrefix,
+  isExecutionContinuationIntent,
 } from "../dist/agent-runtime/turn-sequencing.js";
 import { getSkillSelfImproveNudgeState } from "../dist/agent-runtime/turn-sequencing.js";
 import { buildPlanModeUserPrompt } from "../dist/agent-runtime/planning-slash.js";
@@ -74,6 +75,19 @@ test("isPlanningModePrompt matches synthetic /plan prompt line", () => {
 test("extractPlanningGoalFromPrompt parses **Goal:** from synthetic prompt", () => {
   const p = buildPlanModeUserPrompt("Ship auth", new Date(2026, 0, 15, 12, 0, 0));
   assert.equal(extractPlanningGoalFromPrompt(p), "Ship auth");
+});
+
+test("estimateTaskComplexity stays simple for continuation directives", () => {
+  assert.equal(isExecutionContinuationIntent("Continue until completion"), true);
+  const r = estimateTaskComplexity("Continue until completion");
+  assert.equal(r.tier, "simple");
+  assert.equal(r.estimatedSteps, 1);
+});
+
+test("isExplicitPlanExecutionRequest detects plan approved and bare start", () => {
+  assert.equal(isExplicitPlanExecutionRequest("Plan approved"), true);
+  assert.equal(isExplicitPlanExecutionRequest("Start"), true);
+  assert.equal(isExplicitPlanExecutionRequest("Go ahead"), true);
 });
 
 test("isExplicitPlanExecutionRequest ignores follow-up after planning prompt", () => {

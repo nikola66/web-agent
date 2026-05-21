@@ -38,6 +38,7 @@ import runtimeAgentSource from "../../dist/agent-runtime/agent.js?raw";
 import runtimeConstantsSource from "../../dist/agent-runtime/constants.js?raw";
 import runtimeReflectionSource from "../../dist/agent-runtime/reflection.js?raw";
 import runtimeTurnSequencingSource from "../../dist/agent-runtime/turn-sequencing.js?raw";
+import runtimeTurnContinuationSource from "../../dist/agent-runtime/turn-continuation.js?raw";
 import runtimeUtilsSource from "../../dist/agent-runtime/utils.js?raw";
 import runtimeBootstrapSource from "../../dist/agent-runtime/bootstrap.js?raw";
 import runtimeTurnSource from "../../dist/agent-runtime/turn.js?raw";
@@ -418,6 +419,7 @@ async function writeRuntimeSources(profileId: string): Promise<void> {
   await emulator.fs.writeFile(`${webagentDir}/constants.js`, runtimeConstantsSource);
   await emulator.fs.writeFile(`${webagentDir}/reflection.js`, runtimeReflectionSource);
   await emulator.fs.writeFile(`${webagentDir}/turn-sequencing.js`, runtimeTurnSequencingSource);
+  await emulator.fs.writeFile(`${webagentDir}/turn-continuation.js`, runtimeTurnContinuationSource);
   await emulator.fs.writeFile(`${webagentDir}/utils.js`, runtimeUtilsSource);
   await emulator.fs.writeFile(`${webagentDir}/bootstrap.js`, runtimeBootstrapSource);
   await emulator.fs.writeFile(`${webagentDir}/turn.js`, runtimeTurnSource);

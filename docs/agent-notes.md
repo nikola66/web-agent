@@ -53,7 +53,7 @@ Configure via `.env` / `.env.local` (`VITE_WEBAGENT_TOOL_LOOP_*` → mirrored to
 
 Implementation: `src/agent/runtime/tools/tool-loop-guardrails.ts`, integrated in `turn.ts` before/after tool execution.
 
-Multi-step turns end when the model produces a final answer without tool calls. `/plan` is one turn only; explicit follow-up executes the plan in a new turn.
+Multi-step work runs in one user turn: the model loops with tools until the task is complete or it needs user-only input. Runtime continuation nudges fire when the model narrates intent without tool calls. Use `todo_write` for multi-step tasks; explicit `/plan` is optional for markdown specs under `plans/` — it is never auto-injected.
 
 ## Voice (STT / playback)
 

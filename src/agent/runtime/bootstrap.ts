@@ -71,7 +71,7 @@ import { formatHelpForSurface, runSkillsSlashCommand } from "./channel-outbound.
 import { SLASH_COMMANDS } from "./commands.js";
 import { buildPlanModeUserPrompt } from "./planning-slash.js";
 import { buildClarifyModeUserPrompt } from "./clarify-slash.js";
-import { rewriteFindSkillsSlashUserMessage } from "./find-skills-slash.js";
+import { resolveFindSkillsUserMessage } from "./find-skills-slash.js";
 import { rewriteWikiSlashUserMessage } from "./wiki-slash.js";
 import {
   compactHistory,
@@ -700,11 +700,11 @@ export async function main() {
 
     const displayInput = input;
     const wikiFromSlash = rewriteWikiSlashUserMessage(input);
-    const findSkillsFromSlash = rewriteFindSkillsSlashUserMessage(input);
+    const findSkillsRewrite = resolveFindSkillsUserMessage(input);
     if (wikiFromSlash !== null) {
       input = wikiFromSlash;
-    } else if (findSkillsFromSlash !== null) {
-      input = findSkillsFromSlash;
+    } else if (findSkillsRewrite !== null) {
+      input = findSkillsRewrite;
     } else if (input === "/plan" || input.startsWith("/plan ")) {
       const goal = input === "/plan" ? "" : input.slice("/plan ".length).trim();
       input = buildPlanModeUserPrompt(goal);
