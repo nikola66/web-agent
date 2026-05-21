@@ -535,12 +535,12 @@ function isFullWidthDividerLine(line: string) {
 
 /**
  * Indent a rendered block. When `branchBelowName` is true (default), the first
- * line uses " ⎿ " under a freshly printed speaker name; continuation segments
+ * line uses " └ " under a freshly printed speaker name; continuation segments
  * stay flush so wrapped/full-width content does not pick up extra indentation.
  */
 export function prefixBlock(rendered: unknown, branchBelowName = true) {
   const lines = String(rendered || "").trimEnd().split("\n");
-  const firstPrefix = branchBelowName ? " ⎿ " : BLOCK_CONTINUATION_PREFIX;
+  const firstPrefix = branchBelowName ? " └ " : BLOCK_CONTINUATION_PREFIX;
   return lines.map((line, i) => {
     if (isFullWidthDividerLine(line)) return line;
     if (i === 0) return `${firstPrefix}${line}`;
@@ -557,7 +557,7 @@ export function renderUserBlock(
   process.stdout.write(`${grey(name)}\n`);
   const lines = String(input || "").split("\n");
   for (let i = 0; i < lines.length; i++) {
-    const prefix = i === 0 ? " ⎿ " : BLOCK_CONTINUATION_PREFIX;
+    const prefix = i === 0 ? " └ " : BLOCK_CONTINUATION_PREFIX;
     process.stdout.write(`${grey(prefix + lines[i])}\n`);
   }
   process.stdout.write("\n");

@@ -56,7 +56,7 @@ test("channel transcript formatter includes assistant name and branch prefix", (
       text: "There is no active UAE-Iran war.",
       branchBelowName: true,
     }),
-    "Opaline\n ⎿ There is no active UAE-Iran war."
+    "Opaline\n └ There is no active UAE-Iran war."
   );
 });
 
@@ -129,10 +129,10 @@ test("channel transcript formatter prefers the canonical terminal-rendered body"
       type: "assistant",
       agentName: "Opaline",
       text: "## Result\n- **Done**",
-      renderedText: " ⎿ \u001b[36m\u001b[1mResult\u001b[0m\u001b[0m\n• \u001b[1mDone\u001b[0m",
+      renderedText: " └ \u001b[36m\u001b[1mResult\u001b[0m\u001b[0m\n• \u001b[1mDone\u001b[0m",
       branchBelowName: true,
     }),
-    "Opaline\n ⎿ Result\n• Done"
+    "Opaline\n └ Result\n• Done"
   );
 });
 
@@ -164,7 +164,7 @@ test("transcript delivery helper swallows non-critical failures and propagates a
       createAssistantTranscriptEvent({
         agentName: "Opaline",
         text: "Final answer",
-        renderedText: " ⎿ Final answer",
+        renderedText: " └ Final answer",
       })
     ),
     /channel unavailable/

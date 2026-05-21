@@ -44,7 +44,7 @@ interface ProfileVoiceState {
 }
 
 const agentNarrationEnabled = new Set<string>();
-/** Wait for ` ⎿ ` assistant branch, then narrate until the next system line. */
+/** Wait for ` └ ` assistant branch, then narrate until the next system line. */
 type AgentVoicePhase = "pre_agent" | "awaiting_branch" | "narrating";
 const agentVoicePhase = new Map<string, AgentVoicePhase>();
 const voiceLineCarry = new Map<string, string>();
@@ -113,7 +113,7 @@ function extractNarratableAgentText(profileId: string, chunk: string): string {
       continue;
     }
 
-    const branchMatch = line.match(/^\s*⎿\s?(.*)$/);
+    const branchMatch = line.match(/^\s*└\s?(.*)$/);
     if (branchMatch) {
       setAgentVoicePhase(profileId, "narrating");
       const text = branchMatch[1]?.trim();
@@ -155,7 +155,7 @@ export function flushAgentVoiceLineCarry(
   voiceLineCarry.delete(profileId);
   if (!pending?.trim() || !agentNarrationEnabled.has(profileId) || !isEnabled()) return;
   if (agentVoicePhase.get(profileId) !== "narrating") return;
-  const branchMatch = pending.match(/^\s*⎿\s?(.*)$/);
+  const branchMatch = pending.match(/^\s*└\s?(.*)$/);
   if (branchMatch) {
     if (branchMatch[1]?.trim()) pushVoiceChunk(profileId, branchMatch[1], isEnabled);
     return;

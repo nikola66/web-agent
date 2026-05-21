@@ -152,7 +152,7 @@ test("prefixBlock leaves full-width divider lines flush", () => {
   const rendered = ["Summary", "────────────────────", "Next line"].join("\n");
   const prefixed = stripAnsi(prefixBlock(rendered, true));
   const lines = prefixed.split("\n");
-  assert.equal(lines[0], " ⎿ Summary");
+  assert.equal(lines[0], " └ Summary");
   assert.equal(lines[1], "────────────────────");
   assert.equal(lines[2], "Next line");
 });

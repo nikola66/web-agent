@@ -51,12 +51,12 @@ async function transcriptSince(page: Page, index: number): Promise<string> {
 
 function latestAssistantBlock(transcript: string, agentName = PROFILE_NAME): string {
   const normalized = transcript.replace(/\r\n/g, "\n");
-  const marker = `${agentName}\n ⎿`;
+  const marker = `${agentName}\n └`;
   const idx = normalized.lastIndexOf(marker);
   if (idx < 0) return normalized;
   const after = normalized.slice(idx + marker.length);
   const nextBoundaryMatches = [
-    after.search(/\n[A-Za-z][^\n]{0,80}\n ⎿/),
+    after.search(/\n[A-Za-z][^\n]{0,80}\n └/),
     after.search(/\n▸\s/),
     after.search(/\n🫀/),
   ].filter((index) => index >= 0);

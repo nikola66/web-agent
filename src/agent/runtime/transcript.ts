@@ -25,7 +25,7 @@ function formatToolLabel(
 
 function prefixPlainBlock(text, branchBelowName = true) {
   const lines = String(text || "").trimEnd().split("\n");
-  const firstPrefix = branchBelowName ? " ⎿ " : BLOCK_CONTINUATION_PREFIX;
+  const firstPrefix = branchBelowName ? " └ " : BLOCK_CONTINUATION_PREFIX;
   return lines.map((line, i) => {
     if (i === 0) return `${firstPrefix}${line}`;
     return line.trim() ? `${BLOCK_CONTINUATION_PREFIX}${line}` : "";
