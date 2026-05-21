@@ -78,6 +78,17 @@ test("same tool varying args warns without halting by default", () => {
   assert.equal(controller.haltDecision, null);
 });
 
+test("read_file failure warnings include path-specific recovery guidance", () => {
+  const controller = new ToolCallGuardrailController({
+    ...TOOL_LOOP_GUARDRAIL_DEFAULTS,
+    sameToolFailureWarnAfter: 2,
+  });
+  controller.afterCall("read_file", { path: "a.ts" }, '{"error":"missing"}', true);
+  const warned = controller.afterCall("read_file", { path: "b.ts" }, '{"error":"missing"}', true);
+  assert.equal(warned.action, "warn");
+  assert.match(warned.message, /list_dir|absolute workspace path/i);
+});
+
 test("hard stop halts same tool varying args failure streak", () => {
   const controller = new ToolCallGuardrailController({
     ...TOOL_LOOP_GUARDRAIL_DEFAULTS,

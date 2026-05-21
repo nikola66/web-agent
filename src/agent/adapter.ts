@@ -41,6 +41,7 @@ import runtimeTurnSequencingSource from "../../dist/agent-runtime/turn-sequencin
 import runtimeUtilsSource from "../../dist/agent-runtime/utils.js?raw";
 import runtimeBootstrapSource from "../../dist/agent-runtime/bootstrap.js?raw";
 import runtimeTurnSource from "../../dist/agent-runtime/turn.js?raw";
+import runtimeMessageSanitizerSource from "../../dist/agent-runtime/message-sanitizer.js?raw";
 import runtimeStreamOutputSource from "../../dist/agent-runtime/stream-output.js?raw";
 import runtimeContextCompressionSource from "../../dist/agent-runtime/context-compression.js?raw";
 import runtimePlanningSlashSource from "../../dist/agent-runtime/planning-slash.js?raw";
@@ -55,6 +56,7 @@ import runtimeSlashCommandViewsSource from "../../dist/agent-runtime/slash-comma
 import runtimeChannelOutboundSource from "../../dist/agent-runtime/channel-outbound.js?raw";
 import runtimeOnboardingSource from "../../dist/agent-runtime/identity/onboarding.js?raw";
 import runtimeProviderConfigSource from "../../dist/agent-runtime/llm/provider-config.js?raw";
+import runtimeLlmErrorClassifierSource from "../../dist/agent-runtime/llm/llm-error-classifier.js?raw";
 import runtimeStreamingSource from "../../dist/agent-runtime/llm/streaming.js?raw";
 import runtimeDebugLogSource from "../../dist/agent-runtime/logging/debug-log.js?raw";
 import runtimePrivacySource from "../../dist/agent-runtime/privacy.js?raw";
@@ -417,6 +419,7 @@ async function writeRuntimeSources(profileId: string): Promise<void> {
   await emulator.fs.writeFile(`${webagentDir}/utils.js`, runtimeUtilsSource);
   await emulator.fs.writeFile(`${webagentDir}/bootstrap.js`, runtimeBootstrapSource);
   await emulator.fs.writeFile(`${webagentDir}/turn.js`, runtimeTurnSource);
+  await emulator.fs.writeFile(`${webagentDir}/message-sanitizer.js`, runtimeMessageSanitizerSource);
   await emulator.fs.writeFile(`${webagentDir}/stream-output.js`, runtimeStreamOutputSource);
   await emulator.fs.writeFile(`${webagentDir}/context-compression.js`, runtimeContextCompressionSource);
   await emulator.fs.writeFile(`${webagentDir}/planning-slash.js`, runtimePlanningSlashSource);
@@ -432,6 +435,7 @@ async function writeRuntimeSources(profileId: string): Promise<void> {
   await emulator.fs.writeFile(`${webagentDir}/privacy.js`, runtimePrivacySource);
   await emulator.fs.writeFile(`${webagentDir}/identity/onboarding.js`, runtimeOnboardingSource);
   await emulator.fs.writeFile(`${webagentDir}/llm/provider-config.js`, runtimeProviderConfigSource);
+  await emulator.fs.writeFile(`${webagentDir}/llm/llm-error-classifier.js`, runtimeLlmErrorClassifierSource);
   await emulator.fs.writeFile(`${webagentDir}/llm/streaming.js`, runtimeStreamingSource);
   await emulator.fs.writeFile(`${webagentDir}/logging/debug-log.js`, runtimeDebugLogSource);
   await emulator.fs.writeFile(`${webagentDir}/memory/index.js`, runtimeMemorySource);

@@ -5,6 +5,7 @@ import {
   createToolAwareStreamWriter,
   extractPlainToolCommandLines,
   extractJsonToolCallPayloads,
+  normalizeToolCalls,
   sanitizeAssistantVisibleText,
   stripPseudoToolCallLines,
   stripReasoningPlaceholderLines,
@@ -142,4 +143,16 @@ test("createToolAwareStreamWriter flush surfaces tail when stream ends inside <<
   w.push('<<<TOOL>>>{"name":"read_file"');
   w.flush();
   assert.equal(chunks.join(""), 'before {"name":"read_file"');
+});
+
+test("normalizeToolCalls rejects duplicate same-turn tool calls with identical args", () => {
+  const raw = [
+    { name: "read_file", arguments: { path: "src/a.ts" } },
+    { name: "read_file", arguments: { path: "src/a.ts" } },
+    { name: "list_dir", arguments: { path: "." } },
+  ];
+  const { normalized, rejected } = normalizeToolCalls(raw, ["read_file", "list_dir"]);
+  assert.equal(normalized.length, 2);
+  assert.equal(rejected.length, 1);
+  assert.equal(rejected[0].reason, "duplicate_call");
 });

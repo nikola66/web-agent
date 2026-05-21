@@ -16,9 +16,11 @@ const SKILL_INDEX_TRIGGERS_MAX_CHARS = 160;
 const SKILL_FILE_NAME = "SKILL.md";
 
 let _skillsContextBlockCache: string | null = null;
+let _skillsContextBlockCacheKey = "";
 
 export function invalidateSkillsContextCache(): void {
   _skillsContextBlockCache = null;
+  _skillsContextBlockCacheKey = "";
 }
 const DEFAULT_SKILL_CATEGORY = "local";
 const SKILL_SUPPORT_ROOTS = new Set(["references", "templates", "scripts", "assets"]);
@@ -39,6 +41,7 @@ interface SkillRecord {
   category: string;
   platforms: string[];
   allowedTools: string[];
+  requiresTools: string[];
   path: string;
   dir: string;
   skillPath: string;
@@ -102,7 +105,7 @@ function parseSkillFrontmatter(raw: string): { meta: SkillMeta; body: string } {
         list.push(lines[i].replace(/^\s*-\s+/, "").trim());
       }
       meta[k] = list.length ? list : "";
-    } else if (["tags", "triggers", "allowed-tools", "platforms", "required_environment_variables"].includes(k)) {
+    } else if (["tags", "triggers", "allowed-tools", "requires-tools", "requires_tools", "platforms", "required_environment_variables"].includes(k)) {
       meta[k] = parseInlineList(v);
     } else {
       meta[k] = v.replace(/^["']|["']$/g, "").trim();
@@ -159,6 +162,24 @@ function normalizeSkillTriggers(meta: SkillMeta): string[] {
   if (Array.isArray(raw)) return raw.map(String).map((t) => t.trim()).filter(Boolean);
   if (typeof raw === "string" && raw.trim()) return parseInlineList(raw);
   return [];
+}
+
+function normalizeSkillRequiresTools(meta: SkillMeta): string[] {
+  const raw = meta["requires-tools"] ?? meta.requires_tools ?? meta["requires_tools"];
+  if (Array.isArray(raw)) return raw.map(String).map((t) => t.trim()).filter(Boolean);
+  if (typeof raw === "string" && raw.trim()) return parseInlineList(raw);
+  return [];
+}
+
+function skillMatchesAvailableTools(
+  skill: { allowedTools?: string[]; requiresTools?: string[] },
+  availableTools: Set<string>
+): boolean {
+  const requires = skill.requiresTools || [];
+  if (requires.length) return requires.every((tool) => availableTools.has(tool));
+  const allowed = skill.allowedTools || [];
+  if (allowed.length) return allowed.some((tool) => availableTools.has(tool));
+  return true;
 }
 
 function formatTriggersForIndex(triggers: string[]): string {
@@ -256,6 +277,7 @@ async function collectSkillRecords(): Promise<SkillRecord[]> {
             category,
             platforms: Array.isArray(meta.platforms) ? meta.platforms : [],
             allowedTools: Array.isArray(meta["allowed-tools"]) ? meta["allowed-tools"] : [],
+            requiresTools: normalizeSkillRequiresTools(meta),
             path: skillPublicPath(skillPath),
             dir: abs,
             skillPath,
@@ -685,10 +707,17 @@ export async function manageSkill(args: Record<string, unknown> = {}) {
   throw new Error(`skill_manage: unsupported action "${action}".`);
 }
 
-export async function buildSkillsContextBlock() {
-  if (_skillsContextBlockCache !== null) return _skillsContextBlockCache;
+export async function buildSkillsContextBlock(availableToolNames: string[] = []) {
+  const cacheKey = [...availableToolNames].sort().join(",");
+  if (_skillsContextBlockCache !== null && _skillsContextBlockCacheKey === cacheKey) {
+    return _skillsContextBlockCache;
+  }
   try {
-    const skills = (await listSkills()).sort((a, b) => {
+    const availableTools = new Set(
+      (availableToolNames || []).map((name) => String(name || "").trim()).filter(Boolean)
+    );
+    const skills = (await listSkills())
+      .filter((skill) => !availableTools.size || skillMatchesAvailableTools(skill, availableTools)).sort((a, b) => {
       const bundledRank = (s) => (s.source === "bundled" || s.category === "bundled" ? 0 : 1);
       const ra = bundledRank(a);
       const rb = bundledRank(b);
@@ -715,6 +744,7 @@ export async function buildSkillsContextBlock() {
       budget -= line.length;
     }
     _skillsContextBlockCache = `\n\n${lines.join("\n")}`;
+    _skillsContextBlockCacheKey = cacheKey;
     return _skillsContextBlockCache;
   } catch {
     return "";

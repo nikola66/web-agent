@@ -23,6 +23,34 @@ import {
 
 const skillsRoot = nodePath.join(process.cwd(), ".webagent", "skills");
 
+test("buildSkillsContextBlock omits skills whose required tools are unavailable", async (t) => {
+  const name = `Requires Phantom ${Date.now()}`;
+  const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+  t.after(async () => {
+    await deleteSkill(slug).catch(() => {});
+  });
+  await saveSkill({
+    name,
+    description: "Needs phantom tool",
+    category: "qa",
+    content: [
+      "---",
+      `name: ${name}`,
+      "description: Needs phantom tool",
+      "requires-tools: [phantom_tool_only]",
+      "---",
+      "",
+      "## Procedure",
+      "",
+      "1. Needs phantom.",
+      "",
+    ].join("\n"),
+  });
+  const context = await buildSkillsContextBlock(["read_file", "list_dir"]);
+  assert.match(context, /Available skills/);
+  assert.doesNotMatch(context, new RegExp(slug, "i"));
+});
+
 test("skills use canonical directories, compact prompt index, and on-demand view", async (t) => {
   const name = `Test Skill ${Date.now()}`;
   const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");

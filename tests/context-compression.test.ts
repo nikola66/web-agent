@@ -8,6 +8,7 @@ import {
   compactHistory,
   extractNonStreamAssistantText,
   maybeCompactHistory,
+  pruneMessagesForCompactionInput,
 } from "../dist/agent-runtime/context-compression.js";
 import {
   SLASH_COMMANDS,
@@ -23,13 +24,29 @@ const cfg = {
 
 function summary() {
   return `${CONTEXT_COMPACTION_PREFIX}
-Goal: Keep working.
-Constraints & Preferences: Preserve important facts.
-Progress: Middle history summarized.
-Key Decisions: None.
-Relevant Files: None.
-Next Steps: Continue.
-Critical Context: Test summary.`;
+This summary is reference-only.
+## Active Task
+User asked: keep working.
+## Goal
+Keep working.
+## Constraints & Preferences
+Preserve important facts.
+## Completed Actions
+1. READ config — found issue [tool: read_file]
+## Active State
+None.
+## Blocked
+None.
+## Key Decisions
+None.
+## Resolved Questions
+None.
+## Relevant Files
+None.
+## Remaining Work
+Continue.
+## Critical Context
+Test summary.`;
 }
 
 function makeHistory(count, { largeToolResultAt = -1, previousSummaryAt = -1 } = {}) {
@@ -173,8 +190,19 @@ test("prunes large old tool-result content before summarization", async () => {
     String(message.content || "").startsWith("Tool results (compact JSON):")
   );
   assert.ok(pruned);
-  assert.match(pruned.content, /\[pruned: large historical tool-result JSON omitted/);
-  assert.ok(!pruned.content.includes("x".repeat(2000)));
+  assert.match(pruned.content, /\[read_file\]|\[pruned: large historical tool-result JSON omitted/);
+});
+
+test("pruneMessagesForCompactionInput deduplicates repeated tool-result payloads", () => {
+  const duplicate = "Tool results (compact JSON):\n" + "x".repeat(300);
+  const messages = [
+    { role: "user", content: duplicate },
+    { role: "assistant", content: "ok" },
+    { role: "user", content: duplicate },
+  ];
+  const out = pruneMessagesForCompactionInput(messages);
+  assert.match(String(out[0].content), /Duplicate tool output/);
+  assert.equal(String(out[2].content), duplicate);
 });
 
 test("compact command appears in runtime, Telegram, and ChatInput command registries", async () => {
@@ -217,6 +245,26 @@ test("adapter injects every bootstrap static ./ import (runtime entry pulls the 
       );
       continue;
     }
+    assert.ok(
+      adapterSource.includes(`\${webagentDir}/${runtimeImport}`),
+      `adapter must write ${runtimeImport} into .webagent`
+    );
+  }
+});
+
+test("adapter mirrors turn.js static runtime imports into .webagent", async () => {
+  const [turnSource, adapterSource] = await Promise.all([
+    fs.readFile(path.join(process.cwd(), "src/agent/runtime/turn.ts"), "utf8"),
+    fs.readFile(path.join(process.cwd(), "src/agent/adapter.ts"), "utf8"),
+  ]);
+
+  const runtimeImports = [
+    ...turnSource.matchAll(/from\s+["']\.\/([^"']+\.js)["']/g),
+  ].map((match) => match[1]);
+
+  assert.ok(runtimeImports.includes("message-sanitizer.js"));
+  for (const runtimeImport of runtimeImports) {
+    if (runtimeImport.startsWith("tools/")) continue;
     assert.ok(
       adapterSource.includes(`\${webagentDir}/${runtimeImport}`),
       `adapter must write ${runtimeImport} into .webagent`

@@ -232,6 +232,27 @@ function toolFailureRecoveryHint(toolName: string, count: number): string {
       "tool such as read_file/write_file/apply_patch."
     );
   }
+  if (toolName === "read_file" || toolName === "grep" || toolName === "list_dir" || toolName === "find_files") {
+    return (
+      common +
+      "Verify the path exists with list_dir/tree, try an absolute workspace path, check spelling/casing, " +
+      "or use grep/find_files with a broader pattern instead of repeating the same read."
+    );
+  }
+  if (toolName === "web_fetch" || toolName === "web_search") {
+    return (
+      common +
+      "Try a different URL/query, fetch a simpler page, or use web_search to find an alternate source " +
+      "before repeating the same failing request."
+    );
+  }
+  if (toolName === "edit_file" || toolName === "write_file" || toolName === "apply_patch") {
+    return (
+      common +
+      "Re-read the target file, confirm old_string/context matches exactly, try a smaller patch, " +
+      "or use write_file when the file is new or empty."
+    );
+  }
   return (
     common +
     "Try different arguments, a narrower query/path, an absolute path when relevant, or a different " +

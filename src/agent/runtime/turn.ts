@@ -67,6 +67,7 @@ import {
   buildPlanExecutionContextPrefix,
   getSkillSelfImproveNudgeState,
 } from "./turn-sequencing.js";
+import { sanitizeMessagesForLlm } from "./message-sanitizer.js";
 import { errorMessage } from "./utils.js";
 import { WS } from "./constants.js";
 import {
@@ -223,13 +224,13 @@ export async function agentTurn(
   const runStartedAt = Date.now();
   if (!_cachedSystemPrompt) _cachedSystemPrompt = await loadSystemPrompt();
   const sys = _cachedSystemPrompt;
+  if (!_cachedToolNames) _cachedToolNames = await getToolNamesAsync();
+  const toolNames = _cachedToolNames;
   const memoryBlock = await buildMemoryContextBlock();
-  const skillsBlock = await buildSkillsContextBlock();
+  const skillsBlock = await buildSkillsContextBlock(toolNames);
   const toolCatalog = await loadToolCatalog();
   const openAiTools = await buildOpenAiToolDefinitions(toolCatalog);
   const streamTools = turnMeta?.textOnly === true ? [] : openAiTools;
-  if (!_cachedToolNames) _cachedToolNames = await getToolNamesAsync();
-  const toolNames = _cachedToolNames;
   const safeMessages = await sanitizeMessagesMissingSnapshotRefs(messages);
   type ChatTurnMsg = { role?: string; content?: unknown };
   const safeList = safeMessages as ChatTurnMsg[];
@@ -359,7 +360,7 @@ export async function agentTurn(
       let streamResult;
       let streamAborted = false;
       try {
-        streamResult = await streamOpenAI(conv, cfg, onDelta, streamTools, {
+        streamResult = await streamOpenAI(sanitizeMessagesForLlm(conv), cfg, onDelta, streamTools, {
           signal: turnController.signal,
         });
       } catch (error) {

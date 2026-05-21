@@ -2,6 +2,7 @@ import { HIDDEN_STREAM_MARKERS, LLM_REQUEST_TIMEOUT_MS } from "../constants.js";
 import { ipcProxyStreamRequest, ipcProxyRequest } from "../ipc.js";
 import { logDebugEvent } from "../logging/debug-log.js";
 import { reasoningDisableExtras } from "./provider-config.js";
+import { classifyLlmProviderError, formatClassifiedLlmError } from "./llm-error-classifier.js";
 
 const STREAM_CHUNK_TIMEOUT_MS = 45_000;
 /** Never treat sub-second read waits as an idle stall (avoids bogus "0s" near total deadline). */
@@ -236,19 +237,7 @@ export async function fetchWithTimeout(url, options = {}, timeoutMs = LLM_REQUES
 }
 
 function formatProviderError(provider, status, bodyText) {
-  let providerMessage = "";
-  try {
-    const parsed = JSON.parse(String(bodyText || ""));
-    if (typeof parsed?.error === "string") providerMessage = parsed.error.trim();
-  } catch {
-    /* ignore non-JSON error bodies */
-  }
-  if (providerMessage) return providerMessage;
-  const details = String(bodyText || "")
-    .replace(/\s+/g, " ")
-    .trim()
-    .slice(0, 500);
-  return `${provider} API ${status}: ${details || "empty error response"}`;
+  return formatClassifiedLlmError(classifyLlmProviderError(status, bodyText, provider));
 }
 
 /** Body suggests the provider/gateway rejected OpenAI-style `tools` — surfaced for operators (no silent retry without tools). */
@@ -464,8 +453,9 @@ export async function streamOpenAI(messages, cfg, onDelta, tools, options = {}) 
     const retryable =
       TRANSIENT_LLM_HTTP_STATUSES.has(res.status) && !looksLikeToolParameterRejection(res.status, firstError);
     if (!retryable || httpAttempt === STREAM_HTTP_MAX_ATTEMPTS - 1) {
+      const classified = classifyLlmProviderError(res.status, firstError, cfg.provider);
       const hint = toolsCapabilityHint(toolCount, res.status, firstError);
-      throw new Error(`${formatProviderError(cfg.provider, res.status, firstError)}${hint}`);
+      throw new Error(`${formatClassifiedLlmError(classified, hint)}`);
     }
   }
   /* eslint-enable no-await-in-loop */

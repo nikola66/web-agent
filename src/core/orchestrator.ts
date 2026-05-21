@@ -331,7 +331,7 @@ export async function submitUserInput(raw: string): Promise<void> {
 
   if (!state.agentReadyForInput) {
     useRuntimeStore.getState().enqueueInput(targetProfileId, input);
-    write(`\r\n\x1b[90m▸ Queued for next turn (${input.slice(0, 80)})\x1b[0m\r\n\n`);
+    write(`\r\x1b[90m▸ Queued for next turn (${input.slice(0, 80)})\x1b[0m\r\n\n`);
     return;
   }
 
