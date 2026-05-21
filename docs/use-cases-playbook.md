@@ -11,7 +11,7 @@ Twenty-five copy-paste scenarios for getting real work done with Web Agent. Each
 | Research | Find niche creators / competitors | `/open-web-research` | `web_search`, `web_fetch`, `write_file`, `artifact_present` |
 | Research | Academic paper / citation dig | `/research-pack` | `web_search`, `web_fetch`, `write_file`, `artifact_present` |
 | Research | Extract a table or JSON from a page | `/structured-extraction` | `web_fetch`, `write_file`, `artifact_present` |
-| Meta | Discover installable skills online | `/find-skills` | `web_search`, `web_fetch`, `skill_manage` |
+| Meta | Discover installable skills online | `/find_skills` | `web_search`, `web_fetch`, `skill_manage` |
 | Memory | Save a durable preference | `/memory-layers` | `memory_save`, `memory_recall` |
 | Memory | Capture rolling session context | `/memory-layers` | `session_memory_append`, `session_memory_list` |
 | Memory | Mirror memory into Obsidian-style vault | `/memory-layers` | `wiki_setup`, `wiki_sync`, `wiki_search` |
@@ -108,11 +108,11 @@ When you want to find community skills from online registries before installing 
 **Try this prompt:**
 
 ```
-/find-skills markdown wiki knowledge base
+/find_skills markdown wiki knowledge base
 Search skills.sh, SkillsMP, and Cursor marketplace — return the top 5 by installs or stars with links. Do not install yet; just rank them.
 ```
 
-**Bundled skills:** `/find-skills` (+ `/clarify` if query ambiguous; `/web-agent-skill` if installing)
+**Bundled skills:** `/find_skills` (+ `/clarify` if query ambiguous; `/web-agent-skill` if installing)
 
 **Tools that fire:** `web_search`, `web_fetch`, `skill_manage`
 

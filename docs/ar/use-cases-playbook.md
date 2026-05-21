@@ -15,7 +15,7 @@
 | بحث | إيجاد منشئي محتوى / منافسين في niche | `/open-web-research` | `web_search`, `web_fetch`, `write_file`, `artifact_present` |
 | بحث | أوراق أكاديمية / استشهادات | `/research-pack` | `web_search`, `web_fetch`, `write_file`, `artifact_present` |
 | بحث | استخراج جدول أو JSON من صفحة | `/structured-extraction` | `web_fetch`, `write_file`, `artifact_present` |
-| Meta | اكتشاف skills قابلة للتثبيت | `/find-skills` | `web_search`, `web_fetch`, `skill_manage` |
+| Meta | اكتشاف skills قابلة للتثبيت | `/find_skills` | `web_search`, `web_fetch`, `skill_manage` |
 | ذاكرة | حفظ تفضيل دائم | `/memory-layers` | `memory_save`, `memory_recall` |
 | ذاكرة | تدوين سياق الجلسة | `/memory-layers` | `session_memory_append`, `session_memory_list` |
 | ذاكرة | Mirroring إلى vault بأسلوب Obsidian | `/memory-layers` | `wiki_setup`, `wiki_sync`, `wiki_search` |
@@ -112,11 +112,11 @@ When you want to find community skills from online registries before installing 
 **جرّب هذا الـ prompt:**
 
 ```
-/find-skills markdown wiki knowledge base
+/find_skills markdown wiki knowledge base
 Search skills.sh, SkillsMP, and Cursor marketplace — return the top 5 by installs or stars with links. Do not install yet; just rank them.
 ```
 
-**Bundled skills:** `/find-skills` (+ `/clarify` if query ambiguous; `/web-agent-skill` if installing)
+**Bundled skills:** `/find_skills` (+ `/clarify` if query ambiguous; `/web-agent-skill` if installing)
 
 **الأدوات المتوقعة:** `web_search`, `web_fetch`, `skill_manage`
 

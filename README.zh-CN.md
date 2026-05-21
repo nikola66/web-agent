@@ -26,7 +26,7 @@
 
 Web Agent 是在 WebContainers 上直接在浏览器中运行的开源 AI 代理。终端用户无需安装：无 Docker、无 VPS、无 VM、无 Mac mini、无 Hostinger、无本地 Python 栈。打开应用、启动 profile 即可工作。
 
-面向普通用户简单、面向高级用户强大：隔离 profile、浏览器本地持久化、工具、技能、会话、反思、学习、cron、**规划模式**（`/plan`）、**PARA + Obsidian 风格知识库**（`wiki_*` 工具与 `/wiki-*` 命令），以及留在用户机器上的自改进运行时。
+面向普通用户简单、面向高级用户强大：隔离 profile、浏览器本地持久化、工具、技能、会话、反思、学习、cron、**规划模式**（`/plan`）、**PARA + Obsidian 风格知识库**（`wiki_*` 工具与 `/wiki_*` 斜杠命令），以及留在用户机器上的自改进运行时。
 
 ## 目录
 
@@ -214,6 +214,8 @@ These commands make the terminal experience feel like an operator console rather
 | `/clear` | Clear conversation history for a fresh thread; keeps agent and user identity. |
 | `/compact` | Summarize older context and keep the current thread going. |
 | `/plan [goal]` | **Planning mode:** research the workspace with read-only tools, write the full plan markdown under `plans/`, present it via `artifact_present`, then **stop** — reply on the **next** turn with “execute the plan” (or edits) to implement. |
+| `/find_skills [query]` | **Find-skills mode:** search online skill registries (skills.sh, SkillsMP, Cursor Marketplace, etc.) and return the top 5 skills by installs, stars, or votes. |
+| `/clarify [topic]` | **Clarify mode:** emit one structured clarification block when intent is ambiguous — no tools; UI shows choice buttons. |
 | `/checkpoint [name]` | Save a named snapshot of current history for rollback. |
 | `/rollback [name]` | List checkpoints or restore a named checkpoint. |
 | `/skills [search]` | List installed skills, or search skills by query. |
@@ -223,6 +225,8 @@ These commands make the terminal experience feel like an operator console rather
 | `/<skill> [task]` | Invoke an installed skill for a task. |
 | `/stop` | Interrupt the current run. |
 | `/exit` | Exit the active terminal agent session. |
+
+> `📌 Tip:` 使用 `/find_skills pdf`（或任意主题）在线发现热门技能，再用 `/skills install <url>` 安装。
 
 > `📌 Tip:` Use `/skills` to discover capabilities, then jump straight into a workflow with `/<skill-slug> [task]`.
 
@@ -332,6 +336,7 @@ Skills are reusable procedures stored as `SKILL.md` files. They let Web Agent sw
 
 | Slash command | Name | What it is for | Tags |
 | --- | --- | --- | --- |
+| `/find_skills` | Find Skills | Search online skill registries and return the top 5 matches by installs, stars, or votes. | `skills`, `discovery`, `registry`, `marketplace`, `install` |
 | `/clarify` | Clarify | Emit one structured clarification block when user intent is ambiguous, so the UI can present choices instead of guessing. | `ux`, `ambiguity`, `clarification`, `dialog` |
 | `/project-scaffold` | Project Scaffold | Create an isolated workspace folder for a new app, demo, spike, sandbox, or test harness before file generation begins. | `project`, `scaffold`, `verification` |
 | `/research-pack` | Research Pack | Run scholarly research workflows using existing web tools such as arXiv and Semantic Scholar paths. | `research`, `papers`, `citations`, `academic`, `arxiv`, `semantic-scholar` |
@@ -450,7 +455,7 @@ Default vault root: `.webagent/knowledge-vault/`. Legacy `knowledge-vault/` at w
 | 研究 | 发现细分创作者 / 竞品 | `/open-web-research` | `web_search`, `web_fetch`, `write_file`, `artifact_present` |
 | 研究 | 学术论文 / 引用检索 | `/research-pack` | `web_search`, `web_fetch`, `write_file`, `artifact_present` |
 | 研究 | 从页面提取表格或 JSON | `/structured-extraction` | `web_fetch`, `write_file`, `artifact_present` |
-| 元 | 在线发现可安装技能 | `/find-skills` | `web_search`, `web_fetch`, `skill_manage` |
+| 元 | 在线发现可安装技能 | `/find_skills` | `web_search`, `web_fetch`, `skill_manage` |
 | 记忆 | 保存持久偏好 | `/memory-layers` | `memory_save`, `memory_recall` |
 | 记忆 | 记录滚动会话上下文 | `/memory-layers` | `session_memory_append`, `session_memory_list` |
 | 记忆 | 同步到 Obsidian 风格知识库 | `/memory-layers` | `wiki_setup`, `wiki_sync`, `wiki_search` |

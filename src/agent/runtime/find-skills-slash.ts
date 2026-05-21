@@ -1,10 +1,20 @@
-/** Synthetic user message for `/find-skills` turns (UI shows raw `/find-skills …`). */
+/** If `input` is a find-skills slash command, return the synthetic prompt; otherwise null. */
+export function rewriteFindSkillsSlashUserMessage(input: string): string | null {
+  const trimmed = String(input ?? "").trim();
+  if (trimmed === "/find_skills" || trimmed.startsWith("/find_skills ")) {
+    const query = trimmed === "/find_skills" ? "" : trimmed.slice("/find_skills ".length).trim();
+    return buildFindSkillsModeUserPrompt(query);
+  }
+  return null;
+}
+
+/** Synthetic user message for `/find_skills` turns (UI shows raw `/find_skills …`). */
 export function buildFindSkillsModeUserPrompt(query: string) {
   const queryText =
     String(query || "").trim() ||
     "Infer the skill-discovery query from the recent conversation and the latest user message.";
   return [
-    "The user invoked **find-skills mode** via `/find-skills`. Follow it strictly for this turn only.",
+    "The user invoked **find-skills mode** via `/find_skills`. Follow it strictly for this turn only.",
     "",
     `**Search query:** ${queryText}`,
     "",

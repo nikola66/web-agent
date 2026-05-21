@@ -13,7 +13,7 @@ export const SLASH_COMMANDS = [
       "Clarify mode: emit one <<<CLARIFY>>> option block—no tools; host shows choice buttons.",
   },
   {
-    name: "/find-skills [query]",
+    name: "/find_skills [query]",
     description:
       "Find-skills mode: search online skill registries (skills.sh, SkillsMP, Cursor Marketplace, etc.) and return the top 5 by installs, stars, or votes.",
   },
@@ -44,13 +44,17 @@ export const SLASH_COMMANDS = [
   { name: "/exit", description: "Exit the active terminal agent session." },
 ];
 
+const TELEGRAM_COMMAND_RE = /^[a-z0-9_]{1,32}$/;
+
 export function buildTelegramBotCommands() {
-  return SLASH_COMMANDS.filter((command) => /^\/[A-Za-z0-9_-]+(?:\s|$)/.test(command.name || "")).map((command) => {
-    const nameWithoutSlash = String(command.name || "").replace(/^\//, "");
-    const commandName = nameWithoutSlash.split(/\s/)[0];
-    return {
-      command: commandName,
-      description: String(command.description || "").slice(0, 256),
-    };
-  });
+  return SLASH_COMMANDS.filter((command) => /^\/[a-z0-9_]+(?:\s|$)/i.test(command.name || ""))
+    .map((command) => {
+      const nameWithoutSlash = String(command.name || "").replace(/^\//, "");
+      const commandName = nameWithoutSlash.split(/\s/)[0].toLowerCase();
+      return {
+        command: commandName,
+        description: String(command.description || "").slice(0, 256),
+      };
+    })
+    .filter(({ command }) => TELEGRAM_COMMAND_RE.test(command));
 }

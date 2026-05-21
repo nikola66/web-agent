@@ -1,10 +1,10 @@
 ---
 name: Find Skills
-description: Use when the user wants to discover, search, or install agent skills from online registries—top results by installs, stars, or votes. Or user sends /find-skills.
+description: Use when the user wants to discover, search, or install agent skills from online registries—top results by installs, stars, or votes. Or user sends /find_skills.
 version: 1.0.0
 category: bundled
 tags: [skills, discovery, registry, marketplace, install, search, skills.sh, skillsmp, cursor]
-triggers: [find skill, find skills, search skills, skill marketplace, skill registry, install skill, discover skill, skills.sh, skillsmp, cursor marketplace, /find-skills, skill library, agent skill pack]
+triggers: [find skill, find skills, search skills, skill marketplace, skill registry, install skill, discover skill, skills.sh, skillsmp, cursor marketplace, /find_skills, skill library, agent skill pack]
 ---
 
 ## Tool contract (read first)
@@ -22,7 +22,7 @@ triggers: [find skill, find skills, search skills, skill marketplace, skill regi
 ## When to Use
 
 - User asks to **find**, **search**, **discover**, or **recommend** agent skills for a topic.
-- User sends **`/find-skills [query]`** or names a registry (`skills.sh`, SkillsMP, Cursor Marketplace).
+- User sends **`/find_skills [query]`** or names a registry (`skills.sh`, SkillsMP, Cursor Marketplace).
 - User wants the **most popular** skill for PDF, React, debugging, etc. — not installed workspace skills (use `/skills` for those).
 
 **Not for:** listing skills already in the workspace (`/skills`), editing bundled skills (**`web-agent-skill`**), or general open-web people/product discovery (**`open-web-research`**).

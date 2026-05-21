@@ -26,7 +26,7 @@
 
 Web Agent es un agente de IA de código abierto que corre en el navegador sobre WebContainers. There is nothing to install to use it: no Docker, no VPS, no VM, no Mac mini, no Hostinger box, no local Python stack. Open the app, launch a profile, and start working.
 
-It is designed to feel simple for end users and capable for power users: isolated profiles, browser-local persistence, tools, skills, sessions, reflections, learnings, cron jobs, **planning mode** (`/plan`), a **PARA + Obsidian-style knowledge vault** (`wiki_*` tools and `/wiki-*` commands), and a self-improving runtime that stays on the user’s machine.
+It is designed to feel simple for end users and capable for power users: isolated profiles, browser-local persistence, tools, skills, sessions, reflections, learnings, cron jobs, **planning mode** (`/plan`), a **PARA + Obsidian-style knowledge vault** (`wiki_*` tools and `/wiki_*` slash commands), and a self-improving runtime that stays on the user’s machine.
 
 ## Contenidos
 
@@ -214,6 +214,8 @@ These commands make the terminal experience feel like an operator console rather
 | `/clear` | Clear conversation history for a fresh thread; keeps agent and user identity. |
 | `/compact` | Summarize older context and keep the current thread going. |
 | `/plan [goal]` | **Planning mode:** research the workspace with read-only tools, write the full plan markdown under `plans/`, present it via `artifact_present`, then **stop** — reply on the **next** turn with “execute the plan” (or edits) to implement. |
+| `/find_skills [query]` | **Find-skills mode:** search online skill registries (skills.sh, SkillsMP, Cursor Marketplace, etc.) and return the top 5 skills by installs, stars, or votes. |
+| `/clarify [topic]` | **Clarify mode:** emit one structured clarification block when intent is ambiguous — no tools; UI shows choice buttons. |
 | `/checkpoint [name]` | Save a named snapshot of current history for rollback. |
 | `/rollback [name]` | List checkpoints or restore a named checkpoint. |
 | `/skills [search]` | List installed skills, or search skills by query. |
@@ -223,6 +225,8 @@ These commands make the terminal experience feel like an operator console rather
 | `/<skill> [task]` | Invoke an installed skill for a task. |
 | `/stop` | Interrupt the current run. |
 | `/exit` | Exit the active terminal agent session. |
+
+> `📌 Tip:` Use `/find_skills pdf` (or any topic) to discover popular skills online, then install with `/skills install <url>`.
 
 > `📌 Tip:` Use `/skills` to discover capabilities, then jump straight into a workflow with `/<skill-slug> [task]`.
 
@@ -332,6 +336,7 @@ Skills are reusable procedures stored as `SKILL.md` files. They let Web Agent sw
 
 | Slash command | Name | What it is for | Tags |
 | --- | --- | --- | --- |
+| `/find_skills` | Find Skills | Search online skill registries and return the top 5 matches by installs, stars, or votes. | `skills`, `discovery`, `registry`, `marketplace`, `install` |
 | `/clarify` | Clarify | Emit one structured clarification block when user intent is ambiguous, so the UI can present choices instead of guessing. | `ux`, `ambiguity`, `clarification`, `dialog` |
 | `/project-scaffold` | Project Scaffold | Create an isolated workspace folder for a new app, demo, spike, sandbox, or test harness before file generation begins. | `project`, `scaffold`, `verification` |
 | `/research-pack` | Research Pack | Run scholarly research workflows using existing web tools such as arXiv and Semantic Scholar paths. | `research`, `papers`, `citations`, `academic`, `arxiv`, `semantic-scholar` |
@@ -450,7 +455,7 @@ Veinticinco escenarios de asistente personal con prompts para copiar, skills emp
 | Investigación | Encontrar creadores / competidores de nicho | `/open-web-research` | `web_search`, `web_fetch`, `write_file`, `artifact_present` |
 | Investigación | Búsqueda de papers / citas | `/research-pack` | `web_search`, `web_fetch`, `write_file`, `artifact_present` |
 | Investigación | Extraer tabla o JSON de una página | `/structured-extraction` | `web_fetch`, `write_file`, `artifact_present` |
-| Meta | Descubrir skills instalables online | `/find-skills` | `web_search`, `web_fetch`, `skill_manage` |
+| Meta | Descubrir skills instalables online | `/find_skills` | `web_search`, `web_fetch`, `skill_manage` |
 | Memoria | Guardar preferencia durable | `/memory-layers` | `memory_save`, `memory_recall` |
 | Memoria | Capturar contexto de sesión | `/memory-layers` | `session_memory_append`, `session_memory_list` |
 | Memoria | Espejar memoria en vault estilo Obsidian | `/memory-layers` | `wiki_setup`, `wiki_sync`, `wiki_search` |

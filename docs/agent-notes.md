@@ -60,6 +60,10 @@ Multi-step turns end when the model produces a final answer without tool calls. 
 - **Browser mic:** `src/core/voice/stt-worker.ts` + `stt-client.ts` run vendored whisper-tiny.en (WASM). Mic input in `ChatInput` submits transcribed text directly — no LLM provider required for STT.
 - **Browser playback:** `src/core/voice-playback.ts` — Edge TTS (free cloud, `en-US-AvaNeural`, +25% rate) via same-origin `/api/edge-tts`. Toggle with `/voice on|off` or the speaker control. Dev: Vite middleware; prod: `scripts/cors-proxy-server.mjs` + Caddy.
 - **Telegram / workspace audio:** `audio_analyze` sends bytes to the STT worker over IPC (`WEBAGENT_STT_REQ` in `adapter.ts`). Telegram voice notes are transcribed and answered in **text** only.
+
+## Telegram slash commands
+
+Built-in slash commands in `SLASH_COMMANDS` (`src/agent/runtime/commands.ts`) use **underscores** (`/find_skills`, `/wiki_setup`, …) so they pass Telegram Bot API `setMyCommands` validation (lowercase letters, digits, underscores only — no hyphens). `buildTelegramBotCommands()` filters the registry before registration. Bundled **skill** invocations may still use hyphenated slugs (e.g. `/memory-layers`); those are not registered in the Telegram command menu.
 - **Refresh script:** `npm run download:whisper`; `npm run check:models` runs before production builds.
 
 See [`src/agent/runtime/voice/README.md`](../src/agent/runtime/voice/README.md).
