@@ -16,6 +16,9 @@ import {
   shouldContinueEmptyAfterTools,
   shouldContinuePostToolStall,
   shouldContinuePreToolPromiseStall,
+  shouldContinueCronVerification,
+  cronRegisterJobIdFromArgs,
+  cronJobIdsFromListResult,
   MAX_INTERMEDIATE_ACK_CONTINUATIONS,
 } from "../dist/agent-runtime/turn-continuation.js";
 
@@ -353,4 +356,69 @@ test("looksLikePostToolStall still nudges when completion is followed by a next-
     ),
     true
   );
+});
+
+test("matchesFutureActionIntent covers transcript progressive/imperative phrases", () => {
+  const cases = [
+    "Executing now.",
+    "I'm updating the configuration now.",
+    "I'm implementing the CC requirement now.",
+    "Registering web_agent_hunt_loop... (120 min interval, search → verify → personalize → send → log).",
+    "I'm registering the web_agent_hunt_loop cron job now.",
+    "Step 1: Patching the outreach-hunter skill.",
+    "Step 2: Refreshing the web_agent_hunt_loop cron.",
+  ];
+  for (const text of cases) {
+    assert.equal(matchesFutureActionIntent(text), true, text);
+  }
+});
+
+test("looksLikePreToolPromiseStall nudges transcript cron registration promises", () => {
+  assert.equal(
+    looksLikePreToolPromiseStall(
+      "I'm registering the web_agent_hunt_loop cron job now.\n\nJob Registered: web_agent_hunt_loop",
+      NO_TOOLS,
+      false
+    ),
+    true
+  );
+});
+
+test("looksLikePostToolStall nudges executing-now after prior tools", () => {
+  assert.equal(
+    looksLikePostToolStall(
+      "I'm updating the outreach-hunter skill and refreshing the cron job.\n\nExecuting now.",
+      true
+    ),
+    true
+  );
+});
+
+test("cron verification helpers track register/list ids", () => {
+  assert.equal(
+    cronRegisterJobIdFromArgs({ id: "web_agent_hunt_loop", everyMinutes: 120 }),
+    "web_agent_hunt_loop"
+  );
+  assert.equal(cronRegisterJobIdFromArgs({ action: "remove", id: "x" }), "");
+  const listed = cronJobIdsFromListResult({
+    success: true,
+    count: 1,
+    jobs: [{ id: "web_agent_hunt_loop", everyMinutes: 120 }],
+  });
+  assert.ok(listed.has("web_agent_hunt_loop"));
+});
+
+test("shouldContinueCronVerification requires cron_list after register", () => {
+  const pending = new Set(["web_agent_hunt_loop"]);
+  assert.equal(shouldContinueCronVerification(pending, 0), true);
+  pending.delete("web_agent_hunt_loop");
+  assert.equal(shouldContinueCronVerification(pending, 0), false);
+});
+
+test("buildContinuationNudge cron_verify mentions pending ids", () => {
+  const nudge = buildContinuationNudge("cron_verify", {
+    pendingCronIds: ["web_agent_hunt_loop"],
+  });
+  assert.match(nudge, /cron_list/i);
+  assert.match(nudge, /web_agent_hunt_loop/);
 });

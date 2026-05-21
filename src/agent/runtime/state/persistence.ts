@@ -338,7 +338,15 @@ export async function removeCronJob(id: string) {
   }
   jobs.splice(idx, 1);
   await saveCronJobs({ jobs });
-  return { ok: true, id: trimmed, removed: true, jobsRegistered: jobs.length };
+  return {
+    success: true,
+    ok: true,
+    id: trimmed,
+    removed: true,
+    jobsRegistered: jobs.length,
+    count: jobs.length,
+    message: `Cron job "${trimmed}" removed.`,
+  };
 }
 
 /**
@@ -428,13 +436,18 @@ export async function upsertCronJob(job) {
   if (idx >= 0) jobs[idx] = entry;
   else jobs.push({ ...entry, lastRunAt: 0, retryAttempts: 0, nextRetryAt: 0 });
   await saveCronJobs({ jobs });
+  const persisted = jobs.find((j) => j && String(j.id) === id) ?? entry;
   return {
+    success: true,
     ok: true,
     id,
     everyMinutes,
     delivery,
     ...(hasSteps ? { steps: job.steps.length } : { tool: toolName }),
     jobsRegistered: jobs.length,
+    count: jobs.length,
+    job: persisted,
+    message: `Cron job "${id}" ${idx >= 0 ? "updated" : "registered"}.`,
   };
 }
 

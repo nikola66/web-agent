@@ -8,6 +8,8 @@ export const CRON_REGISTER_TOOL_DESCRIPTION = `Save a recurring heartbeat job to
 
 **Register / update (default):** Always include \`id\` (string) and \`everyMinutes\` (number, ≥1). Set \`delivery\` to \`silent\`, \`terminal\`, or \`email\`. For \`email\`, also set \`deliveryEmailTo\` (and optional \`deliveryEmailSubject\`). Optional: \`notifyChannel\` as \`telegram:<chatId>\` when Telegram is configured.
 
+**Verify before claiming success:** After every successful \`cron_register\`, call \`cron_list\` in the same turn and confirm the returned \`jobs\` array contains the same \`id\` before telling the user the job is registered or active. Never announce "Job Registered" or "confirmed active" from intent text alone — only from \`cron_list\` tool output.
+
 **What runs:** Either (1) one tool at the job root, or (2) an ordered \`steps\` array. Each step must be a **built-in tool name** plus that tool’s arguments.
 
 **Canonical step shape:** \`{"tool":"<builtin_name>","arguments":{...}}\` — use this in \`steps\`. Legacy \`action\` is accepted as an alias for \`tool\`.

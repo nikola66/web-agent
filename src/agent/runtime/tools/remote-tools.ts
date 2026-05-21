@@ -268,7 +268,15 @@ export async function cronRegisterTool(args: ToolArgs = {}, ctx) {
 
 export async function cronListTool(_args, _ctx) {
   const { loadCronJobs } = await import("../state/persistence.js");
-  return loadCronJobs();
+  const store = await loadCronJobs();
+  const jobs = Array.isArray(store?.jobs) ? store.jobs : [];
+  return {
+    success: true,
+    ok: true,
+    count: jobs.length,
+    jobs,
+    message: jobs.length ? `${jobs.length} cron job(s) registered.` : "No cron jobs registered.",
+  };
 }
 
 function hasProviderApiKey(provider, ctx) {

@@ -249,6 +249,26 @@ test("cron_register validates tool names and persists jobs", async () => {
     const job = jobs.find((entry) => entry.id === id);
     assert.ok(job, "registered cron job should appear in cron_list");
     assert.equal(job.tool, "system_info");
+    const regResult = registered?.result as {
+      success?: boolean;
+      ok?: boolean;
+      message?: string;
+      job?: { id?: string };
+      count?: number;
+    };
+    assert.equal(regResult.success, true);
+    assert.equal(regResult.ok, true);
+    assert.match(String(regResult.message || ""), new RegExp(id));
+    assert.equal(regResult.job?.id, id);
+    const listResult = listed?.result as {
+      success?: boolean;
+      count?: number;
+      jobs?: unknown[];
+      message?: string;
+    };
+    assert.equal(listResult.success, true);
+    assert.equal(listResult.count, listResult.jobs?.length);
+    assert.match(String(listResult.message || ""), /cron job/i);
   });
 });
 

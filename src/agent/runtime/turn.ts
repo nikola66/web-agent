@@ -75,6 +75,9 @@ import {
   buildContinuationNudge,
   buildEmptyRecoveryUserMessage,
   buildSyntheticEmptyAssistantMessage,
+  cronJobIdsFromListResult,
+  cronRegisterJobIdFromArgs,
+  shouldContinueCronVerification,
   shouldContinueEmptyAfterTools,
   shouldContinueIntermediateAck,
   shouldContinuePostToolStall,
@@ -374,6 +377,8 @@ export async function agentTurn(
   let emptyAfterToolsContinuations = 0;
   let postToolStallContinuations = 0;
   let preToolPromiseContinuations = 0;
+  let cronVerifyContinuations = 0;
+  const pendingCronRegisterIds = new Set<string>();
   let continuationRecoveriesFired = 0;
 
   const agentName = process.env.WEBAGENT_AGENT_NAME || process.env.WEBAGENT_PROFILE_NAME || "Agent";
@@ -620,6 +625,22 @@ export async function agentTurn(
           });
           continue;
         }
+        if (shouldContinueCronVerification(pendingCronRegisterIds, cronVerifyContinuations)) {
+          cronVerifyContinuations++;
+          continuationRecoveriesFired++;
+          conv.push({
+            role: "user",
+            content: buildContinuationNudge("cron_verify", {
+              pendingCronIds: [...pendingCronRegisterIds],
+            }),
+          });
+          await logDebugEvent("turn_cron_verify_continuation", {
+            round,
+            count: cronVerifyContinuations,
+            pendingCronIds: [...pendingCronRegisterIds],
+          });
+          continue;
+        }
         const skipChannelSkillNudge = typeof turnMeta?.onTranscript === "function";
         if (
           !turnMeta?.textOnly &&
@@ -755,6 +776,20 @@ export async function agentTurn(
             skillMutatingCalledInTurn = true;
           }
           if (tname === "memory_save" && !turnMeta?.backgroundReview) noteForegroundMemoryWrite();
+          const args =
+            tools[i].arguments && typeof tools[i].arguments === "object" && !Array.isArray(tools[i].arguments)
+              ? (tools[i].arguments as Record<string, unknown>)
+              : {};
+          if (tname === "cron_register") {
+            const jobId = cronRegisterJobIdFromArgs(args);
+            if (jobId) pendingCronRegisterIds.add(jobId);
+          }
+          if (tname === "cron_list") {
+            const listedIds = cronJobIdsFromListResult(item?.result);
+            for (const id of [...pendingCronRegisterIds]) {
+              if (listedIds.has(id)) pendingCronRegisterIds.delete(id);
+            }
+          }
         }
       }
       run.tool_calls.push(

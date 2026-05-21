@@ -7,6 +7,7 @@ export const MAX_INTERMEDIATE_ACK_CONTINUATIONS = 2;
 export const MAX_EMPTY_AFTER_TOOLS_CONTINUATIONS = 1;
 export const MAX_POST_TOOL_STALL_CONTINUATIONS = 1;
 export const MAX_PRE_TOOL_PROMISE_CONTINUATIONS = 1;
+export const MAX_CRON_VERIFY_CONTINUATIONS = 1;
 
 export const SYNTHETIC_EMPTY_ASSISTANT_CONTENT = "(empty)";
 
@@ -60,12 +61,20 @@ const FUTURE_ACTION_INTENT_RES: RegExp[] = [
   /\b(?:first|next|then|now|so),?\s+i['']?m going to\b/i,
   /\b(?:first|next|then|now|so),?\s+i am going to\b/i,
   /\b(?:first|next|then|now|so),?\s+let me\b/i,
+  /\bi['']?m (?:now )?(?:executing|implementing|applying|patching|updating|registering|refreshing|re-registering|configuring|working on|locking in)\b/i,
+  /\bi am (?:now )?(?:executing|implementing|applying|patching|updating|registering|refreshing|re-registering|configuring|working on|locking in)\b/i,
+  /\b(?:executing|implementing|applying|patching|updating|registering|refreshing|configuring) now\b/i,
+  /\b(?:step \d+|step one|step two):?\s/i,
+  /\bworking on (?:this|it|that) now\b/i,
+  /\block(?:ing)? (?:this )?in now\b/i,
 ];
 
 export function matchesFutureActionIntent(text: string): boolean {
   const low = String(text || "").trim().toLowerCase();
   if (!low) return false;
-  return FUTURE_ACTION_INTENT_RES.some((re) => re.test(low));
+  if (FUTURE_ACTION_INTENT_RES.some((re) => re.test(low))) return true;
+  if (/\b(?:registering|updating|refreshing|patching|implementing)\b/i.test(low)) return true;
+  return false;
 }
 
 /** English patterns where the agent is asking the user to decide, choose, or supply info — do not nudge. */
@@ -285,10 +294,26 @@ const ACTION_MARKERS = [
   "install",
   "deploy",
   "execute",
+  "executing",
   "continue",
   "walkthrough",
   "report back",
   "summarize",
+  "register",
+  "re-register",
+  "update",
+  "configure",
+  "configuration",
+  "refresh",
+  "patch",
+  "implement",
+  "lock in",
+  "cron",
+  "schedule",
+  "send",
+  "email",
+  "personalize",
+  "log",
 ] as const;
 
 const WORKSPACE_MARKERS = [
@@ -395,9 +420,28 @@ export type ContinuationNudgeKind =
   | "intermediate_ack"
   | "empty_after_tools"
   | "post_tool_stall"
-  | "pre_tool_promise";
+  | "pre_tool_promise"
+  | "cron_verify";
 
-export function buildContinuationNudge(kind: ContinuationNudgeKind): string {
+export function cronRegisterJobIdFromArgs(args: Record<string, unknown> | null | undefined): string {
+  if (String(args?.action ?? "").trim().toLowerCase() === "remove") return "";
+  return String(args?.id ?? "").trim();
+}
+
+export function cronJobIdsFromListResult(result: unknown): Set<string> {
+  const ids = new Set<string>();
+  const row = result && typeof result === "object" && !Array.isArray(result) ? (result as Record<string, unknown>) : null;
+  const jobs = Array.isArray(row?.jobs) ? row.jobs : [];
+  for (const job of jobs) {
+    if (job && typeof job === "object" && !Array.isArray(job)) {
+      const id = String((job as Record<string, unknown>).id ?? "").trim();
+      if (id) ids.add(id);
+    }
+  }
+  return ids;
+}
+
+export function buildContinuationNudge(kind: ContinuationNudgeKind, extra?: { pendingCronIds?: string[] }): string {
   if (kind === "empty_after_tools") {
     return (
       "You just executed tool calls but returned an empty response. " +
@@ -414,6 +458,14 @@ export function buildContinuationNudge(kind: ContinuationNudgeKind): string {
     return (
       "You ended with only a promise to take the next step. " +
       "Continue now by calling the tools needed for that step."
+    );
+  }
+  if (kind === "cron_verify") {
+    const ids = (extra?.pendingCronIds ?? []).filter(Boolean);
+    const idHint = ids.length ? ` (${ids.join(", ")})` : "";
+    return (
+      "You called cron_register but have not verified persistence with cron_list yet. " +
+      `Call cron_list now and confirm the job id${idHint} appears in the tool result before telling the user the cron job is registered or active.`
     );
   }
   return (
@@ -480,4 +532,12 @@ export function shouldContinuePreToolPromiseStall(
 ): boolean {
   if (preToolPromiseContinuations >= MAX_PRE_TOOL_PROMISE_CONTINUATIONS) return false;
   return looksLikePreToolPromiseStall(visible, messages, executedToolsInTurn);
+}
+
+export function shouldContinueCronVerification(
+  pendingCronRegisterIds: Set<string>,
+  cronVerifyContinuations: number
+): boolean {
+  if (cronVerifyContinuations >= MAX_CRON_VERIFY_CONTINUATIONS) return false;
+  return pendingCronRegisterIds.size > 0;
 }
