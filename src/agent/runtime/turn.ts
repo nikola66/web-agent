@@ -427,9 +427,29 @@ export async function agentTurn(
       });
       let acc = "";
       let streamedVisible = "";
+      const isNodeboxLiveStream =
+        String(process.env.WEBAGENT_RUNTIME || "").trim() === "nodebox";
+      let liveStreamStarted = false;
+      let liveStreamBranchPending = false;
+      const maybeLiveStreamChunk = (chunk: string) => {
+        if (!isNodeboxLiveStream || quietTurn || !chunk) return;
+        if (!liveStreamStarted) {
+          if (!turnHeaderPrinted) {
+            if (round > 1) process.stdout.write("\n");
+            process.stdout.write(`${bold(cyan(agentName))}\n`);
+            turnHeaderPrinted = true;
+          }
+          liveStreamStarted = true;
+          liveStreamBranchPending = true;
+        }
+        const out = liveStreamBranchPending ? prefixBlock(chunk, true) : chunk;
+        liveStreamBranchPending = false;
+        process.stdout.write(out);
+      };
       const streamWriter = createToolAwareStreamWriter((chunk) => {
         if (!chunk) return;
         streamedVisible += chunk;
+        maybeLiveStreamChunk(chunk);
       });
       const onDelta = (c) => {
         acc += c;
@@ -528,7 +548,11 @@ export async function agentTurn(
         }
         if (rendered) {
           const block = prefixBlock(rendered, branchBelowName);
-          await writeStdoutSmoothed(`${block}\n\n`);
+          if (liveStreamStarted) {
+            process.stdout.write("\n\n");
+          } else {
+            await writeStdoutSmoothed(`${block}\n\n`);
+          }
           await emitTranscriptEvent(
             turnMeta,
             createAssistantTranscriptEvent({

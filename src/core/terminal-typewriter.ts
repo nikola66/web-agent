@@ -3,11 +3,21 @@ import type { Terminal } from "@xterm/xterm";
 /** Per-profile queue: smooth type-out while bytes arrive; fast drain when idle. */
 interface TypewriterState {
   pending: string;
-  rafId: number | null;
+  tickId: ReturnType<typeof setTimeout> | null;
   lastArrivalAt: number;
 }
 
 const states = new Map<string, TypewriterState>();
+
+/** Still receiving stream bytes — keep a readable cadence. */
+export const ACTIVE_ARRIVAL_MS = 150;
+/** After this idle gap, allow moderate catch-up (never a single-frame dump). */
+export const CATCH_UP_IDLE_MS = 500;
+export const UNITS_WHILE_STREAMING = 2;
+export const UNITS_WHILE_DRAINING = 5;
+export const UNITS_CATCH_UP_MAX = 48;
+/** Artificial pacing between writes while the stream is active (~55 chars/s at 2 units / 18ms). */
+export const STREAM_TICK_MS = 18;
 
 let graphemeSegmenter: Intl.Segmenter | null = null;
 function getGraphemeSegmenter(): Intl.Segmenter | null {
@@ -20,10 +30,22 @@ function getGraphemeSegmenter(): Intl.Segmenter | null {
   }
 }
 
+export function computeTypewriterDrainBudget(pendingLength: number, idleMs: number): number {
+  const streaming = idleMs < ACTIVE_ARRIVAL_MS;
+  if (streaming) return UNITS_WHILE_STREAMING;
+  if (idleMs > CATCH_UP_IDLE_MS) {
+    return Math.min(
+      UNITS_CATCH_UP_MAX,
+      Math.max(UNITS_WHILE_DRAINING, Math.ceil(pendingLength / 80)),
+    );
+  }
+  return UNITS_WHILE_DRAINING;
+}
+
 function stateFor(profileId: string): TypewriterState {
   let s = states.get(profileId);
   if (!s) {
-    s = { pending: "", rafId: null, lastArrivalAt: 0 };
+    s = { pending: "", tickId: null, lastArrivalAt: 0 };
     states.set(profileId, s);
   }
   return s;
@@ -83,6 +105,23 @@ function peelNextAtomicUnit(buffer: string): Peel {
   return { kind: "unit", unit: buffer.slice(0, len), rest: buffer.slice(len) };
 }
 
+function cancelTick(s: TypewriterState): void {
+  if (s.tickId === null) return;
+  clearTimeout(s.tickId);
+  s.tickId = null;
+}
+
+function schedule(profileId: string, resolveTerminal: (id: string) => Terminal | null): void {
+  const s = stateFor(profileId);
+  if (s.tickId !== null) return;
+  const idleMs = performance.now() - s.lastArrivalAt;
+  const delay = idleMs < ACTIVE_ARRIVAL_MS ? STREAM_TICK_MS : 0;
+  s.tickId = setTimeout(() => {
+    s.tickId = null;
+    drainStep(profileId, resolveTerminal);
+  }, delay);
+}
+
 function drainStep(
   profileId: string,
   resolveTerminal: (id: string) => Terminal | null
@@ -90,17 +129,12 @@ function drainStep(
   const s = stateFor(profileId);
   const term = resolveTerminal(profileId);
   if (!term || !s.pending.length) {
-    s.rafId = null;
+    cancelTick(s);
     return;
   }
 
   const idleMs = performance.now() - s.lastArrivalAt;
-  const catchingUp = idleMs > 40;
-  let stepsBudget = catchingUp ? 200 : 2;
-
-  if (catchingUp && s.pending.length > 8000) {
-    stepsBudget = Math.min(4000, Math.ceil(s.pending.length / 12));
-  }
+  let stepsBudget = computeTypewriterDrainBudget(s.pending.length, idleMs);
 
   while (stepsBudget > 0 && s.pending.length > 0) {
     const peeled = peelNextAtomicUnit(s.pending);
@@ -112,16 +146,8 @@ function drainStep(
   }
 
   if (s.pending.length > 0) {
-    s.rafId = requestAnimationFrame(() => drainStep(profileId, resolveTerminal));
-  } else {
-    s.rafId = null;
+    schedule(profileId, resolveTerminal);
   }
-}
-
-function schedule(profileId: string, resolveTerminal: (id: string) => Terminal | null): void {
-  const s = stateFor(profileId);
-  if (s.rafId !== null) return;
-  s.rafId = requestAnimationFrame(() => drainStep(profileId, resolveTerminal));
 }
 
 /**
@@ -143,7 +169,7 @@ export function enqueueTerminalTypewriter(
 export function disposeTypewriter(profileId: string): void {
   const s = states.get(profileId);
   if (!s) return;
-  if (s.rafId !== null) cancelAnimationFrame(s.rafId);
+  cancelTick(s);
   states.delete(profileId);
 }
 
@@ -154,10 +180,7 @@ export function flushTerminalTypewriter(
 ): void {
   const s = states.get(profileId);
   if (!s) return;
-  if (s.rafId !== null) {
-    cancelAnimationFrame(s.rafId);
-    s.rafId = null;
-  }
+  cancelTick(s);
   const term = resolveTerminal(profileId);
   if (term && s.pending.length > 0) term.write(s.pending);
   s.pending = "";

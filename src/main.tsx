@@ -3,10 +3,12 @@ import { createRoot } from "react-dom/client";
 import { App } from "./App";
 import { ErrorBoundary } from "./ui/components/ErrorBoundary";
 import { initialize } from "./core/orchestrator";
+import { startAppUpdateChecker } from "./core/app-update";
 import { registerStaleChunkRecovery } from "./ui/lazy-with-retry";
 import "./styles.css";
 
 registerStaleChunkRecovery();
+startAppUpdateChecker();
 
 // Initialize orchestrator (loads credentials, requests storage persistence)
 initialize().catch(console.error);

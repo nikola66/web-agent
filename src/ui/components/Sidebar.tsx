@@ -3,6 +3,7 @@ import { useSettingsStore, type SidebarView } from "../stores/settings-store";
 import { ProfileSelector } from "./ProfileSelector";
 import { SettingsPanel } from "./Settings";
 import { WorkspacePanel } from "./WorkspacePanel";
+import { UpdateAvailableNotice } from "./UpdateAvailableNotice";
 
 const NAV_ITEMS: { id: SidebarView; icon: typeof Bot; label: string }[] = [
   { id: "profiles", icon: Bot, label: "Profiles" },
@@ -69,6 +70,8 @@ export function Sidebar() {
         {sidebarView === "settings" && <SettingsPanel />}
         {sidebarView === "workspaces" && <WorkspacePanel />}
       </div>
+
+      <UpdateAvailableNotice />
 
       <div
         className="flex shrink-0 items-center justify-center gap-4 border-t px-3 py-2 grayscale"

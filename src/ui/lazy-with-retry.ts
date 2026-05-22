@@ -1,3 +1,4 @@
+import { reloadForAppUpdate } from "@/core/app-update";
 import { lazy, type ComponentType, type LazyExoticComponent } from "react";
 
 /** Set immediately before a deploy-stale-chunk reload; cleared once the app loads successfully. */
@@ -33,7 +34,7 @@ export function reloadAppForStaleChunks(): void {
   } catch {
     /* still reload */
   }
-  window.location.reload();
+  void reloadForAppUpdate();
 }
 
 export function registerStaleChunkRecovery(): void {

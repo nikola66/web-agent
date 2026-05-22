@@ -18,6 +18,13 @@ const PRECACHE = [
 const CACHEABLE_PATH_RE =
   /\.(?:js|css|html|ico|png|jpg|jpeg|svg|webp|woff2?|ttf|json|map)$/i;
 
+const NETWORK_FIRST_PATHS = new Set([
+  "/version.json",
+  "/index.html",
+  "/sw.js",
+  "/sw-register.js",
+]);
+
 function isCacheableRequest(request, url) {
   if (request.method !== "GET") return false;
   if (url.origin !== sw.location.origin) return false;
@@ -26,6 +33,12 @@ function isCacheableRequest(request, url) {
 
 function isNavigationRequest(request) {
   return request.mode === "navigate";
+}
+
+function isNetworkFirst(url, isNavigation) {
+  if (NETWORK_FIRST_PATHS.has(url.pathname)) return true;
+  if (isNavigation) return true;
+  return false;
 }
 
 sw.addEventListener("install", (event) => {
@@ -55,20 +68,34 @@ sw.addEventListener("fetch", (event) => {
   const isNavigation = isNavigationRequest(event.request);
   if (!cacheable && !isNavigation) return;
 
+  const networkFirst = isNetworkFirst(url, isNavigation);
+
   event.respondWith(
     (async () => {
       const cache = await caches.open(CACHE_NAME);
-      const cached = await cache.match(event.request);
 
       const networkPromise = fetch(event.request)
         .then((response) => {
-          if (response.ok) {
+          if (response.ok && cacheable) {
             void cache.put(event.request, response.clone());
           }
           return response;
         })
         .catch(() => null);
 
+      if (networkFirst) {
+        const response = await networkPromise;
+        if (response) return response;
+        const cached =
+          (await cache.match(event.request)) ??
+          (isNavigation
+            ? ((await cache.match("/index.html")) ?? (await cache.match("/")))
+            : null);
+        if (cached) return cached;
+        throw new Error(`Request failed and no cache entry found: ${url.pathname}`);
+      }
+
+      const cached = await cache.match(event.request);
       if (cached) {
         void networkPromise;
         return cached;

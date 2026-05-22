@@ -11,6 +11,7 @@ import {
   normalizeLaunchMode,
   sanitizeForLogs,
 } from "./src/agent/runtime/privacy";
+import { appVersionPlugin } from "./vite/app-version";
 import { transformersOrtAssetsPlugin } from "./vite/transformers-ort-assets";
 
 const PACKAGE_JSON = JSON.parse(
@@ -423,6 +424,7 @@ export default defineConfig(({ mode }) => {
       "import.meta.env.VITE_APP_VERSION": JSON.stringify(PACKAGE_JSON.version),
     },
     plugins: [
+      appVersionPlugin(__dirname, PACKAGE_JSON.version),
       rawRuntimeFilesPlugin(),
       transformersOrtAssetsPlugin(__dirname),
       crossOriginIsolationHeaders(),

@@ -2,6 +2,7 @@
 
 interface ImportMetaEnv {
   readonly VITE_APP_VERSION: string;
+  readonly VITE_APP_BUILD_ID: string;
   readonly VITE_WEBAGENT_TOOL_LOOP_GUARDRAILS_WARNINGS?: string;
   readonly VITE_WEBAGENT_TOOL_LOOP_GUARDRAILS_HARD_STOP?: string;
   readonly VITE_WEBAGENT_TOOL_LOOP_EXACT_FAILURE_WARN_AFTER?: string;
