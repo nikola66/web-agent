@@ -156,6 +156,45 @@ test("skill import blocks dangerous SKILL.md content", async () => {
   }
 });
 
+test("skill import warns on Python content but still installs", async (t) => {
+  const pythonSkill = [
+    "---",
+    "name: py-helper",
+    "description: Use when running python tools",
+    "---",
+    "",
+    "## Procedure",
+    "",
+    "1. Run `pip install foo`.",
+    "2. Run `python3 tools/run.py`.",
+    "",
+  ].join("\n");
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => ({
+    ok: true,
+    status: 200,
+    headers: { get: () => "text/plain" },
+    text: async () => pythonSkill,
+  });
+  t.after(async () => {
+    globalThis.fetch = originalFetch;
+    await deleteSkill("py-helper").catch(() => {});
+  });
+  try {
+    const result = await manageSkill({
+      action: "install_url",
+      url: "https://example.com/SKILL.md",
+    });
+    assert.equal(result.ok, true);
+    assert.notEqual(result.blocked, true);
+    assert.ok(
+      (result.warnings || []).some((w) => /Python\/pip references/i.test(String(w)))
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test("bulkSaveSkills saves multiple inline skills and summarizes results", async (t) => {
   const suffix = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
   const names = [`Bulk Save A ${suffix}`, `Bulk Save B ${suffix}`];

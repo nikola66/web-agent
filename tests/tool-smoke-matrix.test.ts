@@ -39,6 +39,7 @@ const SMOKE_TIERS = {
   session_search: "local",
   move_file: "local-setup",
   multi_edit: "local-setup",
+  python_to_node: "local",
   read_file: "local-setup",
   run_shell: "local-setup",
   session_memory_append: "local",
@@ -138,6 +139,15 @@ test("local smoke tier tools execute without error", async (t) => {
     check?: (result: unknown) => void | Promise<void>;
   }> = [
     { name: "system_info", args: {}, check: (r) => assert.equal((r as { ok?: boolean }).ok, true) },
+    {
+      name: "python_to_node",
+      args: { python: "import requests\nprint('ok')" },
+      check: (r) => {
+        const rec = r as { skill_ref?: string; hints?: string[] };
+        assert.equal(rec.skill_ref, "script-porting");
+        assert.ok(rec.hints?.some((h) => /requests/i.test(h)));
+      },
+    },
     { name: "cron_list", args: {} },
     { name: "list_dir", args: { path: "." } },
     { name: "skill_list", args: { query: "" }, check: (r) => assert.equal((r as { ok?: boolean }).ok, true) },
@@ -322,6 +332,15 @@ test("local-setup smoke tier tools execute on an isolated workspace tree", async
       args: { query: "PARA", root_path: `${relRoot}/knowledge-vault`, limit: 5 },
     },
     { name: "run_shell", args: { command: "printf matrix-ok", cwd: relRoot, timeout_ms: 5000 } },
+    {
+      name: "run_shell",
+      args: {
+        command: 'node -e "console.log(process.env.SMOKE_ENV_KEY)"',
+        cwd: relRoot,
+        env: { SMOKE_ENV_KEY: "matrix-env-ok" },
+        timeout_ms: 5000,
+      },
+    },
   ];
 
   for (const tc of setupCases) {

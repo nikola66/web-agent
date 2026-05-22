@@ -29,6 +29,7 @@ Canonical built-in tool picker. Other skills defer here for filesystem vs HTTP v
 | Show file to user | `artifact_present` — **`artifact-delivery`** |
 | Image / audio / video | `vision_analyze`, `audio_analyze`, `youtube_transcribe` — **`multimodal-ingest`** |
 | Memory / skills / wiki | see **`memory-layers`** (`memory_*`, `session_*`, `skill_list`, `skill_view`, `skill_manage`, `skill_bulk_save`, `wiki_*`) |
+| Skill has Python/bash scripts | **`script-porting`**, `python_to_node`, port to `scripts/*.js`, then `run_shell` **`node …`** with **`cwd`** + **`env`** |
 | One-off shell (last resort) | `run_shell` — host only; Nodebox: **`node …`** only |
 
 **Non-negotiable:** No `curl`/`npx`/`git clone` when a row above fits. Nodebox has **no** POSIX shell. Skill installs: `skill_bulk_save` / `skill_manage`, never shell.
@@ -45,7 +46,14 @@ Canonical built-in tool picker. Other skills defer here for filesystem vs HTTP v
 
 ## Surfaces
 
-- **Nodebox / WebContainer**: no POSIX `sh -c`. `run_shell` only runs **`node …`**. No pipes, `npx`, `npm`, `curl`.
+Three layers (see **`script-porting`** for porting Python skills):
+
+| Layer | Capability |
+|-------|------------|
+| **Nodebox API** | `shell.runCommand(binary, args, { cwd, env })` — bootstrap also uses `npm` |
+| **Agent `run_shell`** | **`node …` only** — optional `cwd`, `env` (maps to Nodebox `runCommand`); no POSIX `sh -c`, pipes, `curl`, `npx`, or arbitrary binaries |
+| **Nodebox runtime** | Node.js only — **no Python/pip binary** |
+
 - **Host runtime**: real `run_shell` via `sh -c` when available — still prefer dedicated tools first.
 
 ## Procedure
@@ -57,6 +65,7 @@ Canonical built-in tool picker. Other skills defer here for filesystem vs HTTP v
 ## Pitfalls
 
 - Treating POSIX tutorials as literal in Nodebox.
+- Running `python`, `pip install`, or `python3 tools/*.py` in Nodebox — port to `node scripts/*.js` first (**`script-porting`**).
 - Using `run_shell` for skill installs — use HTTPS URL + `skill_manage` / `skill_bulk_save`.
 
 ## Anti-patterns

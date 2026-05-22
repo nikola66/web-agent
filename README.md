@@ -24,7 +24,7 @@
 
 Web Agent is an open-source AI agent that runs directly in the browser on top of WebContainers. There is nothing to install to use it: no Docker, no VPS, no VM, no Mac mini, no Hostinger box, no local Python stack. Open the app, launch a profile, and start working.
 
-It is designed to feel simple for end users and capable for power users: isolated profiles, browser-local persistence, **38 built-in tools**, **16 bundled skills**, sessions, reflections, learnings, cron jobs, **planning mode** (`/plan`), a **PARA + Obsidian-style knowledge vault** (`wiki_*` tools and `/wiki_*` slash commands), and a self-improving runtime that stays on the user’s machine. For copy-paste scenarios mapped to skills and tools, start with the **[Personal Helper Playbook](docs/use-cases-playbook.md)**.
+It is designed to feel simple for end users and capable for power users: isolated profiles, browser-local persistence, **39 built-in tools**, **17 bundled skills**, sessions, reflections, learnings, cron jobs, **planning mode** (`/plan`), a **PARA + Obsidian-style knowledge vault** (`wiki_*` tools and `/wiki_*` slash commands), and a self-improving runtime that stays on the user’s machine. For copy-paste scenarios mapped to skills and tools, start with the **[Personal Helper Playbook](docs/use-cases-playbook.md)**.
 
 ## Contents
 
@@ -276,7 +276,7 @@ These power built-in web actions from the Settings panel:
 
 ## Tooling
 
-Web Agent ships with **38 native built-in tools** in seven groups. The surface was consolidated so models see four skill tools (`skill_list`, `skill_view`, `skill_manage`, `skill_bulk_save`) instead of seven overlapping names; `list_dir` lists one directory level while `find_files` searches by glob pattern.
+Web Agent ships with **39 native built-in tools** in seven groups. The surface was consolidated so models see four skill tools (`skill_list`, `skill_view`, `skill_manage`, `skill_bulk_save`) instead of seven overlapping names; `list_dir` lists one directory level while `find_files` searches by glob pattern.
 
 ### Tool Groups
 
@@ -288,7 +288,7 @@ Web Agent ships with **38 native built-in tools** in seven groups. The surface w
 | `📚 Skills` | `skill_list`, `skill_view`, `skill_manage`, `skill_bulk_save` | Discovering, reading, creating, importing, and maintaining skills |
 | `⏱️ Automation` | `cron_register`, `cron_list`, `todo_write` | Recurring jobs, heartbeat-driven workflows, and checklists |
 | `🌐 Remote & Multimodal` | `web_search`, `web_fetch`, `vision_analyze`, `youtube_transcribe`, `email` | Research, fetching live content, image analysis, transcripts, and outbound delivery |
-| `🖥️ System & Output` | `run_shell`, `system_info`, `artifact_present`, `apply_patch` | Executing commands, checking environment state, presenting artifacts, and surgical patching |
+| `🖥️ System & Output` | `run_shell`, `python_to_node`, `system_info`, `artifact_present`, `apply_patch` | Executing commands, Python→Node porting hints, environment state, artifacts, and surgical patching |
 
 <details>
 <summary><strong>🛠️ Full tool catalog</strong></summary>
@@ -313,6 +313,7 @@ Web Agent ships with **38 native built-in tools** in seven groups. The surface w
 | `📦 move_file` | Move or rename a workspace path. |
 | `🛠️ multi_edit` | Apply multiple find-and-replace edits in one file. |
 | `📄 read_file` | Read a UTF-8 file from the workspace. |
+| `🐍 python_to_node` | Read-only Python→Node porting checklist and hints for Nodebox (not an auto-transpiler). |
 | `🖥️ run_shell` | Run a shell command in the workspace runtime. |
 | `📝 session_memory_append` | Append a lightweight note to rolling session memory. |
 | `🗂️ session_memory_list` | Read the newest entries from rolling session memory. |
@@ -340,7 +341,7 @@ Web Agent ships with **38 native built-in tools** in seven groups. The surface w
 
 Skills are reusable procedures stored as `SKILL.md` files. They let Web Agent switch from raw tool usage to structured workflows that can be invoked on demand.
 
-### Bundled Skills (16)
+### Bundled Skills (17)
 
 **Hub skills** — route related workflows and cross-skill tables:
 
@@ -348,6 +349,7 @@ Skills are reusable procedures stored as `SKILL.md` files. They let Web Agent sw
 | --- | --- |
 | `/memory-layers` | Facts, session notes, wiki mirror, secret hygiene, `session_search` |
 | `/browser-runtime-map` | WebContainer limits, shell failures, file layout |
+| `/script-porting` | Python/bash skill scripts → `node scripts/*.js` for Nodebox |
 | `/artifact-delivery` | Reports, email, charts, presentation patterns |
 | `/web-agent-skill` | Evolving Web Agent itself (runtime, skills, cron, repo truth) |
 

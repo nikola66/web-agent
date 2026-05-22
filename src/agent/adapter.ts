@@ -1356,6 +1356,7 @@ export async function startWebAgent(options: AgentStartOptions): Promise<void> {
               command?: string;
               args?: string[];
               cwd?: string;
+              env?: Record<string, string>;
               timeout_ms?: number;
             };
             const cmd = String(req.command || "").trim();
@@ -1373,9 +1374,18 @@ export async function startWebAgent(options: AgentStartOptions): Promise<void> {
               const cwdRaw = req.cwd != null ? String(req.cwd).trim() : "";
               const cwdForSpawn =
                 nodeboxSpawnArgvNeedsWorkspaceCwd(args) && cwdRaw ? cwdRaw : undefined;
+              const spawnEnv =
+                req.env && typeof req.env === "object"
+                  ? Object.fromEntries(
+                      Object.entries(req.env)
+                        .filter(([k, v]) => String(k || "").trim() && v != null)
+                        .map(([k, v]) => [String(k), String(v)])
+                    )
+                  : undefined;
               const result = await runNodeboxShellCommand(cmd, args, {
                 cwd: cwdForSpawn,
                 timeoutMs,
+                ...(Object.keys(spawnEnv || {}).length ? { env: spawnEnv } : {}),
               });
               respPayload = JSON.stringify({
                 ok: true,

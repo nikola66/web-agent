@@ -22,6 +22,7 @@ const EXPECTED_TOOLS = [
   "memory_search",
   "move_file",
   "multi_edit",
+  "python_to_node",
   "read_file",
   "run_shell",
   "session_memory_append",

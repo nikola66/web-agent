@@ -467,6 +467,9 @@ function scanSkillContent(
   for (const [pattern, label] of patterns) {
     if (pattern.test(text)) dangerous.push(label);
   }
+  if (/\b(pip install|python3?|python\s+-m|\.py\b)/i.test(text)) {
+    warnings.push("contains Python/pip references — port scripts to node scripts/*.js before run_shell (skill_view script-porting)");
+  }
   if (text.length > 120_000) warnings.push("large skill content");
   for (const file of files) {
     if (!isSafeSkillRelativePath(file.path)) dangerous.push(`unsafe support path: ${file.path}`);

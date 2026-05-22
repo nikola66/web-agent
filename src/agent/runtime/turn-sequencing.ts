@@ -32,15 +32,21 @@ export function isSkillInstallIntent(input) {
   return SKILL_INSTALL_INTENT_RE.test(String(input || ""));
 }
 
+const PYTHON_SKILL_INSTALL_RE = /\b(pip install|python3?|python\s+-m|\.py\b)\b/i;
+
 /** One-shot prefix when installing from curated lists or registries. */
 export function buildSkillInstallContextPrefix(input) {
   if (!isSkillInstallIntent(input)) return null;
-  return (
+  let prefix =
     "[Skill install] Some GitHub repos are curated indexes (README + outbound links), not skill hosts. " +
     "Read the README, follow registry links (officialskills.sh / skills.sh / skillsmp) or source-repo URLs — " +
     "do not guess raw paths from list labels. On 404: web_fetch registry pages, resolve GitHub links, " +
-    "try alternate repo layouts, web_search — pivot before declaring a blocker."
-  );
+    "try alternate repo layouts, web_search — pivot before declaring a blocker.";
+  if (PYTHON_SKILL_INSTALL_RE.test(String(input || ""))) {
+    prefix +=
+      " After install, if the skill references Python or pip, call skill_view **`script-porting`** and port scripts to `node scripts/*.js` before run_shell.";
+  }
+  return prefix;
 }
 
 export const SKILL_INSTALL_PIVOT_NUDGE =

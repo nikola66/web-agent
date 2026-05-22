@@ -50,6 +50,12 @@ export const SKILLS_GUIDANCE =
   "it next time. When using a skill and finding it outdated or wrong, patch it immediately — " +
   "don't wait to be asked. Skills capture procedures; memory captures durable facts.";
 
+export const SCRIPT_PORTING_GUIDANCE =
+  "Nodebox runs JavaScript only — no `python`, `pip`, or POSIX shell. When a skill or task " +
+  "references Python scripts, `pip install`, or `.py` CLI examples, port them to ESM under " +
+  "`scripts/*.js` and run with `run_shell` (`node scripts/….js`, `cwd` at skill folder, `env` for API tokens). " +
+  "Call `skill_view` **`script-porting`** or `python_to_node` (check `run_shell_example`) before shell execution.";
+
 export function buildMemoryLayerGuidanceBlock(toolNames: string[] = []): string {
   const tools = new Set(
     (toolNames || []).map((name) => String(name || "").trim()).filter(Boolean)
@@ -82,6 +88,9 @@ export function buildMemoryLayerGuidanceBlock(toolNames: string[] = []): string 
   }
   if (tools.has("skill_manage") || tools.has("skill_bulk_save")) {
     parts.push(SKILLS_GUIDANCE);
+  }
+  if (tools.has("run_shell")) {
+    parts.push(SCRIPT_PORTING_GUIDANCE);
   }
   if (!parts.length) return "";
   return `\n\n# Memory layers\n${parts.join("\n\n")}`;

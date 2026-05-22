@@ -67,9 +67,9 @@ function hostSchedulingBlockedReason(command) {
 }
 
 function parseShellLineArgs(input) {
-  const args = [];
+  const args: string[] = [];
   let cur = "";
-  let quote = null;
+  let quote: string | null = null;
   let esc = false;
   const str = String(input || "");
   for (const ch of str) {
@@ -189,7 +189,20 @@ export async function moveFileTool({ from, to }, ctx) {
   return { ok: true };
 }
 
-async function runShellViaNodeboxIpc(command, cwd, ctxCwd, effectiveTimeoutMs, ctxSignal) {
+function normalizeShellEnv(env) {
+  if (!env || typeof env !== "object") return undefined;
+  /** @type {Record<string, string>} */
+  const out = {};
+  for (const [k, v] of Object.entries(env)) {
+    const key = String(k || "").trim();
+    if (!key) continue;
+    if (v == null) continue;
+    out[key] = String(v);
+  }
+  return Object.keys(out).length ? out : undefined;
+}
+
+async function runShellViaNodeboxIpc(command, cwd, ctxCwd, effectiveTimeoutMs, ctxSignal, env) {
   let argvStrings = normalizeNodeboxCliArgv(parseNodeboxNodeArgv(command));
   /** Same JS VM as `system_info` — Nodebox `shell.runCommand` + cwd can throw resolving `…/nodebox`. */
   if (argvStrings.length === 1 && argvStrings[0] === "--version") {
@@ -198,34 +211,44 @@ async function runShellViaNodeboxIpc(command, cwd, ctxCwd, effectiveTimeoutMs, c
     return { stdout: line, stderr: "", exit_code: 0, signal: null };
   }
   const resolvedCwd = shellCwd(cwd ?? ctxCwd);
-  let tmpScriptPath = null;
+  let tmpScriptPath: string | null = null;
   const dashE = argvStrings.indexOf("-e");
   const dashEval = argvStrings.indexOf("--eval");
   const evalIdx = dashE >= 0 ? dashE : dashEval;
   if (evalIdx >= 0 && evalIdx + 1 < argvStrings.length) {
     const scriptBody = argvStrings[evalIdx + 1];
-    tmpScriptPath = path.join(
+    const tmpPath = path.join(
       resolvedCwd,
       `.webagent/tmp/rs-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}.js`
     );
-    await fs.mkdir(path.dirname(tmpScriptPath), { recursive: true });
-    await fs.writeFile(tmpScriptPath, scriptBody, "utf8");
-    argvStrings = [...argvStrings.slice(0, evalIdx), tmpScriptPath, ...argvStrings.slice(evalIdx + 2)];
+    tmpScriptPath = tmpPath;
+    await fs.mkdir(path.dirname(tmpPath), { recursive: true });
+    await fs.writeFile(tmpPath, scriptBody, "utf8");
+    argvStrings = [...argvStrings.slice(0, evalIdx), tmpPath, ...argvStrings.slice(evalIdx + 2)];
   }
+  const shellEnv = normalizeShellEnv(env);
   const payload = {
     command: "node",
     args: argvStrings,
     cwd: resolvedCwd,
     timeout_ms: effectiveTimeoutMs,
+    ...(shellEnv ? { env: shellEnv } : {}),
   };
   if (ctxSignal?.aborted) {
     throw Object.assign(new Error("run_shell aborted before start"), { name: "AbortError" });
   }
   try {
-    const raw = await ipcSpawnRequest(payload);
-    if (!raw || typeof raw !== "object") {
+    const rawUnknown = await ipcSpawnRequest(payload);
+    if (!rawUnknown || typeof rawUnknown !== "object") {
       throw new Error("run_shell: invalid IPC response");
     }
+    const raw = rawUnknown as {
+      ok?: boolean;
+      error?: string;
+      stdout?: string;
+      stderr?: string;
+      exit_code?: number;
+    };
     if (!raw.ok) {
       throw new Error(String(raw.error || "run_shell failed"));
     }
@@ -240,10 +263,16 @@ async function runShellViaNodeboxIpc(command, cwd, ctxCwd, effectiveTimeoutMs, c
   }
 }
 
-export function runShellTool(
-  { command, cwd, timeout_ms, background = false, watch_patterns = [], notify_on_complete = true } = {},
-  ctx
-) {
+export function runShellTool(args, ctx) {
+  const {
+    command,
+    cwd,
+    env,
+    timeout_ms,
+    background = false,
+    watch_patterns = [],
+    notify_on_complete = true,
+  } = args ?? {};
   if (!command || typeof command !== "string") {
     return Promise.reject(new Error("run_shell requires `command` (string)."));
   }
@@ -271,13 +300,17 @@ export function runShellTool(
         )
       );
     }
-    return runShellViaNodeboxIpc(command, cwd, ctxCwd, effectiveTimeoutMs, ctxSignal);
+    return runShellViaNodeboxIpc(command, cwd, ctxCwd, effectiveTimeoutMs, ctxSignal, env);
   }
+
+  const shellEnv = normalizeShellEnv(env);
+  const spawnEnv = shellEnv ? { ...process.env, ...shellEnv } : undefined;
 
   if (background) {
     return new Promise((resolve, reject) => {
       const child = spawnShellCommand(command, {
         cwd: shellCwd(cwd ?? ctxCwd),
+        ...(spawnEnv ? { env: spawnEnv } : {}),
       });
       const jobId = createJobId();
       let completed = false;
@@ -413,11 +446,12 @@ export function runShellTool(
 
   return new Promise((resolve, reject) => {
     let settled = false;
-    let timer = null;
-    let killTimer = null;
-    let abortListener = null;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    let killTimer: ReturnType<typeof setTimeout> | null = null;
+    let abortListener: (() => void) | null = null;
     const child = spawnShellCommand(command, {
       cwd: shellCwd(cwd ?? ctxCwd),
+      ...(spawnEnv ? { env: spawnEnv } : {}),
     });
     let stdout = "";
     let stderr = "";
@@ -452,14 +486,14 @@ export function runShellTool(
     if (ctxSignal) {
       if (ctxSignal.aborted) {
         killChild("SIGKILL");
-        settle(Object.assign(new Error("run_shell aborted before start"), { name: "AbortError" }));
+        settle(Object.assign(new Error("run_shell aborted before start"), { name: "AbortError" }), undefined);
         return;
       }
       abortListener = () => {
         killChild("SIGTERM");
         killTimer = setTimeout(() => killChild("SIGKILL"), 1000);
-        killTimer.unref?.();
-        settle(Object.assign(new Error("run_shell aborted"), { name: "AbortError" }));
+        killTimer?.unref?.();
+        settle(Object.assign(new Error("run_shell aborted"), { name: "AbortError" }), undefined);
       };
       ctxSignal.addEventListener?.("abort", abortListener, { once: true });
     }
@@ -468,17 +502,17 @@ export function runShellTool(
       timer = setTimeout(() => {
         killChild("SIGTERM");
         killTimer = setTimeout(() => killChild("SIGKILL"), 1000);
-        killTimer.unref?.();
-        settle(new Error(`run_shell timed out after ${effectiveTimeoutMs}ms`));
+        killTimer?.unref?.();
+        settle(new Error(`run_shell timed out after ${effectiveTimeoutMs}ms`), undefined);
       }, effectiveTimeoutMs);
-      timer.unref?.();
+      timer?.unref?.();
     }
 
     const OUTPUT_CAP = 512 * 1024;
     child.stdout?.on("data", (d) => { if (stdout.length < OUTPUT_CAP) stdout += d; });
     child.stderr?.on("data", (d) => { if (stderr.length < OUTPUT_CAP) stderr += d; });
     child.on("error", (err) => {
-      settle(err);
+      settle(err, undefined);
     });
     child.on("close", (code, signal) => {
       settle(null, { stdout, stderr, exit_code: code, signal: signal || null });

@@ -67,6 +67,7 @@ test("each builtin tool has a documented execution test path", () => {
     "memory_search",
     "move_file",
     "multi_edit",
+    "python_to_node",
     "read_file",
     "run_shell",
     "session_memory_append",

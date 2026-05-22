@@ -41,3 +41,12 @@ test("buildMemoryLayerGuidanceBlock includes workspace browse guidance for read_
 test("buildMemoryLayerGuidanceBlock returns empty when no memory layer tools", () => {
   assert.equal(buildMemoryLayerGuidanceBlock(["web_fetch"]), "");
 });
+
+test("buildMemoryLayerGuidanceBlock includes script porting when run_shell enabled", () => {
+  const block = buildMemoryLayerGuidanceBlock(["run_shell", "read_file"]);
+  assert.match(block, /script-porting/);
+  assert.match(block, /python_to_node/);
+  assert.match(block, /Nodebox runs JavaScript only/);
+  assert.match(block, /`cwd`/);
+  assert.match(block, /`env`/);
+});

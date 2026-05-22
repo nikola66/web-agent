@@ -26,7 +26,7 @@
 
 Web Agent وكيل ذكاء اصطناعي مفتوح المصدر يعمل في المتصفح فوق WebContainers. There is nothing to install to use it: no Docker, no VPS, no VM, no Mac mini, no Hostinger box, no local Python stack. Open the app, launch a profile, and start working.
 
-It is designed to feel simple for end users and capable for power users: isolated profiles, browser-local persistence, **38 built-in tools**, **16 bundled skills**, sessions, reflections, learnings, cron jobs, **planning mode** (`/plan`), a **PARA + Obsidian-style knowledge vault** (`wiki_*` tools and `/wiki_*` slash commands), and a self-improving runtime that stays on the user’s machine. Start with the **[Personal Helper Playbook](docs/ar/use-cases-playbook.md)** for copy-paste scenarios.
+It is designed to feel simple for end users and capable for power users: isolated profiles, browser-local persistence, **39 built-in tools**, **17 bundled skills**, sessions, reflections, learnings, cron jobs, **planning mode** (`/plan`), a **PARA + Obsidian-style knowledge vault** (`wiki_*` tools and `/wiki_*` slash commands), and a self-improving runtime that stays on the user’s machine. Start with the **[Personal Helper Playbook](docs/ar/use-cases-playbook.md)** for copy-paste scenarios.
 
 ## المحتويات
 

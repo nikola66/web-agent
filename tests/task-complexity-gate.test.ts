@@ -147,6 +147,13 @@ test("buildSkillInstallContextPrefix warns about curated indexes", () => {
   assert.doesNotMatch(prefix!, /VoltAgent/i);
 });
 
+test("buildSkillInstallContextPrefix nudges script-porting for python skills", () => {
+  const prefix = buildSkillInstallContextPrefix("install python skill with pip install helpers");
+  assert.ok(prefix);
+  assert.match(prefix!, /script-porting/);
+  assert.match(prefix!, /node scripts/);
+});
+
 test("skillBulkSaveAllUrlItemsFailed detects total URL failure batch", () => {
   const exec = [
     {
