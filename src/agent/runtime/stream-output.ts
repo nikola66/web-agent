@@ -134,23 +134,6 @@ export function takeStdoutAtom(buffer) {
   return { atom: buffer.slice(0, len), rest: buffer.slice(len) };
 }
 
-/** Replace the last `previousLineCount` terminal rows with `content` (live markdown refresh). */
-export function rewriteTerminalBlockLines(previousLineCount: number, content: string): number {
-  const text = String(content ?? "");
-  const nextLineCount = text.length ? text.split("\n").length : 0;
-  if (previousLineCount > 0) {
-    process.stdout.write(`\x1b[${previousLineCount}A`);
-    const eraseLines = Math.max(previousLineCount, nextLineCount);
-    for (let i = 0; i < eraseLines; i++) {
-      process.stdout.write("\x1b[2K");
-      if (i < eraseLines - 1) process.stdout.write("\x1b[1B");
-    }
-    process.stdout.write(`\x1b[${eraseLines}A`);
-  }
-  if (text) process.stdout.write(text);
-  return nextLineCount;
-}
-
 export async function writeStdoutSmoothed(text) {
   let buf = text;
   let n = 0;
