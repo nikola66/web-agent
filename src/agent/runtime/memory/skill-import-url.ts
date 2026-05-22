@@ -84,6 +84,77 @@ function looksLikeHtml(text: string, contentType = ""): boolean {
   return head.startsWith("<!doctype") || head.startsWith("<html") || /<head[\s>]/i.test(head);
 }
 
+function isMarketplaceHost(host: string): boolean {
+  const h = host.toLowerCase();
+  return (
+    h.includes("skillsmp.com") ||
+    h.includes("officialskills.sh") ||
+    h.endsWith("skills.sh") ||
+    h.endsWith("cursor.directory")
+  );
+}
+
+function trimLinkSuffix(link: string): string {
+  return link.replace(/[)"'\\]+$/, "");
+}
+
+/** Alternate raw paths when a direct SKILL.md URL 404s (common repo layouts). */
+export function candidateRawSkillUrls(url: string): string[] {
+  const raw = String(url || "").trim();
+  const m = raw.match(/^https:\/\/raw\.githubusercontent\.com\/([^/]+)\/([^/]+)\/([^/]+)\/(.+)$/i);
+  if (!m) return [];
+  const [, owner, repo, ref, rest] = m;
+  let skillPath = rest.replace(/\/SKILL\.md$/i, "");
+  if (!skillPath || skillPath === rest) return [];
+
+  const bases = [
+    skillPath,
+    `skills/${skillPath}`,
+    `.agents/skills/${skillPath}`,
+    `.claude/skills/${skillPath}`,
+  ];
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const base of bases) {
+    const candidate = `https://raw.githubusercontent.com/${owner}/${repo}/${ref}/${base}/SKILL.md`;
+    if (!seen.has(candidate)) {
+      seen.add(candidate);
+      out.push(candidate);
+    }
+  }
+  return out;
+}
+
+function extractGithubSkillUrlsFromPage(body: string): string[] {
+  const text = String(body || "");
+  const out: string[] = [];
+  const seen = new Set<string>();
+
+  const treeRe =
+    /https:\/\/github\.com\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+\/tree\/[A-Za-z0-9_.-]+(?:\/[A-Za-z0-9_./-]+)?/g;
+  let treeMatch: RegExpExecArray | null;
+  while ((treeMatch = treeRe.exec(text))) {
+    const raw = githubTreeToRawSkillMd(trimLinkSuffix(treeMatch[0]));
+    if (raw && !seen.has(raw)) {
+      seen.add(raw);
+      out.push(raw);
+    }
+  }
+
+  const rawRe =
+    /https:\/\/raw\.githubusercontent\.com\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+(?:\/[A-Za-z0-9_./-]+)*\.md/gi;
+  let rawMatch: RegExpExecArray | null;
+  while ((rawMatch = rawRe.exec(text))) {
+    const link = trimLinkSuffix(rawMatch[0]);
+    if (!seen.has(link)) {
+      seen.add(link);
+      out.push(link);
+    }
+  }
+
+  return out;
+}
+
 /** When a marketplace page was fetched, resolve a raw SKILL.md URL from embedded GitHub links. */
 export function resolveSkillImportUrlFromPage(sourceUrl: string, body: string): string | null {
   const host = (() => {
@@ -93,26 +164,28 @@ export function resolveSkillImportUrlFromPage(sourceUrl: string, body: string): 
       return "";
     }
   })();
-  const isMarketplace =
-    host.includes("skillsmp.com") ||
-    host.includes("skills.sh") ||
-    host.endsWith("cursor.directory");
-  if (!isMarketplace && !looksLikeHtml(body)) return null;
+  if (!isMarketplaceHost(host) && !looksLikeHtml(body)) return null;
 
-  const treeMatch = body.match(
-    /https:\/\/github\.com\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+\/tree\/[A-Za-z0-9_.-]+(?:\/[A-Za-z0-9_./-]+)?/
-  );
-  if (treeMatch) {
-    const raw = githubTreeToRawSkillMd(treeMatch[0].replace(/[)"'\\]+$/, ""));
-    if (raw) return raw;
-  }
-
-  const rawMatch = body.match(
-    /https:\/\/raw\.githubusercontent\.com\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+(?:\/[A-Za-z0-9_./-]+)*\.md/i
-  );
-  if (rawMatch) return rawMatch[0].replace(/[)"'\\]+$/, "");
+  const candidates = extractGithubSkillUrlsFromPage(body);
+  if (candidates.length) return candidates[0];
 
   return null;
+}
+
+export function resolveAllSkillImportUrlsFromPage(sourceUrl: string, body: string): string[] {
+  const host = (() => {
+    try {
+      return new URL(sourceUrl).hostname.toLowerCase();
+    } catch {
+      return "";
+    }
+  })();
+  if (!isMarketplaceHost(host) && !looksLikeHtml(body)) return [];
+  return extractGithubSkillUrlsFromPage(body);
+}
+
+function isFetch404Error(err: unknown): boolean {
+  return /fetch failed \(404\)/i.test(errorMessage(err));
 }
 
 export async function fetchSkillImportText(url: string): Promise<string> {
@@ -151,11 +224,28 @@ export async function fetchSkillImportText(url: string): Promise<string> {
     }
   };
 
-  let { body, contentType } = await load(target);
+  const loadWithCandidates = async (fetchUrl: string) => {
+    try {
+      return await load(fetchUrl);
+    } catch (err) {
+      if (!isFetch404Error(err)) throw err;
+      for (const alt of candidateRawSkillUrls(fetchUrl)) {
+        if (alt === fetchUrl) continue;
+        try {
+          return await load(alt);
+        } catch (altErr) {
+          if (!isFetch404Error(altErr)) throw altErr;
+        }
+      }
+      throw err;
+    }
+  };
+
+  let { body, contentType } = await loadWithCandidates(target);
   if (!looksLikeSkillMarkdown(body)) {
     const alt = resolveSkillImportUrlFromPage(target, body);
     if (alt && alt !== target) {
-      const second = await load(alt);
+      const second = await loadWithCandidates(alt);
       body = second.body;
       contentType = second.contentType;
     }

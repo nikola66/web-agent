@@ -7,6 +7,8 @@ import {
   looksLikeFalseManualCronPromise,
   looksLikePostToolStall,
   looksLikePreToolPromiseStall,
+  looksLikeEmptyResponse,
+  looksLikeTruncatedResponse,
   matchesFutureActionIntent,
   matchesUserInputRequest,
   matchesTaskCompletionOrFinalState,
@@ -15,6 +17,8 @@ import {
   buildContinuationNudge,
   shouldContinueIntermediateAck,
   shouldContinueEmptyAfterTools,
+  shouldContinueEmptyResponse,
+  shouldContinueTruncation,
   shouldContinuePostToolStall,
   shouldContinuePreToolPromiseStall,
   shouldContinueCronVerification,
@@ -23,6 +27,10 @@ import {
   cronRegisterJobIdFromArgs,
   cronJobIdsFromListResult,
   MAX_INTERMEDIATE_ACK_CONTINUATIONS,
+  MAX_POST_TOOL_STALL_CONTINUATIONS,
+  MAX_PRE_TOOL_PROMISE_CONTINUATIONS,
+  MAX_EMPTY_RESPONSE_CONTINUATIONS,
+  MAX_TRUNCATION_CONTINUATIONS,
 } from "../dist/agent-runtime/turn-continuation.js";
 
 const NO_TOOLS: never[] = [];
@@ -85,6 +93,7 @@ test("looksLikeEmptyAfterTools detects empty post-tool responses", () => {
 test("buildContinuationNudge matches Hermes recovery text", () => {
   assert.match(buildContinuationNudge("intermediate_ack"), /Continue now/i);
   assert.match(buildContinuationNudge("empty_after_tools"), /empty response/i);
+  assert.match(buildContinuationNudge("empty_response"), /empty response/i);
 });
 
 test("shouldContinueIntermediateAck respects cap", () => {
@@ -153,7 +162,7 @@ test("matchesUserInputRequest ignores agent self-selection pick one of", () => {
 
 test("shouldContinuePostToolStall respects cap", () => {
   assert.equal(
-    shouldContinuePostToolStall("I'll search for the positioning first.", true, 1),
+    shouldContinuePostToolStall("I'll search for the positioning first.", true, MAX_POST_TOOL_STALL_CONTINUATIONS),
     false
   );
 });
@@ -196,7 +205,7 @@ test("shouldContinuePreToolPromiseStall respects cap", () => {
       "I'll search for companies in the target niche.",
       NO_TOOLS,
       false,
-      1
+      MAX_PRE_TOOL_PROMISE_CONTINUATIONS
     ),
     false
   );
@@ -381,6 +390,19 @@ test("shouldSuppressContinuationNudge blocks completion but not chained next ste
     ),
     false
   );
+  assert.equal(
+    shouldSuppressContinuationNudge(
+      "Every raw URL is 404. I'm done guessing. I'm going to use web_search to find design-md. If that fails, we pivot."
+    ),
+    false
+  );
+});
+
+test("looksLikePostToolStall nudges skill-install pivot promise after bulk 404s", () => {
+  const text =
+    "Every single raw URL is 404ing. I'm done guessing. I'm going to use web_search to find the actual raw content. If I can't find that one, we pivot.";
+  assert.equal(looksLikePostToolStall(text, true), true);
+  assert.equal(shouldContinuePostToolStall(text, true, 0), true);
 });
 
 test("looksLikePostToolStall rejects final deliverables and blockers", () => {
@@ -498,4 +520,40 @@ test("buildContinuationNudge incomplete_todos mentions open count", () => {
   const nudge = buildContinuationNudge("incomplete_todos", { openTodos: 8, totalTodos: 12 });
   assert.match(nudge, /8 of 12/i);
   assert.match(nudge, /todo/i);
+});
+
+test("matchesUserInputRequest ignores give me a second stall filler", () => {
+  assert.equal(matchesUserInputRequest("Give me a second to track down the remaining targets."), false);
+  assert.equal(matchesUserInputRequest("Give me a moment while I search."), false);
+  assert.equal(matchesUserInputRequest("Give me the list of domains and I'll start pulling contacts."), true);
+});
+
+test("looksLikePreToolPromiseStall nudges transcript skill-install promise with give me a second", () => {
+  const text =
+    "Let's do it. I'll dig back into the search and get those installed. Give me a second to track down the remaining targets.";
+  assert.equal(looksLikePreToolPromiseStall(text, NO_TOOLS, false), true);
+  assert.equal(shouldContinuePreToolPromiseStall(text, NO_TOOLS, false, 0), true);
+});
+
+test("looksLikePreToolPromiseStall nudges even when prior turns had tool results", () => {
+  const conv = [{ role: "user", content: "Tool results (compact JSON):\n[]" }];
+  const text = "I'll dig back into the search and install the remaining VoltAgent skills.";
+  assert.equal(hasToolContextInConversation(conv, false), true);
+  assert.equal(looksLikePreToolPromiseStall(text, conv, false), true);
+});
+
+test("looksLikeEmptyResponse and shouldContinueEmptyResponse detect blank assistant turns", () => {
+  assert.equal(looksLikeEmptyResponse(""), true);
+  assert.equal(looksLikeEmptyResponse("   "), true);
+  assert.equal(looksLikeEmptyResponse("Done."), false);
+  assert.equal(shouldContinueEmptyResponse("", 0), true);
+  assert.equal(shouldContinueEmptyResponse("", MAX_EMPTY_RESPONSE_CONTINUATIONS), false);
+});
+
+test("looksLikeTruncatedResponse and shouldContinueTruncation detect length finish", () => {
+  assert.equal(looksLikeTruncatedResponse("length"), true);
+  assert.equal(looksLikeTruncatedResponse("stop"), false);
+  assert.equal(shouldContinueTruncation("length", 0), true);
+  assert.equal(shouldContinueTruncation("length", MAX_TRUNCATION_CONTINUATIONS), false);
+  assert.match(buildContinuationNudge("truncation"), /continue exactly where you left off/i);
 });

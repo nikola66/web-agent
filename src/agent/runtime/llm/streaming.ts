@@ -338,7 +338,10 @@ function toolsCapabilityHint(toolCount, status, bodyText) {
 function parseOpenAiStreamPayload(payload, toolAcc, onContent) {
   const choices = Array.isArray(payload?.choices) ? payload.choices : [];
   let sawReasoning = false;
+  let finishReason = null;
   for (const choice of choices) {
+    const fr = choice?.finish_reason;
+    if (fr) finishReason = fr;
     const delta = choice?.delta || {};
     const content = delta.content;
     if (typeof content === "string" && content) onContent(content);
@@ -355,7 +358,7 @@ function parseOpenAiStreamPayload(payload, toolAcc, onContent) {
       toolAcc.set(idx, current);
     }
   }
-  return { sawReasoning };
+  return { sawReasoning, finishReason };
 }
 
 function shouldUseIpcStream(endpoint) {
@@ -407,6 +410,7 @@ export async function streamOpenAI(messages, cfg, onDelta, tools, options = {}) 
   let buf = "";
   const fullParts: string[] = [];
   let sawReasoning = false;
+  let finishReason = null;
   const toolAcc = new Map();
   const onContent = (content) => {
     fullParts.push(content);
@@ -417,6 +421,7 @@ export async function streamOpenAI(messages, cfg, onDelta, tools, options = {}) 
     try {
       const parsed = parseOpenAiStreamPayload(JSON.parse(data), toolAcc, onContent);
       sawReasoning = sawReasoning || parsed.sawReasoning;
+      if (parsed.finishReason) finishReason = parsed.finishReason;
     } catch {
       /* ignore malformed SSE payloads */
     }
@@ -449,6 +454,7 @@ export async function streamOpenAI(messages, cfg, onDelta, tools, options = {}) 
         let meta = { status: 0, statusText: "", contentType: "" };
         fullParts.length = 0;
         sawReasoning = false;
+        finishReason = null;
         toolAcc.clear();
         buf = "";
         await ipcProxyStreamRequest(
@@ -542,9 +548,10 @@ export async function streamOpenAI(messages, cfg, onDelta, tools, options = {}) 
       outputChars: fullText.length,
       toolCalls: toolCalls.length,
       sawReasoning,
+      finishReason,
       transport: "ipc_stream",
     });
-    return { text: fullText, toolCalls, sawReasoning };
+    return { text: fullText, toolCalls, sawReasoning, finishReason };
   }
   const reader = res.body.getReader();
   const abortStream = () => {
@@ -622,8 +629,9 @@ export async function streamOpenAI(messages, cfg, onDelta, tools, options = {}) 
     outputChars: fullText.length,
     toolCalls: toolCalls.length,
     sawReasoning,
+    finishReason,
   });
-  return { text: fullText, toolCalls, sawReasoning };
+  return { text: fullText, toolCalls, sawReasoning, finishReason };
 }
 
 function completionMessageText(payload) {

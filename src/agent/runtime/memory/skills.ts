@@ -623,15 +623,20 @@ export async function bulkSaveSkills(items) {
     }
   }
 
+  const summary: Record<string, unknown> = {
+    total: items.length,
+    saved,
+    failed,
+    blocked,
+  };
+  if (saved === 0 && failed > 0) {
+    summary.pivotHint =
+      "Batch failed — re-read the list README for registry or source-repo links; try web_fetch on those pages or web_search before giving up.";
+  }
   return {
     ok: true,
     results,
-    summary: {
-      total: items.length,
-      saved,
-      failed,
-      blocked,
-    },
+    summary,
   };
 }
 

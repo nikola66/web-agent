@@ -8,8 +8,10 @@ import { workspaceStatePath } from "./constants.js";
 
 export const MAX_INTERMEDIATE_ACK_CONTINUATIONS = 2;
 export const MAX_EMPTY_AFTER_TOOLS_CONTINUATIONS = 1;
-export const MAX_POST_TOOL_STALL_CONTINUATIONS = 1;
-export const MAX_PRE_TOOL_PROMISE_CONTINUATIONS = 1;
+export const MAX_EMPTY_RESPONSE_CONTINUATIONS = 2;
+export const MAX_TRUNCATION_CONTINUATIONS = 2;
+export const MAX_POST_TOOL_STALL_CONTINUATIONS = 2;
+export const MAX_PRE_TOOL_PROMISE_CONTINUATIONS = 2;
 export const MAX_CRON_VERIFY_CONTINUATIONS = 1;
 export const MAX_INCOMPLETE_TODO_CONTINUATIONS = 2;
 
@@ -85,9 +87,16 @@ export function matchesFutureActionIntent(text: string): boolean {
   return false;
 }
 
+/** Agent stall filler — not a request for user-supplied input. */
+const AGENT_STALL_PHRASE_RES: RegExp[] = [
+  /\bgive me a (?:second|moment|minute|sec|bit|while|few)\b/i,
+  /\bbear with me\b/i,
+  /\bjust a (?:second|moment|minute|sec)\b/i,
+];
+
 /** English patterns where the agent is asking the user to decide, choose, or supply info — do not nudge. */
 const USER_INPUT_REQUEST_RES: RegExp[] = [
-  /\bgive me\b/i,
+  /\bgive me (?!(?:a )?(?:second|moment|minute|sec|bit|while|few)\b)/i,
   /\bplease provide\b/i,
   /\bplease send\b/i,
   /\bsend me\b/i,
@@ -176,6 +185,7 @@ function hasChoicePromptNearEnd(low: string): boolean {
 export function matchesUserInputRequest(text: string): boolean {
   const low = String(text || "").trim().toLowerCase();
   if (!low) return false;
+  if (AGENT_STALL_PHRASE_RES.some((re) => re.test(low))) return false;
   if (USER_INPUT_REQUEST_RES.some((re) => re.test(low))) return true;
   if (endsWithUserDirectedQuestion(low)) return true;
   if (hasChoicePromptNearEnd(low)) return true;
@@ -256,6 +266,22 @@ function tailPromisesFurtherAction(text: string): boolean {
   return ACTION_MARKERS.some((marker) => tail.includes(marker));
 }
 
+const PIVOT_ACTION_TAIL_RES: RegExp[] = [
+  /\bweb_search\b/i,
+  /\bweb_fetch\b/i,
+  /\b(?:i['']?ll|i will)\s+(?:try|use|fetch|search|look)\b/i,
+  /\bpivot\b/i,
+  /\bofficialskills\b/i,
+  /\bdone guessing\b/i,
+  /\bghost town\b/i,
+];
+
+function tailPromisesPivotAction(text: string): boolean {
+  const tail = tailSentences(text, 3);
+  if (PIVOT_ACTION_TAIL_RES.some((re) => re.test(tail))) return true;
+  return matchesFutureActionIntent(tail);
+}
+
 /** Model promises to run a cron job manually — not supported. */
 export function looksLikeFalseManualCronPromise(text: string): boolean {
   const low = String(text || "").trim().toLowerCase();
@@ -287,7 +313,10 @@ export function shouldSuppressContinuationNudge(text: string): boolean {
   const raw = String(text || "").trim();
   if (!raw) return false;
   if (matchesUserInputRequest(raw)) return true;
-  if (matchesTaskCompletionOrFinalState(raw) && !tailPromisesFurtherAction(raw)) return true;
+  if (matchesTaskCompletionOrFinalState(raw)) {
+    if (tailPromisesFurtherAction(raw) || tailPromisesPivotAction(raw)) return false;
+    return true;
+  }
   return false;
 }
 
@@ -455,20 +484,29 @@ export function looksLikePostToolStall(visible: string, executedToolsInTurn: boo
   return looksLikeActionPromiseStall(visible);
 }
 
-/** Before any tools: promised action but no tool calls (research/outreach tasks without workspace paths). */
+/** Before any tools this turn: promised action but no tool calls. */
 export function looksLikePreToolPromiseStall(
   visible: string,
-  messages: ConvMsg[],
+  _messages: ConvMsg[],
   executedToolsInTurn: boolean
 ): boolean {
   if (executedToolsInTurn) return false;
-  if (hasToolContextInConversation(messages, executedToolsInTurn)) return false;
   return looksLikeActionPromiseStall(visible);
+}
+
+export function looksLikeEmptyResponse(visible: string): boolean {
+  return !String(visible || "").trim();
+}
+
+export function looksLikeTruncatedResponse(finishReason: string | null | undefined): boolean {
+  return String(finishReason || "").trim().toLowerCase() === "length";
 }
 
 export type ContinuationNudgeKind =
   | "intermediate_ack"
   | "empty_after_tools"
+  | "empty_response"
+  | "truncation"
   | "post_tool_stall"
   | "pre_tool_promise"
   | "cron_verify"
@@ -575,6 +613,14 @@ export function buildContinuationNudge(
       "Please process the tool results above and continue with the task."
     );
   }
+  if (kind === "empty_response") {
+    return (
+      "You returned an empty response. Continue the task now by calling the required tools."
+    );
+  }
+  if (kind === "truncation") {
+    return "Continue exactly where you left off.";
+  }
   if (kind === "post_tool_stall") {
     const cronHint = extra?.falseManualCron
       ? " There is no manual cron run — jobs execute only on heartbeat ticks while the tab is open. " +
@@ -632,6 +678,14 @@ export function buildEmptyRecoveryUserMessage(): ConvMsg & { _empty_recovery_syn
   };
 }
 
+export function buildEmptyResponseRecoveryUserMessage(): ConvMsg & { _empty_recovery_synthetic: true } {
+  return {
+    role: "user",
+    content: buildContinuationNudge("empty_response"),
+    _empty_recovery_synthetic: true,
+  };
+}
+
 export function shouldContinueIntermediateAck(
   userMessage: string,
   assistantContent: string,
@@ -655,6 +709,22 @@ export function shouldContinueEmptyAfterTools(
 ): boolean {
   if (emptyAfterToolsContinuations >= MAX_EMPTY_AFTER_TOOLS_CONTINUATIONS) return false;
   return looksLikeEmptyAfterTools(visible, executedToolsInTurn);
+}
+
+export function shouldContinueEmptyResponse(
+  visible: string,
+  emptyResponseContinuations: number
+): boolean {
+  if (emptyResponseContinuations >= MAX_EMPTY_RESPONSE_CONTINUATIONS) return false;
+  return looksLikeEmptyResponse(visible);
+}
+
+export function shouldContinueTruncation(
+  finishReason: string | null | undefined,
+  truncationContinuations: number
+): boolean {
+  if (truncationContinuations >= MAX_TRUNCATION_CONTINUATIONS) return false;
+  return looksLikeTruncatedResponse(finishReason);
 }
 
 export function shouldContinuePostToolStall(

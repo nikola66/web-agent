@@ -70,6 +70,11 @@ import {
   buildPlanExecutionContextPrefix,
   buildExecutionContinuationContextPrefix,
   isExecutionContinuationIntent,
+  isSkillInstallIntent,
+  buildSkillInstallContextPrefix,
+  SKILL_INSTALL_PIVOT_NUDGE,
+  skillBulkSaveAllUrlItemsFailed,
+  webFetchTargetsRegistryUrl,
 } from "./turn-sequencing.js";
 import { buildExecutionGuidanceBlock } from "./execution-guidance.js";
 import {
@@ -81,16 +86,19 @@ import { buildMemoryLayerGuidanceBlock } from "./memory-guidance.js";
 import {
   buildContinuationNudge,
   buildEmptyRecoveryUserMessage,
+  buildEmptyResponseRecoveryUserMessage,
   buildSyntheticEmptyAssistantMessage,
   cronJobIdsFromListResult,
   cronRegisterJobIdFromArgs,
   looksLikeFalseManualCronPromise,
   shouldContinueCronVerification,
   shouldContinueEmptyAfterTools,
+  shouldContinueEmptyResponse,
   shouldContinueIncompleteTodosAsync,
   shouldContinueIntermediateAck,
   shouldContinuePostToolStall,
   shouldContinuePreToolPromiseStall,
+  shouldContinueTruncation,
 } from "./turn-continuation.js";
 import { dropTrailingEmptyResponseScaffolding, sanitizeMessagesForLlm } from "./message-sanitizer.js";
 import { errorMessage } from "./utils.js";
@@ -116,7 +124,7 @@ import {
   scheduleBackgroundReview,
 } from "./background-review.js";
 
-const MAX_AGENT_ROUNDS = Math.max(1, Number(typeof process !== "undefined" ? process.env?.WEBAGENT_MAX_AGENT_ROUNDS : undefined) || 64);
+const MAX_AGENT_ROUNDS = Math.max(1, Number(typeof process !== "undefined" ? process.env?.WEBAGENT_MAX_AGENT_ROUNDS : undefined) || 90);
 
 function resolveMaxAgentRounds(turnMeta: Record<string, unknown>): number {
   const custom = Number(turnMeta?.maxAgentRounds);
@@ -135,6 +143,20 @@ function emitTurnStopLine(message: string): void {
   if (!isDebugLogEnabled()) return;
   process.stdout.write(dim(`▸ stopped: ${message}\n\n`));
 }
+
+async function logTurnStopReason(
+  reason: string,
+  extra?: { round?: number; continuationRecoveriesFired?: number }
+): Promise<void> {
+  await logDebugEvent("turn_stop_reason", {
+    reason,
+    round: extra?.round,
+    continuationRecoveriesFired: extra?.continuationRecoveriesFired,
+  });
+}
+
+const REASONING_ONLY_NO_VISIBLE_MSG =
+  "The model returned internal reasoning tokens but no visible answer. Try again or choose a non-reasoning model.";
 
 const MAX_TOOL_RESULT_INLINE_CHARS = Math.max(
   200,
@@ -316,6 +338,10 @@ export async function agentTurn(
     !turnMeta?.textOnly && originalUserInput
       ? buildExecutionContinuationContextPrefix(originalUserInput)
       : null;
+  const skillInstallPrefix =
+    !turnMeta?.textOnly && originalUserInput
+      ? buildSkillInstallContextPrefix(originalUserInput)
+      : null;
   const volatileToolHint =
     buildExecutionGuidanceBlock(typeof cfg.model === "string" ? cfg.model : null) +
     buildMemoryLayerGuidanceBlock(toolNames) +
@@ -396,17 +422,25 @@ export async function agentTurn(
   if (continuationPrefix) {
     conv.push({ role: "user", content: continuationPrefix });
   }
+  if (skillInstallPrefix && skillInstallPrefix !== continuationPrefix) {
+    conv.push({ role: "user", content: skillInstallPrefix });
+  }
 
   let usedTodoWriteInTurn = false;
   let skillMutatingCalledInTurn = false;
   let intermediateAckContinuations = 0;
   let emptyAfterToolsContinuations = 0;
+  let emptyResponseContinuations = 0;
+  let truncationContinuations = 0;
   let postToolStallContinuations = 0;
   let preToolPromiseContinuations = 0;
   let cronVerifyContinuations = 0;
   let incompleteTodoContinuations = 0;
   const pendingCronRegisterIds = new Set<string>();
   let continuationRecoveriesFired = 0;
+  let skillInstallPivotNudgeFired = false;
+  const skillInstallIntent =
+    isSkillInstallIntent(originalUserInput) || !!continuationPrefix || !!skillInstallPrefix;
 
   const agentName = process.env.WEBAGENT_AGENT_NAME || process.env.WEBAGENT_PROFILE_NAME || "Agent";
   let turnHeaderPrinted = false;
@@ -416,6 +450,7 @@ export async function agentTurn(
     while (round < maxAgentRounds) {
       if (turnController.signal.aborted) {
         run.errors.push("turn aborted");
+        await logTurnStopReason("turn_aborted", { round, continuationRecoveriesFired });
         break;
       }
       round++;
@@ -471,6 +506,7 @@ export async function agentTurn(
         });
       }
       if (streamAborted) {
+        await logTurnStopReason("stream_aborted", { round, continuationRecoveriesFired });
         emitTurnStopLine("stream_aborted");
         break;
       }
@@ -526,14 +562,12 @@ export async function agentTurn(
         skippedAlreadySuccessfulToolCalls: duplicateSuccessfulTools.length,
       });
       let visible = sanitizeAssistantVisibleText(plainCommandParsed.visible, toolNames);
-      if (!visible.trim() && streamResult?.sawReasoning && !tools.length) {
-        visible =
-          "The model returned internal reasoning tokens but no visible answer. Try again or choose a non-reasoning model.";
-      }
       if (!visible.trim() && streamedVisible.trim()) {
         visible = sanitizeAssistantVisibleText(streamedVisible, toolNames);
       }
       visible = normalizeLatexInlineSymbols(repairExactResponseText(originalUserInput, visible));
+      const reasoningOnlyNoVisible =
+        !visible.trim() && !!streamResult?.sawReasoning && !tools.length;
       if ((visible.trim() || clarifyEmitted) && !quietTurn) {
         run.final_visible_assistant_text = visible;
         const rendered = visible.trim() ? renderMarkdownToAnsi(visible) : "";
@@ -583,6 +617,7 @@ export async function agentTurn(
           round,
           blockCount: clarifyParsed.blocks.length,
         });
+        await logTurnStopReason("clarify_offer", { round, continuationRecoveriesFired });
         emitTurnStopLine("clarify_offer");
         break;
       }
@@ -649,6 +684,31 @@ export async function agentTurn(
           await logDebugEvent("turn_empty_after_tools_continuation", {
             round,
             count: emptyAfterToolsContinuations,
+          });
+          continue;
+        }
+        if (shouldContinueEmptyResponse(visible, emptyResponseContinuations)) {
+          emptyResponseContinuations++;
+          continuationRecoveriesFired++;
+          if (conv.length && (conv[conv.length - 1] as ChatTurnMsg).role === "assistant") {
+            conv.pop();
+          }
+          conv.push(buildSyntheticEmptyAssistantMessage());
+          conv.push(buildEmptyResponseRecoveryUserMessage());
+          await logDebugEvent("turn_empty_response_continuation", {
+            round,
+            count: emptyResponseContinuations,
+          });
+          continue;
+        }
+        if (shouldContinueTruncation(streamResult?.finishReason, truncationContinuations)) {
+          truncationContinuations++;
+          continuationRecoveriesFired++;
+          conv.push({ role: "user", content: buildContinuationNudge("truncation") });
+          await logDebugEvent("turn_truncation_continuation", {
+            round,
+            count: truncationContinuations,
+            finishReason: streamResult?.finishReason,
           });
           continue;
         }
@@ -728,20 +788,42 @@ export async function agentTurn(
           });
           continue;
         }
+        let stopReason = executedToolsInTurn ? "post_tool_no_continue" : "no_tools_no_continue";
+        if (stopReason === "no_tools_no_continue" && reasoningOnlyNoVisible) {
+          stopReason = "reasoning_only_no_visible";
+          visible = REASONING_ONLY_NO_VISIBLE_MSG;
+          run.final_visible_assistant_text = visible;
+          if (conv.length && (conv[conv.length - 1] as ChatTurnMsg).role === "assistant") {
+            conv[conv.length - 1] = { role: "assistant", content: visible };
+          }
+          if (!quietTurn && visible.trim()) {
+            if (!turnHeaderPrinted) {
+              process.stdout.write(`${bold(cyan(agentName))}\n`);
+              turnHeaderPrinted = true;
+            } else {
+              process.stdout.write("\n");
+            }
+            const rendered = renderMarkdownToAnsi(visible);
+            await writeStdoutSmoothed(`${prefixBlock(rendered, false)}\n\n`);
+          }
+        }
         await logDebugEvent("turn_completed", {
           round,
           durationMs: Date.now() - roundStartedAt,
           continued: false,
+          stopReason,
+          continuationRecoveriesFired,
+          reasoningOnlyNoVisible,
         });
-        emitTurnStopLine(
-          executedToolsInTurn ? "post_tool_no_continue" : "no_tools_no_continue"
-        );
+        await logTurnStopReason(stopReason, { round, continuationRecoveriesFired });
+        emitTurnStopLine(stopReason);
         break;
       }
 
       if (turnController.signal.aborted) {
         run.errors.push("turn aborted");
         await logDebugEvent("turn_aborted_before_tools", { round, toolCount: tools.length });
+        await logTurnStopReason("turn_aborted_before_tools", { round, continuationRecoveriesFired });
         break;
       }
 
@@ -902,6 +984,7 @@ export async function agentTurn(
           createSystemLineTranscriptEvent({ round, text: reason }),
           { round }
         );
+        await logTurnStopReason("tool_guardrail", { round, continuationRecoveriesFired });
         emitTurnStopLine("tool_guardrail");
         break;
       }
@@ -917,6 +1000,15 @@ export async function agentTurn(
             "Research reminder: your last step was search-only. Run web_fetch on at least two URLs from those results (YouTube channel or video pages first) before concluding.",
         });
       }
+      if (
+        !skillInstallPivotNudgeFired &&
+        skillInstallIntent &&
+        skillBulkSaveAllUrlItemsFailed(exec) &&
+        !webFetchTargetsRegistryUrl(tools, exec)
+      ) {
+        skillInstallPivotNudgeFired = true;
+        conv.push({ role: "user", content: SKILL_INSTALL_PIVOT_NUDGE });
+      }
       await logDebugEvent("turn_completed", {
         round,
         durationMs: Date.now() - roundStartedAt,
@@ -925,6 +1017,7 @@ export async function agentTurn(
       if (turnController.signal.aborted) {
         run.errors.push("turn aborted");
         await logDebugEvent("turn_aborted_after_tools", { round, toolCount: tools.length });
+        await logTurnStopReason("turn_aborted_after_tools", { round, continuationRecoveriesFired });
         break;
       }
     }
@@ -934,6 +1027,10 @@ export async function agentTurn(
     });
     if (round >= maxAgentRounds && !turnController.signal.aborted) {
       run.errors.push(`agent round cap reached (${maxAgentRounds})`);
+      await logTurnStopReason(`max_rounds (${maxAgentRounds})`, {
+        round,
+        continuationRecoveriesFired,
+      });
       emitTurnStopLine(`max_rounds (${maxAgentRounds})`);
       await logDebugEvent("agent_turn_round_cap_reached", {
         rounds: round,

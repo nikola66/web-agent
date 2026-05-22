@@ -33,6 +33,36 @@ const LOOP_RECOVERY_CASES: LoopRecoveryCase[] = [
     },
   },
   {
+    id: "continue_intent_install_resume",
+    check: () => {
+      assert.equal(isExecutionContinuationIntent("Shall we continue installing them?"), true);
+      const prefix = buildExecutionContinuationContextPrefix("Shall we continue installing them?");
+      assert.ok(prefix);
+      assert.match(prefix!, /skill install/i);
+    },
+  },
+  {
+    id: "post_tool_skill_install_pivot_promise",
+    check: () => {
+      const text =
+        "Every single raw URL is 404ing. I'm done guessing. I'm going to use web_search to find the actual raw content for design-md. If I can't find that one, the whole repo is a ghost town and we pivot.";
+      assert.equal(shouldContinuePostToolStall(text, true, 0), true);
+      assert.equal(
+        looksLikePostToolStall(text, true),
+        true
+      );
+    },
+  },
+  {
+    id: "pre_tool_skill_install_give_me_a_second",
+    check: () => {
+      const text =
+        "Let's do it. I'll dig back into the search and get those installed. Give me a second to track down the remaining targets.";
+      const conv = [{ role: "user", content: "Tool results (compact JSON):\n[]" }];
+      assert.equal(looksLikePreToolPromiseStall(text, conv, false), true);
+    },
+  },
+  {
     id: "post_tool_trying_wider_search",
     check: () => {
       const text = 'Trying a wider search for any "Ainex" or "outreach" files.';

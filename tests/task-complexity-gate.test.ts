@@ -8,6 +8,10 @@ import {
   isExplicitPlanExecutionRequest,
   buildPlanExecutionContextPrefix,
   isExecutionContinuationIntent,
+  isSkillInstallIntent,
+  buildSkillInstallContextPrefix,
+  skillBulkSaveAllUrlItemsFailed,
+  webFetchTargetsRegistryUrl,
 } from "../dist/agent-runtime/turn-sequencing.js";
 import { buildPlanModeUserPrompt } from "../dist/agent-runtime/planning-slash.js";
 
@@ -80,6 +84,9 @@ test("estimateTaskComplexity stays simple for continuation directives", () => {
   assert.equal(isExecutionContinuationIntent("Continue until completion"), true);
   assert.equal(isExecutionContinuationIntent("Continue"), true);
   assert.equal(isExecutionContinuationIntent("keep going"), true);
+  assert.equal(isExecutionContinuationIntent("Shall we continue installing them?"), true);
+  assert.equal(isExecutionContinuationIntent("Let's continue with the skill install"), true);
+  assert.equal(isExecutionContinuationIntent("continue installing the remaining skills"), true);
   const r = estimateTaskComplexity("Continue until completion");
   assert.equal(r.tier, "simple");
   assert.equal(r.estimatedSteps, 1);
@@ -123,4 +130,46 @@ test("buildPlanExecutionContextPrefix returns prefix only for explicit execution
     buildPlanExecutionContextPrefix("execute the plan") ?? "",
     /\[Approved plan execution context\]/
   );
+});
+
+test("isSkillInstallIntent detects install and registry mentions", () => {
+  assert.equal(isSkillInstallIntent("Install skills from this awesome list"), true);
+  assert.equal(isSkillInstallIntent("Continue installing them"), true);
+  assert.equal(isSkillInstallIntent("https://officialskills.sh/foo/bar"), true);
+  assert.equal(isSkillInstallIntent("What is the weather"), false);
+});
+
+test("buildSkillInstallContextPrefix warns about curated indexes", () => {
+  const prefix = buildSkillInstallContextPrefix("bulk save skills from officialskills.sh");
+  assert.ok(prefix);
+  assert.match(prefix!, /indexes/i);
+  assert.match(prefix!, /do not guess raw paths/i);
+  assert.doesNotMatch(prefix!, /VoltAgent/i);
+});
+
+test("skillBulkSaveAllUrlItemsFailed detects total URL failure batch", () => {
+  const exec = [
+    {
+      tool: "skill_bulk_save",
+      result: { summary: { saved: 0, failed: 11, blocked: 0 } },
+    },
+  ];
+  assert.equal(skillBulkSaveAllUrlItemsFailed(exec), true);
+  assert.equal(
+    skillBulkSaveAllUrlItemsFailed([
+      { tool: "skill_bulk_save", result: { summary: { saved: 2, failed: 1, blocked: 0 } } },
+    ]),
+    false
+  );
+});
+
+test("webFetchTargetsRegistryUrl detects officialskills fetch", () => {
+  const tools = [
+    {
+      name: "web_fetch",
+      arguments: { url: "https://officialskills.sh/anthropics/skills/frontend-design" },
+    },
+  ];
+  const exec = [{ tool: "web_fetch", result: { ok: true } }];
+  assert.equal(webFetchTargetsRegistryUrl(tools, exec), true);
 });

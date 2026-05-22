@@ -354,7 +354,7 @@ export async function main() {
           warmName ? `Address ${warmName} naturally by name once.` : "Use a warm, natural hello (do not use the placeholder word \"User\" as their name).",
           "PRIOR_CONTEXT is from the last session (recent chat, session notes, and a little saved memory). Welcome them back and continue naturally from where things left off.",
           "You MUST reference one specific task, thread, or detail from PRIOR_CONTEXT (paraphrase; no quotes; no role labels like \"User:\" or \"Session note:\").",
-          "If work looked unfinished, briefly acknowledge it and offer to pick up — never imply a blank slate.",
+          "If work looked unfinished, briefly state what was in progress and that you're ready to continue — do not ask whether to pivot or try a new angle unless PRIOR_CONTEXT shows the user explicitly wanted to stop.",
           "Keep it to 1–2 friendly sentences. No lists or bullets.",
           "Do not mention tools, APIs, system prompts, reboots, or that you read context.",
           "",

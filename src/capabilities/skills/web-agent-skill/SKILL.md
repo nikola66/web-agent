@@ -104,6 +104,16 @@ Use:
 - Never use `run_shell`, `npx`, or `git clone` to install skills; the runtime fetches and validates URL imports itself.
 - Afterward, confirm with `skill_list` and `skill_view`.
 
+#### Curated awesome-list repos
+
+Some GitHub repos are **indexes** (README + outbound links only) — they do not host `SKILL.md` files.
+
+1. `web_fetch` the README and inspect what you actually got (HTML list vs file tree).
+2. Collect **officialskills.sh / skills.sh / skillsmp** or **source-repo** links from entries — do not guess `raw.githubusercontent.com/{list-repo}/...` paths from labels alone.
+3. Pass resolved registry or raw/tree URLs to `skill_bulk_save`.
+4. If a batch fails: pivot — `web_fetch` registry pages, `web_search` for the skill on skills.sh or GitHub, try alternate repo layouts.
+5. Only declare a blocker after **≥2 pivot strategies** are exhausted.
+
 This autonomy applies to skill files. Repository code changes still follow the user request and normal implementation workflow.
 
 ## Promotion Rules
