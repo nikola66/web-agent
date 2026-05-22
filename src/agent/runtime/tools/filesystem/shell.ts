@@ -18,6 +18,11 @@ import {
 } from "../../workspace-paths.js";
 import { withPathHints } from "./path-hints.js";
 import { ipcSpawnRequest } from "../../ipc.js";
+import {
+  detectHttpIntentInShellCommand,
+  formatShellHttpMisrouteError,
+} from "../http-tool-routing.js";
+import { shellMemorySpillBypassBlockedMessage } from "../../memory/internal-paths.js";
 
 const WATCH_MIN_INTERVAL_MS = 15_000;
 const WATCH_STRIKE_LIMIT = 3;
@@ -278,6 +283,8 @@ export function runShellTool(args, ctx) {
   }
   const blocked = hostSchedulingBlockedReason(command);
   if (blocked) return Promise.reject(new Error(blocked));
+  const spillBypass = shellMemorySpillBypassBlockedMessage(command);
+  if (spillBypass) return Promise.reject(new Error(spillBypass));
   const ctxCwd = ctx?.cwd ?? WS;
   const ctxTimeout = Number(ctx?.timeoutMs);
   const argTimeout = Number(timeout_ms);
@@ -299,6 +306,10 @@ export function runShellTool(args, ctx) {
           "run_shell (Nodebox): background mode is not supported. Omit `background` or use a full Node runtime."
         )
       );
+    }
+    const httpIntent = detectHttpIntentInShellCommand(command);
+    if (httpIntent.detected) {
+      return Promise.reject(new Error(formatShellHttpMisrouteError(httpIntent)));
     }
     return runShellViaNodeboxIpc(command, cwd, ctxCwd, effectiveTimeoutMs, ctxSignal, env);
   }

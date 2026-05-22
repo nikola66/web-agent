@@ -82,6 +82,7 @@ test("each builtin tool has a documented execution test path", () => {
     "tree",
     "vision_analyze",
     "web_fetch",
+    "web_post",
     "web_search",
     "wiki_search",
     "wiki_setup",

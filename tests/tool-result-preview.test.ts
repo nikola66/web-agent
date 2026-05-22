@@ -14,6 +14,16 @@ test("summarizeToolResultPreview includes text excerpt for web_fetch-shaped resu
   assert.match(s, /…$/);
 });
 
+test("summarizeToolResultPreview includes JSON data excerpt for web_fetch", () => {
+  const s = summarizeToolResultPreview({
+    ok: true,
+    url: "https://api.example.com/collections",
+    data: [{ collection: "job_posts" }, { collection: "articles" }],
+  });
+  assert.match(s, /^data \(\d+ chars\):/);
+  assert.match(s, /job_posts/);
+});
+
 test("summarizeToolResultPreview includes longer content when from_snapshot", () => {
   const body = "x".repeat(3_000);
   const s = summarizeToolResultPreview({

@@ -51,6 +51,36 @@ function classifyFromMessage(message: string, statusHint: number | null): Omit<C
     return { reason, retryable, shouldCompress, shouldFallback, error_code, hintBase: "User declined this tool execution." };
   }
 
+  if (/run_shell \(nodebox\):\s*HTTP calls belong in/i.test(message)) {
+    reason = "format_error";
+    retryable = false;
+    shouldFallback = true;
+    error_code = "shell_http_misroute";
+    return {
+      reason,
+      retryable,
+      shouldCompress,
+      shouldFallback,
+      error_code,
+      hintBase: "Use web_fetch (GET + headers) or web_post (POST/GraphQL) instead of run_shell for HTTP.",
+    };
+  }
+
+  if (/cannot find module ['"]axios['"]|require is not defined/i.test(message)) {
+    reason = "format_error";
+    retryable = false;
+    shouldFallback = true;
+    error_code = "shell_no_axios";
+    return {
+      reason,
+      retryable,
+      shouldCompress,
+      shouldFallback,
+      error_code,
+      hintBase: "axios/require is unavailable in Nodebox shell — use web_fetch or web_post for HTTP.",
+    };
+  }
+
   if (/run_shell \(nodebox\):\s*no os shell/i.test(message)) {
     reason = "unknown";
     retryable = false;
@@ -63,7 +93,7 @@ function classifyFromMessage(message: string, statusHint: number | null): Omit<C
       shouldFallback,
       error_code,
       hintBase:
-        "Nodebox has no POSIX shell — only `node …`. Use grep, read_file, web_fetch, or node -e; do not retry shell pipelines or external binaries.",
+        "Nodebox has no POSIX shell — only `node …`. Use web_fetch, web_post, grep, read_file, or local node scripts; do not retry shell pipelines or external binaries.",
     };
   }
 
@@ -137,7 +167,17 @@ function classifyFromMessage(message: string, statusHint: number | null): Omit<C
     reason = "auth";
     retryable = false;
     error_code = "auth_error";
-    return { reason, retryable, shouldCompress, shouldFallback, error_code, hintBase: "Authentication/authorization failed — check credentials or permissions." };
+    const httpToolHint = /web_fetch|HTTP request failed/i.test(message)
+      ? " Add Authorization in web_fetch/web_post headers — do not move auth to run_shell."
+      : " Check credentials or permissions.";
+    return {
+      reason,
+      retryable,
+      shouldCompress,
+      shouldFallback,
+      error_code,
+      hintBase: `Authentication/authorization failed —${httpToolHint}`,
+    };
   }
 
   if (

@@ -5,12 +5,15 @@
 
 import fs from "node:fs/promises";
 import { workspaceStatePath } from "./constants.js";
+import { isApiCallIntent } from "./turn-sequencing.js";
 
 export const MAX_INTERMEDIATE_ACK_CONTINUATIONS = 2;
 export const MAX_EMPTY_AFTER_TOOLS_CONTINUATIONS = 1;
 export const MAX_EMPTY_RESPONSE_CONTINUATIONS = 2;
 export const MAX_TRUNCATION_CONTINUATIONS = 2;
 export const MAX_POST_TOOL_STALL_CONTINUATIONS = 2;
+export const MAX_SNAPSHOT_READ_STALL_CONTINUATIONS = 2;
+export const MAX_API_DISCOVERY_STALL_CONTINUATIONS = 1;
 export const MAX_PRE_TOOL_PROMISE_CONTINUATIONS = 2;
 export const MAX_CRON_VERIFY_CONTINUATIONS = 1;
 export const MAX_INCOMPLETE_TODO_CONTINUATIONS = 2;
@@ -484,6 +487,95 @@ export function looksLikePostToolStall(visible: string, executedToolsInTurn: boo
   return looksLikeActionPromiseStall(visible);
 }
 
+type SnapshotReadExecution = {
+  tool?: string;
+  result?: { path?: string; from_snapshot?: boolean };
+};
+
+/** After read_file on memory/snapshots: model narrates a loop instead of using unwrapped tool output. */
+export function looksLikeSnapshotReadStall(
+  visible: string,
+  executedToolsInTurn: boolean,
+  lastExecutions: SnapshotReadExecution[]
+): boolean {
+  if (!executedToolsInTurn || !lastExecutions?.length) return false;
+  const readSnapshot = lastExecutions.some(
+    (item) =>
+      item?.tool === "read_file" &&
+      (item?.result?.from_snapshot === true ||
+        String(item?.result?.path || "").includes("memory/snapshots/"))
+  );
+  if (!readSnapshot) return false;
+  const low = String(visible || "").trim().toLowerCase();
+  if (!low) return true;
+  if (/\b(?:snapshot|result_ref|spill)\b/.test(low) && (/\bloop\b/.test(low) || /\bredirect/.test(low))) {
+    return true;
+  }
+  if (
+    /\b(?:snapshot|result_ref|spill)\b/.test(low) &&
+    /\b(?:empty|nothing|no data|didn't provide|did not provide|glitch|fighting|stop fighting|not help)\b/.test(
+      low
+    )
+  ) {
+    return true;
+  }
+  if (
+    /\b(?:read(?:ing)?|rerun(?:ning)?)\b.*\b(?:snapshot|result_ref)\b/.test(low) ||
+    /\b(?:snapshot|result_ref)\b.*\b(?:again|one more time|properly|different approach)\b/.test(low)
+  ) {
+    return true;
+  }
+  if (/\bmemory\/runs\b/.test(low) || /\brun_\d+/.test(low)) return true;
+  return looksLikeActionPromiseStall(visible);
+}
+
+type ApiDiscoveryExecution = {
+  tool?: string;
+  result?: { ok?: boolean; url?: string; status?: number };
+};
+
+function httpResourcePathDepth(url: string): number {
+  try {
+    return new URL(String(url || "")).pathname.split("/").filter(Boolean).length;
+  } catch {
+    const tail = String(url || "").split("?")[0]?.split("#")[0] ?? "";
+    const segments = tail.split("/").filter(Boolean).length;
+    return segments > 0 ? segments - 1 : 0;
+  }
+}
+
+/** After 403/404 on a guessed resource path, model asks user instead of skill discovery. */
+export function looksLikeApiDiscoveryStall(
+  userMessage: string,
+  visible: string,
+  executedToolsInTurn: boolean,
+  lastExecutions: ApiDiscoveryExecution[]
+): boolean {
+  if (!executedToolsInTurn || !lastExecutions?.length) return false;
+  if (!isApiCallIntent(userMessage)) return false;
+  const lastHttp = [...lastExecutions]
+    .reverse()
+    .find((e) => e?.tool === "web_fetch" || e?.tool === "web_post");
+  const r = lastHttp?.result;
+  if (!r || r.ok !== false) return false;
+  const status = Number(r.status);
+  if (status !== 403 && status !== 404) return false;
+  if (httpResourcePathDepth(String(r.url || "")) < 2) return false;
+  const low = String(visible || "").toLowerCase();
+  if (/\bskill_view\b/.test(low) && /\bdiscover|list|metadata|schema|health|ping\b/.test(low)) {
+    return false;
+  }
+  if (/\bweb_fetch\b/.test(low) && /\blist|metadata|discover|schema\b/.test(low)) return false;
+  if (
+    /\bslug|resource name|flying blind|don't have a list|do you know|should i try to list|list all available|what we actually have access|403 forbidden|wrong (?:slug|id|name)/i.test(
+      low
+    )
+  ) {
+    return true;
+  }
+  return looksLikeActionPromiseStall(visible);
+}
+
 /** Before any tools this turn: promised action but no tool calls. */
 export function looksLikePreToolPromiseStall(
   visible: string,
@@ -508,6 +600,8 @@ export type ContinuationNudgeKind =
   | "empty_response"
   | "truncation"
   | "post_tool_stall"
+  | "snapshot_read_stall"
+  | "api_discovery_stall"
   | "pre_tool_promise"
   | "cron_verify"
   | "incomplete_todos";
@@ -632,6 +726,20 @@ export function buildContinuationNudge(
       cronHint
     );
   }
+  if (kind === "snapshot_read_stall") {
+    return (
+      "You read a memory/snapshots spill file. Use the unwrapped `content` from that read_file result (or the inlined `result` " +
+      "in the latest \"Tool results (compact JSON)\" message) to answer the user. For JSON APIs, collections/metadata live in " +
+      "the unwrapped body — do not read another snapshot path or rerun web_fetch unless that payload is missing or stale."
+    );
+  }
+  if (kind === "api_discovery_stall") {
+    return (
+      "Before asking the user for a resource slug or id, follow the imported skill's discovery procedure " +
+      "(health, list metadata, schema — see skill_view on that skill and **`http-api`**). " +
+      "Do not guess resource paths until discovery returns or proves metadata is forbidden."
+    );
+  }
   if (kind === "pre_tool_promise") {
     return (
       "You ended with only a promise to take the next step. " +
@@ -734,6 +842,27 @@ export function shouldContinuePostToolStall(
 ): boolean {
   if (postToolStallContinuations >= MAX_POST_TOOL_STALL_CONTINUATIONS) return false;
   return looksLikePostToolStall(visible, executedToolsInTurn);
+}
+
+export function shouldContinueSnapshotReadStall(
+  visible: string,
+  executedToolsInTurn: boolean,
+  lastExecutions: SnapshotReadExecution[],
+  snapshotReadStallContinuations: number
+): boolean {
+  if (snapshotReadStallContinuations >= MAX_SNAPSHOT_READ_STALL_CONTINUATIONS) return false;
+  return looksLikeSnapshotReadStall(visible, executedToolsInTurn, lastExecutions);
+}
+
+export function shouldContinueApiDiscoveryStall(
+  userMessage: string,
+  visible: string,
+  executedToolsInTurn: boolean,
+  lastExecutions: ApiDiscoveryExecution[],
+  apiDiscoveryStallContinuations: number
+): boolean {
+  if (apiDiscoveryStallContinuations >= MAX_API_DISCOVERY_STALL_CONTINUATIONS) return false;
+  return looksLikeApiDiscoveryStall(userMessage, visible, executedToolsInTurn, lastExecutions);
 }
 
 export function shouldContinuePreToolPromiseStall(

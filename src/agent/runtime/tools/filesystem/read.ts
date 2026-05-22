@@ -9,16 +9,13 @@ import {
   normalizeWorkspaceRelativePath,
 } from "../../workspace-paths.js";
 import { errorMessage } from "../../utils.js";
+import { unwrapMemorySnapshotReadContent } from "../../memory/snapshots.js";
+import {
+  isMemoryRunArchivePath,
+  isMemorySnapshotSpillPath,
+  memoryRunArchiveBlockedMessage,
+} from "../../memory/internal-paths.js";
 import { toolPathStringFromArgs, withPathHints } from "./path-hints.js";
-
-function looksLikeMemorySnapshotRelativePath(rel) {
-  const raw = normalizeWorkspaceRelativePath(rel);
-  return (
-    raw.startsWith("memory/snapshots/") &&
-    raw.endsWith(".json") &&
-    !raw.includes("..")
-  );
-}
 
 async function snapshotJsonPeers(absFilePath, limit = 44) {
   const parentAbs = nodePath.dirname(absFilePath);
@@ -35,6 +32,26 @@ async function snapshotJsonPeers(absFilePath, limit = 44) {
     .slice(0, limit);
 }
 
+function formatReadFileSuccess(rel: string, content: string) {
+  const unwrapped = isMemorySnapshotSpillPath(rel)
+    ? unwrapMemorySnapshotReadContent(rel, content)
+    : null;
+  if (unwrapped) {
+    return {
+      ok: true,
+      path: rel,
+      bytes: Buffer.byteLength(unwrapped.content, "utf8"),
+      ...unwrapped,
+    };
+  }
+  return {
+    ok: true,
+    path: rel,
+    bytes: Buffer.byteLength(content, "utf8"),
+    content,
+  };
+}
+
 export async function readFileTool(args = {}, ctx) {
   const rel =
     typeof args.path === "string" && args.path.trim()
@@ -46,6 +63,11 @@ export async function readFileTool(args = {}, ctx) {
     );
   }
 
+  const normalized = normalizeWorkspaceRelativePath(rel).replace(/\\/g, "/");
+  if (isMemoryRunArchivePath(normalized)) {
+    throw new Error(memoryRunArchiveBlockedMessage(normalized));
+  }
+
   async function innerReadFile() {
     const abs = resolveWorkspacePath(ctx, rel);
     return fs.readFile(abs, "utf8");
@@ -53,14 +75,9 @@ export async function readFileTool(args = {}, ctx) {
 
   try {
     const content = await withPathHints(innerReadFile, ctx, rel);
-    return {
-      ok: true,
-      path: rel,
-      bytes: Buffer.byteLength(content, "utf8"),
-      content,
-    };
+    return formatReadFileSuccess(normalized, content);
   } catch (e) {
-    if (!looksLikeMemorySnapshotRelativePath(rel)) throw e;
+    if (!isMemorySnapshotSpillPath(normalized)) throw e;
 
     let peers = [];
     try {
@@ -84,11 +101,8 @@ export async function readFileTool(args = {}, ctx) {
         try {
           const content = await fs.readFile(resolveWorkspacePath(ctx, fixedRel), "utf8");
           return {
-            ok: true,
-            path: fixedRel,
+            ...formatReadFileSuccess(fixedRel, content),
             remapped_from: rel,
-            bytes: Buffer.byteLength(content, "utf8"),
-            content,
           };
         } catch {
           /* fall through */

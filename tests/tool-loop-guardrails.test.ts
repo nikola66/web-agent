@@ -172,6 +172,27 @@ test("toolGuardrailSyntheticResult encodes guardrail metadata", () => {
   assert.equal(payload.guardrail.code, "repeated_exact_failure_block");
 });
 
+test("snapshot read_file chain blocks on third memory/snapshots read", () => {
+  const controller = new ToolCallGuardrailController();
+  const args = { path: "memory/snapshots/run_x_r1_0.json" };
+  assert.equal(controller.beforeCall("read_file", args).action, "allow");
+  assert.equal(controller.beforeCall("read_file", args).action, "allow");
+  const blocked = controller.beforeCall("read_file", args);
+  assert.equal(blocked.action, "block");
+  assert.equal(blocked.code, "snapshot_read_chain_block");
+  assert.match(blocked.message, /list_digest/i);
+});
+
+test("second snapshot read_file warns when enabled", () => {
+  const controller = new ToolCallGuardrailController();
+  const args = { path: "memory/snapshots/run_x_r1_0.json" };
+  controller.beforeCall("read_file", args);
+  controller.beforeCall("read_file", args);
+  const warned = controller.afterCall("read_file", args, '{"ok":true,"content":"x"}', false);
+  assert.equal(warned.action, "warn");
+  assert.equal(warned.code, "snapshot_read_chain_warning");
+});
+
 test("success resets exact signature failure streak", () => {
   const controller = new ToolCallGuardrailController({
     ...TOOL_LOOP_GUARDRAIL_DEFAULTS,

@@ -2,9 +2,35 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 import {
+  unwrapMemorySnapshotReadContent,
   unwrapSnapshotReadFileExecutions,
   spillInlineCharBudgetForToolResultItem,
 } from "../dist/agent-runtime/memory/index.js";
+
+test("unwrapMemorySnapshotReadContent inlines nested web_fetch body", () => {
+  const inner = { ok: true, text: "collections payload" };
+  const raw = JSON.stringify({
+    payload: { tool: "web_fetch", result: inner },
+  });
+  const out = unwrapMemorySnapshotReadContent("memory/snapshots/run_x_r1_0.json", raw);
+  assert.equal(out?.from_snapshot, true);
+  assert.match(out?.content ?? "", /collections payload/);
+});
+
+test("unwrapMemorySnapshotReadContent inlines web_fetch JSON data field", () => {
+  const inner = {
+    ok: true,
+    url: "https://api.example.com/collections",
+    data: [{ collection: "job_posts" }, { collection: "articles" }],
+  };
+  const raw = JSON.stringify({
+    payload: { tool: "web_fetch", result: inner },
+  });
+  const out = unwrapMemorySnapshotReadContent("memory/snapshots/run_coll_r1_0.json", raw);
+  assert.equal(out?.from_snapshot, true);
+  assert.match(out?.content ?? "", /job_posts/);
+  assert.match(out?.content ?? "", /articles/);
+});
 
 test("unwrapSnapshotReadFileExecutions inlines each primary body field from nested tool results", () => {
   const cases = [

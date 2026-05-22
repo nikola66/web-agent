@@ -74,7 +74,7 @@ The same framing is used for streaming LLM responses (`ipcProxyStreamRequest` in
 3. `streamOpenAI()` issues a request (HTTP direct or IPC-framed).
 4. Streamed chunks parsed → tool calls extracted.
 5. `runTools()` (registry.ts) executes built-ins or capability tools.
-6. Result spillover > 10 KB → written to workspace file (inline cap `MAX_TOOL_RESULT_INLINE_CHARS`).
+6. Result spillover exceeds inline caps → written under `memory/snapshots/` (see env: `WEBAGENT_MAX_TOOL_RESULT_INLINE_CHARS` default 48k per item, `WEBAGENT_MAX_TURN_INLINE_CHARS` default 256k per tool round). Unwrapped snapshot `read_file` results are never re-spilled.
 7. Tool loop guardrails (`tool-loop-guardrails.ts`) detect repeated tool failures and idempotent no-progress reads per turn (Hermes-style deterministic guardrails). Configure via `VITE_WEBAGENT_TOOL_LOOP_*` in `.env` (see `.env.example` and `docs/agent-notes.md`).
 8. Max 64 rounds per turn (`WEBAGENT_MAX_AGENT_ROUNDS`).
 

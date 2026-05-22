@@ -72,6 +72,7 @@ import {
   isExecutionContinuationIntent,
   isSkillInstallIntent,
   buildSkillInstallContextPrefix,
+  buildApiCallContextPrefix,
   SKILL_INSTALL_PIVOT_NUDGE,
   skillBulkSaveAllUrlItemsFailed,
   webFetchTargetsRegistryUrl,
@@ -98,6 +99,8 @@ import {
   shouldContinueIntermediateAck,
   shouldContinuePostToolStall,
   shouldContinuePreToolPromiseStall,
+  shouldContinueSnapshotReadStall,
+  shouldContinueApiDiscoveryStall,
   shouldContinueTruncation,
 } from "./turn-continuation.js";
 import { dropTrailingEmptyResponseScaffolding, sanitizeMessagesForLlm } from "./message-sanitizer.js";
@@ -160,7 +163,7 @@ const REASONING_ONLY_NO_VISIBLE_MSG =
 
 const MAX_TOOL_RESULT_INLINE_CHARS = Math.max(
   200,
-  Number(process.env.WEBAGENT_MAX_TOOL_RESULT_INLINE_CHARS) || 10_000
+  Number(process.env.WEBAGENT_MAX_TOOL_RESULT_INLINE_CHARS) || 48_000
 );
 
 let _cachedToolNames: string[] | null = null;
@@ -168,11 +171,11 @@ let _openAiToolsCacheKey: string | null = null;
 let _openAiToolsCache: Awaited<ReturnType<typeof buildOpenAiToolDefinitions>> | null = null;
 
 const STATIC_TOOL_DISCIPLINE =
-  "\n\nTools: prefer native tool calls and respect each tool's schema (especially `required` fields). For files/URLs/shell/external/memory data, use tools first, then answer. Never copy terminal status lines (e.g. lines starting with ✓ or parenthetical summaries) into tool arguments—use real paths, URLs, and queries only. When the user asks for a sequence (for example, testing tools one by one), continue step-by-step without waiting for another user nudge: after you announce a step, immediately emit the corresponding tool call. No fake <tool_call> markup. Text fallback: <<<TOOL>>>{\"name\":\"read_file\",\"arguments\":{\"path\":\"relative/path\"}}<<<END>>>. Memory example: <<<TOOL>>>{\"name\":\"memory_save\",\"arguments\":{\"key\":\"user_timezone\",\"value\":\"America/New_York\"}}<<<END>>> — never call memory_save without both `key` and `value`. Tool results (compact JSON batches): each entry may contain `result` (full inlined payload when it stayed under the size cap — read this first) or `result_ref` (workspace-relative spill file such as \"memory/snapshots/run_xxx_r0_0.json\" when the payload was too large — call read_file on that exact path only). Never call read_file on memory/snapshots/run_* paths when `result` is already present or when no `result_ref` was supplied. If read_file fails or snapshot files disappeared, rerun the originating tool (`web_fetch`, etc.)." +
+  "\n\nTools: prefer native tool calls and respect each tool's schema (especially `required` fields). For files/URLs/shell/external/memory data, use tools first, then answer. Never copy terminal status lines (e.g. lines starting with ✓ or parenthetical summaries) into tool arguments—use real paths, URLs, and queries only. When the user asks for a sequence (for example, testing tools one by one), continue step-by-step without waiting for another user nudge: after you announce a step, immediately emit the corresponding tool call. No fake <tool_call> markup. Text fallback: <<<TOOL>>>{\"name\":\"read_file\",\"arguments\":{\"path\":\"relative/path\"}}<<<END>>>. Memory example: <<<TOOL>>>{\"name\":\"memory_save\",\"arguments\":{\"key\":\"user_timezone\",\"value\":\"America/New_York\"}}<<<END>>> — never call memory_save without both `key` and `value`. Tool results (compact JSON batches): each entry may contain `result` (inlined payload — use this first) or `result_ref` (spill under `memory/snapshots/` — read_file that exact path once; auto-unwrapped). Never list/grep/find_files under `memory/snapshots/` or `memory/runs/` for API data — `memory/runs/` is agent logs only. If spill files are stale/nested/missing, rerun the originating tool (`web_fetch`, `web_post`, etc.) or `session_search` for chat context — not run_shell head/tail on memory paths." +
   "\n\nExact text discipline: when the user asks for an exact string, token, filename, identifier, code symbol, JSON key, or command output, copy it byte-for-byte. Preserve underscores, hyphens, slashes, capitalization, digits, punctuation, and spacing. Never normalize or prettify exact tokens such as FOO_BAR_TOKEN." +
   "\n\nTopic discipline: when the user's latest message changes the subject or starts a new request, treat that as the active task. Do not continue earlier plans, files, or tools from older turns unless the user explicitly asks you to resume them." +
   "\n\nSkill discipline: skills are procedural knowledge, separate from memory facts. The prompt contains only a compact skills index; call `skill_view` before relying on detailed skill instructions. Memory layer boundaries are in **Memory layers** above; for the full picker table call `skill_view` **`memory-layers`**. Saving or installing skills: `skill_view` **`web-agent-skill`**." +
-  "\n\nDomain tool discipline: bundled skills own tool choice—call `skill_view` for the matching skill before fan-out. Hubs: **`find-skills`** (online skill registries → top 5 by installs/stars/votes), **`browser-runtime-map`** (filesystem/HTTP/shell), **`script-porting`** (Python/bash skill scripts → node scripts/*.js), **`memory-layers`** (memory/session/skills/wiki/secrets), **`artifact-delivery`** + **`chart`** (present/show/Mermaid), **`clarify`** (ambiguous intent → `<<<CLARIFY>>>` option buttons, no tools), **`open-web-research`** (discovery), **`heartbeat-cron`** (scheduled jobs), **`project-scaffold`** (projects/work paths), **`task-execution`** (multi-step plan+run). Prefer GitHub-flavored Markdown pipe tables in assistant-visible text." +
+  "\n\nDomain tool discipline: bundled skills own tool choice—call `skill_view` for the matching skill before fan-out. Hubs: **`find-skills`** (online skill registries → top 5 by installs/stars/votes), **`browser-runtime-map`** (filesystem/HTTP/shell), **`http-api`** (REST/GraphQL via web_fetch/web_post), **`script-porting`** (Python skills → web_fetch/web_post + node scripts), **`memory-layers`** (memory/session/skills/wiki/secrets), **`artifact-delivery`** + **`chart`** (present/show/Mermaid), **`clarify`** (ambiguous intent → `<<<CLARIFY>>>` option buttons, no tools), **`open-web-research`** (discovery), **`heartbeat-cron`** (scheduled jobs), **`project-scaffold`** (projects/work paths), **`task-execution`** (multi-step plan+run). Prefer GitHub-flavored Markdown pipe tables in assistant-visible text." +
   "\n\nCron discipline: heartbeat jobs in `.webagent/cronjobs.json` run only on heartbeat ticks while the tab is open (`everyMinutes` + `lastRunAt`); there is no manual cron run tool. `cron_register` refresh reschedules—it does not execute the job unless a heartbeat tick is due at that moment. If the user wants work now, run the job step tools in this chat (or invoke the relevant skill)—never claim to \"run the cron manually\". Before explaining cron timing or where output goes, call `cron_list` or `skill_view` **`heartbeat-cron`** and cite `outputDestination`, `nextEligibleAtMs`, and `schedulingNote` from tool output. Delivery: Silent (logs only), Web UI (`delivery: terminal`), Web UI + Telegram (`terminal` + `notifyChannel`), Email (`delivery: email` + `deliveryEmailTo`).";
 
 export { invalidateSystemPromptCache } from "./system-prompt-cache.js";
@@ -342,6 +345,10 @@ export async function agentTurn(
     !turnMeta?.textOnly && originalUserInput
       ? buildSkillInstallContextPrefix(originalUserInput)
       : null;
+  const apiCallPrefix =
+    !turnMeta?.textOnly && originalUserInput
+      ? buildApiCallContextPrefix(originalUserInput)
+      : null;
   const volatileToolHint =
     buildExecutionGuidanceBlock(typeof cfg.model === "string" ? cfg.model : null) +
     buildMemoryLayerGuidanceBlock(toolNames) +
@@ -425,6 +432,9 @@ export async function agentTurn(
   if (skillInstallPrefix && skillInstallPrefix !== continuationPrefix) {
     conv.push({ role: "user", content: skillInstallPrefix });
   }
+  if (apiCallPrefix && apiCallPrefix !== skillInstallPrefix && apiCallPrefix !== continuationPrefix) {
+    conv.push({ role: "user", content: apiCallPrefix });
+  }
 
   let usedTodoWriteInTurn = false;
   let skillMutatingCalledInTurn = false;
@@ -433,6 +443,8 @@ export async function agentTurn(
   let emptyResponseContinuations = 0;
   let truncationContinuations = 0;
   let postToolStallContinuations = 0;
+  let snapshotReadStallContinuations = 0;
+  let apiDiscoveryStallContinuations = 0;
   let preToolPromiseContinuations = 0;
   let cronVerifyContinuations = 0;
   let incompleteTodoContinuations = 0;
@@ -689,6 +701,24 @@ export async function agentTurn(
           continue;
         }
         if (
+          shouldContinueSnapshotReadStall(
+            visible,
+            executedToolsInTurn,
+            lastToolExecutions,
+            snapshotReadStallContinuations
+          )
+        ) {
+          snapshotReadStallContinuations++;
+          continuationRecoveriesFired++;
+          conv.push({ role: "user", content: buildContinuationNudge("snapshot_read_stall") });
+          await logDebugEvent("turn_snapshot_read_stall_continuation", {
+            round,
+            count: snapshotReadStallContinuations,
+            visiblePreview: String(visible || "").slice(0, 200),
+          });
+          continue;
+        }
+        if (
           shouldContinuePostToolStall(visible, executedToolsInTurn, postToolStallContinuations)
         ) {
           postToolStallContinuations++;
@@ -702,6 +732,25 @@ export async function agentTurn(
           await logDebugEvent("turn_post_tool_stall_continuation", {
             round,
             count: postToolStallContinuations,
+            visiblePreview: String(visible || "").slice(0, 200),
+          });
+          continue;
+        }
+        if (
+          shouldContinueApiDiscoveryStall(
+            originalUserInput,
+            visible,
+            executedToolsInTurn,
+            lastToolExecutions,
+            apiDiscoveryStallContinuations
+          )
+        ) {
+          apiDiscoveryStallContinuations++;
+          continuationRecoveriesFired++;
+          conv.push({ role: "user", content: buildContinuationNudge("api_discovery_stall") });
+          await logDebugEvent("turn_api_discovery_stall_continuation", {
+            round,
+            count: apiDiscoveryStallContinuations,
             visiblePreview: String(visible || "").slice(0, 200),
           });
           continue;

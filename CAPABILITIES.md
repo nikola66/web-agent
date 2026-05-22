@@ -1,6 +1,6 @@
 # Modular Capabilities
 
-Web Agent ships **39 built-in tools** and **17 bundled skills** under `src/capabilities/`. Add a capability folder, rebuild, and the host copies it into `.webagent/capabilities/` for the runtime to scan.
+Web Agent ships **40 built-in tools** and **18 bundled skills** under `src/capabilities/`. Add a capability folder, rebuild, and the host copies it into `.webagent/capabilities/` for the runtime to scan.
 
 ## Built-In Tools
 

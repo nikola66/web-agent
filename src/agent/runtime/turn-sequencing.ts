@@ -34,6 +34,37 @@ export function isSkillInstallIntent(input) {
 
 const PYTHON_SKILL_INSTALL_RE = /\b(pip install|python3?|python\s+-m|\.py\b)\b/i;
 
+const API_CALL_INTENT_RE = new RegExp(
+  [
+    "\\bgraphql\\b",
+    "\\brest\\s+api\\b",
+    "\\bapi\\s+(call|request|endpoint)\\b",
+    "\\bbearer\\b",
+    "\\bauthorization\\s*:\\s*bearer",
+    "/graphql",
+    "\\bhow many\\b[^.!?]{0,40}\\b(posts?|jobs?|items?|records?)\\b",
+    "\\bweb_post\\b",
+    "\\bweb_fetch\\b",
+    "\\bcms\\b",
+  ].join("|"),
+  "i"
+);
+
+export function isApiCallIntent(input) {
+  return API_CALL_INTENT_RE.test(String(input || ""));
+}
+
+/** One-shot prefix before REST/GraphQL work. */
+export function buildApiCallContextPrefix(input) {
+  if (!isApiCallIntent(input)) return null;
+  return (
+    "[HTTP API] Call skill_view **`http-api`** and any imported skill for this API before the first request. " +
+    "GET + Bearer → web_fetch `{ url, headers }`. POST/GraphQL → web_post `{ url, body, headers }`. " +
+    "Follow the skill's discovery order (health, list metadata, schema) before guessing resource names or GraphQL root fields. " +
+    "On validation errors, read `recovery_hint` and fix query shape — do not retry the same malformed call."
+  );
+}
+
 /** One-shot prefix when installing from curated lists or registries. */
 export function buildSkillInstallContextPrefix(input) {
   if (!isSkillInstallIntent(input)) return null;
@@ -44,7 +75,7 @@ export function buildSkillInstallContextPrefix(input) {
     "try alternate repo layouts, web_search — pivot before declaring a blocker.";
   if (PYTHON_SKILL_INSTALL_RE.test(String(input || ""))) {
     prefix +=
-      " After install, if the skill references Python or pip, call skill_view **`script-porting`** and port scripts to `node scripts/*.js` before run_shell.";
+      " After install, if the skill references Python, pip, or HTTP clients: call skill_view **`http-api`** (REST/GraphQL) and **`script-porting`** (Python ports); use `web_fetch`/`web_post` for API steps; `run_shell` only for local node scripts.";
   }
   return prefix;
 }

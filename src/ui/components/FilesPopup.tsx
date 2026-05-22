@@ -289,6 +289,9 @@ export function FilesPopup({
   const terminalSessionRef = useRef<WorkspaceTerminalSession | null>(null);
 
   const { runtimeStatus } = useActiveProfileRuntime();
+  const workspaceFilesRevision = useRuntimeStore((s) =>
+    profileId ? s.profileRuntime[profileId]?.workspaceFilesRevision ?? 0 : 0
+  );
   const bumpWorkspaceFilesRevision = useRuntimeStore((s) => s.bumpWorkspaceFilesRevision);
   const uploadDisabled = runtimeStatus !== "running" || uploading;
 
@@ -375,7 +378,7 @@ export function FilesPopup({
 
   useEffect(() => {
     void loadFiles();
-  }, [profileId]);
+  }, [profileId, workspaceFilesRevision]);
 
   useEffect(() => {
     if (!selectedPath || !canPreview(selectedPath)) {

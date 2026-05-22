@@ -10,6 +10,7 @@ import {
   toWorkspaceRelative,
 } from "../../workspace-paths.js";
 import { coerceWorkspaceBrowsePath } from "../argument-normalization.js";
+import { memoryInternalBrowseBlockedMessage, shouldSkipMemoryInternalDirWalk } from "../../memory/internal-paths.js";
 import { resolveGrepSearchTarget } from "./path-hints.js";
 
 type GrepHit = { file: string; line: number; text: string };
@@ -41,7 +42,11 @@ export async function grepTool(
     );
   }
   const browseRoot = coerceWorkspaceBrowsePath(root);
+  const browseBlock = memoryInternalBrowseBlockedMessage("grep", browseRoot);
+  if (browseBlock) throw new Error(browseBlock);
   const target = await resolveGrepSearchTarget(ctx, browseRoot);
+  const targetBlock = memoryInternalBrowseBlockedMessage("grep", target.relPath);
+  if (targetBlock) throw new Error(targetBlock);
   const safeMaxResults = Math.max(1, Math.min(2000, Number(maxResults) || 200));
   const safeMaxFilesScanned = Math.max(100, Math.min(20000, Number(maxFilesScanned) || 10000));
   const needleLc = needle.toLowerCase();
@@ -91,6 +96,7 @@ export async function grepTool(
       const p = nodePath.join(d, e.name);
       if (e.isDirectory()) {
         if (shouldSkipDir(e.name)) continue;
+        if (shouldSkipMemoryInternalDirWalk(e.name, toWorkspaceRelative(p))) continue;
         await walk(p);
       }
       else {

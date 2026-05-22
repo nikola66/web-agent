@@ -53,6 +53,7 @@ const SMOKE_TIERS = {
   tree: "local-setup",
   vision_analyze: "network-proxy",
   web_fetch: "network-proxy",
+  web_post: "network-proxy",
   web_search: "network-proxy",
   wiki_search: "local-setup",
   wiki_setup: "local-setup",
@@ -499,5 +500,5 @@ test("smoke tier manifest documents manual and proxy-only tools", () => {
     "skill_bulk_save",
     "skill_manage",
   ]);
-  assert.deepEqual(proxy, ["email", "vision_analyze", "web_fetch", "web_search", "youtube_transcribe"]);
+  assert.deepEqual(proxy, ["email", "vision_analyze", "web_fetch", "web_post", "web_search", "youtube_transcribe"]);
 });

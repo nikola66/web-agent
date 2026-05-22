@@ -11,6 +11,11 @@ import {
   toWorkspaceRelative,
 } from "../../workspace-paths.js";
 import {
+  memoryInternalBrowseBlockedMessage,
+  shouldSkipMemoryInternalDirWalk,
+  shouldSkipMemoryInternalFileSearch,
+} from "../../memory/internal-paths.js";
+import {
   coerceFindFilesArguments,
   coerceWorkspaceBrowsePath,
 } from "../argument-normalization.js";
@@ -27,6 +32,8 @@ export async function listDirTool(
   ctx
 ) {
   const relPath = coerceWorkspaceBrowsePath(rel);
+  const browseBlock = memoryInternalBrowseBlockedMessage("list_dir", relPath);
+  if (browseBlock) throw new Error(browseBlock);
   const abs = resolveWorkspacePath(ctx, relPath);
   const resolvedPattern = String(pattern ?? "").trim();
   const safeMaxResults = Math.max(1, Math.min(20000, Number(maxResults) || 2000));
@@ -51,7 +58,10 @@ export async function listDirTool(
         ) {
           out.push({ path: relP, kind: "dir" });
         }
-        if (recursive && !shouldSkipDir(e.name)) await walk(p);
+        if (recursive && !shouldSkipDir(e.name)) {
+          if (shouldSkipMemoryInternalDirWalk(e.name, relP)) continue;
+          await walk(p);
+        }
       } else if (
         includeFiles &&
         (!resolvedPattern || matchPathPattern(e.name, relP, resolvedPattern))
@@ -110,6 +120,8 @@ export async function findFilesTool(rawArgs = {}, ctx) {
     );
   }
   const resolvedRoot = coerceWorkspaceBrowsePath(String(path ?? root ?? "."));
+  const browseBlock = memoryInternalBrowseBlockedMessage("find_files", resolvedRoot);
+  if (browseBlock) throw new Error(browseBlock);
   const abs = resolveWorkspacePath(ctx, resolvedRoot);
   const safeMaxResults = Math.max(1, Math.min(20000, Number(maxResults) || 1000));
   const safeMaxFilesScanned = Math.max(100, Math.min(100000, Number(maxFilesScanned) || 15000));
@@ -125,8 +137,10 @@ export async function findFilesTool(rawArgs = {}, ctx) {
       const relP = toWorkspaceRelative(p);
       scanned += 1;
       if (e.isDirectory()) {
+        if (shouldSkipMemoryInternalDirWalk(e.name, relP)) continue;
         if (!shouldSkipDir(e.name)) await walk(p);
       } else if (pathMatchesPatterns(e.name, relP, resolvedPatterns, matchMode)) {
+        if (shouldSkipMemoryInternalFileSearch(relP)) continue;
         files.push(relP);
       }
     }

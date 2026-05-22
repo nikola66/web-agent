@@ -1,4 +1,5 @@
 import fs from "node:fs/promises";
+import type { Dirent } from "node:fs";
 import nodePath from "node:path";
 import { ipcProxyRequest } from "../ipc.js";
 import {
@@ -27,6 +28,40 @@ import {
 
 /** Loose tool / IPC JSON object shape (tool handlers read known keys with runtime checks). */
 type ToolArgs = Record<string, unknown>;
+
+type HttpProxySuccessJson = {
+  ok: true;
+  status: number;
+  url: string;
+  contentType: string;
+  data: unknown;
+  truncated?: true;
+  truncated_at_chars?: number;
+};
+
+type HttpProxySuccessText = {
+  ok: true;
+  status: number;
+  url: string;
+  contentType: string;
+  text: string;
+  truncated?: true;
+  truncated_at_chars?: number;
+};
+
+type HttpProxyFailure = {
+  ok: false;
+  status: number;
+  url: string;
+  contentType: string;
+  data: unknown;
+  error: string;
+  recovery_hint?: string;
+  truncated?: true;
+  truncated_at_chars?: number;
+};
+
+export type HttpProxyResult = HttpProxySuccessJson | HttpProxySuccessText | HttpProxyFailure;
 
 type BrowserCatalogProvider = {
   id: string;
@@ -308,23 +343,157 @@ export function sliceProxyFetchBody(body: unknown, cap = WEB_FETCH_PROXY_BODY_CA
   return { text: bodyStr.slice(0, cap), truncated: true as const, truncated_at_chars: cap };
 }
 
-async function proxyFetch(url, ctx) {
-  const { status, body, contentType } = readProxyResponse(await proxyRequest({ method: "GET", url }, ctx));
-  if (status < 200 || status >= 300) {
-    const detail = String(body || "").slice(0, 240);
-    throw new Error(
-      `Fetch failed (${status}): ${detail || "unknown error"}. Retry web_search with a simpler query, one location code (ae or sa, not "ae, sa"), or check network/API settings.`
-    );
+function normalizeHttpHeaders(raw: unknown): Record<string, string> {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return {};
+  const out: Record<string, string> = {};
+  for (const [k, v] of Object.entries(raw as Record<string, unknown>)) {
+    const key = String(k || "").trim();
+    if (!key || v == null) continue;
+    out[key] = String(v);
   }
-  const sliced = sliceProxyFetchBody(body);
-  return {
-    ok: true,
+  return out;
+}
+
+function redactHttpHeadersForLog(headers: Record<string, string>): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const [k, v] of Object.entries(headers)) {
+    if (/authorization|api[_-]?key|token|secret/i.test(k)) out[k] = "<redacted>";
+    else out[k] = v.length > 80 ? `${v.slice(0, 80)}…` : v;
+  }
+  return out;
+}
+
+export function summarizeHttpErrorBody(data: unknown, status: number): string {
+  if (data && typeof data === "object" && !Array.isArray(data)) {
+    const rec = data as Record<string, unknown>;
+    const errors = rec.errors;
+    if (Array.isArray(errors) && errors.length) {
+      const first = errors[0];
+      if (first && typeof first === "object") {
+        const msg = String((first as Record<string, unknown>).message || "").trim();
+        if (msg) return msg;
+      }
+    }
+    const err = rec.error;
+    if (typeof err === "string" && err.trim()) return err.trim();
+  }
+  return `HTTP ${status}`;
+}
+
+export function graphqlSchemaRecoveryHint(data: unknown, status: number): string | undefined {
+  if (status !== 400 && status !== 422) return undefined;
+  const text = JSON.stringify(data || "");
+  if (!/graphql|Cannot query field/i.test(text)) return undefined;
+  return (
+    "GraphQL root fields must match that API's schema — do not assume generic names. " +
+    "Call skill_view on the relevant imported skill (and **`http-api`**) for discovery endpoints and query shape, " +
+    "then fix field names from the error."
+  );
+}
+
+/** 403/404 on a deep resource path — run skill discovery before guessing names. */
+export function guessedResourceRecoveryHint(url: string, status: number): string | undefined {
+  if (status !== 403 && status !== 404) return undefined;
+  let segments = 0;
+  try {
+    segments = new URL(String(url || "")).pathname.split("/").filter(Boolean).length;
+  } catch {
+    const tail = String(url || "").split("?")[0]?.split("#")[0] ?? "";
+    segments = tail.split("/").filter(Boolean).length;
+    if (segments > 0) segments -= 1;
+  }
+  if (segments < 2) return undefined;
+  return (
+    "403/404 on a specific resource path often means wrong slug/id or missing permission — not a dead host. " +
+    "Use skill_view on the relevant imported skill for discovery (list/metadata/health) before guessing resource names. " +
+    "See skill_view **`http-api`**."
+  );
+}
+
+function httpApiRecoveryHint(url: string, status: number, data: unknown): string | undefined {
+  return graphqlSchemaRecoveryHint(data, status) ?? guessedResourceRecoveryHint(url, status);
+}
+
+export async function httpProxyCall(
+  {
+    method = "GET",
     url,
-    status,
-    contentType,
+    headers = {},
+    body = null,
+  }: { method?: string; url: string; headers?: Record<string, string>; body?: string | null },
+  ctx
+): Promise<HttpProxyResult> {
+  const normHeaders = normalizeHttpHeaders(headers);
+  const m = String(method || "GET").toUpperCase();
+  await logDebugEvent("http_proxy_call", {
+    method: m,
+    url: String(url).slice(0, 800),
+    headers: redactHttpHeadersForLog(normHeaders),
+  });
+  const { status, body: respBody, contentType } = readProxyResponse(
+    await proxyRequest({ method: m, url, headers: normHeaders, body }, ctx)
+  );
+  const ok = status >= 200 && status < 300;
+  const sliced = sliceProxyFetchBody(respBody);
+  const trimmed = sliced.text.trim();
+  const looksJson =
+    contentType.includes("json") || trimmed.startsWith("{") || trimmed.startsWith("[");
+  let parsedJson: unknown;
+  if (looksJson) {
+    try {
+      parsedJson = JSON.parse(sliced.text);
+    } catch {
+      parsedJson = undefined;
+    }
+  }
+  if (!ok) {
+    if (parsedJson !== undefined) {
+      const error = summarizeHttpErrorBody(parsedJson, status);
+      const recovery_hint = httpApiRecoveryHint(url, status, parsedJson);
+      return {
+        ok: false as const,
+        status,
+        url,
+        contentType,
+        data: parsedJson,
+        error,
+        ...(recovery_hint ? { recovery_hint } : {}),
+        ...(sliced.truncated ? { truncated: true, truncated_at_chars: sliced.truncated_at_chars } : {}),
+      };
+    }
+    const detail = String(respBody || "").slice(0, 240);
+    let msg = `HTTP request failed (${status}): ${detail || "unknown error"}`;
+    const restHint = guessedResourceRecoveryHint(url, status);
+    if (restHint) {
+      msg += ` ${restHint}`;
+    } else if (status === 401 || status === 403) {
+      msg += " Add or fix Authorization in headers — do not use run_shell for authenticated API calls.";
+    }
+    if (status === 405 && m === "GET") {
+      msg += " Use web_post for POST/GraphQL on this endpoint.";
+    }
+    throw Object.assign(new Error(msg), {
+      status,
+      ...(status === 405 && m === "GET" ? { suggested_tool: "web_post" } : {}),
+    });
+  }
+  const base = { ok: true as const, status, url, contentType };
+  if (parsedJson !== undefined) {
+    return {
+      ...base,
+      data: parsedJson,
+      ...(sliced.truncated ? { truncated: true, truncated_at_chars: sliced.truncated_at_chars } : {}),
+    };
+  }
+  return {
+    ...base,
     text: sliced.text,
     ...(sliced.truncated ? { truncated: true, truncated_at_chars: sliced.truncated_at_chars } : {}),
   };
+}
+
+async function proxyFetch(url, ctx, headers: Record<string, string> = {}) {
+  return httpProxyCall({ method: "GET", url, headers }, ctx);
 }
 
 export async function webSearchTool(args: ToolArgs = {}, ctx) {
@@ -344,7 +513,11 @@ export async function webSearchTool(args: ToolArgs = {}, ctx) {
   const searchUrl = `https://html.duckduckgo.com/html/?q=${encodeURIComponent(q)}${p ? `&s=${p * 20}` : ""}`;
   let text: string;
   try {
-    ({ text } = await proxyFetch(searchUrl, ctx));
+    const fetched = await proxyFetch(searchUrl, ctx);
+    if (fetched.ok === false) {
+      throw new Error(fetched.error);
+    }
+    text = "text" in fetched ? fetched.text : JSON.stringify(fetched.data ?? "");
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     throw new Error(`${msg} (duckduckgo-fallback)`);
@@ -365,9 +538,37 @@ export async function webSearchTool(args: ToolArgs = {}, ctx) {
 
 const WEB_FETCH_READABLE_HTML_CAP = 50_000;
 
-async function webFetchReadableFromProxy(url, ctx) {
-  const proxy = await proxyFetch(url, ctx);
-  const { text, contentType, truncated: proxyTruncated, truncated_at_chars: proxyTruncCap } = proxy;
+async function webFetchReadableFromProxy(url, ctx, headers: Record<string, string> = {}) {
+  const proxy = await proxyFetch(url, ctx, headers);
+  if (proxy.ok === false) {
+    return {
+      ok: false as const,
+      url,
+      provider: "proxy",
+      status: proxy.status,
+      content_type: String(proxy.contentType || ""),
+      data: proxy.data,
+      error: proxy.error,
+      ...(proxy.recovery_hint ? { recovery_hint: proxy.recovery_hint } : {}),
+      ...(proxy.truncated ? { truncated: proxy.truncated, truncated_at_chars: proxy.truncated_at_chars } : {}),
+    };
+  }
+  const contentType = String(proxy.contentType || "");
+  const hasJsonData = "data" in proxy;
+  if (hasJsonData) {
+    return {
+      ok: true as const,
+      url,
+      provider: "proxy",
+      status: proxy.status,
+      content_type: contentType,
+      data: proxy.data,
+      ...(proxy.truncated ? { truncated: proxy.truncated, truncated_at_chars: proxy.truncated_at_chars } : {}),
+    };
+  }
+  const text = "text" in proxy ? String(proxy.text ?? "") : "";
+  const proxyTruncated = !!proxy.truncated;
+  const proxyTruncCap = proxy.truncated_at_chars;
   const isHtml = contentType.includes("html") || text.trimStart().startsWith("<");
   let readable;
   let truncated = !!proxyTruncated;
@@ -400,10 +601,13 @@ async function webFetchReadableFromProxy(url, ctx) {
 
 const WEB_FETCH_BATCH_MAX = 5;
 
-async function webFetchOne(url: string, ctx) {
+async function webFetchOne(url: string, ctx, headers: Record<string, string> = {}) {
   const u = new URL(url);
   if (!["http:", "https:"].includes(u.protocol)) {
     throw new Error(`web_fetch only supports http(s) URLs, got: ${u.protocol}`);
+  }
+  if (Object.keys(headers).length > 0) {
+    return webFetchReadableFromProxy(url, ctx, headers);
   }
   const provider = await getBrowserAgentProvider(ctx);
   if (provider && hasProviderApiKey(provider, ctx)) {
@@ -422,10 +626,19 @@ async function webFetchOne(url: string, ctx) {
 }
 
 export async function webFetchTool(args: ToolArgs = {}, ctx) {
-  const headers = (args.headers && typeof args.headers === "object" && !Array.isArray(args.headers)
-    ? args.headers
-    : {}) as Record<string, unknown>;
-  void headers;
+  const method = args.method != null ? String(args.method).trim().toUpperCase() : "GET";
+  if (method !== "GET") {
+    throw new Error(
+      'web_fetch is GET-only. Use web_post for POST/GraphQL. Example: {"url":"https://api.example.com/graphql","headers":{"Authorization":"Bearer <token>"},"body":"{\\"query\\":\\"...\\"}"}'
+    );
+  }
+  if (args.body != null && String(args.body).trim()) {
+    throw new Error(
+      'web_fetch does not accept a body. Use web_post for POST/GraphQL with {"url":"…","headers":{…},"body":"…"}.'
+    );
+  }
+
+  const headers = normalizeHttpHeaders(args.headers);
 
   const rawUrls = Array.isArray(args.urls) ? args.urls : [];
   const single = typeof args.url === "string" ? args.url.trim() : "";
@@ -438,18 +651,43 @@ export async function webFetchTool(args: ToolArgs = {}, ctx) {
     throw new Error(`web_fetch accepts at most ${WEB_FETCH_BATCH_MAX} URLs per call.`);
   }
 
-  if (targets.length === 1) return webFetchOne(targets[0], ctx);
+  if (targets.length === 1) return webFetchOne(targets[0], ctx, headers);
 
   const documents = await Promise.all(
     targets.map(async (url) => {
       try {
-        return await webFetchOne(url, ctx);
+        return await webFetchOne(url, ctx, headers);
       } catch (err) {
         return { ok: false, url, error: String(err?.message || err) };
       }
     })
   );
   return { ok: true, count: documents.length, documents };
+}
+
+export async function webPostTool(args: ToolArgs = {}, ctx) {
+  const url = typeof args.url === "string" ? args.url.trim() : "";
+  if (!url) throw new Error("`url` is required for web_post.");
+  const u = new URL(url);
+  if (!["http:", "https:"].includes(u.protocol)) {
+    throw new Error(`web_post only supports http(s) URLs, got: ${u.protocol}`);
+  }
+  if (args.body === undefined || args.body === null) {
+    throw new Error("`body` is required for web_post.");
+  }
+  const body =
+    typeof args.body === "string" ? args.body : JSON.stringify(args.body);
+  const headers = normalizeHttpHeaders(args.headers);
+  const contentType =
+    typeof args.content_type === "string" ? args.content_type.trim() : "";
+  if (contentType) headers["Content-Type"] = contentType;
+  else if (!headers["Content-Type"] && !headers["content-type"]) {
+    const trimmed = body.trim();
+    if (trimmed.startsWith("{") || trimmed.startsWith("[")) {
+      headers["Content-Type"] = "application/json";
+    }
+  }
+  return httpProxyCall({ method: "POST", url, headers, body }, ctx);
 }
 
 export async function memorySaveTool(args: ToolArgs = {}, ctx) {
@@ -571,7 +809,7 @@ export async function sessionSearchTool(args: ToolArgs = {}, _ctx) {
   const scored: SessionSearchHit[] = [];
   const recentCandidates: SessionSearchHit[] = [];
 
-  let dirents = [];
+  let dirents: Dirent[] = [];
   try {
     dirents = await fs.readdir(absDir, { withFileTypes: true });
   } catch {
@@ -663,7 +901,7 @@ export async function sessionSearchTool(args: ToolArgs = {}, _ctx) {
   }
 
   // Fallback 1: run history snapshots (saved each turn).
-  let runDirents = [];
+  let runDirents: Dirent[] = [];
   try {
     runDirents = await fs.readdir(absRunsDir, { withFileTypes: true });
   } catch {
@@ -1006,15 +1244,24 @@ export async function skillListTool(args: ToolArgs = {}, ctx) {
 
 export async function skillViewTool(args: ToolArgs = {}, ctx) {
   const memory = memoryServices(ctx);
-  const name = typeof args?.name === "string" ? args.name.trim() : "";
-  if (!name) throw new Error("`name` is required for skill_view.");
+  const nameRaw =
+    typeof args?.name === "string"
+      ? args.name.trim()
+      : typeof args?.slug === "string"
+        ? args.slug.trim()
+        : "";
+  if (!nameRaw) {
+    throw new Error(
+      '`name` is required for skill_view. Use {"name":"<skill-slug>"} — not `slug`.'
+    );
+  }
   const result = await memory.viewSkill({
-    name,
+    name: nameRaw,
     file_path: typeof args?.file_path === "string" ? args.file_path.trim() : undefined,
   });
   const { recordSkillView } = await import("../skill-provenance.js");
   if (result.slug) await recordSkillView(String(result.slug));
-  await logDebugEvent("skill_view", { name, filePath: result.file_path });
+  await logDebugEvent("skill_view", { name: nameRaw, filePath: result.file_path });
   return result;
 }
 

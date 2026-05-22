@@ -16,7 +16,7 @@ export default defineTool({
   run: runShellTool,
   emoji: "🖥️",
   description:
-    "Not a general-purpose tool—prefer built-ins first (`grep`, `read_file`, `web_fetch`, `list_dir`, `system_info`, etc.). Last resort for workspace commands with no dedicated tool. **Host:** runs via POSIX `sh -c` (optional `cwd`, `env`, `timeout_ms`, `background`); `crontab`/`at` are blocked—use `cron_register`. **Nodebox** (`WEBAGENT_RUNTIME=nodebox`): not a real shell—only `node …` via Nodebox `shell.runCommand` (optional `cwd`, `env`); no pipes, `npx`, `curl`, `git`, or other binaries; no `background`; avoid in heartbeat cron. Required: `command` (string). Examples (arguments JSON only): " +
+    "Not a general-purpose tool—prefer built-ins first (`web_fetch`, `web_post`, `grep`, `read_file`, `list_dir`, `system_info`, etc.). **HTTP:** GET → `web_fetch` (+ `headers`); POST/GraphQL → `web_post` — not run_shell axios/fetch one-liners. Last resort for local `node` scripts with no dedicated tool. **Host:** runs via POSIX `sh -c` (optional `cwd`, `env`, `timeout_ms`, `background`); `crontab`/`at` are blocked—use `cron_register`. **Nodebox** (`WEBAGENT_RUNTIME=nodebox`): not a real shell—only `node …` via Nodebox `shell.runCommand` (optional `cwd`, `env`); no pipes, `npx`, `curl`, `git`, or other binaries; no `background`; avoid in heartbeat cron. Required: `command` (string). Examples (arguments JSON only): " +
     JSON.stringify(RUN_SHELL_EXAMPLES[0]) +
     " | " +
     JSON.stringify(RUN_SHELL_EXAMPLES[1]),

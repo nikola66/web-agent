@@ -78,6 +78,7 @@ import runtimeMemorySqlSource from "../../dist/agent-runtime/memory/sql.js?raw";
 import runtimeMemoryRunsSource from "../../dist/agent-runtime/memory/runs.js?raw";
 import runtimeMemoryJobsSource from "../../dist/agent-runtime/memory/jobs.js?raw";
 import runtimeMemorySnapshotsSource from "../../dist/agent-runtime/memory/snapshots.js?raw";
+import runtimeMemoryInternalPathsSource from "../../dist/agent-runtime/memory/internal-paths.js?raw";
 import runtimeMemoryReflectionSource from "../../dist/agent-runtime/memory/reflection.js?raw";
 import runtimeMemoryFactsSource from "../../dist/agent-runtime/memory/facts.js?raw";
 import runtimeMemorySemanticIndexSource from "../../dist/agent-runtime/memory/semantic-index.js?raw";
@@ -501,6 +502,7 @@ async function writeRuntimeSources(profileId: string): Promise<void> {
   await emulator.fs.writeFile(`${webagentDir}/memory/sql.js`, runtimeMemorySqlSource);
   await emulator.fs.writeFile(`${webagentDir}/memory/runs.js`, runtimeMemoryRunsSource);
   await emulator.fs.writeFile(`${webagentDir}/memory/jobs.js`, runtimeMemoryJobsSource);
+  await emulator.fs.writeFile(`${webagentDir}/memory/internal-paths.js`, runtimeMemoryInternalPathsSource);
   await emulator.fs.writeFile(`${webagentDir}/memory/snapshots.js`, runtimeMemorySnapshotsSource);
   await emulator.fs.writeFile(`${webagentDir}/memory/reflection.js`, runtimeMemoryReflectionSource);
   await emulator.fs.writeFile(`${webagentDir}/memory/facts.js`, runtimeMemoryFactsSource);

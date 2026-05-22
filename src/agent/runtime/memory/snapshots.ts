@@ -13,12 +13,16 @@ import {
   safeWriteJson,
 } from "./sql.js";
 import { extractToolResultBodyText } from "../tool-result-preview.js";
+import { isMemorySnapshotSpillPath } from "./internal-paths.js";
 
 /** Same prefix as agent/context-compaction tool-result injection (must match exactly). */
 export const TOOL_RESULTS_COMPACT_PREFIX = "Tool results (compact JSON):\n";
 
 /** Max chars to inline when unwrapping read_file(memory/snapshots/*.json) to avoid spill ping-pong. */
-export const SNAPSHOT_READ_UNWRAP_MAX_CHARS = 56_000;
+export const SNAPSHOT_READ_UNWRAP_MAX_CHARS = 100_000;
+
+/** Per-item inline budget for web_fetch/web_post JSON `data` (matches proxy body cap). */
+export const HTTP_TOOL_DATA_INLINE_BUDGET = 100_000;
 
 /** Extra room for JSON.stringify keys/quotes/escapes around unwrapped snapshot `content`. */
 export const SNAPSHOT_FROM_SNAPSHOT_INLINE_SLACK = 24_576;
@@ -199,6 +203,73 @@ export async function cleanupSnapshotsNotReferenced(historyMessages, snapshotsDi
 /**
  * Shrink read_file results for spill JSON so the model gets real page text in one hop, not nested snapshots.
  */
+export function unwrapMemorySnapshotReadContent(
+  relPath: string,
+  rawContent: string,
+  depth = 0
+): { content: string; from_snapshot: true; content_truncated?: boolean; unwrap_depth?: number } | null {
+  if (depth > 5) return null;
+  const p = String(relPath || "");
+  if (!isMemorySnapshotSpillPath(p) && !/snapshots\/run_/.test(p)) return null;
+
+  let parsed;
+  try {
+    parsed = JSON.parse(rawContent);
+  } catch {
+    return null;
+  }
+  const execPayload = parsed?.payload;
+  if (!execPayload || typeof execPayload !== "object") return null;
+
+  let text = extractPayloadResultText(execPayload);
+  if (text == null && execPayload.result && typeof execPayload.result === "object") {
+    try {
+      text = JSON.stringify(execPayload.result, null, 2);
+    } catch {
+      text = null;
+    }
+  }
+  if (text == null) return null;
+
+  const trimmed = text.trimStart();
+  if (trimmed.startsWith("{") && trimmed.includes('"payload"')) {
+    const nested = unwrapMemorySnapshotReadContent(p, text, depth + 1);
+    if (nested) return { ...nested, unwrap_depth: depth + (nested.unwrap_depth ?? 1) };
+  }
+
+  let truncated = false;
+  if (text.length > SNAPSHOT_READ_UNWRAP_MAX_CHARS) {
+    text = text.slice(0, SNAPSHOT_READ_UNWRAP_MAX_CHARS) + "\n...[truncated]";
+    truncated = true;
+  }
+
+  return {
+    content: text,
+    from_snapshot: true,
+    ...(truncated ? { content_truncated: true } : {}),
+    ...(depth > 0 ? { unwrap_depth: depth } : {}),
+  };
+}
+
+function extractPayloadResultText(payload: Record<string, unknown>): string | null {
+  const result = payload.result;
+  if (!result || typeof result !== "object") return null;
+  const obj = result as Record<string, unknown>;
+
+  if (obj.from_snapshot === true && typeof obj.content === "string" && obj.content.trim()) {
+    return obj.content;
+  }
+
+  if (payload.tool === "read_file" && typeof obj.content === "string" && obj.content.trim()) {
+    const nestedPath =
+      typeof obj.path === "string" && obj.path.trim() ? obj.path : "memory/snapshots/run_nested.json";
+    const nested = unwrapMemorySnapshotReadContent(nestedPath, obj.content, 1);
+    if (nested) return nested.content;
+  }
+
+  return extractToolResultBodyText(result);
+}
+
 export function unwrapSnapshotReadFileExecutions(executions) {
   if (!Array.isArray(executions)) return executions;
   return executions.map((item) => unwrapSnapshotReadFileExecution(item));
@@ -209,46 +280,27 @@ function unwrapSnapshotReadFileExecution(item) {
   if (item.tool !== "read_file") return item;
   const res = item.result;
   if (!res || res.ok !== true || typeof res.content !== "string") return item;
-  const p = String(res.path || "");
-  if (!p.includes("memory/snapshots/") && !/snapshots\/run_/.test(p)) return item;
+  if (res.from_snapshot === true) return item;
 
-  let parsed;
-  try {
-    parsed = JSON.parse(res.content);
-  } catch {
-    return item;
-  }
-  const execPayload = parsed?.payload;
-  if (!execPayload || typeof execPayload !== "object") return item;
-
-  const extracted = extractToolResultBodyText(execPayload.result);
-  if (extracted == null) return item;
-
-  let text = extracted;
-  let truncated = false;
-  if (text.length > SNAPSHOT_READ_UNWRAP_MAX_CHARS) {
-    text = text.slice(0, SNAPSHOT_READ_UNWRAP_MAX_CHARS) + "\n...[truncated]";
-    truncated = true;
-  }
+  const unwrapped = unwrapMemorySnapshotReadContent(String(res.path || ""), res.content);
+  if (!unwrapped) return item;
 
   return {
     ...item,
     result: {
       ok: true,
-      path: p,
-      from_snapshot: true,
-      bytes: Buffer.byteLength(text, "utf8"),
-      content: text,
-      ...(truncated ? { content_truncated: true } : {}),
+      path: res.path,
+      bytes: Buffer.byteLength(unwrapped.content, "utf8"),
+      ...unwrapped,
     },
   };
 }
 
-/** Per agent-round cap on total inlined tool-result JSON chars (`WEBAGENT_MAX_TURN_INLINE_CHARS`, default 60_000). */
+/** Per agent-round cap on total inlined tool-result JSON chars (`WEBAGENT_MAX_TURN_INLINE_CHARS`, default 256_000). */
 export function getMaxTurnInlineChars() {
   const n = Number(process.env.WEBAGENT_MAX_TURN_INLINE_CHARS);
   if (Number.isFinite(n) && n >= 500) return Math.floor(n);
-  return 60_000;
+  return 256_000;
 }
 
 /** Mutable holder; one per `agentTurn` round for `saveCompressedToolResults`. */
@@ -265,19 +317,63 @@ export type TurnInlineBudgetState = {
  * Unwrapped snapshot reads carry long `content`; the default inline cap would re-spill every round without a boosted budget below.
  * @param {{ tool?: string; result?: Record<string, unknown> } | null | undefined} item
  */
-export function spillInlineCharBudgetForToolResultItem(item, inlineCharBudget = 10_000) {
-  const capped = Math.max(200, Number(inlineCharBudget || 10_000));
+export function spillInlineCharBudgetForToolResultItem(item, inlineCharBudget = 48_000) {
+  const capped = Math.max(200, Number(inlineCharBudget || 48_000));
   if (item?.tool === "read_file" && item?.result?.from_snapshot === true) {
     return Math.max(capped, SNAPSHOT_READ_UNWRAP_MAX_CHARS * 2 + SNAPSHOT_FROM_SNAPSHOT_INLINE_SLACK);
   }
+  const tool = String(item?.tool || "");
+  const res = item?.result;
+  if (res && typeof res === "object") {
+    if (
+      (tool === "web_fetch" || tool === "web_post") &&
+      (res as Record<string, unknown>).data !== undefined
+    ) {
+      return Math.max(capped, HTTP_TOOL_DATA_INLINE_BUDGET);
+    }
+    if (
+      (tool === "find_files" && Array.isArray(res.files)) ||
+      (tool === "grep" && Array.isArray(res.hits)) ||
+      (tool === "list_dir" && Array.isArray(res.entries))
+    ) {
+      return Math.max(capped, 24_000);
+    }
+  }
   return capped;
+}
+
+export function decideToolResultCompression(
+  item: Record<string, unknown> | null | undefined,
+  inlineCharBudget: number,
+  turnRemaining: number
+): { inline: boolean; serializedLength: number; spilledForTurnBudget?: true } {
+  const itemBudget = spillInlineCharBudgetForToolResultItem(item, inlineCharBudget);
+  const serialized = JSON.stringify(item?.result ?? item?.error ?? null, null, 2);
+  const fitsItemCap = serialized.length <= itemBudget;
+  const isUnwrappedSnapshotRead =
+    item?.tool === "read_file" &&
+    (item?.result as Record<string, unknown> | undefined)?.from_snapshot === true;
+
+  if (isUnwrappedSnapshotRead && fitsItemCap) {
+    return { inline: true, serializedLength: serialized.length };
+  }
+
+  const fitsTurnCap = fitsItemCap && serialized.length <= turnRemaining;
+  if (fitsTurnCap) {
+    return { inline: true, serializedLength: serialized.length };
+  }
+  return {
+    inline: false,
+    serializedLength: serialized.length,
+    ...(fitsItemCap ? { spilledForTurnBudget: true as const } : {}),
+  };
 }
 
 export async function saveCompressedToolResults({
   runId,
   round,
   executions,
-  inlineCharBudget = 10_000,
+  inlineCharBudget = 48_000,
   turnInlineBudget = null,
 }: {
   runId?: string;
@@ -297,12 +393,9 @@ export async function saveCompressedToolResults({
   const refs = [];
   for (let index = 0; index < (executions || []).length; index += 1) {
     const item = executions[index];
-    const itemBudget = spillInlineCharBudgetForToolResultItem(item, inlineCharBudget);
-    const serialized = JSON.stringify(item?.result ?? item?.error ?? null, null, 2);
-    const fitsItemCap = serialized.length <= itemBudget;
-    const fitsTurnCap = fitsItemCap && serialized.length <= budgetState.remaining;
-    if (fitsTurnCap) {
-      budgetState.remaining -= serialized.length;
+    const decision = decideToolResultCompression(item, inlineCharBudget, budgetState.remaining);
+    if (decision.inline) {
+      budgetState.remaining = Math.max(0, budgetState.remaining - decision.serializedLength);
       refs.push(null);
       continue;
     }
@@ -315,7 +408,7 @@ export async function saveCompressedToolResults({
       tool: item?.tool || null,
       created_at: new Date().toISOString(),
       payload: item,
-      spilled_for_turn_budget: fitsItemCap ? true : undefined,
+      spilled_for_turn_budget: decision.spilledForTurnBudget ? true : undefined,
     });
     refs.push(snapshotPath.replace(`${MEMORY_ROOT}/`, "memory/"));
   }

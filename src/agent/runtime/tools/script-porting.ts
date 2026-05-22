@@ -9,14 +9,24 @@ import { resolveWorkspacePath } from "../workspace-paths.js";
 export const PORTING_CHECKLIST = [
   "Load the Python source (read_file, skill_view, or web_fetch raw URL).",
   "Call python_to_node for construct hints before writing JS.",
-  "Port to ESM at scripts/<basename>.js under the skill folder.",
-  "Replace SKILL.md CLI examples: python/pip → node scripts/….js.",
-  "Verify with run_shell (node command, cwd at skill root, env for API tokens).",
-  "Persist via skill_manage write_file; keep secrets in Settings/vault or run_shell env.",
+  "Map HTTP: requests.get → web_fetch (+ headers); requests.post/GraphQL → web_post.",
+  "Port non-HTTP logic to ESM at scripts/<basename>.js under the skill folder.",
+  "Replace SKILL.md CLI examples: python/pip → node scripts/….js or web_fetch/web_post.",
+  "Verify local scripts with run_shell (node command, cwd, env); verify API calls with web_fetch/web_post.",
+  "Persist via skill_manage write_file; keep secrets in Settings/vault or tool headers/env.",
 ];
 
+export const HTTP_TOOL_ROUTING = {
+  get: "web_fetch",
+  post: "web_post",
+  skill_ref: "http-api",
+  note: "Call skill_view http-api for REST/GraphQL shapes; do not port requests.get/post to run_shell axios one-liners.",
+};
+
 export const PORTING_MAPPINGS: { python: string; node: string }[] = [
-  { python: "requests.get/post", node: "fetch(url, { method, headers, body })" },
+  { python: "requests.get", node: "web_fetch({ url, headers: { Authorization: 'Bearer …' } })" },
+  { python: "requests.post / GraphQL", node: "web_post({ url, headers, body })" },
+  { python: "requests (generic)", node: "web_fetch (GET) or web_post (POST) — not run_shell axios" },
   { python: "argparse / sys.argv", node: "process.argv or node:util parseArgs" },
   { python: "os.environ / os.getenv", node: "process.env (or run_shell env for this run)" },
   { python: "json.loads / json.dumps", node: "JSON.parse / JSON.stringify" },
@@ -32,7 +42,10 @@ export const PORTING_MAPPINGS: { python: string; node: string }[] = [
 ];
 
 const HINT_RULES: { pattern: RegExp; hint: string }[] = [
-  { pattern: /\bimport\s+requests\b|\bfrom\s+requests\b/, hint: "Uses requests → replace with fetch (JSON/text response handling)." },
+  { pattern: /\bimport\s+requests\b|\bfrom\s+requests\b/, hint: "Uses requests → skill_view http-api; web_fetch for GET, web_post for POST/GraphQL (headers for Bearer)." },
+  { pattern: /\brequests\.get\b/, hint: "requests.get → web_fetch with url + headers (not run_shell axios)." },
+  { pattern: /\brequests\.post\b/, hint: "requests.post → web_post with url, headers, body." },
+  { pattern: /\brequire\s*\(\s*['"]axios['"]\)|\bimport\s+axios\b|\bfrom\s+['"]axios['"]/, hint: "axios is unavailable — use web_fetch/web_post instead of run_shell HTTP one-liners." },
   { pattern: /\bimport\s+argparse\b|\bArgumentParser\b/, hint: "Uses argparse → use process.argv or node:util parseArgs." },
   { pattern: /\bimport\s+os\b|\bos\.environ\b|\bos\.getenv\b/, hint: "Uses os.environ → process.env; pass tokens via run_shell `env` or Settings/vault." },
   { pattern: /\bimport\s+json\b/, hint: "Uses json module → JSON.parse / JSON.stringify." },
@@ -42,7 +55,7 @@ const HINT_RULES: { pattern: RegExp; hint: string }[] = [
   { pattern: /\bimport\s+subprocess\b|\bsubprocess\./, hint: "Uses subprocess — not available in Nodebox; use fetch, file tools, or inline logic." },
   { pattern: /\bpip\s+install\b/, hint: "References pip install — port deps inline; agent cannot run pip (bootstrap may use npm internally)." },
   { pattern: /\bpython3?\s+-m\b/, hint: "CLI via python -m → node scripts/<module>.js with same args." },
-  { pattern: /\burllib\b|\bhttpx\b|\baiohttp\b/, hint: "HTTP client library → use global fetch." },
+  { pattern: /\burllib\b|\bhttpx\b|\baiohttp\b/, hint: "HTTP client library → web_fetch (GET) or web_post (POST/GraphQL)." },
   { pattern: /\bimport\s+sys\b|\bsys\.argv\b/, hint: "Uses sys.argv → process.argv (skip node + script path)." },
   { pattern: /\.env\b|load_dotenv/, hint: "Dotenv pattern → process.env or run_shell `env`; user sets keys in Settings/vault." },
   { pattern: /\bfrom\s+\.(\w+)\s+import\b|\bfrom\s+(\w+)\s+import\b/, hint: "Relative/package imports → ESM import paths under scripts/ (e.g. import { x } from './lib.js')." },
@@ -117,6 +130,8 @@ export function analyzePythonSource(source: string, filePath?: string) {
   return {
     checklist: PORTING_CHECKLIST,
     mappings: PORTING_MAPPINGS,
+    http_routing: HTTP_TOOL_ROUTING,
+    http_skill_ref: "http-api",
     hints,
     env_vars,
     suggested_cwd: suggested_cwd ?? null,

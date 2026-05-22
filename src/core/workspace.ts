@@ -487,7 +487,6 @@ async function listLiveWorkspaceFiles(profileId: string): Promise<WorkspaceFileE
           }
           continue;
         }
-        if (abs === `${workspaceDir}/memory/snapshots`) continue;
         addDir(abs);
         await walk(abs);
         continue;

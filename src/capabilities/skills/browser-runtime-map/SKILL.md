@@ -22,14 +22,15 @@ Canonical built-in tool picker. Other skills defer here for filesystem vs HTTP v
 | Patch or multi-edit | `apply_patch`, `edit_file`, `multi_edit` |
 | Move / delete | `move_file`, `delete_file` |
 | Compare files | `file_diff` |
-| HTTP(S) GET / API | `web_fetch` |
+| HTTP(S) GET (public or Bearer) | `web_fetch` (+ optional `headers`) — see **`http-api`** |
+| HTTP(S) POST / GraphQL / JSON body | `web_post` — see **`http-api`** |
 | Web search | `web_search` |
 | Environment facts | `system_info` |
 | Recurring jobs | `cron_register`, `cron_list` — **`heartbeat-cron`** |
 | Show file to user | `artifact_present` — **`artifact-delivery`** |
 | Image / audio / video | `vision_analyze`, `audio_analyze`, `youtube_transcribe` — **`multimodal-ingest`** |
 | Memory / skills / wiki | see **`memory-layers`** (`memory_*`, `session_*`, `skill_list`, `skill_view`, `skill_manage`, `skill_bulk_save`, `wiki_*`) |
-| Skill has Python/bash scripts | **`script-porting`**, `python_to_node`, port to `scripts/*.js`, then `run_shell` **`node …`** with **`cwd`** + **`env`** |
+| Skill has Python/bash scripts | **`script-porting`**, `python_to_node`, `web_fetch`/`web_post` for API steps, `run_shell` **`node …`** only for local scripts |
 | One-off shell (last resort) | `run_shell` — host only; Nodebox: **`node …`** only |
 
 **Non-negotiable:** No `curl`/`npx`/`git clone` when a row above fits. Nodebox has **no** POSIX shell. Skill installs: `skill_bulk_save` / `skill_manage`, never shell.
@@ -59,7 +60,8 @@ Three layers (see **`script-porting`** for porting Python skills):
 ## Procedure
 
 1. Match the need to the table above before calling `run_shell`.
-2. On Nodebox, use `web_fetch` instead of curl, dedicated file tools instead of shell file ops.
+2. **HTTP decision:** GET → `web_fetch` + `headers`; POST/GraphQL → `web_post`. Call `skill_view` **`http-api`** before first API call on an unfamiliar service. Never `run_shell` + axios for one-off HTTP.
+3. On Nodebox, use `web_fetch`/`web_post` instead of curl; dedicated file tools instead of shell file ops.
 3. For cron, use `cron_register` — not host crontab or shell wrappers.
 
 ## Pitfalls

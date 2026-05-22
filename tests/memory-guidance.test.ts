@@ -32,10 +32,10 @@ test("buildMemoryLayerGuidanceBlock includes workspace browse guidance for list_
   assert.match(block, /grep.*`root`/i);
 });
 
-test("buildMemoryLayerGuidanceBlock includes workspace browse guidance for read_file alone", () => {
+test("buildMemoryLayerGuidanceBlock includes spill recovery when read_file enabled", () => {
   const block = buildMemoryLayerGuidanceBlock(["read_file"]);
-  assert.match(block, /run `list_dir/);
-  assert.match(block, /workspace root/);
+  assert.match(block, /memory\/snapshots/);
+  assert.match(block, /memory\/runs/);
 });
 
 test("buildMemoryLayerGuidanceBlock returns empty when no memory layer tools", () => {
@@ -46,7 +46,13 @@ test("buildMemoryLayerGuidanceBlock includes script porting when run_shell enabl
   const block = buildMemoryLayerGuidanceBlock(["run_shell", "read_file"]);
   assert.match(block, /script-porting/);
   assert.match(block, /python_to_node/);
+  assert.match(block, /web_fetch/);
+  assert.match(block, /web_post/);
   assert.match(block, /Nodebox runs JavaScript only/);
-  assert.match(block, /`cwd`/);
-  assert.match(block, /`env`/);
+});
+
+test("buildMemoryLayerGuidanceBlock includes http-api guidance when web_fetch and web_post enabled", () => {
+  const block = buildMemoryLayerGuidanceBlock(["web_fetch", "web_post", "read_file"]);
+  assert.match(block, /http-api/);
+  assert.match(block, /Do not invent GraphQL root fields/);
 });

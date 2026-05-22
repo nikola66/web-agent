@@ -468,7 +468,7 @@ function scanSkillContent(
     if (pattern.test(text)) dangerous.push(label);
   }
   if (/\b(pip install|python3?|python\s+-m|\.py\b)/i.test(text)) {
-    warnings.push("contains Python/pip references — port scripts to node scripts/*.js before run_shell (skill_view script-porting)");
+    warnings.push("contains Python/pip references — use web_fetch/web_post for API steps and run_shell only for local node scripts (skill_view script-porting)");
   }
   if (text.length > 120_000) warnings.push("large skill content");
   for (const file of files) {
@@ -768,7 +768,7 @@ export async function buildSkillsContextBlock(availableToolNames: string[] = [])
     if (!skills.length) return "";
     const lines = [
       "Available skills (procedural knowledge, compact index):",
-      "Before replying, scan the skills below. If a skill matches or is even partially relevant to the task, you MUST call `skill_view` on the best slug before acting — err on the side of loading. Full procedures load only via `skill_view`. Only proceed without loading a skill if genuinely none are relevant. `skill_manage` create/patch/import applies immediately; `skill_manage` delete and `skill_bulk_save` each show one approval gate. Prefer `skill_bulk_save` when adding many skills in one request.",
+      "Before replying, scan the skills below. If a skill matches or is even partially relevant to the task, you MUST call `skill_view` with `{\"name\":\"<slug>\"}` on the best match before acting — err on the side of loading. Full procedures load only via `skill_view`. Only proceed without loading a skill if genuinely none are relevant. `skill_manage` create/patch/import applies immediately; `skill_manage` delete and `skill_bulk_save` each show one approval gate. Prefer `skill_bulk_save` when adding many skills in one request.",
     ];
     let budget = SKILLS_CONTEXT_CHAR_BUDGET;
     for (const skill of skills) {

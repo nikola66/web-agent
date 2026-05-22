@@ -23,6 +23,7 @@ import {
   parseToolArguments,
   applyWorkspaceBrowsePathArgs,
   applyWikiPathArgs,
+  applySkillNameArgAliases,
   resolveInputSchema,
   validateRequiredArguments,
 } from "./argument-normalization.js";
@@ -399,6 +400,7 @@ export function prepareIncomingToolArguments(
     argsForNormalize = {};
   } else {
     argsForNormalize = applyPathArgAliases(name, { ...argsForNormalize });
+    argsForNormalize = applySkillNameArgAliases(name, argsForNormalize);
     argsForNormalize = applyWorkspaceBrowsePathArgs(name, argsForNormalize);
     argsForNormalize = applyWikiPathArgs(name, argsForNormalize);
     if (name === "write_file") {

@@ -3,7 +3,7 @@
  */
 
 import { setTimeout as sleep } from "node:timers/promises";
-import { summarizeToolResultPreview } from "./tool-result-preview.js";
+import { summarizeToolResultPreview, extractHttpListDigest } from "./tool-result-preview.js";
 
 export function summarizeToolExecutions(exec, snapshotRefs = []) {
   return exec.map((item, index) => {
@@ -15,7 +15,15 @@ export function summarizeToolExecutions(exec, snapshotRefs = []) {
       summary = `failed: ${String(item.error || "unknown error").slice(0, 220)}`;
       if (resultRef) summary += ` (full error payload spilled: use read_file on "${resultRef}")`;
     } else if (resultRef) {
-      summary = `payload_spilled_to_snapshot: full tool result is only in "${resultRef}" — call read_file with that path; the inline body was not included here`;
+      const preview = summarizeToolResultPreview(item?.result);
+      const digest = extractHttpListDigest(item?.result);
+      summary =
+        `payload_spilled_to_snapshot: full tool result is in "${resultRef}" — read_file that path once (auto-unwrapped). ` +
+        `Preview: ${preview}. Do not list/grep memory/snapshots or memory/runs; if stale or nested, rerun the originating tool (web_fetch, web_post, grep, etc.).`;
+      if (digest) {
+        const sample = digest.slugs.slice(0, 48);
+        summary += ` List digest (${digest.total}): ${sample.join(", ")}${digest.total > sample.length ? ", …" : ""}.`;
+      }
       const tr = item?.result;
       if (tr && typeof tr === "object" && tr.truncated === true) {
         summary += ` [fetch_truncated: spilled payload may be partial (${tr.truncated_at_chars ?? "?"} char cap) — narrow scope or grep/read within file]`;
@@ -47,6 +55,10 @@ export function summarizeToolExecutions(exec, snapshotRefs = []) {
     }
     if (hasError && item?.fail_reason) {
       row.fail_reason = String(item.fail_reason);
+    }
+    const digest = !hasError && resultRef ? extractHttpListDigest(item?.result) : null;
+    if (digest) {
+      row.list_digest = digest;
     }
     const fullInlined =
       !hasError && !aborted && !resultRef && item?.result !== undefined && item?.result !== null;

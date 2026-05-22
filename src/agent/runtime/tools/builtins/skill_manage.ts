@@ -18,7 +18,10 @@ export default defineTool({
         enum: ["create", "patch", "edit", "delete", "install_url", "import_url", "write_file"],
         description: "Operation to perform.",
       },
-      name: { type: "string", description: "Skill name or slug." },
+      name: {
+        type: "string",
+        description: "Skill identifier. JSON key must be `name` (not `slug`).",
+      },
       content: { type: "string", description: "SKILL.md body for create/patch/edit." },
       description: { type: "string", description: "Short discovery description for create." },
       url: {

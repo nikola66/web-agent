@@ -461,6 +461,24 @@ export function applyWorkspaceBrowsePathArgs(
 
 const WIKI_PATH_TOOLS = new Set(["wiki_setup", "wiki_sync", "wiki_search"]);
 
+const SKILL_NAME_ARG_TOOLS = new Set(["skill_view", "skill_manage"]);
+
+/** Models often send `slug`; schema requires `name`. */
+export function applySkillNameArgAliases(
+  toolName: string,
+  argsObj: Record<string, unknown>
+): Record<string, unknown> {
+  if (!SKILL_NAME_ARG_TOOLS.has(toolName) || !argsObj || typeof argsObj !== "object") {
+    return argsObj;
+  }
+  const out = { ...argsObj };
+  const name = typeof out.name === "string" ? out.name.trim() : "";
+  const slug = typeof out.slug === "string" ? out.slug.trim() : "";
+  if (!name && slug) out.name = slug;
+  if ("slug" in out) delete out.slug;
+  return out;
+}
+
 export function applyWikiPathArgs(
   toolName: string,
   argsObj: Record<string, unknown>
@@ -492,6 +510,14 @@ export function validateRequiredArguments(
 
   if (!missing.length) return null;
   let hint = "";
+  if (
+    SKILL_NAME_ARG_TOOLS.has(toolName) &&
+    typeof argsObj.slug === "string" &&
+    String(argsObj.slug).trim() &&
+    !String(argsObj.name || "").trim()
+  ) {
+    hint = ' Use JSON key `name` (not `slug`), e.g. {"name":"http-api"}.';
+  }
   const ex = schema?.examples;
   if (Array.isArray(ex) && ex.length && ex[0] && typeof ex[0] === "object") {
     try {

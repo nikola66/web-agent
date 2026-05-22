@@ -6,10 +6,10 @@ export default defineTool({
   run: readFileTool,
   emoji: "📄",
   description:
-    "Read a UTF-8 file. **`path`** is workspace-relative (`.` = root) — not a host path like /home/... " +
-    "and not necessarily an app repo (profiles often have AGENT.md, projects/, work/ only). " +
-    "Run `list_dir({\"path\":\".\"})`, `tree`, or `find_files` before guessing paths like src/... or " +
-    ".webagent/package.json. Returns { ok, path, bytes, content }. Empty file: bytes 0, content \"\".",
+    "Read a UTF-8 file. **`path`** is workspace-relative (`.` = root). " +
+    "Do not read `memory/runs/*.json` (agent logs) or browse `memory/snapshots/` except the exact `result_ref` from tool output (auto-unwrapped). " +
+    "For API data, rerun `web_fetch`/`web_post` instead of scavenging memory archives. " +
+    "Run `list_dir({\"path\":\".\"})`, `tree`, or `find_files` before guessing paths. Returns { ok, path, bytes, content }.",
   inputSchema: {
     type: "object",
     properties: {

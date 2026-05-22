@@ -14,12 +14,15 @@ Canonical procedure for porting Python/bash skill scripts to JavaScript runnable
 | Need | Use first |
 |------|-----------|
 | Full porting procedure | This skill (`skill_view` **`script-porting`**) |
+| REST / GraphQL call shapes | `skill_view` **`http-api`** |
 | Construct hints for a `.py` snippet | `python_to_node` |
 | Read Python source | `read_file`, `skill_view` (support paths), or `web_fetch` (raw GitHub) |
 | Write ported script | `skill_manage` `write_file` → `scripts/<name>.js` under the skill folder |
 | Patch skill docs | `skill_manage` `patch` / `edit` — replace Python CLI with `node scripts/…` |
-| Run ported script | `run_shell` — **`node scripts/foo.js …`**, set **`cwd`** to the skill folder, optional **`env`** for API tokens — see **`browser-runtime-map`** |
-| HTTP from script | `fetch` in ESM (Nodebox routes via browser network stack) |
+| Run ported script (local logic) | `run_shell` — **`node scripts/foo.js …`**, **`cwd`**, optional **`env`** |
+| HTTP GET (API read) | `web_fetch` + `headers` (Bearer) — not run_shell axios |
+| HTTP POST / GraphQL | `web_post` + `headers` + `body` |
+| HTTP inside long script only | global `fetch` in ESM (last resort) |
 | Secrets / API tokens | Settings vault / env vars — never hardcode in scripts |
 
 **Non-negotiable:** Nodebox has **no Python/pip binary** in its runtime. Agent `run_shell` runs **`node …` only** (not arbitrary `shell.runCommand` binaries). Port Python skill steps first.

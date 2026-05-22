@@ -3,6 +3,14 @@ import assert from "node:assert/strict";
 
 import { classifyToolError } from "../dist/agent-runtime/tools/error-classifier.js";
 
+test("classifyToolError tags shell HTTP misroute", () => {
+  const c = classifyToolError(
+    "run_shell (nodebox): HTTP calls belong in web_fetch, not shell — use web_fetch"
+  );
+  assert.equal(c.error_code, "shell_http_misroute");
+  assert.match(c.recovery_hint, /web_fetch/);
+});
+
 test("classifyToolError tags Nodebox non-shell run_shell as nodebox_shell_unsupported", () => {
   const msg =
     "run_shell (Nodebox): no OS shell — only `node …` is supported (spawned without `sh -c`). " +

@@ -31,12 +31,13 @@ import tool29 from "./todo_write.js";
 import tool30 from "./tree.js";
 import tool31 from "./vision_analyze.js";
 import tool32 from "./web_fetch.js";
-import tool33 from "./web_search.js";
-import tool34 from "./wiki_search.js";
-import tool35 from "./wiki_setup.js";
-import tool36 from "./wiki_sync.js";
-import tool37 from "./write_file.js";
-import tool38 from "./youtube_transcribe.js";
+import tool33 from "./web_post.js";
+import tool34 from "./web_search.js";
+import tool35 from "./wiki_search.js";
+import tool36 from "./wiki_setup.js";
+import tool37 from "./wiki_sync.js";
+import tool38 from "./write_file.js";
+import tool39 from "./youtube_transcribe.js";
 
 export const BUILTIN_TOOL_DEFINITIONS = [
   tool0,
@@ -78,4 +79,5 @@ export const BUILTIN_TOOL_DEFINITIONS = [
   tool36,
   tool37,
   tool38,
+  tool39,
 ] as const;

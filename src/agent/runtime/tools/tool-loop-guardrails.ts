@@ -14,6 +14,7 @@ export const IDEMPOTENT_TOOL_NAMES = new Set([
   "file_diff",
   "web_search",
   "web_fetch",
+  "web_post",
   "youtube_transcribe",
   "session_search",
   "memory_search",
@@ -215,7 +216,27 @@ function resultHash(result: string | null | undefined): string {
   return sha256(result ?? "");
 }
 
-function toolFailureRecoveryHint(toolName: string, count: number): string {
+export const SNAPSHOT_READ_WARN_AFTER = 2;
+export const SNAPSHOT_READ_BLOCK_AFTER = 3;
+
+function isSnapshotSpillReadPath(args: Record<string, unknown> | null | undefined): boolean {
+  const pathArg = String(args?.path ?? args?.filename ?? args?.file ?? "").trim().replace(/\\/g, "/");
+  return /^memory\/snapshots\b/i.test(pathArg);
+}
+
+function snapshotReadChainMessage(count: number): string {
+  return (
+    `read_file on memory/snapshots/ (${count} this turn). Use the inlined \`result\` or \`list_digest\` ` +
+    "from the latest \"Tool results (compact JSON)\" message — do not chain snapshot reads. " +
+    "Rerun web_fetch/web_post if the payload is missing or stale."
+  );
+}
+
+function toolFailureRecoveryHint(
+  toolName: string,
+  count: number,
+  args: Record<string, unknown> | null | undefined = null
+): string {
   const common =
     `${toolName} has failed ${count} times this turn. This looks like a loop. ` +
     "Do not switch to text-only replies; keep using tools, but diagnose before retrying. " +
@@ -236,6 +257,14 @@ function toolFailureRecoveryHint(toolName: string, count: number): string {
     );
   }
   if (toolName === "read_file" || toolName === "list_dir" || toolName === "find_files") {
+    const pathArg = String(args?.path ?? args?.root ?? "").trim();
+    if (/^memory\/(?:runs|snapshots)\b/i.test(pathArg.replace(/\\/g, "/"))) {
+      return (
+        common +
+        "Do not scavenge `memory/runs/` or browse `memory/snapshots/` for API data. Rerun `web_fetch`/`web_post`, " +
+        "or read_file the exact `result_ref` from the latest tool batch once."
+      );
+    }
     return (
       common +
       "Paths are workspace-relative — run list_dir({\"path\":\".\"}) or tree before retrying. " +
@@ -282,6 +311,7 @@ export class ToolCallGuardrailController {
   private exactFailureCounts = new Map<string, number>();
   private sameToolFailureCounts = new Map<string, number>();
   private noProgress = new Map<string, [string, number]>();
+  private snapshotReadCount = 0;
   private _haltDecision: ToolGuardrailDecision | null = null;
 
   constructor(config: ToolLoopGuardrailConfig = TOOL_LOOP_GUARDRAIL_DEFAULTS) {
@@ -293,6 +323,7 @@ export class ToolCallGuardrailController {
     this.exactFailureCounts.clear();
     this.sameToolFailureCounts.clear();
     this.noProgress.clear();
+    this.snapshotReadCount = 0;
     this._haltDecision = null;
   }
 
@@ -314,6 +345,23 @@ export class ToolCallGuardrailController {
     args: Record<string, unknown> | null | undefined
   ): ToolGuardrailDecision {
     const signature = toolCallSignatureFromCall(toolName, args);
+
+    if (toolName === "read_file" && isSnapshotSpillReadPath(args)) {
+      this.snapshotReadCount += 1;
+      if (this.snapshotReadCount >= SNAPSHOT_READ_BLOCK_AFTER) {
+        const blocked = decision({
+          action: "block",
+          code: "snapshot_read_chain_block",
+          message: snapshotReadChainMessage(this.snapshotReadCount),
+          toolName,
+          count: this.snapshotReadCount,
+          signature,
+        });
+        this._haltDecision = blocked;
+        return blocked;
+      }
+    }
+
     if (!this.config.hardStopEnabled) {
       return decision({ toolName, signature });
     }
@@ -367,6 +415,23 @@ export class ToolCallGuardrailController {
     const signature = toolCallSignatureFromCall(toolName, args);
     const isFailed = failed ?? classifyToolFailure(toolName, result ?? null);
 
+    if (
+      toolName === "read_file" &&
+      isSnapshotSpillReadPath(args) &&
+      !isFailed &&
+      this.config.warningsEnabled &&
+      this.snapshotReadCount === SNAPSHOT_READ_WARN_AFTER
+    ) {
+      return decision({
+        action: "warn",
+        code: "snapshot_read_chain_warning",
+        message: snapshotReadChainMessage(this.snapshotReadCount),
+        toolName,
+        count: this.snapshotReadCount,
+        signature,
+      });
+    }
+
     if (isFailed) {
       const key = this.signatureKey(signature);
       const exactCount = (this.exactFailureCounts.get(key) ?? 0) + 1;
@@ -408,7 +473,7 @@ export class ToolCallGuardrailController {
         return decision({
           action: "warn",
           code: "same_tool_failure_warning",
-          message: toolFailureRecoveryHint(toolName, sameCount),
+          message: toolFailureRecoveryHint(toolName, sameCount, args),
           toolName,
           count: sameCount,
           signature,

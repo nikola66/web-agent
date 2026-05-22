@@ -30,6 +30,10 @@ test("analyzePythonSource detects requests and argparse hints", () => {
   assert.ok(Array.isArray(out.checklist) && out.checklist.length >= 4);
   assert.ok(Array.isArray(out.mappings) && out.mappings.length > 0);
   assert.ok(out.hints.some((h) => /requests/i.test(h)));
+  assert.ok(out.hints.some((h) => /web_fetch/i.test(h)));
+  assert.equal(out.http_routing?.get, "web_fetch");
+  assert.equal(out.http_routing?.post, "web_post");
+  assert.equal(out.http_skill_ref, "http-api");
   assert.ok(out.hints.some((h) => /argparse/i.test(h)));
   assert.match(out.run_command_template, /^node scripts\//);
   assert.ok(out.run_shell_example && typeof out.run_shell_example === "object");

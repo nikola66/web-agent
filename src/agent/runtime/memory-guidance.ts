@@ -34,7 +34,8 @@ export const WORKSPACE_BROWSE_GUIDANCE =
 
 export const TOOL_JSON_ARGS_GUIDANCE =
   "Tool arguments must be plain JSON with the schema keys each tool declares — do not swap names " +
-  "(grep/find_files: `pattern`; session_search: `query`; read_file/list_dir/tree: `path` or `root`). " +
+  "(grep/find_files: `pattern`; session_search: `query`; read_file/list_dir/tree: `path` or `root`; " +
+  "skill_view/skill_manage: `name` — not `slug`). " +
   "Examples: {\"pattern\":\"TODO\"}, {\"query\":\"last outreach\"}, {\"path\":\".\"}. " +
   "Do not escape property names and do not wrap values in extra quote layers.";
 
@@ -51,10 +52,18 @@ export const SKILLS_GUIDANCE =
   "don't wait to be asked. Skills capture procedures; memory captures durable facts.";
 
 export const SCRIPT_PORTING_GUIDANCE =
-  "Nodebox runs JavaScript only — no `python`, `pip`, or POSIX shell. When a skill or task " +
-  "references Python scripts, `pip install`, or `.py` CLI examples, port them to ESM under " +
-  "`scripts/*.js` and run with `run_shell` (`node scripts/….js`, `cwd` at skill folder, `env` for API tokens). " +
-  "Call `skill_view` **`script-porting`** or `python_to_node` (check `run_shell_example`) before shell execution.";
+  "Nodebox runs JavaScript only — no `python`, `pip`, or POSIX shell. When a skill references Python scripts or HTTP clients: map `requests.get` → `web_fetch` (+ `headers`), `requests.post`/GraphQL → `web_post`; use `run_shell` only for local `node` scripts (not axios/fetch one-liners). Call `skill_view` **`http-api`** for REST/GraphQL shapes, **`script-porting`** for Python ports, or `python_to_node` before shell/API steps.";
+
+export const HTTP_API_GUIDANCE =
+  "REST GET → `web_fetch` with `url` + optional `headers` (Bearer). POST / GraphQL → `web_post` with `url`, `body`, `headers`. " +
+  "Do not invent GraphQL root fields — read the API schema or `skill_view` **`http-api`**. " +
+  "On `ok: false` or GraphQL `errors`, read the error message and fix the call once; never loop axios/shell retries for HTTP.";
+
+export const MEMORY_SPILL_RECOVERY_GUIDANCE =
+  "**Internal memory paths (do not scavenge):** `memory/snapshots/` = oversized tool-result spill only; " +
+  "`memory/runs/` = agent turn logs (tool names/errors), not API payloads. Never `list_dir`, `find_files`, or `grep` under those trees to recover HTTP data. " +
+  "When compact tool output shows `result_ref`, `read_file` that exact path once (content is auto-unwrapped). If missing/stale/nested, rerun `web_fetch`/`web_post`/`grep` on real project paths — not `run_shell head` on memory files. " +
+  "For prior chat context use `session_search`, not raw run JSON.";
 
 export function buildMemoryLayerGuidanceBlock(toolNames: string[] = []): string {
   const tools = new Set(
@@ -91,6 +100,12 @@ export function buildMemoryLayerGuidanceBlock(toolNames: string[] = []): string 
   }
   if (tools.has("run_shell")) {
     parts.push(SCRIPT_PORTING_GUIDANCE);
+  }
+  if (tools.has("web_fetch") && tools.has("web_post")) {
+    parts.push(HTTP_API_GUIDANCE);
+  }
+  if (tools.has("read_file") || tools.has("grep") || tools.has("find_files") || tools.has("list_dir")) {
+    parts.push(MEMORY_SPILL_RECOVERY_GUIDANCE);
   }
   if (!parts.length) return "";
   return `\n\n# Memory layers\n${parts.join("\n\n")}`;

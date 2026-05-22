@@ -10,6 +10,7 @@ import {
   isExecutionContinuationIntent,
   isSkillInstallIntent,
   buildSkillInstallContextPrefix,
+  buildApiCallContextPrefix,
   skillBulkSaveAllUrlItemsFailed,
   webFetchTargetsRegistryUrl,
 } from "../dist/agent-runtime/turn-sequencing.js";
@@ -151,7 +152,24 @@ test("buildSkillInstallContextPrefix nudges script-porting for python skills", (
   const prefix = buildSkillInstallContextPrefix("install python skill with pip install helpers");
   assert.ok(prefix);
   assert.match(prefix!, /script-porting/);
-  assert.match(prefix!, /node scripts/);
+  assert.match(prefix!, /http-api/);
+});
+
+test("buildApiCallContextPrefix nudges http-api and skill discovery for graphql tasks", () => {
+  const prefix = buildApiCallContextPrefix("how many job posts via graphql");
+  assert.ok(prefix);
+  assert.match(prefix!, /http-api/);
+  assert.match(prefix!, /web_fetch/);
+  assert.match(prefix!, /discovery/i);
+  assert.doesNotMatch(prefix!, /directus/i);
+});
+
+test("buildApiCallContextPrefix orders discovery before guessing resources", () => {
+  const prefix = buildApiCallContextPrefix("connect to our cms api with bearer token");
+  assert.ok(prefix);
+  assert.match(prefix!, /discovery/i);
+  assert.match(prefix!, /Do not retry/i);
+  assert.doesNotMatch(prefix!, /\/collections/);
 });
 
 test("skillBulkSaveAllUrlItemsFailed detects total URL failure batch", () => {
