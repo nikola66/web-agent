@@ -85,6 +85,7 @@ import runtimeMemorySemanticIndexSource from "../../dist/agent-runtime/memory/se
 import runtimeMemoryToolStatsSource from "../../dist/agent-runtime/memory/tool-stats.js?raw";
 import runtimeMemoryLearningsSource from "../../dist/agent-runtime/memory/learnings.js?raw";
 import runtimeMemorySkillsSource from "../../dist/agent-runtime/memory/skills.js?raw";
+import runtimeMemorySkillCompatSource from "../../dist/agent-runtime/memory/skill-compat.js?raw";
 import runtimeMemorySkillImportUrlSource from "../../dist/agent-runtime/memory/skill-import-url.js?raw";
 import runtimeMemoryContextBlocksSource from "../../dist/agent-runtime/memory/context-blocks.js?raw";
 /** Nodebox copies this string at agent start — it is `dist/`, not `src/`; run `npm run build:embed-runtime` after changing runtime TS. */
@@ -510,6 +511,7 @@ async function writeRuntimeSources(profileId: string): Promise<void> {
   await emulator.fs.writeFile(`${webagentDir}/memory/tool-stats.js`, runtimeMemoryToolStatsSource);
   await emulator.fs.writeFile(`${webagentDir}/memory/learnings.js`, runtimeMemoryLearningsSource);
   await emulator.fs.writeFile(`${webagentDir}/memory/skills.js`, runtimeMemorySkillsSource);
+  await emulator.fs.writeFile(`${webagentDir}/memory/skill-compat.js`, runtimeMemorySkillCompatSource);
   await emulator.fs.writeFile(`${webagentDir}/memory/skill-import-url.js`, runtimeMemorySkillImportUrlSource);
   await emulator.fs.writeFile(`${webagentDir}/memory/context-blocks.js`, runtimeMemoryContextBlocksSource);
   await emulator.fs.writeFile(`${webagentDir}/migrations/index.js`, runtimeMigrationsIndexSource);

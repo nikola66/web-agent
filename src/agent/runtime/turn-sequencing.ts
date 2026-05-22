@@ -72,7 +72,8 @@ export function buildSkillInstallContextPrefix(input) {
     "[Skill install] Some GitHub repos are curated indexes (README + outbound links), not skill hosts. " +
     "Read the README, follow registry links (officialskills.sh / skills.sh / skillsmp) or source-repo URLs — " +
     "do not guess raw paths from list labels. On 404: web_fetch registry pages, resolve GitHub links, " +
-    "try alternate repo layouts, web_search — pivot before declaring a blocker.";
+    "try alternate repo layouts, web_search — pivot before declaring a blocker. " +
+    "After install, call skill_view **`imported-skill-compat`**, then skill_view the installed skill; follow the Web Agent execution section.";
   if (PYTHON_SKILL_INSTALL_RE.test(String(input || ""))) {
     prefix +=
       " After install, if the skill references Python, pip, or HTTP clients: call skill_view **`http-api`** (REST/GraphQL) and **`script-porting`** (Python ports); use `web_fetch`/`web_post` for API steps; `run_shell` only for local node scripts.";

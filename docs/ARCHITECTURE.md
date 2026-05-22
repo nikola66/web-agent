@@ -86,6 +86,11 @@ The same framing is used for streaming LLM responses (`ipcProxyStreamRequest` in
 - Capability tools: `src/capabilities/tools/<id>/{manifest.json, handler.js}` — loaded lazily; **skipped if name collides with a built-in** (warns to console + JSONL debug log).
 - Tool catalog re-exported to browser via `src/agent/tool-catalog.ts` for emoji/icon hints in the UI.
 
+## Skills
+
+- Bundled procedures live under `src/capabilities/skills/<id>/SKILL.md` (compact index injected each turn; full body via `skill_view`).
+- User/imported skills live under `.webagent/skills/`. Remote imports auto-append a **Web Agent execution** compatibility section via `memory/skill-compat.ts` so skills.sh hosts map to built-in tools (`web_fetch`, `web_post`, file tools, etc.).
+
 ## Build pipeline
 
 ```

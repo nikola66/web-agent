@@ -298,6 +298,64 @@ test("skill_manage create and delete share the skill write paths", async (t) => 
   await assert.rejects(loadSkill(fromManage.slug), /not found/);
 });
 
+test("saveSkill appends Web Agent execution section for imported WebFetch skills", async (t) => {
+  const name = `WebFetch Import ${Date.now()}`;
+  const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+  t.after(async () => {
+    await deleteSkill(slug).catch(() => {});
+  });
+  await saveSkill({
+    name,
+    description: "Uses WebFetch",
+    category: "imported",
+    content: [
+      "---",
+      `name: ${name}`,
+      "description: Uses WebFetch",
+      "---",
+      "",
+      "## Procedure",
+      "",
+      "Fetch guidelines with WebFetch.",
+      "",
+    ].join("\n"),
+  });
+  const raw = await loadSkill(slug);
+  assert.match(raw, /## Web Agent execution \(auto-appended\)/);
+  assert.match(raw, /web_fetch/);
+  const viewed = await viewSkill({ name: slug });
+  assert.equal(viewed.compatibility_tier, "mapped");
+  assert.ok(Array.isArray(viewed.compatibility_notes));
+});
+
+test("skill_view returns compatibility_notes for imported external-tool skills", async (t) => {
+  const name = `Compat View ${Date.now()}`;
+  const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+  t.after(async () => {
+    await deleteSkill(slug).catch(() => {});
+  });
+  await saveSkill({
+    name,
+    description: "Playwright skill",
+    category: "imported",
+    content: [
+      "---",
+      `name: ${name}`,
+      "description: Playwright skill",
+      "---",
+      "",
+      "## Procedure",
+      "",
+      "Use Playwright to test the app.",
+      "",
+    ].join("\n"),
+  });
+  const viewed = await viewSkill({ name: slug });
+  assert.equal(viewed.compatibility_tier, "unsupported");
+  assert.ok(Array.isArray(viewed.compatibility_notes));
+  assert.match(viewed.compatibility_notes.join("\n"), /Playwright/i);
+});
+
 test("skill_view reads allowed support files and rejects unsafe paths", async (t) => {
   const name = `Tool View ${Date.now()}-${Math.random().toString(36).slice(2)}`;
   const saved = await skillManageTool({

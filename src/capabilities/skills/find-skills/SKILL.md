@@ -76,7 +76,8 @@ When the user picks a skill:
 
 1. `skill_view` **`web-agent-skill`** — remote install rules (HTTPS + `skill_manage` / `skill_bulk_save`, never shell `git clone`).
 2. Install with `/skills install <https-url-to-SKILL.md>` or `skill_manage` `import_url`.
-3. Confirm with `skill_list` + `skill_view`.
+3. `skill_view` **`imported-skill-compat`**, then `skill_view` the installed slug — follow the Web Agent execution section and `compatibility_notes`.
+4. Confirm with `skill_list`.
 
 ## Pitfalls
 

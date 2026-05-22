@@ -18,8 +18,14 @@ import {
   archiveSkillDirectory,
 } from "../skill-provenance.js";
 import { fetchSkillImportText, normalizeSkillImportUrl } from "./skill-import-url.js";
+import {
+  analyzeSkillCompat,
+  appendCompatSectionIfMissing,
+  compatNotesForView,
+  compatScanWarnings,
+} from "./skill-compat.js";
 
-const SKILLS_CONTEXT_CHAR_BUDGET = 8_000;
+const SKILLS_CONTEXT_CHAR_BUDGET = 8_500;
 const SKILL_INDEX_TRIGGERS_MAX_CHARS = 160;
 const SKILL_FILE_NAME = "SKILL.md";
 
@@ -354,11 +360,12 @@ export async function saveSkill({
         content,
       });
   const validated = validateSkillDocument(raw);
+  const { content: patchedRaw } = appendCompatSectionIfMissing(raw, validated.meta);
   const resolvedCategory = skillCategorySlug(category || validated.meta.category || DEFAULT_SKILL_CATEGORY);
   const skillDir = canonicalSkillDir({ category: resolvedCategory, slug: validated.slug });
   await fs.mkdir(skillDir, { recursive: true });
   const filePath = nodePath.join(skillDir, SKILL_FILE_NAME);
-  await fs.writeFile(filePath, raw.endsWith("\n") ? raw : `${raw}\n`, "utf8");
+  await fs.writeFile(filePath, patchedRaw.endsWith("\n") ? patchedRaw : `${patchedRaw}\n`, "utf8");
   invalidateSkillsContextCache();
   const origin = getSkillWriteOrigin();
   if (origin === "background_review" || origin === "curator") {
@@ -425,7 +432,7 @@ export async function viewSkill({ name, file_path }: { name?: string; file_path?
     throw new Error(`skill_view: file "${requestedPath}" is too large to inline.`);
   }
   const content = await fs.readFile(targetPath, "utf8");
-  return {
+  const result: Record<string, unknown> = {
     ok: true,
     name: record.name,
     slug: record.slug,
@@ -433,6 +440,12 @@ export async function viewSkill({ name, file_path }: { name?: string; file_path?
     file_path: requestedPath,
     content,
   };
+  if (requestedPath === SKILL_FILE_NAME) {
+    const { meta } = parseSkillFrontmatter(content);
+    const compat = compatNotesForView(analyzeSkillCompat(content, meta), record.source);
+    if (compat) Object.assign(result, compat);
+  }
+  return result;
 }
 
 export async function deleteSkill(name) {
@@ -467,9 +480,11 @@ function scanSkillContent(
   for (const [pattern, label] of patterns) {
     if (pattern.test(text)) dangerous.push(label);
   }
-  if (/\b(pip install|python3?|python\s+-m|\.py\b)/i.test(text)) {
+  if (/\b(pip install|python3?|python\s+-m|\.py\b|pdftotext|qpdf)\b/i.test(text)) {
     warnings.push("contains Python/pip references — use web_fetch/web_post for API steps and run_shell only for local node scripts (skill_view script-porting)");
   }
+  const { meta } = parseSkillFrontmatter(raw);
+  warnings.push(...compatScanWarnings(analyzeSkillCompat(text, meta)));
   if (text.length > 120_000) warnings.push("large skill content");
   for (const file of files) {
     if (!isSafeSkillRelativePath(file.path)) dangerous.push(`unsafe support path: ${file.path}`);
@@ -493,13 +508,14 @@ async function installSkillFromUrl({ url, category }) {
       warnings: scan.warnings,
     };
   }
+  const { content: patchedRaw } = appendCompatSectionIfMissing(raw, validation.meta, { force: true });
   const result = await saveSkill({
     name: String(validation.meta.name ?? ""),
     description: String(validation.meta.description ?? ""),
     version: String(validation.meta.version ?? "1.0.0"),
     tags: Array.isArray(validation.meta.tags) ? validation.meta.tags.map(String) : [],
     category: String(category || validation.meta.category || "imported"),
-    content: raw,
+    content: patchedRaw,
   });
   const hubDir = nodePath.join(SKILLS_DIR, ".hub");
   const lockPath = nodePath.join(hubDir, "lock.json");
@@ -516,7 +532,8 @@ async function installSkillFromUrl({ url, category }) {
     category: result.category,
   };
   await fs.writeFile(lockPath, JSON.stringify(lock, null, 2), "utf8");
-  return { ...result, source: normalizedUrl, warnings: scan.warnings };
+  const postScan = scanSkillContent(patchedRaw);
+  return { ...result, source: normalizedUrl, warnings: postScan.warnings };
 }
 
 /**

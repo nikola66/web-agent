@@ -1,0 +1,82 @@
+[
+  {
+    "rank": 1,
+    "slug": "find-skills",
+    "repo": "vercel-labs/add-skill",
+    "patterns": ["web_search", "skill_manage"],
+    "tier": "native",
+    "notes": "Already bundled in web-agent"
+  },
+  {
+    "rank": 2,
+    "slug": "frontend-design",
+    "repo": "anthropics/skills",
+    "patterns": ["write_file", "edit_file"],
+    "tier": "native",
+    "notes": "Code-only skill"
+  },
+  {
+    "rank": 3,
+    "slug": "vercel-react-best-practices",
+    "repo": "vercel-labs/agent-skills",
+    "patterns": ["read_file"],
+    "tier": "native",
+    "notes": "Reads rules/*.md via read_file"
+  },
+  {
+    "rank": 4,
+    "slug": "web-design-guidelines",
+    "repo": "vercel-labs/agent-skills",
+    "patterns": ["WebFetch", "read_file"],
+    "tier": "mapped",
+    "mapping": "WebFetch -> web_fetch"
+  },
+  {
+    "rank": 5,
+    "slug": "agent-browser",
+    "repo": "vercel-labs/agent-browser",
+    "patterns": ["Bash(agent-browser:*)", "npx"],
+    "tier": "unsupported",
+    "mapping": "Use web_fetch + file tools; no Playwright/agent-browser"
+  },
+  {
+    "rank": 6,
+    "slug": "skill-creator",
+    "repo": "anthropics/skills",
+    "patterns": ["write_file"],
+    "tier": "native",
+    "notes": "File writes only"
+  },
+  {
+    "rank": 7,
+    "slug": "pdf",
+    "repo": "anthropics/skills",
+    "patterns": ["pip install", "python", "pdftotext"],
+    "tier": "limited",
+    "mapping": "script-porting + python_to_node"
+  },
+  {
+    "rank": 8,
+    "slug": "webapp-testing",
+    "repo": "anthropics/skills",
+    "patterns": ["Playwright"],
+    "tier": "unsupported",
+    "mapping": "No browser automation in Nodebox"
+  },
+  {
+    "rank": 9,
+    "slug": "mcp-builder",
+    "repo": "anthropics/skills",
+    "patterns": ["WebFetch", "web search", "npx", "Python", "CallMcpTool"],
+    "tier": "limited",
+    "mapping": "web_fetch/web_post; MCP out of scope"
+  },
+  {
+    "rank": 10,
+    "slug": "tdd",
+    "repo": "obra/superpowers",
+    "patterns": ["test runners", "shell"],
+    "tier": "limited",
+    "mapping": "run_shell node-only in Nodebox"
+  }
+]

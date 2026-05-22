@@ -93,6 +93,16 @@ export {
 } from "./skills.js";
 
 export {
+  analyzeSkillCompat,
+  appendCompatSectionIfMissing,
+  buildWebAgentExecutionAppendix,
+  compatNotesForView,
+  compatScanWarnings,
+  WEB_AGENT_EXECUTION_HEADING,
+} from "./skill-compat.js";
+export type { CompatTier, SkillCompatAnalysis } from "./skill-compat.js";
+
+export {
   getSkillWriteOrigin,
   runWithSkillWriteOrigin,
   markAgentCreated,

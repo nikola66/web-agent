@@ -145,6 +145,7 @@ test("buildSkillInstallContextPrefix warns about curated indexes", () => {
   assert.ok(prefix);
   assert.match(prefix!, /indexes/i);
   assert.match(prefix!, /do not guess raw paths/i);
+  assert.match(prefix!, /imported-skill-compat/);
   assert.doesNotMatch(prefix!, /VoltAgent/i);
 });
 
