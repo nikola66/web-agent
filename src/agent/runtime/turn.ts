@@ -111,6 +111,7 @@ import {
 import { emitTranscriptEvent } from "./transcript-delivery.js";
 import {
   summarizeToolExecutions,
+  rewriteTerminalBlockLines,
   writeStdoutSmoothed,
   createRunId,
   toolExecutionKey,
@@ -465,9 +466,9 @@ export async function agentTurn(
       const isNodeboxLiveStream =
         String(process.env.WEBAGENT_RUNTIME || "").trim() === "nodebox";
       let liveStreamStarted = false;
-      let liveStreamBranchPending = false;
-      const maybeLiveStreamChunk = (chunk: string) => {
-        if (!isNodeboxLiveStream || quietTurn || !chunk) return;
+      let liveStreamRenderedLineCount = 0;
+      const maybeLiveStreamChunk = (_chunk: string) => {
+        if (!isNodeboxLiveStream || quietTurn || !streamedVisible.trim()) return;
         if (!liveStreamStarted) {
           if (!turnHeaderPrinted) {
             if (round > 1) process.stdout.write("\n");
@@ -475,11 +476,12 @@ export async function agentTurn(
             turnHeaderPrinted = true;
           }
           liveStreamStarted = true;
-          liveStreamBranchPending = true;
         }
-        const out = liveStreamBranchPending ? prefixBlock(chunk, true) : chunk;
-        liveStreamBranchPending = false;
-        process.stdout.write(out);
+        const block = prefixBlock(renderMarkdownToAnsi(streamedVisible), true);
+        liveStreamRenderedLineCount = rewriteTerminalBlockLines(
+          liveStreamRenderedLineCount,
+          block
+        );
       };
       const streamWriter = createToolAwareStreamWriter((chunk) => {
         if (!chunk) return;
@@ -581,8 +583,12 @@ export async function agentTurn(
           process.stdout.write("\n");
         }
         if (rendered) {
-          const block = prefixBlock(rendered, branchBelowName);
+          const block = prefixBlock(rendered, liveStreamStarted ? true : branchBelowName);
           if (liveStreamStarted) {
+            liveStreamRenderedLineCount = rewriteTerminalBlockLines(
+              liveStreamRenderedLineCount,
+              block
+            );
             process.stdout.write("\n\n");
           } else {
             await writeStdoutSmoothed(`${block}\n\n`);

@@ -21,6 +21,20 @@ function displayCellWidth(text: string) {
   return graphemes.reduce((sum, cluster) => sum + (/\p{Extended_Pictographic}/u.test(cluster) ? 2 : cluster.length), 0);
 }
 
+test("renderMarkdownToAnsi formats bold headings and bullet lists", () => {
+  const md = [
+    "**The Model War**",
+    "*   **GPT-5.5** is the current benchmark, but the gap is closing.",
+    "**Bottom Line:** It's no longer about who has the biggest cluster.",
+  ].join("\n");
+  const plain = stripAnsi(renderMarkdownToAnsi(md));
+  assert.match(plain, /The Model War/);
+  assert.doesNotMatch(plain, /\*\*The Model War\*\*/);
+  assert.match(plain, /•.*GPT-5\.5.*benchmark/);
+  assert.doesNotMatch(plain, /\*\*GPT-5\.5\*\*/);
+  assert.match(plain, /Bottom Line:/);
+});
+
 test("renderMarkdownToAnsi preserves underscores inside exact tokens", () => {
   assert.equal(stripAnsi(renderMarkdownToAnsi("LIVE_DIRECT_OK_TOKEN")), "LIVE_DIRECT_OK_TOKEN");
   assert.equal(
