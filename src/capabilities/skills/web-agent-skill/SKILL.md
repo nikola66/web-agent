@@ -68,10 +68,11 @@ Call `skill_view` **`memory-layers`** for facts vs session vs skills. Reference 
 
 ### Hermes-style background self-improvement
 
-After enough tool iterations (default **10** without a foreground skill write), the runtime may spawn a **post-turn background review** that replays the conversation snapshot with a restricted tool set (`skill_*`, `memory_*`) and the full Hermes-style skill review prompt. This runs **after** the user-visible response and does not block the main turn.
+After enough tool iterations (default **8** without a foreground skill write), the runtime may spawn a **post-turn background review** that replays the conversation snapshot with a restricted tool set (`skill_*`, `memory_*`) and the full Hermes-style skill review prompt. This runs **after** the user-visible response and does not block the main turn.
 
 - Skill review trigger is **interval-only** (`WEBAGENT_SKILL_REVIEW_INTERVAL`) — not tied to todo/plan gates.
-- Memory review interval defaults to every **10 user turns** (`WEBAGENT_MEMORY_REVIEW_INTERVAL`).
+- Memory review interval defaults to every **8 user turns** (`WEBAGENT_MEMORY_REVIEW_INTERVAL`).
+- Background review agent loop caps at **12** rounds (`WEBAGENT_BACKGROUND_REVIEW_MAX_ROUNDS`).
 - Skills created in background review are marked `created_by: agent` in `.webagent/skills/.usage.json` and are eligible for curator consolidation.
 - Foreground `skill_manage` / `skill_bulk_save` resets the skill counter (same as Hermes).
 - User-visible summary lines look like: `Self-improvement review: Skill 'x' updated · Memory updated`.

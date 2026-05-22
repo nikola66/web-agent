@@ -10,15 +10,15 @@ import { errorMessage } from "./utils.js";
 
 export const DEFAULT_SKILL_REVIEW_INTERVAL = Math.max(
   1,
-  Number(process.env.WEBAGENT_SKILL_REVIEW_INTERVAL) || 10
+  Number(process.env.WEBAGENT_SKILL_REVIEW_INTERVAL) || 8
 );
 export const DEFAULT_MEMORY_REVIEW_INTERVAL = Math.max(
   1,
-  Number(process.env.WEBAGENT_MEMORY_REVIEW_INTERVAL) || 10
+  Number(process.env.WEBAGENT_MEMORY_REVIEW_INTERVAL) || 8
 );
 export const BACKGROUND_REVIEW_MAX_ROUNDS = Math.max(
   1,
-  Number(process.env.WEBAGENT_BACKGROUND_REVIEW_MAX_ROUNDS) || 16
+  Number(process.env.WEBAGENT_BACKGROUND_REVIEW_MAX_ROUNDS) || 12
 );
 
 const MEMORY_TOOLS = new Set([
