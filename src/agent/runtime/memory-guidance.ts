@@ -12,7 +12,8 @@ export const MEMORY_GUIDANCE =
   "not belong in memory.\n" +
   "If you discovered a repeatable workflow, save it as a skill — not as a memory fact. " +
   "Write memories as declarative facts, not instructions to yourself ('User prefers concise " +
-  "responses' ✓ — 'Always respond concisely' ✗). Procedures belong in skills, not memory.";
+  "responses' ✓ — 'Always respond concisely' ✗). Procedures belong in skills, not memory. " +
+  "Use `memory_forget` by exact key when a saved fact is stale, wrong, or the user asks you to forget it.";
 
 export const SESSION_SEARCH_GUIDANCE =
   "When the user references something from a past conversation, you suspect cross-session context " +
@@ -70,7 +71,7 @@ export function buildMemoryLayerGuidanceBlock(toolNames: string[] = []): string 
     (toolNames || []).map((name) => String(name || "").trim()).filter(Boolean)
   );
   const parts: string[] = [];
-  if (tools.has("memory_save") || tools.has("memory_recall") || tools.has("memory_search")) {
+  if (tools.has("memory_save") || tools.has("memory_recall") || tools.has("memory_search") || tools.has("memory_forget")) {
     parts.push(MEMORY_GUIDANCE);
   }
   if (tools.has("session_search")) {

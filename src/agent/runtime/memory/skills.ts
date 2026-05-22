@@ -480,9 +480,6 @@ function scanSkillContent(
   for (const [pattern, label] of patterns) {
     if (pattern.test(text)) dangerous.push(label);
   }
-  if (/\b(pip install|python3?|python\s+-m|\.py\b|pdftotext|qpdf)\b/i.test(text)) {
-    warnings.push("contains Python/pip references — use web_fetch/web_post for API steps and run_shell only for local node scripts (skill_view script-porting)");
-  }
   const { meta } = parseSkillFrontmatter(raw);
   warnings.push(...compatScanWarnings(analyzeSkillCompat(text, meta)));
   if (text.length > 120_000) warnings.push("large skill content");

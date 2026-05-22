@@ -28,6 +28,16 @@ const EMAIL_SEND_FIELDS: ReadonlyArray<EmailField> = [
   },
 ];
 
+const COMPOSIO_FIELDS: ReadonlyArray<EmailField> = [
+  {
+    key: "composio_api_key",
+    label: "Composio API key",
+    secret: true,
+    placeholder: "cmp_...",
+    hint: "Composio dashboard",
+  },
+];
+
 function SettingsSection(props: { title: string; subtitle: ReactNode; children: ReactNode }) {
   return (
     <section className="flex flex-col gap-3 rounded-md border border-white/10 bg-white/2 p-3">
@@ -223,6 +233,34 @@ export function SettingsPanel() {
       >
         <EmailCredentialGrid
           fields={EMAIL_SEND_FIELDS}
+          apiKeys={apiKeys}
+          setApiKey={setApiKey}
+          visibleKeys={visibleKeys}
+          toggleVisibility={toggleVisibility}
+        />
+      </SettingsSection>
+
+      <SettingsSection
+        title="Composio"
+        subtitle={
+          <>
+            Connect marketing apps for <span className="font-mono">composio_status</span>,{" "}
+            <span className="font-mono">composio_connect</span>, and{" "}
+            <span className="font-mono">composio_action</span>.{" "}
+            <a
+              href="https://dashboard.composio.dev"
+              target="_blank"
+              rel="noreferrer"
+              className="underline underline-offset-2 hover:text-text-secondary"
+            >
+              Open dashboard
+            </a>
+            .
+          </>
+        }
+      >
+        <EmailCredentialGrid
+          fields={COMPOSIO_FIELDS}
           apiKeys={apiKeys}
           setApiKey={setApiKey}
           visibleKeys={visibleKeys}

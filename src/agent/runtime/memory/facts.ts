@@ -3,7 +3,7 @@
  */
 
 import { getDb, persistDb } from "./sql.js";
-import { searchFactEmbeddings, upsertFactEmbedding } from "./semantic-index.js";
+import { removeFactEmbedding, searchFactEmbeddings, upsertFactEmbedding } from "./semantic-index.js";
 
 function parseFactValue(raw) {
   try {
@@ -16,11 +16,12 @@ function parseFactValue(raw) {
 function factRows(db, sql, params = []) {
   const result = db.exec(sql, params);
   const rows = result[0]?.values || [];
-  return rows.map(([key, value, createdAt, updatedAt]) => ({
+  return rows.map(([key, value, createdAt, updatedAt, scope]) => ({
     key,
     value: parseFactValue(value),
     created_at: createdAt,
     updated_at: updatedAt,
+    ...(scope ? { scope } : {}),
   }));
 }
 
@@ -38,20 +39,27 @@ function substringScore(fact, query) {
   return hits / tokens.length;
 }
 
-export async function setFact(key, value) {
+function normalizeFactScope(scope) {
+  const s = String(scope || "").trim().toLowerCase().replace(/[^a-z0-9_-]+/g, "_");
+  const allowed = new Set(["user", "preference", "environment", "project", "tool", "general"]);
+  return allowed.has(s) ? s : "general";
+}
+
+export async function setFact(key, value, options = {}) {
   const factKey = String(key || "").trim();
   if (!factKey) throw new Error("`key` is required for memory_save.");
+  const scope = normalizeFactScope(options?.scope);
   const db = await getDb();
   const now = new Date().toISOString();
   db.run(
-    `INSERT INTO facts(key, value, created_at, updated_at)
-     VALUES (?, ?, ?, ?)
-     ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`,
-    [factKey, JSON.stringify(value), now, now]
+    `INSERT INTO facts(key, value, created_at, updated_at, scope)
+     VALUES (?, ?, ?, ?, ?)
+     ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at, scope = excluded.scope`,
+    [factKey, JSON.stringify(value), now, now, scope]
   );
   await persistDb(db, true);
   await upsertFactEmbedding(factKey, value).catch(() => {});
-  return { key: factKey, value, created_at: now, updated_at: now };
+  return { key: factKey, value, created_at: now, updated_at: now, scope };
 }
 
 export async function getFact(key) {
@@ -60,7 +68,7 @@ export async function getFact(key) {
   const db = await getDb();
   return factRows(
     db,
-    "SELECT key, value, created_at, updated_at FROM facts WHERE key = ? LIMIT 1",
+    "SELECT key, value, created_at, updated_at, scope FROM facts WHERE key = ? LIMIT 1",
     [factKey]
   )[0] || null;
 }
@@ -70,9 +78,21 @@ export async function getAllFacts(limit = 0) {
   const cap = Math.round(Number(limit) || 0);
   const sql =
     cap > 0
-      ? `SELECT key, value, created_at, updated_at FROM facts ORDER BY updated_at DESC, key ASC LIMIT ${cap}`
-      : "SELECT key, value, created_at, updated_at FROM facts ORDER BY updated_at DESC, key ASC";
+      ? `SELECT key, value, created_at, updated_at, scope FROM facts ORDER BY updated_at DESC, key ASC LIMIT ${cap}`
+      : "SELECT key, value, created_at, updated_at, scope FROM facts ORDER BY updated_at DESC, key ASC";
   return factRows(db, sql);
+}
+
+export async function deleteFact(key) {
+  const factKey = String(key || "").trim();
+  if (!factKey) throw new Error("`key` is required for memory_forget.");
+  const existing = await getFact(factKey);
+  if (!existing) return { key: factKey, deleted: false };
+  const db = await getDb();
+  db.run("DELETE FROM facts WHERE key = ?", [factKey]);
+  await persistDb(db, true);
+  await removeFactEmbedding(factKey).catch(() => {});
+  return { key: factKey, deleted: true, previous: existing };
 }
 
 export async function searchFacts(query, limit = 30) {

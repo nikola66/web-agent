@@ -4,6 +4,7 @@
 
 import fs from "node:fs/promises";
 import nodePath from "node:path";
+import { workspaceStatePath } from "../constants.js";
 import { resolveWorkspacePath } from "../workspace-paths.js";
 
 export const PORTING_CHECKLIST = [
@@ -39,7 +40,118 @@ export const PORTING_MAPPINGS: { python: string; node: string }[] = [
   { python: "dict/list comprehensions", node: "array map/filter/reduce" },
   { python: "subprocess / shell", node: "not available in Nodebox scripts — use fetch or tools" },
   { python: "pip install", node: "not available to the agent — port logic inline or use fetch" },
+  { python: "httpx / aiohttp / urllib", node: "web_fetch/web_post for tool calls, or global fetch in ESM scripts" },
+  { python: "BeautifulSoup / bs4", node: "web_fetch + simple text/link extraction helpers; no full DOM parser by default" },
+  { python: "csv", node: "node:fs/promises + small parse/stringify helpers for simple CSV" },
+  { python: "glob", node: "node:fs/promises readdir recursive walk + RegExp/endsWith filters" },
+  { python: "shutil.copyfile / move", node: "node:fs/promises copyFile / rename" },
+  { python: "logging", node: "console.error / console.log with small level wrapper" },
+  { python: "datetime / time", node: "Date, Intl.DateTimeFormat, performance.now" },
+  { python: "pandas / numpy", node: "manual redesign or CSV/JSON streaming helpers; do not bundle heavy equivalents" },
+  { python: "selenium / playwright", node: "manual redesign around Web Agent web tools; browser automation is not a Nodebox script port" },
 ];
+
+const CACHE_REL = ".webagent/python-porting-cache.json";
+const CACHE_VERSION = 1;
+const CACHE_LIMIT = 50;
+
+type CompatibilityTier = "direct" | "template" | "manual" | "unsupported";
+
+type LibraryRecipe = {
+  library: string;
+  tier: CompatibilityTier;
+  replacement: string;
+  notes: string;
+  tool?: string;
+};
+
+const LIBRARY_RECIPES: LibraryRecipe[] = [
+  { library: "requests", tier: "template", replacement: "web_fetch/web_post or global fetch", notes: "Route simple GET/POST through Web Agent tools; use fetch only inside reusable scripts.", tool: "web_fetch" },
+  { library: "httpx", tier: "template", replacement: "web_fetch/web_post or global fetch", notes: "Async client features collapse to fetch plus explicit status checks.", tool: "web_fetch" },
+  { library: "aiohttp", tier: "template", replacement: "web_fetch/web_post or global fetch", notes: "Use fetch promises; avoid porting session pools unless the task needs them.", tool: "web_fetch" },
+  { library: "urllib", tier: "template", replacement: "web_fetch/web_post or global fetch", notes: "Map URL reads to fetch and parse text/json explicitly.", tool: "web_fetch" },
+  { library: "beautifulsoup4", tier: "template", replacement: "web_fetch + simple extraction helpers", notes: "Good for links/text/title extraction; complex CSS selectors need manual redesign." },
+  { library: "bs4", tier: "template", replacement: "web_fetch + simple extraction helpers", notes: "Alias for BeautifulSoup; no full DOM parser is bundled." },
+  { library: "argparse", tier: "direct", replacement: "node:util parseArgs", notes: "Use parseArgs for flags/options and process.argv for positional args." },
+  { library: "sys", tier: "direct", replacement: "process.argv / process.exit", notes: "Skip argv[0] and argv[1] for user args." },
+  { library: "dotenv", tier: "direct", replacement: "process.env / run_shell env", notes: "Do not read .env secrets from skills; pass env through Settings/vault or tool env." },
+  { library: "os", tier: "direct", replacement: "process.env and node:os where needed", notes: "Most skill ports only need env vars and paths." },
+  { library: "json", tier: "direct", replacement: "JSON.parse / JSON.stringify", notes: "Use explicit try/catch for invalid JSON." },
+  { library: "csv", tier: "template", replacement: "small CSV helpers + node:fs/promises", notes: "Suitable for simple comma CSV; quoted/newline-heavy CSV needs manual handling." },
+  { library: "pathlib", tier: "direct", replacement: "node:path", notes: "Use path.join, dirname, basename, extname." },
+  { library: "glob", tier: "template", replacement: "recursive readdir helper", notes: "Use a small walk function plus suffix/regex filters." },
+  { library: "shutil", tier: "direct", replacement: "node:fs/promises copyFile, rename, rm", notes: "Use Web Agent file tools for broad workspace mutations when possible." },
+  { library: "logging", tier: "direct", replacement: "console.log / console.error", notes: "Keep CLI output parseable; log diagnostics to stderr." },
+  { library: "time", tier: "direct", replacement: "Date.now / performance.now / setTimeout", notes: "Use Date for wall-clock, performance.now for duration." },
+  { library: "datetime", tier: "direct", replacement: "Date / Intl.DateTimeFormat", notes: "Timezone-heavy code needs explicit UTC handling." },
+  { library: "subprocess", tier: "unsupported", replacement: "Web Agent tools or inline JS", notes: "Nodebox scripts cannot shell out; redesign the step around tools/fetch/files." },
+  { library: "pandas", tier: "manual", replacement: "CSV/JSON streaming helpers or artifact output", notes: "Port only the needed transformation; no bundled DataFrame equivalent." },
+  { library: "numpy", tier: "manual", replacement: "plain arrays or manual numeric helper", notes: "Small numeric loops are fine; vectorized/scientific code needs redesign." },
+  { library: "matplotlib", tier: "manual", replacement: "Mermaid/markdown/table artifact or inline SVG", notes: "Generate an artifact instead of reproducing pyplot." },
+  { library: "selenium", tier: "manual", replacement: "Web Agent web tools or dedicated browser capability", notes: "Browser automation is not a Nodebox script port." },
+  { library: "playwright", tier: "manual", replacement: "Web Agent web tools or dedicated browser capability", notes: "Do not assume Playwright is installed in Nodebox skills." },
+];
+
+const TEMPLATE_SNIPPETS = {
+  fetch_json: [
+    "async function fetchJson(url, headers = {}) {",
+    "  const res = await fetch(url, { headers });",
+    "  if (!res.ok) throw new Error(`HTTP ${res.status} ${res.statusText}: ${await res.text()}`);",
+    "  return await res.json();",
+    "}",
+  ].join("\n"),
+  post_json: [
+    "async function postJson(url, body, headers = {}) {",
+    "  const res = await fetch(url, {",
+    "    method: 'POST',",
+    "    headers: { 'Content-Type': 'application/json', ...headers },",
+    "    body: JSON.stringify(body),",
+    "  });",
+    "  if (!res.ok) throw new Error(`HTTP ${res.status} ${res.statusText}: ${await res.text()}`);",
+    "  return await res.json();",
+    "}",
+  ].join("\n"),
+  parse_args: [
+    "import { parseArgs } from 'node:util';",
+    "const { values, positionals } = parseArgs({",
+    "  args: process.argv.slice(2),",
+    "  options: { dryRun: { type: 'boolean' } },",
+    "  allowPositionals: true,",
+    "});",
+  ].join("\n"),
+  require_env: [
+    "function requireEnv(name) {",
+    "  const value = process.env[name];",
+    "  if (!value) throw new Error(`Missing required env var ${name}`);",
+    "  return value;",
+    "}",
+  ].join("\n"),
+  extract_links: [
+    "function extractLinks(html) {",
+    "  return [...String(html).matchAll(/<a\\s+[^>]*href=[\"']([^\"']+)[\"'][^>]*>(.*?)<\\/a>/gis)]",
+    "    .map((m) => ({ href: m[1], text: m[2].replace(/<[^>]+>/g, '').trim() }));",
+    "}",
+  ].join("\n"),
+  simple_csv: [
+    "function parseSimpleCsv(text) {",
+    "  const [headerLine, ...rows] = String(text).trim().split(/\\r?\\n/);",
+    "  const headers = headerLine.split(',').map((h) => h.trim());",
+    "  return rows.map((row) => Object.fromEntries(row.split(',').map((v, i) => [headers[i], v.trim()])));",
+    "}",
+  ].join("\n"),
+  walk_files: [
+    "import fs from 'node:fs/promises';",
+    "import path from 'node:path';",
+    "async function walk(dir) {",
+    "  const entries = await fs.readdir(dir, { withFileTypes: true });",
+    "  const nested = await Promise.all(entries.map((entry) => {",
+    "    const p = path.join(dir, entry.name);",
+    "    return entry.isDirectory() ? walk(p) : p;",
+    "  }));",
+    "  return nested.flat();",
+    "}",
+  ].join("\n"),
+};
 
 const HINT_RULES: { pattern: RegExp; hint: string }[] = [
   { pattern: /\bimport\s+requests\b|\bfrom\s+requests\b/, hint: "Uses requests → skill_view http-api; web_fetch for GET, web_post for POST/GraphQL (headers for Bearer)." },
@@ -56,10 +168,130 @@ const HINT_RULES: { pattern: RegExp; hint: string }[] = [
   { pattern: /\bpip\s+install\b/, hint: "References pip install — port deps inline; agent cannot run pip (bootstrap may use npm internally)." },
   { pattern: /\bpython3?\s+-m\b/, hint: "CLI via python -m → node scripts/<module>.js with same args." },
   { pattern: /\burllib\b|\bhttpx\b|\baiohttp\b/, hint: "HTTP client library → web_fetch (GET) or web_post (POST/GraphQL)." },
+  { pattern: /\bBeautifulSoup\b|\bbs4\b/, hint: "BeautifulSoup/bs4 → web_fetch plus simple text/link extraction helpers; full DOM selectors need manual redesign." },
+  { pattern: /\bimport\s+csv\b|\bfrom\s+csv\b/, hint: "csv module → node:fs/promises plus small CSV parse/stringify helpers for simple CSV." },
+  { pattern: /\bimport\s+glob\b|\bglob\.glob\b/, hint: "glob → recursive node:fs/promises readdir helper plus suffix/regex filters." },
+  { pattern: /\bimport\s+shutil\b|\bshutil\./, hint: "shutil → node:fs/promises copyFile, rename, rm; prefer Web Agent file tools for broad workspace edits." },
+  { pattern: /\bimport\s+logging\b|\blogging\./, hint: "logging → console.log/console.error or a tiny level wrapper." },
+  { pattern: /\bimport\s+(?:time|datetime)\b|\bfrom\s+datetime\b/, hint: "time/datetime → Date, Intl.DateTimeFormat, Date.now, or performance.now." },
+  { pattern: /\bimport\s+pandas\b|\bfrom\s+pandas\b|\bpd\./, hint: "pandas → manual redesign; port only needed CSV/JSON transforms, no bundled DataFrame equivalent." },
+  { pattern: /\bimport\s+numpy\b|\bfrom\s+numpy\b|\bnp\./, hint: "numpy → manual redesign with arrays for small numeric logic; scientific/vectorized code is not a direct Nodebox port." },
+  { pattern: /\bselenium\b|\bplaywright\b/, hint: "selenium/playwright → manual redesign around Web Agent web tools; do not assume browser automation packages in Nodebox." },
   { pattern: /\bimport\s+sys\b|\bsys\.argv\b/, hint: "Uses sys.argv → process.argv (skip node + script path)." },
   { pattern: /\.env\b|load_dotenv/, hint: "Dotenv pattern → process.env or run_shell `env`; user sets keys in Settings/vault." },
   { pattern: /\bfrom\s+\.(\w+)\s+import\b|\bfrom\s+(\w+)\s+import\b/, hint: "Relative/package imports → ESM import paths under scripts/ (e.g. import { x } from './lib.js')." },
 ];
+
+function normalizeLibraryName(name: string): string {
+  const lower = String(name || "").trim().toLowerCase();
+  const aliases: Record<string, string> = {
+    bs4: "beautifulsoup4",
+    beautifulsoup: "beautifulsoup4",
+    pil: "pillow",
+    dotenv: "dotenv",
+  };
+  return aliases[lower] || lower;
+}
+
+export function detectPythonLibraries(source: string): string[] {
+  const libs = new Set<string>();
+  const text = String(source || "");
+  for (const m of text.matchAll(/^\s*import\s+([^\n#]+)/gm)) {
+    for (const part of m[1].split(",")) {
+      const name = part.trim().split(/\s+as\s+/i)[0]?.split(".")[0];
+      if (/^[A-Za-z_]\w*$/.test(name || "")) libs.add(normalizeLibraryName(name));
+    }
+  }
+  for (const m of text.matchAll(/^\s*from\s+([A-Za-z_][\w.]*)\s+import\s+/gm)) {
+    libs.add(normalizeLibraryName(m[1].split(".")[0]));
+  }
+  if (/\bBeautifulSoup\b/.test(text)) libs.add("beautifulsoup4");
+  if (/\bload_dotenv\b/.test(text)) libs.add("dotenv");
+  if (/\bpip\s+install\b/.test(text)) libs.add("pip");
+  if (/\bpython3?\s+-m\b/.test(text)) libs.add("python-module-cli");
+  return [...libs].sort();
+}
+
+function tierRank(tier: CompatibilityTier): number {
+  return { direct: 0, template: 1, manual: 2, unsupported: 3 }[tier] ?? 0;
+}
+
+function recipesForLibraries(libraries: string[]): LibraryRecipe[] {
+  const byLibrary = new Map(LIBRARY_RECIPES.map((recipe) => [recipe.library, recipe]));
+  return libraries.map((library) => {
+    if (library === "pip" || library === "python-module-cli") {
+      return {
+        library,
+        tier: "unsupported" as CompatibilityTier,
+        replacement: "node scripts/<name>.js or Web Agent tools",
+        notes: "Do not run Python/pip in Nodebox; port the referenced script or replace the step with dedicated tools.",
+      };
+    }
+    return byLibrary.get(library) || {
+      library,
+      tier: "manual" as CompatibilityTier,
+      replacement: "manual ESM port",
+      notes: "No dedicated recipe yet; inspect the call sites and port only the behavior actually used.",
+    };
+  });
+}
+
+function compatibilityTier(recipes: LibraryRecipe[], hasSource: boolean): CompatibilityTier {
+  if (!hasSource || !recipes.length) return "direct";
+  return recipes.reduce<CompatibilityTier>(
+    (tier, recipe) => (tierRank(recipe.tier) > tierRank(tier) ? recipe.tier : tier),
+    "direct"
+  );
+}
+
+function templateNamesForLibraries(libraries: string[]): string[] {
+  const names = new Set<string>();
+  if (libraries.some((lib) => ["requests", "httpx", "aiohttp", "urllib"].includes(lib))) {
+    names.add("fetch_json");
+    names.add("post_json");
+  }
+  if (libraries.includes("argparse")) names.add("parse_args");
+  if (libraries.some((lib) => ["os", "dotenv"].includes(lib))) names.add("require_env");
+  if (libraries.includes("beautifulsoup4")) names.add("extract_links");
+  if (libraries.includes("csv")) names.add("simple_csv");
+  if (libraries.includes("glob")) names.add("walk_files");
+  return [...names];
+}
+
+function buildTemplates(libraries: string[]) {
+  return templateNamesForLibraries(libraries).map((name) => ({
+    name,
+    code: TEMPLATE_SNIPPETS[name as keyof typeof TEMPLATE_SNIPPETS],
+  }));
+}
+
+function stableHash(text: string): string {
+  let hash = 2166136261;
+  for (let i = 0; i < text.length; i += 1) {
+    hash ^= text.charCodeAt(i);
+    hash = Math.imul(hash, 16777619);
+  }
+  return (hash >>> 0).toString(16).padStart(8, "0");
+}
+
+function cachePath(): string {
+  return workspaceStatePath(CACHE_REL);
+}
+
+async function loadPortingCache(): Promise<Record<string, unknown>> {
+  try {
+    const parsed = JSON.parse(await fs.readFile(cachePath(), "utf8"));
+    return parsed && typeof parsed === "object" ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+async function savePortingCache(cache: Record<string, unknown>): Promise<void> {
+  const entries = Object.entries(cache).slice(-CACHE_LIMIT);
+  await fs.mkdir(nodePath.dirname(cachePath()), { recursive: true });
+  await fs.writeFile(cachePath(), JSON.stringify(Object.fromEntries(entries), null, 2), "utf8");
+}
 
 function extractPythonEnvVars(source: string): string[] {
   const vars = new Set<string>();
@@ -113,6 +345,7 @@ function suggestRunCommand(source: string, filePath?: string): string {
 
 export function analyzePythonSource(source: string, filePath?: string) {
   const text = String(source || "");
+  const cache_key = `py2node-v${CACHE_VERSION}-${stableHash(`${filePath || ""}\n${text}`)}`;
   const hints: string[] = [];
   const seen = new Set<string>();
   for (const { pattern, hint } of HINT_RULES) {
@@ -127,11 +360,21 @@ export function analyzePythonSource(source: string, filePath?: string) {
   const env_vars = extractPythonEnvVars(text);
   const script_rel = suggestScriptRel(text, filePath);
   const suggested_cwd = suggestCwd(filePath);
+  const detected_libraries = detectPythonLibraries(text);
+  const recipes = recipesForLibraries(detected_libraries);
+  const unsupported = recipes.filter((recipe) => recipe.tier === "unsupported");
   return {
     checklist: PORTING_CHECKLIST,
     mappings: PORTING_MAPPINGS,
     http_routing: HTTP_TOOL_ROUTING,
     http_skill_ref: "http-api",
+    cache_key,
+    cache_hit: false,
+    compatibility_tier: compatibilityTier(recipes, Boolean(text.trim())),
+    detected_libraries,
+    recipes,
+    templates: buildTemplates(detected_libraries),
+    unsupported,
     hints,
     env_vars,
     suggested_cwd: suggested_cwd ?? null,
@@ -148,10 +391,21 @@ export async function pythonToNodeTool(
   ctx: { cwd?: string } | null = null
 ) {
   const filePath = typeof relPath === "string" ? relPath.trim() : "";
+  async function analyzeWithCache(source: string, path?: string) {
+    const fresh = analyzePythonSource(source, path);
+    const cache = await loadPortingCache().catch(() => ({}));
+    const cached = cache[fresh.cache_key] as Record<string, unknown> | undefined;
+    if (cached && typeof cached === "object") {
+      return { ...cached, cache_hit: true };
+    }
+    cache[fresh.cache_key] = fresh;
+    await savePortingCache(cache).catch(() => {});
+    return fresh;
+  }
   if (filePath) {
     const abs = resolveWorkspacePath(ctx, filePath);
     const source = await fs.readFile(abs, "utf8");
-    return analyzePythonSource(source, filePath);
+    return analyzeWithCache(source, filePath);
   }
   const inline = typeof python === "string" ? python : "";
   if (!inline.trim()) {
@@ -160,5 +414,5 @@ export async function pythonToNodeTool(
       note: "Provide `path` (workspace .py file) or `python` (source string) for snippet-specific hints.",
     };
   }
-  return analyzePythonSource(inline);
+  return analyzeWithCache(inline);
 }

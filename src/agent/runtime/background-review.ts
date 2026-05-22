@@ -23,6 +23,7 @@ export const BACKGROUND_REVIEW_MAX_ROUNDS = Math.max(
 
 const MEMORY_TOOLS = new Set([
   "memory_save",
+  "memory_forget",
   "memory_search",
   "memory_recall",
   "session_memory_append",
@@ -75,6 +76,7 @@ export type BackgroundReviewTriggerInput = {
   estimatedStepsOverSix?: boolean;
   toolRoundCount?: number;
   toolCallCount?: number;
+  inputText?: string;
   finalVisibleText?: string;
   availableToolNames?: string[];
 };
@@ -98,8 +100,27 @@ export function evaluateBackgroundReviewTrigger(
 
   let shouldReviewMemory = false;
   let shouldReviewSkills = false;
+  const userText = String(input.inputText || "").toLowerCase();
+  const visibleText = String(input.finalVisibleText || "").toLowerCase();
+  const explicitMemorySignal =
+    /\b(remember this|remember that|save (?:this|that|my|the)|don't forget|do not forget|for next time|from now on)\b/i.test(userText);
+  const correctionSignal =
+    /\b(stop doing|don't (?:do|format|say|ask)|do not (?:do|format|say|ask)|too verbose|be more concise|you should|next time|prefer(?:red|s)?|i hate when|why are you)\b/i.test(userText);
+  const complexTurnSignal =
+    Boolean(input.executedToolsInTurn) &&
+    (Number(input.toolCallCount || 0) >= 5 ||
+      Number(input.toolRoundCount || 0) >= 4 ||
+      Boolean(input.estimatedStepsOverSix));
+  const recoverySignal =
+    /\b(retried|retry worked|workaround|fixed by|resolved by|tool failed|port(?:ed)? to node|nodebox|run_shell)\b/i.test(
+      `${userText}\n${visibleText}`
+    );
 
   if (completed && hasMemoryTools && turnsSinceMemory >= DEFAULT_MEMORY_REVIEW_INTERVAL) {
+    shouldReviewMemory = true;
+    turnsSinceMemory = 0;
+  }
+  if (completed && hasMemoryTools && explicitMemorySignal) {
     shouldReviewMemory = true;
     turnsSinceMemory = 0;
   }
@@ -107,7 +128,10 @@ export function evaluateBackgroundReviewTrigger(
     completed &&
     hasSkillTools &&
     !input.skillMutatingCalled &&
-    itersSinceSkill >= DEFAULT_SKILL_REVIEW_INTERVAL;
+    (itersSinceSkill >= DEFAULT_SKILL_REVIEW_INTERVAL ||
+      complexTurnSignal ||
+      correctionSignal ||
+      recoverySignal);
   if (skillReviewDue) {
     shouldReviewSkills = true;
     itersSinceSkill = 0;
@@ -242,7 +266,7 @@ export const SKILL_REVIEW_PROMPT =
   "Otherwise, act.";
 
 export const COMBINED_REVIEW_PROMPT =
-  "Tools available in this pass (exact names only): memory_save, session_memory_append, " +
+  "Tools available in this pass (exact names only): memory_save, memory_forget, session_memory_append, " +
   "memory_search, memory_recall, session_memory_list, skill_list, skill_view, skill_manage " +
   "(action: create | patch | edit | write_file). No skill_save/skill_create/standalone write_file.\n\n" +
   "Review the conversation above and update two things:\n\n" +
@@ -373,6 +397,9 @@ export function summarizeBackgroundReviewActionsDetailed(
       skillsPatched += 1;
     } else if (tool === "memory_save") {
       lines.push("Memory updated");
+      memoryUpdates += 1;
+    } else if (tool === "memory_forget") {
+      lines.push("Memory forgotten");
       memoryUpdates += 1;
     } else if (tool === "session_memory_append") {
       lines.push("Session memory updated");

@@ -6,8 +6,8 @@ export default defineTool({
   run: pythonToNodeTool,
   emoji: "🐍",
   description:
-    "Read-only Python→Node porting guide for Nodebox — not an auto-transpiler. Returns checklist, " +
-    "Python→JS mappings, heuristic hints, detected `env_vars`, `suggested_cwd`, and `run_shell_example`. " +
+    "Read-only Python→Node compatibility report for Nodebox — not an auto-transpiler. Returns checklist, " +
+    "Python→JS mappings, detected libraries, compatibility tier, recipes, templates, heuristic hints, `env_vars`, `suggested_cwd`, cache metadata, and `run_shell_example`. " +
     "Use before writing scripts/*.js when a skill references python, pip, or .py files. Full procedure: skill_view **`script-porting`**. " +
     "Provide `path` (workspace .py file) or `python` (inline source); path wins if both set.",
   inputSchema: {

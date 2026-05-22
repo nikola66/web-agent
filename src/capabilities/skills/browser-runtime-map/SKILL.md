@@ -31,7 +31,7 @@ Canonical built-in tool picker. Other skills defer here for filesystem vs HTTP v
 | Image / audio / video | `vision_analyze`, `audio_analyze`, `youtube_transcribe` — **`multimodal-ingest`** |
 | Memory / skills / wiki | see **`memory-layers`** (`memory_*`, `session_*`, `skill_list`, `skill_view`, `skill_manage`, `skill_bulk_save`, `wiki_*`) |
 | Skill has Python/bash scripts | **`script-porting`**, `python_to_node`, `web_fetch`/`web_post` for API steps, `run_shell` **`node …`** only for local scripts |
-| One-off shell (last resort) | `run_shell` — host only; Nodebox: **`node …`** only |
+| One-off shell (last resort) | `run_shell` — Nodebox: **`node …`** plus simple read-only probes (`date`, `pwd`, `echo`, `wc -l`) |
 
 **Non-negotiable:** No `curl`/`npx`/`git clone` when a row above fits. Nodebox has **no** POSIX shell. Skill installs: `skill_bulk_save` / `skill_manage`, never shell.
 
@@ -52,10 +52,10 @@ Three layers (see **`script-porting`** for porting Python skills):
 | Layer | Capability |
 |-------|------------|
 | **Nodebox API** | `shell.runCommand(binary, args, { cwd, env })` — bootstrap also uses `npm` |
-| **Agent `run_shell`** | **`node …` only** — optional `cwd`, `env` (maps to Nodebox `runCommand`); no POSIX `sh -c`, pipes, `curl`, `npx`, or arbitrary binaries |
+| **Agent `run_shell`** | **`node …` plus simple read-only probes** — optional `cwd`, `env` for node scripts; no POSIX `sh -c`, pipes, `curl`, `npx`, Python, git, or package managers |
 | **Nodebox runtime** | Node.js only — **no Python/pip binary** |
 
-- **Host runtime**: real `run_shell` via `sh -c` when available — still prefer dedicated tools first.
+- Unsupported Nodebox commands return recovery metadata (`suggested_tool`, `suggested_next_step`) instead of acting like a real host shell.
 
 ## Procedure
 

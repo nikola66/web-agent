@@ -55,7 +55,10 @@ test("session_search falls back to run history when conversation archives are em
       (out?.result as { matches?: Array<{ path?: string; context?: string }> })?.matches || [];
     assert.ok(matches.length >= 1);
     assert.equal(matches[0]?.path, "memory/runs/run_abc.json");
+    assert.equal((matches[0] as { source?: string })?.source, "run");
     assert.match(String(matches[0]?.context || ""), /youtube creators/i);
+    const groups = (out?.result as { source_groups?: Array<{ source?: string; count?: number }> })?.source_groups || [];
+    assert.ok(groups.some((group) => group.source === "run" && Number(group.count) >= 1));
   });
 });
 

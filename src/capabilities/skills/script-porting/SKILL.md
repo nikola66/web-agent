@@ -15,7 +15,7 @@ Canonical procedure for porting Python/bash skill scripts to JavaScript runnable
 |------|-----------|
 | Full porting procedure | This skill (`skill_view` **`script-porting`**) |
 | REST / GraphQL call shapes | `skill_view` **`http-api`** |
-| Construct hints for a `.py` snippet | `python_to_node` |
+| Construct compatibility report for a `.py` snippet | `python_to_node` |
 | Read Python source | `read_file`, `skill_view` (support paths), or `web_fetch` (raw GitHub) |
 | Write ported script | `skill_manage` `write_file` → `scripts/<name>.js` under the skill folder |
 | Patch skill docs | `skill_manage` `patch` / `edit` — replace Python CLI with `node scripts/…` |
@@ -40,7 +40,7 @@ Canonical procedure for porting Python/bash skill scripts to JavaScript runnable
 
 ## Procedure
 
-1. **Detect** — After `skill_view`, scan for `python`, `pip install`, `.py`, `python -m`. Call `python_to_node` with source or path for hints.
+1. **Detect** — After `skill_view`, scan for `python`, `pip install`, `.py`, `python -m`. Call `python_to_node` with source or path for compatibility tier, library recipes, templates, and cache-backed hints.
 2. **Load sources** — `read_file` or `skill_view` with `file_path`, or `web_fetch` raw GitHub URLs for repo scripts not yet in workspace.
 3. **Port** — Write ESM to `scripts/<basename>.js` (same basename as the `.py` file when possible). Use `import`/`export`, top-level `await` or async IIFE for `main`.
 4. **Patch docs** — Update the skill's `SKILL.md` CLI section: replace `python …` / `pip install` with `node scripts/….js` and note env vars.
@@ -54,7 +54,7 @@ Three layers — do not conflate them:
 | Layer | What it is | Implication |
 |-------|------------|-------------|
 | **Nodebox API** | [`shell.runCommand(binary, args, { cwd, env })`](https://github.com/Sandpack/nodebox-runtime/blob/main/packages/nodebox/api.md) — programmatic shell | Can spawn `node`, and bootstrap uses `npm`; supports `cwd` + `env` |
-| **Agent `run_shell`** | Web Agent policy on top of Nodebox | **`node …` only** for the model — no `python`, `curl`, pipes, or arbitrary binaries |
+| **Agent `run_shell`** | Web Agent policy on top of Nodebox | **`node …` plus simple read-only probes** for the model — no `python`, `curl`, pipes, git, package managers, or arbitrary binaries |
 | **Nodebox runtime** | In-browser Node.js VM | **No Python/pip binary** — port to JS even if the API allowed other binaries |
 
 `npm install` may run during app bootstrap; the agent must not rely on pip/npm in skill steps — port logic inline.
@@ -74,6 +74,19 @@ See **`references/porting-cheatsheet.md`** for the full table. Common cases:
 | `if __name__ == "__main__"` | top-level async IIFE or `main().catch(...)` |
 | `print(x)` | `console.log(x)` |
 | `None` | `null` |
+
+## Famous Python tools: preferred alternatives
+
+| Python tool | Web Agent / Nodebox alternative |
+|-------------|----------------------------------|
+| `requests`, `httpx`, `aiohttp`, `urllib` | Prefer `web_fetch` / `web_post`; use global `fetch` only inside reusable ESM scripts. |
+| `BeautifulSoup` / `bs4` | `web_fetch` + simple title/text/link extraction helpers from `python_to_node.templates`; full selector logic needs manual redesign. |
+| `argparse`, `sys.argv` | `node:util parseArgs` or `process.argv.slice(2)`. |
+| `dotenv`, `os.getenv`, `os.environ` | `process.env`; pass secrets through `run_shell.env` or Settings/vault. |
+| `json`, `csv`, `pathlib`, `glob`, `shutil`, `logging`, `time`, `datetime` | Node built-ins plus small helpers from `python_to_node.templates`. |
+| `pandas`, `numpy`, `matplotlib` | Manual redesign: port only the needed transform or emit markdown/Mermaid/SVG artifacts. |
+| `selenium`, `playwright` | Manual redesign around Web Agent web tools; do not assume browser automation packages in Nodebox. |
+| `subprocess`, `pip`, `python -m` | Unsupported directly; replace with Web Agent tools or `node scripts/<name>.js`. |
 
 ## Nodebox constraints
 

@@ -29,7 +29,22 @@ function mergeFactsByKey(recentFacts, relevantFacts, max = 24) {
   for (const fact of recentFacts) {
     if (!merged.has(fact.key)) merged.set(fact.key, fact);
   }
-  return [...merged.values()].slice(0, max);
+  const priority = new Map([
+    ["user", 0],
+    ["preference", 1],
+    ["project", 2],
+    ["environment", 3],
+    ["tool", 4],
+    ["general", 5],
+  ]);
+  return [...merged.values()]
+    .sort((a, b) => {
+      const sa = priority.get(String(a.scope || "general")) ?? 5;
+      const sb = priority.get(String(b.scope || "general")) ?? 5;
+      if (sa !== sb) return sa - sb;
+      return String(b.updated_at || "").localeCompare(String(a.updated_at || ""));
+    })
+    .slice(0, max);
 }
 
 export async function buildMemoryContextBlock(options: { goal?: string } = {}) {
@@ -59,11 +74,13 @@ export async function buildMemoryContextBlock(options: { goal?: string } = {}) {
     for (const fact of facts) {
       const age = relativeAge(fact.updated_at);
       const ageTag = age ? ` (${age})` : "";
+      const scope = String(fact.scope || "general");
+      const scopeTag = scope && scope !== "general" ? `[${scope}] ` : "";
       const staleTag =
         fact.updated_at && Date.now() - new Date(fact.updated_at).getTime() > 90 * 86_400_000
           ? " ⚠️stale"
           : "";
-      lines.push(`- ${fact.key}: ${JSON.stringify(fact.value)}${ageTag}${staleTag}`);
+      lines.push(`- ${scopeTag}${fact.key}: ${JSON.stringify(fact.value)}${ageTag}${staleTag}`);
     }
   }
   if (reflections.length) {
@@ -106,11 +123,13 @@ export async function buildMemoryContextBlock(options: { goal?: string } = {}) {
   if (block.length <= MEMORY_CONTEXT_CHAR_BUDGET) return block;
 
   while (block.length > MEMORY_CONTEXT_CHAR_BUDGET && lines.length > 2) {
-    const factsHeaderIdx = lines.indexOf("Facts:");
     let removed = false;
-    if (factsHeaderIdx >= 0) {
-      for (let i = factsHeaderIdx + 1; i < lines.length; i += 1) {
-        if (!lines[i].startsWith("- ")) break;
+    for (let i = lines.length - 1; i >= 0; i -= 1) {
+      if (
+        lines[i].startsWith("- ") &&
+        !lines[i].startsWith("- [user]") &&
+        !lines[i].startsWith("- [preference]")
+      ) {
         lines.splice(i, 1);
         removed = true;
         break;

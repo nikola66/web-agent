@@ -52,6 +52,9 @@ test("each builtin tool has a documented execution test path", () => {
     "apply_patch",
     "artifact_present",
     "audio_analyze",
+    "composio_action",
+    "composio_connect",
+    "composio_status",
     "cron_list",
     "cron_register",
     "delete_file",
@@ -62,6 +65,7 @@ test("each builtin tool has a documented execution test path", () => {
     "grep",
     "list_dir",
     "make_dir",
+    "memory_forget",
     "memory_recall",
     "memory_save",
     "memory_search",
@@ -91,6 +95,346 @@ test("each builtin tool has a documented execution test path", () => {
     "youtube_transcribe",
   ]);
   assert.deepEqual([...covered].sort(), Object.keys(BUILTIN_TOOLS).sort());
+});
+
+test("composio_status reports missing configuration without network", async () => {
+  const catalog = await loadToolCatalog();
+  const out = await runOne("composio_status", {}, catalog, { env: {} });
+  assert.ok(!out?.error, out?.error);
+  const result = out?.result as { configured?: boolean; missing?: string; allowed_actions?: unknown[] };
+  assert.equal(result.configured, false);
+  assert.equal(result.missing, "WEBAGENT_COMPOSIO_API_KEY");
+  assert.ok((result.allowed_actions?.length ?? 0) >= 5);
+});
+
+test("composio_connect discovers auth configs and links automatically when one exists", async () => {
+  const catalog = await loadToolCatalog();
+  const originalFetch = globalThis.fetch;
+  const calls: string[] = [];
+  globalThis.fetch = async (url, init) => {
+    calls.push(String(url));
+    if (calls.length === 1) {
+      return new Response(
+        JSON.stringify({
+          data: [
+            { id: "auth_google_calendar_1", toolkit: { slug: "GOOGLECALENDAR" }, name: "Google Calendar" },
+          ],
+        }),
+        { status: 200 }
+      );
+    }
+    if (calls.length === 2) {
+      return new Response(JSON.stringify({ data: [] }), { status: 200 });
+    }
+    assert.equal(String(url).endsWith("/connected_accounts/link"), true);
+    assert.equal((init?.headers as Record<string, string>)["x-api-key"], "cmp_test");
+    return new Response(JSON.stringify({ redirect_url: "https://connect.example/link" }), { status: 200 });
+  };
+  try {
+    const out = await runOne(
+      "composio_connect",
+      { app: "google_calendar", user_id: "user_1" },
+      catalog,
+      { env: { WEBAGENT_COMPOSIO_API_KEY: "cmp_test" } }
+    );
+    assert.ok(!out?.error, out?.error);
+    const result = out?.result as { redirect_url?: string; selected_connected_account?: { id?: string } };
+    assert.equal(result.redirect_url, "https://connect.example/link");
+    assert.equal(result.selected_connected_account, undefined);
+    assert.equal(calls.length, 3);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("composio_connect lists connected account choices when multiple accounts exist", async () => {
+  const catalog = await loadToolCatalog();
+  const originalFetch = globalThis.fetch;
+  const calls: string[] = [];
+  globalThis.fetch = async (url) => {
+    calls.push(String(url));
+    if (calls.length === 1) {
+      return new Response(JSON.stringify({ data: [] }), { status: 200 });
+    }
+    return new Response(
+      JSON.stringify({
+        data: [
+          { id: "acct_1", toolkit: { slug: "GOOGLECALENDAR" }, status: "ACTIVE", name: "Personal Calendar" },
+          { id: "acct_2", toolkit: { slug: "GOOGLECALENDAR" }, status: "ACTIVE", name: "Work Calendar" },
+        ],
+      }),
+      { status: 200 }
+    );
+  };
+  try {
+    const out = await runOne(
+      "composio_connect",
+      { app: "google_calendar", user_id: "user_1" },
+      catalog,
+      { env: { WEBAGENT_COMPOSIO_API_KEY: "cmp_test" } }
+    );
+    assert.ok(!out?.error, out?.error);
+    const result = out?.result as { needs_choice?: boolean; connected_accounts?: Array<{ id?: string; name?: string }> };
+    assert.equal(result.needs_choice, true);
+    assert.equal(result.connected_accounts?.length, 2);
+    assert.equal(calls.length, 2);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("composio_connect creates hosted auth link through configured API", async () => {
+  const catalog = await loadToolCatalog();
+  const originalFetch = globalThis.fetch;
+  let seenUrl = "";
+  let seenBody: Record<string, unknown> = {};
+  globalThis.fetch = async (url, init) => {
+    seenUrl = String(url);
+    seenBody = JSON.parse(String(init?.body || "{}"));
+    assert.equal((init?.headers as Record<string, string>)["x-api-key"], "cmp_test");
+    return new Response(JSON.stringify({ redirect_url: "https://connect.example/link" }), { status: 200 });
+  };
+  try {
+    const out = await runOne(
+      "composio_connect",
+      { app: "gmail", auth_config_id: "ac_123", user_id: "user_1" },
+      catalog,
+      { env: { WEBAGENT_COMPOSIO_API_KEY: "cmp_test" } }
+    );
+    assert.ok(!out?.error, out?.error);
+    assert.match(seenUrl, /\/connected_accounts\/link$/);
+    assert.deepEqual(seenBody, { user_id: "user_1", auth_config_id: "ac_123" });
+    assert.equal((out?.result as { redirect_url?: string })?.redirect_url, "https://connect.example/link");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("composio_action rejects non-allowlisted actions", async () => {
+  const catalog = await loadToolCatalog();
+  const out = await runOne(
+    "composio_action",
+    { action: "gmail_delete_everything", args: {} },
+    catalog,
+    { env: { WEBAGENT_COMPOSIO_API_KEY: "cmp_test" } }
+  );
+  assert.ok(out?.error, "expected allowlist rejection");
+  assert.match(String(out.error), /Unsupported Composio marketing action/);
+});
+
+const GMAIL_ACCOUNT_LIST_RESPONSE = JSON.stringify({
+  data: [
+    {
+      id: "ca_gmail_1",
+      toolkit: { slug: "GMAIL" },
+      status: "ACTIVE",
+      name: "Primary Gmail",
+      user_id: "user_1",
+    },
+  ],
+});
+
+const CALENDAR_ACCOUNT_LIST_RESPONSE = JSON.stringify({
+  data: [
+    {
+      id: "ca_cal_1",
+      toolkit: { slug: "GOOGLECALENDAR" },
+      status: "ACTIVE",
+      name: "Primary Calendar",
+      user_id: "user_1",
+    },
+  ],
+});
+
+test("composio_action executes a curated marketing action and logs it", async () => {
+  await withIsolatedWorkspace(async () => {
+    const catalog = await loadToolCatalog();
+    const originalFetch = globalThis.fetch;
+    let seenUrl = "";
+    let seenBody: Record<string, unknown> = {};
+    let call = 0;
+    globalThis.fetch = async (url, init) => {
+      call += 1;
+      assert.equal((init?.headers as Record<string, string>)["x-api-key"], "cmp_test");
+      if (call === 1) {
+        return new Response(GMAIL_ACCOUNT_LIST_RESPONSE, { status: 200 });
+      }
+      seenUrl = String(url);
+      seenBody = JSON.parse(String(init?.body || "{}"));
+      return new Response(JSON.stringify({ data: { draft_id: "d1" }, successful: true }), { status: 200 });
+    };
+    try {
+      const out = await runOne(
+        "composio_action",
+        {
+          action: "gmail_create_draft",
+          args: { to: "lead@example.com", subject: "Intro", body: "Hello" },
+          user_id: "user_1",
+        },
+        catalog,
+        { env: { WEBAGENT_COMPOSIO_API_KEY: "cmp_test" } }
+      );
+      assert.ok(!out?.error, out?.error);
+      assert.match(seenUrl, /\/tools\/execute\/GMAIL_CREATE_EMAIL_DRAFT$/);
+      assert.equal(seenBody.connected_account_id, "ca_gmail_1");
+      assert.equal(seenBody.user_id, "user_1");
+      assert.deepEqual(seenBody.arguments, { to: "lead@example.com", subject: "Intro", body: "Hello" });
+      const result = out?.result as { ok?: boolean; action?: string; approval_required?: boolean };
+      assert.equal(result.ok, true);
+      assert.equal(result.action, "gmail_create_draft");
+      assert.equal(result.approval_required, false);
+      const logPath = nodePath.join(process.env.WEBAGENT_WORKSPACE_ROOT || "", ".webagent/composio-actions.jsonl");
+      const log = await fs.readFile(logPath, "utf8");
+      assert.match(log, /gmail_create_draft/);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+});
+
+test("composio_action does not gate read actions", async () => {
+  const catalog = await loadToolCatalog();
+  const originalFetch = globalThis.fetch;
+  let askCalled = false;
+  let call = 0;
+  globalThis.fetch = async () => {
+    call += 1;
+    if (call === 1) return new Response(GMAIL_ACCOUNT_LIST_RESPONSE, { status: 200 });
+    return new Response(JSON.stringify({ successful: true, data: { ok: true } }), { status: 200 });
+  };
+  try {
+    const ctx = createToolContext({
+      runId: "tool_coverage_composio_read",
+      autoApprove: false,
+      ask: async () => {
+        askCalled = true;
+        return false;
+      },
+      env: { WEBAGENT_COMPOSIO_API_KEY: "cmp_test" },
+    });
+    const [out] = await runTools(
+      [{ name: "composio_action", arguments: { action: "gmail_fetch_emails", args: { query: "newer_than:1d" } } }],
+      ctx,
+      catalog
+    );
+    assert.ok(!out?.error, out?.error);
+    assert.equal(askCalled, false);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("composio_action gates outbound send actions", async () => {
+  const catalog = await loadToolCatalog();
+  const originalFetch = globalThis.fetch;
+  let askCalled = false;
+  let call = 0;
+  globalThis.fetch = async () => {
+    call += 1;
+    if (call === 1) return new Response(GMAIL_ACCOUNT_LIST_RESPONSE, { status: 200 });
+    return new Response(JSON.stringify({ successful: true, data: { ok: true } }), { status: 200 });
+  };
+  try {
+    const ctx = createToolContext({
+      runId: "tool_coverage_composio_send",
+      autoApprove: false,
+      ask: async () => {
+        askCalled = true;
+        return true;
+      },
+      env: { WEBAGENT_COMPOSIO_API_KEY: "cmp_test" },
+    });
+    const [out] = await runTools(
+      [{ name: "composio_action", arguments: { action: "gmail_send_email", args: { recipient_email: "lead@example.com", subject: "Intro" } } }],
+      ctx,
+      catalog
+    );
+    assert.ok(!out?.error, out?.error);
+    assert.equal(askCalled, true);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("composio_action resolves a selected connected account id before execute", async () => {
+  const catalog = await loadToolCatalog();
+  const originalFetch = globalThis.fetch;
+  const calls: string[] = [];
+  let seenBody: Record<string, unknown> = {};
+  globalThis.fetch = async (url, init) => {
+    calls.push(String(url));
+    if (calls.length === 1) {
+      return new Response(
+        JSON.stringify({
+          data: [
+            {
+              id: "ca_acct_1",
+              toolkit: { slug: "GMAIL" },
+              status: "ACTIVE",
+              name: "Primary Gmail",
+              user_id: "user_1",
+            },
+          ],
+        }),
+        { status: 200 }
+      );
+    }
+    seenBody = JSON.parse(String(init?.body || "{}"));
+    return new Response(JSON.stringify({ successful: true, data: { ok: true } }), { status: 200 });
+  };
+  try {
+    const out = await runOne(
+      "composio_action",
+      {
+        action: "gmail_fetch_emails",
+        args: { query: "newer_than:1d" },
+        connected_account_id: "ca_acct_1",
+        user_id: "user_1",
+      },
+      catalog,
+      { env: { WEBAGENT_COMPOSIO_API_KEY: "cmp_test" } }
+    );
+    assert.ok(!out?.error, out?.error);
+    assert.equal(calls.length, 2);
+    assert.equal(seenBody.connected_account_id, "ca_acct_1");
+    assert.equal(seenBody.user_id, "user_1");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("composio_action covers calendar read and write slugs", async () => {
+  const catalog = await loadToolCatalog();
+  const originalFetch = globalThis.fetch;
+  const seen: string[] = [];
+  globalThis.fetch = async (url) => {
+    const sUrl = String(url);
+    if (sUrl.includes("/connected_accounts")) {
+      return new Response(CALENDAR_ACCOUNT_LIST_RESPONSE, { status: 200 });
+    }
+    seen.push(sUrl);
+    return new Response(JSON.stringify({ successful: true, data: { ok: true } }), { status: 200 });
+  };
+  try {
+    const readOut = await runOne(
+      "composio_action",
+      { action: "google_calendar_list_events", args: { calendar_id: "primary", time_min: "2026-05-01T00:00:00Z" } },
+      catalog,
+      { env: { WEBAGENT_COMPOSIO_API_KEY: "cmp_test" } }
+    );
+    assert.ok(!readOut?.error, readOut?.error);
+    const writeOut = await runOne(
+      "composio_action",
+      { action: "google_calendar_create_event", args: { calendar_id: "primary", summary: "Standup", start_datetime: "2026-05-01T10:00:00Z", end_datetime: "2026-05-01T10:15:00Z" } },
+      catalog,
+      { env: { WEBAGENT_COMPOSIO_API_KEY: "cmp_test" } }
+    );
+    assert.ok(!writeOut?.error, writeOut?.error);
+    assert.equal(seen[0].includes("/tools/execute/GOOGLECALENDAR_EVENTS_LIST"), true);
+    assert.equal(seen[1].includes("/tools/execute/GOOGLECALENDAR_CREATE_EVENT"), true);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
 });
 
 test("wiki_setup and wiki_search run on isolated workspace", async () => {
@@ -222,6 +566,32 @@ test("memory_recall returns a saved fact by exact key", async () => {
       : [];
     assert.equal(rows[0]?.key, key);
     assert.deepEqual(rows[0]?.value, { mode: "aurora" });
+  });
+});
+
+test("memory_forget deletes a saved fact by exact key", async () => {
+  await withIsolatedWorkspace(async () => {
+    const catalog = await loadToolCatalog();
+    const key = `coverage_forget_${Date.now()}`;
+    const fact = {
+      key,
+      value: { stale: true },
+      scope: "project",
+      created_at: "2026-05-12T00:00:00.000Z",
+      updated_at: "2026-05-12T00:00:00.000Z",
+    };
+    const ctx = createToolContext({
+      runId: `tool_coverage_memory_forget_${Date.now()}`,
+      autoApprove: true,
+      services: {
+        memory: {
+          deleteFact: async () => ({ key, deleted: true, previous: fact }),
+        },
+      },
+    });
+    const [forgotten] = await runTools([{ name: "memory_forget", arguments: { key } }], ctx, catalog);
+    assert.ok(!forgotten?.error, forgotten?.error);
+    assert.equal((forgotten?.result as { deleted?: boolean })?.deleted, true);
   });
 });
 

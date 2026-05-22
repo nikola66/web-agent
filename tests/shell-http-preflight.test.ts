@@ -20,3 +20,30 @@ test("run_shell preflight rejects HTTP one-liners on Nodebox", async (t) => {
     /HTTP calls belong in web_fetch/
   );
 });
+
+test("run_shell returns recovery metadata for Python on Nodebox", async (t) => {
+  const prev = process.env.WEBAGENT_RUNTIME;
+  process.env.WEBAGENT_RUNTIME = "nodebox";
+  t.after(() => {
+    if (prev === undefined) delete process.env.WEBAGENT_RUNTIME;
+    else process.env.WEBAGENT_RUNTIME = prev;
+  });
+
+  const out = await runShellTool({ command: "python script.py" }, { cwd: "." });
+  assert.equal((out as { exit_code?: number }).exit_code, 127);
+  assert.equal((out as { error_code?: string }).error_code, "nodebox_python_unsupported");
+  assert.equal((out as { suggested_tool?: string }).suggested_tool, "python_to_node");
+});
+
+test("run_shell supports simple virtual date on Nodebox", async (t) => {
+  const prev = process.env.WEBAGENT_RUNTIME;
+  process.env.WEBAGENT_RUNTIME = "nodebox";
+  t.after(() => {
+    if (prev === undefined) delete process.env.WEBAGENT_RUNTIME;
+    else process.env.WEBAGENT_RUNTIME = prev;
+  });
+
+  const out = await runShellTool({ command: "date" }, { cwd: "." });
+  assert.equal((out as { exit_code?: number }).exit_code, 0);
+  assert.match(String((out as { stdout?: string }).stdout || ""), /\d{4}/);
+});

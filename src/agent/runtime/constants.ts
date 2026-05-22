@@ -65,6 +65,8 @@ export const MEMORY_DB_PATH = `${MEMORY_ROOT}/memory.sqlite`;
 export const SESSION_MEMORY_PATH = `${WS}/.webagent/session-memory.jsonl`;
 /** First-Telegram-user lock state (`workspaceStatePath(TELEGRAM_AUTH_REL)`). Must match `WORKSPACE_TELEGRAM_AUTH_REL` in `src/core/workspace-layout.ts`. */
 export const TELEGRAM_AUTH_REL = ".webagent/telegram-auth.json";
+/** Append-only Composio external-action audit log. Must match `WORKSPACE_COMPOSIO_AUDIT_REL` in `src/core/workspace-layout.ts`. */
+export const COMPOSIO_AUDIT_REL = ".webagent/composio-actions.jsonl";
 /** Skill documents — reusable procedure markdown files injected into system prompt. */
 export const SKILLS_DIR = `${WS}/.webagent/skills`;
 /** Conversation history checkpoints for rollback. */

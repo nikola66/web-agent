@@ -195,6 +195,46 @@ test("skill import warns on Python content but still installs", async (t) => {
   }
 });
 
+test("skill import warning names likely Python libraries", async (t) => {
+  const pythonSkill = [
+    "---",
+    "name: py-web-helper",
+    "description: Use when running python web tools",
+    "---",
+    "",
+    "## Procedure",
+    "",
+    "```python",
+    "import requests",
+    "from bs4 import BeautifulSoup",
+    "```",
+    "",
+  ].join("\n");
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => ({
+    ok: true,
+    status: 200,
+    headers: { get: () => "text/plain" },
+    text: async () => pythonSkill,
+  });
+  t.after(async () => {
+    globalThis.fetch = originalFetch;
+    await deleteSkill("py-web-helper").catch(() => {});
+  });
+  try {
+    const result = await manageSkill({
+      action: "install_url",
+      url: "https://example.com/SKILL.md",
+    });
+    assert.equal(result.ok, true);
+    assert.match((result.warnings || []).join("\n"), /requests/);
+    assert.match((result.warnings || []).join("\n"), /beautifulsoup4/);
+    assert.match((result.warnings || []).join("\n"), /python_to_node/);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test("bulkSaveSkills saves multiple inline skills and summarizes results", async (t) => {
   const suffix = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
   const names = [`Bulk Save A ${suffix}`, `Bulk Save B ${suffix}`];

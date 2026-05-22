@@ -639,6 +639,7 @@ function buildEnv(profileId: string, profile: Profile, apiKeys: Record<string, s
   const emailEnvMap: Array<[string, string]> = [
     ["WEBAGENT_RESEND_API_KEY", "resend_api_key"],
     ["WEBAGENT_RESEND_FROM", "resend_from"],
+    ["WEBAGENT_COMPOSIO_API_KEY", "composio_api_key"],
   ];
   for (const [envKey, settingKey] of emailEnvMap) {
     assignIfPresent(envKey, settingKey);

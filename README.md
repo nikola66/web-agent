@@ -24,7 +24,7 @@
 
 Web Agent is an open-source AI agent that runs directly in the browser on top of WebContainers. There is nothing to install to use it: no Docker, no VPS, no VM, no Mac mini, no Hostinger box, no local Python stack. Open the app, launch a profile, and start working.
 
-It is designed to feel simple for end users and capable for power users: isolated profiles, browser-local persistence, **40 built-in tools**, **18 bundled skills**, sessions, reflections, learnings, cron jobs, **planning mode** (`/plan`), a **PARA + Obsidian-style knowledge vault** (`wiki_*` tools and `/wiki_*` slash commands), and a self-improving runtime that stays on the user’s machine. For copy-paste scenarios mapped to skills and tools, start with the **[Personal Helper Playbook](docs/use-cases-playbook.md)**.
+It is designed to feel simple for end users and capable for power users: isolated profiles, browser-local persistence, **44 built-in tools**, **18 bundled skills**, sessions, reflections, learnings, cron jobs, **planning mode** (`/plan`), a **PARA + Obsidian-style knowledge vault** (`wiki_*` tools and `/wiki_*` slash commands), and a self-improving runtime that stays on the user’s machine. For copy-paste scenarios mapped to skills and tools, start with the **[Personal Helper Playbook](docs/use-cases-playbook.md)**.
 
 ## Contents
 
@@ -85,7 +85,7 @@ Web Agent is not just a chat box. It is a browser-native agent runtime with thre
 
 | Layer | Count | Notes |
 | --- | --- | --- |
-| Built-in tools | **38** | Seven groups below; skill CRUD consolidated into **`skill_manage`** (plus list, view, bulk import) |
+| Built-in tools | **44** | Eight groups below; skill CRUD consolidated into **`skill_manage`** (plus list, view, bulk import) |
 | Bundled skills | **16** | Four **hub** skills route related workflows; twelve **workflow** skills cover research, planning, delivery, and ops |
 | Playbook scenarios | **25** | Full prompts in **[docs/use-cases-playbook.md](docs/use-cases-playbook.md)** |
 
@@ -212,7 +212,7 @@ For choosing **facts vs session vs skills vs vault**, use the bundled **`/memory
 | `📓 Wiki tools` | `wiki_setup`, `wiki_sync`, `wiki_search` | PARA-shaped markdown vault and search when memory tools are not enough |
 | `📋 Planning` | `/plan` + `write_file` into `plans/` + `artifact_present` | Spec-first workflows: plan now, implement on the next turn |
 | `⏱️ Automation tools` | Heartbeat cron jobs and todos | Recurring tasks while the app is open |
-| `🌐 Remote tools` | Search, fetch, email, vision, YouTube transcript | Web-aware and multimodal task execution |
+| `🌐 Remote tools` | Search, fetch, email, Composio, vision, YouTube transcript | Web-aware, app-integrated, and multimodal task execution |
 | `📚 Skills` | Reusable `SKILL.md` procedures | Higher-level workflows; background review and curator maintain agent-created skills |
 
 ## Slash Commands
@@ -265,6 +265,7 @@ These power built-in web actions from the Settings panel:
 | --- | --- | --- |
 | `TinyFish` | `web_search`, `web_fetch` | Default browser-tool provider configured in Settings. |
 | `Resend` | `email` | Used for outbound email with a verified sender address. |
+| `Composio` | `composio_status`, `composio_connect`, `composio_action` | Curated marketing app bridge for Gmail, Sheets, HubSpot, Notion, Slack, LinkedIn, X/Twitter, and YouTube. |
 
 ### What You Can Configure
 
@@ -273,22 +274,24 @@ These power built-in web actions from the Settings panel:
 - `🔐 Per-profile API key`: store credentials separately from other profiles.
 - `🌐 Custom base URL`: point the custom provider at any OpenAI-compatible endpoint.
 - `✉️ Email delivery`: add Resend credentials for digest or outbound mail flows.
+- `🔌 Composio`: add a Composio key for approval-gated marketing app actions.
 
 ## Tooling
 
-Web Agent ships with **40 native built-in tools** in seven groups. The surface was consolidated so models see four skill tools (`skill_list`, `skill_view`, `skill_manage`, `skill_bulk_save`) instead of seven overlapping names; `list_dir` lists one directory level while `find_files` searches by glob pattern.
+Web Agent ships with **44 native built-in tools** in eight groups. The surface was consolidated so models see four skill tools (`skill_list`, `skill_view`, `skill_manage`, `skill_bulk_save`) instead of seven overlapping names; `list_dir` lists one directory level while `find_files` searches by glob pattern.
 
 ### Tool Groups
 
 | Group | Includes | Best for |
 | --- | --- | --- |
 | `📁 Files & Workspace` | `read_file`, `write_file`, `edit_file`, `multi_edit`, `move_file`, `delete_file`, `tree`, `list_dir`, `find_files`, `grep`, `file_diff`, `make_dir` | Building, editing, inspecting, and organizing project files |
-| `🧠 Memory & Recall` | `memory_save`, `memory_recall`, `memory_search`, `session_memory_append`, `session_memory_list`, `session_search` | Long-lived facts, rolling notes, and recovering prior context |
+| `🧠 Memory & Recall` | `memory_save`, `memory_forget`, `memory_recall`, `memory_search`, `session_memory_append`, `session_memory_list`, `session_search` | Long-lived facts, stale fact cleanup, rolling notes, and recovering prior context |
 | `📓 Knowledge wiki` | `wiki_setup`, `wiki_sync`, `wiki_search` | PARA + Obsidian-friendly vault under the workspace; project facts/session/learnings into markdown; full-text vault search |
 | `📚 Skills` | `skill_list`, `skill_view`, `skill_manage`, `skill_bulk_save` | Discovering, reading, creating, importing, and maintaining skills |
 | `⏱️ Automation` | `cron_register`, `cron_list`, `todo_write` | Recurring jobs, heartbeat-driven workflows, and checklists |
+| `🔌 App Integrations` | `composio_status`, `composio_connect`, `composio_action` | Connecting marketing apps and running allowlisted external actions through Composio |
 | `🌐 Remote & Multimodal` | `web_search`, `web_fetch`, `web_post`, `vision_analyze`, `youtube_transcribe`, `email` | Research, fetching live content, authenticated POST/GraphQL, image analysis, transcripts, and outbound delivery |
-| `🖥️ System & Output` | `run_shell`, `python_to_node`, `system_info`, `artifact_present`, `apply_patch` | Executing commands, Python→Node porting hints, environment state, artifacts, and surgical patching |
+| `🖥️ System & Output` | `run_shell`, `python_to_node`, `system_info`, `artifact_present`, `apply_patch` | Browser-safe Node scripts, Python→Node porting hints, environment state, artifacts, and surgical patching |
 
 <details>
 <summary><strong>🛠️ Full tool catalog</strong></summary>
@@ -297,6 +300,9 @@ Web Agent ships with **40 native built-in tools** in seven groups. The surface w
 | --- | --- |
 | `🩹 apply_patch` | Apply unified patch operations for surgical file changes. |
 | `🪄 artifact_present` | Present markdown to the browser host with view or download affordances. |
+| `🧩 composio_action` | Execute one curated, approval-gated Composio marketing action. |
+| `🔐 composio_connect` | Create a hosted Composio auth link for an app. |
+| `🔌 composio_status` | Check Composio setup, connected accounts, and the curated action allowlist. |
 | `📋 cron_list` | List heartbeat cron jobs from `.webagent/cronjobs.json`. |
 | `⏱️ cron_register` | Register recurring heartbeat jobs that run while the app tab is open. |
 | `🗑️ delete_file` | Delete a file from the workspace. |
@@ -307,14 +313,15 @@ Web Agent ships with **40 native built-in tools** in seven groups. The surface w
 | `🔍 grep` | Search file contents by text or regex. |
 | `📁 list_dir` | List workspace files and directories with optional recursion and filtering. |
 | `📂 make_dir` | Create directories recursively inside the workspace. |
+| `🧹 memory_forget` | Delete a stale or wrong saved memory fact by exact key. |
 | `💭 memory_recall` | Recall a saved memory fact by exact key. |
-| `💾 memory_save` | Save a durable memory fact under a stable key. |
+| `💾 memory_save` | Save a durable memory fact under a stable key, with optional scope. |
 | `🔮 memory_search` | Search saved memory facts by substring. |
 | `📦 move_file` | Move or rename a workspace path. |
 | `🛠️ multi_edit` | Apply multiple find-and-replace edits in one file. |
 | `📄 read_file` | Read a UTF-8 file from the workspace. |
-| `🐍 python_to_node` | Read-only Python→Node porting checklist and hints for Nodebox (not an auto-transpiler). |
-| `🖥️ run_shell` | Run a shell command in the workspace runtime. |
+| `🐍 python_to_node` | Read-only Python→Node compatibility report with library recipes, templates, and cache-backed hints for Nodebox (not an auto-transpiler). |
+| `🖥️ run_shell` | Run browser-safe `node ...` scripts and simple read-only probes in the workspace runtime. |
 | `📝 session_memory_append` | Append a lightweight note to rolling session memory. |
 | `🗂️ session_memory_list` | Read the newest entries from rolling session memory. |
 | `📇 session_search` | Search archived workspace conversations by keywords. |

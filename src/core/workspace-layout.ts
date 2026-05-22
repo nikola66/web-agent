@@ -23,6 +23,7 @@ export const WORKSPACE_CRONJOBS_REL = ".webagent/cronjobs.json";
 export const WORKSPACE_HEARTBEAT_STATE_REL = ".webagent/heartbeat-state.json";
 export const WORKSPACE_CHANNEL_STATE_REL = ".webagent/channel-state.json";
 export const WORKSPACE_MIGRATIONS_REL = ".webagent/migrations.json";
+export const WORKSPACE_COMPOSIO_AUDIT_REL = ".webagent/composio-actions.jsonl";
 
 /** Dotfiles / single files under `.webagent/` that must survive OPFS snapshot export. */
 export const WORKSPACE_WEBAGENT_USER_FILES = [
@@ -34,6 +35,7 @@ export const WORKSPACE_WEBAGENT_USER_FILES = [
   WORKSPACE_HEARTBEAT_STATE_REL,
   WORKSPACE_CHANNEL_STATE_REL,
   WORKSPACE_MIGRATIONS_REL,
+  WORKSPACE_COMPOSIO_AUDIT_REL,
 ] as const;
 
 /** Default dirs to show in the Files tree even when empty (matches primary user-facing vaults). */

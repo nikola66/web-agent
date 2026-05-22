@@ -7,6 +7,9 @@ const EXPECTED_TOOLS = [
   "apply_patch",
   "artifact_present",
   "audio_analyze",
+  "composio_action",
+  "composio_connect",
+  "composio_status",
   "cron_list",
   "cron_register",
   "delete_file",
@@ -17,6 +20,7 @@ const EXPECTED_TOOLS = [
   "grep",
   "list_dir",
   "make_dir",
+  "memory_forget",
   "memory_recall",
   "memory_save",
   "memory_search",
@@ -105,4 +109,11 @@ test("skill catalog separates read-only vs guarded skill writes", async () => {
   for (const name of guardedWrites) {
     assert.equal(browser.BUILTIN_TOOLS[name].requiresConfirmation, true, `${name} should require confirmation`);
   }
+});
+
+test("composio action is read-friendly and only gates outbound/destructive calls", async () => {
+  const browser = await import("../dist/agent-runtime/tools/registry-browser.js");
+  assert.equal(browser.BUILTIN_TOOLS.composio_action.requiresConfirmation, false);
+  assert.ok(!browser.BUILTIN_TOOLS.composio_status.requiresConfirmation);
+  assert.ok(!browser.BUILTIN_TOOLS.composio_connect.requiresConfirmation);
 });

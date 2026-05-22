@@ -2,6 +2,8 @@
  * Map external agent-host tool names (skills.sh / Claude Code) to Web Agent built-ins.
  */
 
+import { detectPythonLibraries } from "../tools/script-porting.js";
+
 export type CompatTier = "native" | "mapped" | "limited" | "unsupported";
 
 export type SkillCompatAnalysis = {
@@ -13,6 +15,7 @@ export type SkillCompatAnalysis = {
   uses_agent_browser: boolean;
   uses_mcp: boolean;
   uses_npx: boolean;
+  python_libraries: string[];
   flags: string[];
 };
 
@@ -56,7 +59,10 @@ export function analyzeSkillCompat(
     toolNames.some((t) => t === "bash" || t.startsWith("bash(")) ||
     /\ballowed-tools:[^\n]*\bBash\b/i.test(body) ||
     /\brequires-tools:[^\n]*\bBash\b/i.test(body);
-  const uses_python = /\b(pip install|python3?|python\s+-m|\.py\b|pdftotext|qpdf)\b/i.test(hay);
+  const python_libraries = detectPythonLibraries(hay);
+  const uses_python =
+    /\b(pip install|python3?|python\s+-m|\.py\b|pdftotext|qpdf)\b/i.test(hay) ||
+    python_libraries.length > 0;
   const uses_playwright = /\bplaywright\b|\bpuppeteer\b/i.test(hay);
   const uses_agent_browser = /\bagent-browser\b/i.test(hay);
   const uses_mcp =
@@ -87,6 +93,7 @@ export function analyzeSkillCompat(
     uses_agent_browser,
     uses_mcp,
     uses_npx,
+    python_libraries,
     flags,
   };
 }
@@ -160,6 +167,12 @@ export function compatScanWarnings(analysis: SkillCompatAnalysis): string[] {
   if (analysis.uses_web_fetch) {
     warnings.push("references WebFetch — use web_fetch with the same URL");
   }
+  if (analysis.uses_python) {
+    const libs = analysis.python_libraries.length
+      ? ` (${analysis.python_libraries.slice(0, 8).join(", ")})`
+      : "";
+    warnings.push(`contains Python/pip references${libs} — use python_to_node and skill_view script-porting`);
+  }
   if (analysis.uses_mcp) {
     warnings.push("references MCP tools — not built-in unless added as a capability");
   }
@@ -179,8 +192,5 @@ export function compatNotesForView(
     `Tier: ${analysis.tier} — follow the "${WEB_AGENT_EXECUTION_HEADING}" section in this skill.`,
     ...compatScanWarnings(analysis),
   ];
-  if (analysis.uses_python) {
-    notes.push("Python/pip steps require script-porting before run_shell");
-  }
   return { compatibility_notes: notes, compatibility_tier: analysis.tier };
 }

@@ -705,12 +705,31 @@ export async function memorySaveTool(args: ToolArgs = {}, ctx) {
     );
   }
   const memory = memoryServices(ctx);
-  const saved = await memory.setFact(key, args.value);
+  const scope = typeof args?.scope === "string" ? args.scope.trim() : undefined;
+  const saved = await memory.setFact(key, args.value, scope ? { scope } : undefined);
   await logDebugEvent("memory_save", {
     key: saved.key,
+    scope: saved.scope || null,
     valueType: typeof args.value,
   });
   return { ok: true, fact: saved };
+}
+
+export async function memoryForgetTool(args: ToolArgs = {}, ctx) {
+  const key = typeof args?.key === "string" ? args.key.trim() : "";
+  if (!key) {
+    throw new Error("`key` is required for memory_forget. It deletes one exact saved memory fact.");
+  }
+  const memory = memoryServices(ctx);
+  if (typeof memory.deleteFact !== "function") {
+    throw new Error("memory_forget is unavailable because the memory service does not support deleteFact.");
+  }
+  const result = await memory.deleteFact(key);
+  await logDebugEvent("memory_forget", {
+    key,
+    deleted: Boolean(result?.deleted),
+  });
+  return { ok: true, ...result };
 }
 
 export async function memoryRecallTool(args: ToolArgs = {}, ctx) {
@@ -1131,15 +1150,33 @@ export async function sessionSearchTool(args: ToolArgs = {}, _ctx) {
     hits: top.length,
   });
 
-  return {
-    ok: true,
-    query,
-    matches: top.map((m) => ({
+  const matches = top.map((m) => {
+    const source = m.relPath.startsWith("memory/conversations/")
+      ? "conversation"
+      : m.relPath.startsWith("memory/runs/")
+        ? "run"
+        : "session_memory";
+    return {
       conversation_id: m.id,
+      source,
       score: m.score,
       path: m.relPath,
       context: m.snippet,
-    })),
+    };
+  });
+  const sourceGroups = ["conversation", "run", "session_memory"]
+    .map((source) => ({
+      source,
+      count: matches.filter((m) => m.source === source).length,
+      matches: matches.filter((m) => m.source === source),
+    }))
+    .filter((group) => group.count > 0);
+
+  return {
+    ok: true,
+    query,
+    matches,
+    source_groups: sourceGroups,
     ...(top.length === 0
       ? {
           note: "No matches found in conversation archives, run history, or session memory.",

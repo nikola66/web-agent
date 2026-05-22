@@ -62,6 +62,7 @@ export {
   setFact,
   getFact,
   getAllFacts,
+  deleteFact,
   searchFacts,
   searchFactsForContext,
 } from "./facts.js";

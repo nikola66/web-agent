@@ -1080,6 +1080,7 @@ export async function agentTurn(
         estimatedStepsOverSix: complexityEstimate.estimatedSteps > 6,
         toolRoundCount: round,
         toolCallCount: toolCallCountInTurn,
+        inputText: originalUserInput,
         finalVisibleText: run.final_visible_assistant_text,
         availableToolNames: allToolNames,
       });

@@ -27,12 +27,11 @@ export const OPENAI_MODEL_EXECUTION_GUIDANCE =
   "\n" +
   "<mandatory_tool_use>\n" +
   "NEVER answer these from memory or mental computation — ALWAYS use a tool:\n" +
-  "- Arithmetic, math, calculations → use terminal or execute_code\n" +
-  "- Hashes, encodings, checksums → use terminal (e.g. sha256sum, base64)\n" +
-  "- Current time, date, timezone → use terminal (e.g. date)\n" +
-  "- System state: OS, CPU, memory, disk, ports, processes → use terminal\n" +
-  "- File contents, sizes, line counts → use read_file, search_files, or terminal\n" +
-  "- Git history, branches, diffs → use terminal\n" +
+  "- Arithmetic, hashes, encodings, and checksums → use `run_shell` only when it can be done with `node ...`; otherwise use a dedicated tool or explain the browser-only limit\n" +
+  "- Current time, date, timezone → use `system_info`\n" +
+  "- System state: OS, CPU, memory, disk → use `system_info`; browser-only mode cannot inspect host ports/processes\n" +
+  "- File contents, sizes, line counts → use read_file, grep, find_files, list_dir, tree, or a `node ...` script\n" +
+  "- Git history, branches, diffs → use file tools on available workspace files; browser-only mode has no git binary\n" +
   "- Current facts (weather, news, versions) → use web_search\n" +
   "</mandatory_tool_use>\n" +
   "\n" +

@@ -188,7 +188,8 @@ export async function getDb(): Promise<SqlDatabase> {
           key TEXT PRIMARY KEY,
           value TEXT NOT NULL,
           created_at TEXT,
-          updated_at TEXT NOT NULL
+          updated_at TEXT NOT NULL,
+          scope TEXT NOT NULL DEFAULT 'general'
         );
         CREATE TABLE IF NOT EXISTS tool_stats(
           tool_name TEXT PRIMARY KEY,
@@ -233,6 +234,7 @@ export async function getDb(): Promise<SqlDatabase> {
       `);
 
       try { db.run("ALTER TABLE facts ADD COLUMN created_at TEXT"); } catch { /* already exists */ }
+      try { db.run("ALTER TABLE facts ADD COLUMN scope TEXT NOT NULL DEFAULT 'general'"); } catch { /* already exists */ }
 
       await persistDb(db, true);
       return db;

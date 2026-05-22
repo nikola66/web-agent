@@ -131,7 +131,7 @@ test("summarizeBackgroundReviewActionsDetailed counts created vs patched", () =>
   assert.ok(summary.lines.length >= 3);
 });
 
-test("evaluateBackgroundReviewTrigger skips skill review before iteration threshold", () => {
+test("evaluateBackgroundReviewTrigger skips simple skill review before iteration threshold", () => {
   resetSelfImproveCounters();
   for (let i = 0; i < 3; i += 1) noteToolIteration();
   const result = evaluateBackgroundReviewTrigger({
@@ -162,10 +162,11 @@ test("evaluateBackgroundReviewTrigger fires at interval without todo or complexi
   assert.equal(result.kind, "skill");
 });
 
-test("hermes parity: skill review is interval-only", () => {
+test("hermes parity: skill review also fires on complex turns", () => {
   const fixture = {
     status: "completed",
     aborted: false,
+    executedToolsInTurn: true,
     skillMutatingCalled: false,
     usedTodoWrite: true,
     toolCallCount: 12,
@@ -177,8 +178,8 @@ test("hermes parity: skill review is interval-only", () => {
   for (let i = 0; i < 3; i += 1) noteToolIteration();
   assert.equal(
     evaluateBackgroundReviewTrigger(fixture).shouldReviewSkills,
-    false,
-    "complex turn alone must not trigger review"
+    true,
+    "complex turn should trigger review before the interval"
   );
 
   resetSelfImproveCounters();
@@ -186,6 +187,20 @@ test("hermes parity: skill review is interval-only", () => {
   const atInterval = evaluateBackgroundReviewTrigger(fixture);
   assert.equal(atInterval.shouldReviewSkills, true);
   assert.equal(getSelfImproveCounters().itersSinceSkill, 0);
+});
+
+test("evaluateBackgroundReviewTrigger fires memory review on explicit remember language", () => {
+  resetSelfImproveCounters();
+  const result = evaluateBackgroundReviewTrigger({
+    status: "completed",
+    aborted: false,
+    skillMutatingCalled: false,
+    inputText: "Remember this: I prefer concise status updates.",
+    finalVisibleText: "Noted.",
+    availableToolNames: ["memory_save", "memory_forget"],
+  });
+  assert.equal(result.shouldReviewMemory, true);
+  assert.equal(result.kind, "memory");
 });
 
 test("SKILL_REVIEW_PROMPT retains Hermes action bias", () => {
@@ -315,6 +330,10 @@ test("semantic index ranks related facts above unrelated ones", async () => {
   const hits = await semantic.searchFactEmbeddings("timezone america chicago", 5);
   assert.ok(hits.length > 0);
   assert.equal(hits[0].key, "user_timezone");
+
+  await semantic.removeFactEmbedding("user_timezone");
+  const afterRemove = await semantic.searchFactEmbeddings("timezone america chicago", 5);
+  assert.equal(afterRemove.some((hit: { key: string }) => hit.key === "user_timezone"), false);
 
   delete process.env.WEBAGENT_WORKSPACE_ROOT;
   delete process.env.WEBAGENT_MEMORY_ROOT;

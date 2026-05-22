@@ -207,6 +207,82 @@ function normalizeShellEnv(env) {
   return Object.keys(out).length ? out : undefined;
 }
 
+function nodeboxUnsupportedCommand(command) {
+  const trimmed = String(command || "").trim();
+  if (!trimmed || /^node\b/i.test(trimmed)) return null;
+  const cmd = parseShellLineArgs(trimmed)[0] || "";
+  const lower = cmd.toLowerCase();
+  if (["python", "python3", "pip", "pip3"].includes(lower)) {
+    return {
+      error_code: "nodebox_python_unsupported",
+      unsupported_reason: "Nodebox has no Python or pip runtime.",
+      suggested_tool: "python_to_node",
+      suggested_next_step:
+        "Use python_to_node or skill_view script-porting, then run the ported script with run_shell `node ...`.",
+    };
+  }
+  if (["curl", "wget"].includes(lower)) {
+    return {
+      error_code: "nodebox_http_shell_unsupported",
+      unsupported_reason: "Nodebox run_shell is not a POSIX shell and should not be used for HTTP.",
+      suggested_tool: "web_fetch",
+      suggested_next_step: "Use web_fetch for GET requests or web_post for POST/GraphQL.",
+    };
+  }
+  if (["git", "gh"].includes(lower)) {
+    return {
+      error_code: "nodebox_git_unsupported",
+      unsupported_reason: "Git/gh are not available in browser-only Nodebox.",
+      suggested_tool: "web_fetch",
+      suggested_next_step: "Use HTTPS APIs, web_fetch, skill imports, or uploaded workspace files instead of git clone.",
+    };
+  }
+  if (["npx", "npm", "pnpm", "yarn"].includes(lower)) {
+    return {
+      error_code: "nodebox_package_manager_unsupported",
+      unsupported_reason: "Package manager commands are not available to the agent in browser-only Nodebox.",
+      suggested_tool: "write_file",
+      suggested_next_step: "Use built-in tools or write a dependency-free ESM script runnable with `node ...`.",
+    };
+  }
+  if (/[|;&<>]/.test(trimmed)) {
+    return {
+      error_code: "nodebox_shell_syntax_unsupported",
+      unsupported_reason: "Pipes, redirects, and shell control operators require a POSIX shell.",
+      suggested_tool: "grep",
+      suggested_next_step: "Use dedicated file, HTTP, or search tools instead of shell syntax.",
+    };
+  }
+  return {
+    error_code: "nodebox_command_unsupported",
+    unsupported_reason: "Browser-only run_shell supports common read-only probes and `node ...` scripts only.",
+    suggested_tool: "system_info",
+    suggested_next_step: "Use a dedicated Web Agent tool, or rewrite the command as a dependency-free node script.",
+  };
+}
+
+async function runNodeboxVirtualCommand(command, cwd, ctxCwd, ctx) {
+  const trimmed = String(command || "").trim();
+  const argv = parseShellLineArgs(trimmed);
+  const cmd = String(argv[0] || "").toLowerCase();
+  if (cmd === "pwd" && argv.length === 1) {
+    return { stdout: `${shellCwd(cwd ?? ctxCwd)}\n`, stderr: "", exit_code: 0, signal: null };
+  }
+  if (cmd === "date" && argv.length === 1) {
+    return { stdout: `${new Date().toString()}\n`, stderr: "", exit_code: 0, signal: null };
+  }
+  if (cmd === "echo") {
+    return { stdout: `${argv.slice(1).join(" ")}\n`, stderr: "", exit_code: 0, signal: null };
+  }
+  if (cmd === "wc" && argv[1] === "-l" && argv[2] && argv.length === 3) {
+    const abs = resolveWorkspacePath({ ...ctx, cwd: shellCwd(cwd ?? ctxCwd) }, argv[2]);
+    const text = await fs.readFile(abs, "utf8");
+    const lines = text.length ? text.split("\n").length - (text.endsWith("\n") ? 1 : 0) : 0;
+    return { stdout: `${lines} ${argv[2]}\n`, stderr: "", exit_code: 0, signal: null };
+  }
+  return null;
+}
+
 async function runShellViaNodeboxIpc(command, cwd, ctxCwd, effectiveTimeoutMs, ctxSignal, env) {
   let argvStrings = normalizeNodeboxCliArgv(parseNodeboxNodeArgv(command));
   /** Same JS VM as `system_info` — Nodebox `shell.runCommand` + cwd can throw resolving `…/nodebox`. */
@@ -311,7 +387,21 @@ export function runShellTool(args, ctx) {
     if (httpIntent.detected) {
       return Promise.reject(new Error(formatShellHttpMisrouteError(httpIntent)));
     }
-    return runShellViaNodeboxIpc(command, cwd, ctxCwd, effectiveTimeoutMs, ctxSignal, env);
+    return Promise.resolve(runNodeboxVirtualCommand(command, cwd, ctxCwd, ctx)).then((virtualResult) => {
+      if (virtualResult) return virtualResult;
+      const unsupported = nodeboxUnsupportedCommand(command);
+      if (unsupported) {
+        const message = `${unsupported.unsupported_reason} ${unsupported.suggested_next_step}`;
+        return {
+          stdout: "",
+          stderr: `${message}\n`,
+          exit_code: 127,
+          signal: null,
+          ...unsupported,
+        };
+      }
+      return runShellViaNodeboxIpc(command, cwd, ctxCwd, effectiveTimeoutMs, ctxSignal, env);
+    });
   }
 
   const shellEnv = normalizeShellEnv(env);

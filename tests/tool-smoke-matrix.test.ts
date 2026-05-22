@@ -23,6 +23,9 @@ const SMOKE_TIERS = {
   apply_patch: "local-setup",
   artifact_present: "local",
   audio_analyze: "manual",
+  composio_action: "manual",
+  composio_connect: "manual",
+  composio_status: "local",
   cron_list: "local",
   cron_register: "local",
   delete_file: "local-setup",
@@ -33,6 +36,7 @@ const SMOKE_TIERS = {
   grep: "local-setup",
   list_dir: "local",
   make_dir: "local-setup",
+  memory_forget: "local",
   memory_recall: "local",
   memory_save: "local",
   memory_search: "local",
@@ -150,6 +154,12 @@ test("local smoke tier tools execute without error", async (t) => {
       },
     },
     { name: "cron_list", args: {} },
+    {
+      name: "composio_status",
+      args: {},
+      context: () => createToolContext({ runId: `tool_smoke_${stamp}`, env: {} }),
+      check: (r) => assert.equal((r as { configured?: boolean }).configured, false),
+    },
     { name: "list_dir", args: { path: "." } },
     { name: "skill_list", args: { query: "" }, check: (r) => assert.equal((r as { ok?: boolean }).ok, true) },
     { name: "session_memory_list", args: { limit: 5 } },
@@ -161,7 +171,22 @@ test("local smoke tier tools execute without error", async (t) => {
     { name: "memory_search", args: { query: "tool_smoke" } },
     {
       name: "memory_save",
-      args: { key: memoryKey, value: { stamp } },
+      args: { key: memoryKey, value: { stamp }, scope: "tool" },
+      check: (r) => assert.equal((r as { ok?: boolean }).ok, true),
+    },
+    {
+      name: "memory_forget",
+      args: { key: `old_tool_smoke_${stamp}` },
+      context: () =>
+        createToolContext({
+          runId: `tool_smoke_${stamp}`,
+          autoApprove: true,
+          services: {
+            memory: {
+              deleteFact: async (key: string) => ({ key, deleted: false }),
+            },
+          },
+        }),
       check: (r) => assert.equal((r as { ok?: boolean }).ok, true),
     },
     {
@@ -497,6 +522,8 @@ test("smoke tier manifest documents manual and proxy-only tools", () => {
     .sort();
   assert.deepEqual(manual, [
     "audio_analyze",
+    "composio_action",
+    "composio_connect",
     "skill_bulk_save",
     "skill_manage",
   ]);

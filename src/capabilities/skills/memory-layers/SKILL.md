@@ -13,7 +13,7 @@ Canonical picker for **what to persist**, **which memory tool**, and **secret ha
 
 | Layer | Tools | Use for |
 |-------|--------|---------|
-| **Facts** | `memory_save`, `memory_recall`, `memory_search` | Stable preferences (timezone, stack, env constraints). Never API keys or tokens. |
+| **Facts** | `memory_save`, `memory_forget`, `memory_recall`, `memory_search` | Stable preferences (timezone, stack, env constraints), plus exact-key cleanup. Never API keys or tokens. |
 | **Session** | `session_memory_append`, `session_memory_list`, `session_search` | Rolling notes, temporary decisions, artifact pointers this session. |
 | **Skills** | `skill_view`, `skill_list`, `skill_manage`, `skill_bulk_save` | Repeatable procedures with a clear trigger. |
 | **Wiki vault** | `wiki_setup`, `wiki_sync`, `wiki_search` | PARA markdown mirror (default `.webagent/knowledge-vault/`). Also `/wiki_setup`, `/wiki_sync`, `/wiki_search`. |
@@ -40,9 +40,10 @@ Single guide for choosing among durable facts, rolling session notes, procedural
 
 ### Layer choice
 
-1. **One-off fact** ("I use pnpm") → `memory_save` (or update existing key).
+1. **One-off fact** ("I use pnpm") → `memory_save` (or update existing key; add `scope` when obvious).
 2. **Debugging trail** ("tried X, failed Y") → session memory until resolved.
-3. **Repeatable recipe** ("how we deploy previews") → `skill_manage` create when the user wants it reusable; call `skill_view` first.
+3. **Wrong/stale durable fact** → `memory_forget` by exact key; use `memory_search` first if unsure.
+4. **Repeatable recipe** ("how we deploy previews") → `skill_manage` create when the user wants it reusable; call `skill_view` first.
 
 ### Wiki vault
 
