@@ -42,9 +42,9 @@ triggers: [imported skill, skills.sh install, skill compat, WebFetch, agent-brow
 
 | Tier | Meaning | Examples |
 |------|---------|----------|
-| **native** | No external-host tools | frontend-design, skill-creator |
+| **native** | No external-host tools | frontend-design (code-only body) |
 | **mapped** | Direct built-in swap | web-design-guidelines (`WebFetch` → `web_fetch`) |
-| **limited** | Needs porting or host-only shell | pdf (Python), mcp-builder, tdd (shell) |
+| **limited** | Needs porting or host-only shell | pdf (Python), mcp-builder, tdd (shell), **skill-creator** (Python scripts + skip `claude -p`) |
 | **unsupported** | No browser automation in Nodebox | agent-browser, webapp-testing (Playwright) |
 
 Remote imports auto-append a **Web Agent execution (auto-appended)** section to saved `SKILL.md` files under `.webagent/skills/`. Bundled skills under `src/capabilities/skills/` are not patched.

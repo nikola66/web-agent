@@ -39,6 +39,11 @@ export const PORTING_MAPPINGS: { python: string; node: string }[] = [
   { python: "True / False", node: "true / false" },
   { python: "dict/list comprehensions", node: "array map/filter/reduce" },
   { python: "subprocess / shell", node: "not available in Nodebox scripts — use fetch or tools" },
+  { python: "python -m scripts.foo", node: "node scripts/foo.js (port the module first)" },
+  { python: "zipfile.ZipFile", node: "manual .skill packaging or deliver folder via artifact_present; no stdlib zip writer" },
+  { python: "http.server / HTTPServer", node: "write standalone HTML (--static pattern) + artifact_present" },
+  { python: "webbrowser.open", node: "artifact_present or inline markdown review; no browser launch in Nodebox" },
+  { python: "ProcessPoolExecutor / claude -p", node: "unsupported — use Task subagents or manual skill_view review loops" },
   { python: "pip install", node: "not available to the agent — port logic inline or use fetch" },
   { python: "httpx / aiohttp / urllib", node: "web_fetch/web_post for tool calls, or global fetch in ESM scripts" },
   { python: "BeautifulSoup / bs4", node: "web_fetch + simple text/link extraction helpers; no full DOM parser by default" },
@@ -90,6 +95,18 @@ const LIBRARY_RECIPES: LibraryRecipe[] = [
   { library: "matplotlib", tier: "manual", replacement: "Mermaid/markdown/table artifact or inline SVG", notes: "Generate an artifact instead of reproducing pyplot." },
   { library: "selenium", tier: "manual", replacement: "Web Agent web tools or dedicated browser capability", notes: "Browser automation is not a Nodebox script port." },
   { library: "playwright", tier: "manual", replacement: "Web Agent web tools or dedicated browser capability", notes: "Do not assume Playwright is installed in Nodebox skills." },
+  { library: "zipfile", tier: "manual", replacement: "folder tree + artifact_present, or inline zip helper", notes: "Node has no stdlib zip writer; .skill packaging may be skipped or ported with a small helper." },
+  { library: "fnmatch", tier: "template", replacement: "RegExp or simple glob suffix match", notes: "Map fnmatch patterns to endsWith/includes or minimatch-style logic." },
+  { library: "math", tier: "direct", replacement: "Math.*", notes: "sqrt, floor, etc. map directly." },
+  { library: "random", tier: "direct", replacement: "Math.random (seed manually if needed)", notes: "Stratified splits need an explicit seed for reproducibility." },
+  { library: "tempfile", tier: "direct", replacement: "fs.mkdtemp / os.tmpdir", notes: "Use node:fs/promises mkdtemp for temp dirs." },
+  { library: "uuid", tier: "direct", replacement: "crypto.randomUUID()", notes: "Import from node:crypto." },
+  { library: "webbrowser", tier: "unsupported", replacement: "artifact_present / static HTML file", notes: "Cannot open a local browser from Nodebox; write HTML and present it." },
+  { library: "concurrent", tier: "unsupported", replacement: "Promise.all or sequential Task subagents", notes: "ProcessPoolExecutor and claude -p subprocess pools are not available." },
+  { library: "http", tier: "manual", replacement: "static HTML embed + artifact_present", notes: "Port generate_review.py --static instead of HTTPServer + webbrowser." },
+  { library: "mimetypes", tier: "direct", replacement: "path.extname + small MIME map", notes: "Use a lookup table for common extensions." },
+  { library: "base64", tier: "direct", replacement: "Buffer.from(...).toString('base64')", notes: "Node Buffer replaces Python base64 module for embeds." },
+  { library: "signal", tier: "unsupported", replacement: "process.on('SIGINT') or skip", notes: "lsof/kill port cleanup is host-only; prefer --static output." },
 ];
 
 const TEMPLATE_SNIPPETS = {
@@ -151,6 +168,22 @@ const TEMPLATE_SNIPPETS = {
     "  return nested.flat();",
     "}",
   ].join("\n"),
+  mkdtemp: [
+    "import fs from 'node:fs/promises';",
+    "import os from 'node:os';",
+    "import path from 'node:path';",
+    "const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'skill-'));",
+  ].join("\n"),
+  stats_mean_stddev: [
+    "function stats(values) {",
+    "  if (!values.length) return { mean: 0, stddev: 0, min: 0, max: 0 };",
+    "  const mean = values.reduce((a, b) => a + b, 0) / values.length;",
+    "  const variance = values.length > 1",
+    "    ? values.reduce((s, x) => s + (x - mean) ** 2, 0) / (values.length - 1)",
+    "    : 0;",
+    "  return { mean, stddev: Math.sqrt(variance), min: Math.min(...values), max: Math.max(...values) };",
+    "}",
+  ].join("\n"),
 };
 
 const HINT_RULES: { pattern: RegExp; hint: string }[] = [
@@ -180,6 +213,17 @@ const HINT_RULES: { pattern: RegExp; hint: string }[] = [
   { pattern: /\bimport\s+sys\b|\bsys\.argv\b/, hint: "Uses sys.argv → process.argv (skip node + script path)." },
   { pattern: /\.env\b|load_dotenv/, hint: "Dotenv pattern → process.env or run_shell `env`; user sets keys in Settings/vault." },
   { pattern: /\bfrom\s+\.(\w+)\s+import\b|\bfrom\s+(\w+)\s+import\b/, hint: "Relative/package imports → ESM import paths under scripts/ (e.g. import { x } from './lib.js')." },
+  { pattern: /\bpython3?\s+-m\s+scripts\./, hint: "python -m scripts.foo → node scripts/foo.js after porting (ESM top-level main)." },
+  { pattern: /\bProcessPoolExecutor\b|\bconcurrent\.futures\b/, hint: "ProcessPoolExecutor — not available; use Promise.all, sequential runs, or Task subagents." },
+  { pattern: /\bclaude\b\s+-p\b|\[\s*["']claude["']\s*,\s*["']-p["']/, hint: "claude -p trigger eval — not available in Web Agent; use skill_view + manual review or description tuning inline." },
+  { pattern: /\bHTTPServer\b|\bhttp\.server\b|\bBaseHTTPRequestHandler\b/, hint: "http.server viewer — port to --static HTML embed + artifact_present instead of a local server." },
+  { pattern: /\bwebbrowser\.open\b/, hint: "webbrowser.open — use artifact_present or write static HTML; cannot launch a browser from Nodebox." },
+  { pattern: /\bimport\s+zipfile\b|\bZipFile\s*\(/, hint: "zipfile — manual port or skip .skill packaging; deliver folder tree via artifact_present." },
+  { pattern: /\bimport\s+fnmatch\b|\bfnmatch\.fnmatch\b/, hint: "fnmatch → RegExp or suffix/glob match on filenames." },
+  { pattern: /\bimport\s+math\b|\bmath\.(sqrt|floor|ceil)\b/, hint: "math → Math.sqrt / Math.floor / Math.ceil." },
+  { pattern: /\bimport\s+uuid\b|\buuid\.uuid4\b/, hint: "uuid → crypto.randomUUID() from node:crypto." },
+  { pattern: /\bimport\s+tempfile\b|\btempfile\./, hint: "tempfile → fs.mkdtemp under os.tmpdir()." },
+  { pattern: /\bimport\s+base64\b|\bbase64\.b64encode\b/, hint: "base64 → Buffer.from(bytes).toString('base64')." },
 ];
 
 function normalizeLibraryName(name: string): string {
@@ -207,6 +251,19 @@ export function detectPythonLibraries(source: string): string[] {
   }
   if (/\bBeautifulSoup\b/.test(text)) libs.add("beautifulsoup4");
   if (/\bload_dotenv\b/.test(text)) libs.add("dotenv");
+  if (/\bimport\s+zipfile\b|\bZipFile\s*\(/.test(text)) libs.add("zipfile");
+  if (/\bimport\s+fnmatch\b|\bfnmatch\./.test(text)) libs.add("fnmatch");
+  if (/\bimport\s+math\b|\bmath\./.test(text)) libs.add("math");
+  if (/\bimport\s+random\b|\brandom\./.test(text)) libs.add("random");
+  if (/\bimport\s+tempfile\b|\btempfile\./.test(text)) libs.add("tempfile");
+  if (/\bimport\s+uuid\b|\buuid\./.test(text)) libs.add("uuid");
+  if (/\bimport\s+webbrowser\b|\bwebbrowser\./.test(text)) libs.add("webbrowser");
+  if (/\bimport\s+http\b|\bHTTPServer\b|\bhttp\.server\b/.test(text)) libs.add("http");
+  if (/\bimport\s+base64\b|\bbase64\./.test(text)) libs.add("base64");
+  if (/\bimport\s+mimetypes\b|\bmimetypes\./.test(text)) libs.add("mimetypes");
+  if (/\bProcessPoolExecutor\b|\bconcurrent\.futures\b/.test(text)) libs.add("concurrent");
+  if (/\[\s*["']claude["']\s*,\s*["']-p["']/.test(text)) libs.add("claude-cli");
+  if (/\bimport\s+signal\b|\bsignal\./.test(text)) libs.add("signal");
   if (/\bpip\s+install\b/.test(text)) libs.add("pip");
   if (/\bpython3?\s+-m\b/.test(text)) libs.add("python-module-cli");
   return [...libs].sort();
@@ -225,6 +282,14 @@ function recipesForLibraries(libraries: string[]): LibraryRecipe[] {
         tier: "unsupported" as CompatibilityTier,
         replacement: "node scripts/<name>.js or Web Agent tools",
         notes: "Do not run Python/pip in Nodebox; port the referenced script or replace the step with dedicated tools.",
+      };
+    }
+    if (library === "claude-cli") {
+      return {
+        library,
+        tier: "unsupported" as CompatibilityTier,
+        replacement: "manual skill_view review loops",
+        notes: "claude -p subprocess eval is Claude Code only; not available in Web Agent.",
       };
     }
     return byLibrary.get(library) || {
@@ -255,6 +320,8 @@ function templateNamesForLibraries(libraries: string[]): string[] {
   if (libraries.includes("beautifulsoup4")) names.add("extract_links");
   if (libraries.includes("csv")) names.add("simple_csv");
   if (libraries.includes("glob")) names.add("walk_files");
+  if (libraries.some((lib) => ["math"].includes(lib))) names.add("stats_mean_stddev");
+  if (libraries.some((lib) => ["tempfile", "random"].includes(lib))) names.add("mkdtemp");
   return [...names];
 }
 

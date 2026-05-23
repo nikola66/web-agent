@@ -113,3 +113,45 @@ test("analyzePythonSource flags manual and unsupported Python tools", () => {
   assert.ok(out.unsupported.some((r) => r.library === "subprocess"));
   assert.ok(out.hints.some((h) => /subprocess/i.test(h)));
 });
+
+const SKILL_CREATOR_AGGREGATE = [
+  "#!/usr/bin/env python3",
+  "import argparse",
+  "import json",
+  "import math",
+  "from datetime import datetime, timezone",
+  "from pathlib import Path",
+  "",
+  "def calculate_stats(values):",
+  "    n = len(values)",
+  "    mean = sum(values) / n",
+  "    variance = sum((x - mean) ** 2 for x in values) / (n - 1)",
+  "    return {'mean': mean, 'stddev': math.sqrt(variance)}",
+].join("\n");
+
+const SKILL_CREATOR_RUN_EVAL = [
+  "import subprocess",
+  "from concurrent.futures import ProcessPoolExecutor",
+  'cmd = ["claude", "-p", query]',
+  "process = subprocess.Popen(cmd, stdout=subprocess.PIPE)",
+].join("\n");
+
+test("analyzePythonSource covers skill-creator aggregate_benchmark stdlib", () => {
+  const out = analyzePythonSource(SKILL_CREATOR_AGGREGATE, "scripts/aggregate_benchmark.py");
+  assert.equal(out.compatibility_tier, "direct");
+  assert.ok(out.detected_libraries.includes("argparse"));
+  assert.ok(out.detected_libraries.includes("math"));
+  assert.ok(out.detected_libraries.includes("pathlib"));
+  assert.ok(out.templates.some((t) => t.name === "parse_args"));
+  assert.ok(out.templates.some((t) => t.name === "stats_mean_stddev"));
+  assert.match(out.run_command_template, /aggregate_benchmark\.js/);
+});
+
+test("analyzePythonSource flags skill-creator run_eval as unsupported", () => {
+  const out = analyzePythonSource(SKILL_CREATOR_RUN_EVAL, "scripts/run_eval.py");
+  assert.equal(out.compatibility_tier, "unsupported");
+  assert.ok(out.detected_libraries.includes("concurrent"));
+  assert.ok(out.detected_libraries.includes("subprocess"));
+  assert.ok(out.hints.some((h) => /claude -p/i.test(h)));
+  assert.ok(out.hints.some((h) => /ProcessPoolExecutor/i.test(h)));
+});

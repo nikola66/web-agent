@@ -47,6 +47,24 @@ Canonical procedure for porting Python/bash skill scripts to JavaScript runnable
 5. **Verify** — `run_shell` with `command`, `cwd` (skill root, e.g. `.webagent/skills/imported/<slug>`), and `env` when the Python script used `os.getenv`. Use `python_to_node` → `run_shell_example` as a template.
 6. **Persist** — Save via `skill_manage` `write_file`; keep Python sources only as reference if needed under `references/`.
 
+## Procedural skill bundles (e.g. [skill-creator](https://github.com/anthropics/skills/tree/main/skills/skill-creator))
+
+Skills that ship `scripts/`, `eval-viewer/`, `references/`, and `agents/` need the **full tree**, not just `SKILL.md`.
+
+| Step | Web Agent |
+|------|-----------|
+| Install full tree | `skill_manage` **`import_dir`** on an extracted folder, **or** `skill_bulk_save` with `content` + `files[]` from `web_fetch` raw GitHub URLs |
+| URL-only import | `import_url` saves `SKILL.md` only — then `web_fetch` + `skill_manage` `write_file` for support files |
+| Port each script | `python_to_node` per `.py` → `scripts/<name>.js` |
+| Patch SKILL.md | Replace `python -m scripts.*` with `node scripts/*.js`; use **`--static`** for eval viewer HTML |
+| Eval viewer | Port `generate_review.py` static mode → `artifact_present`; skip `webbrowser.open` / `HTTPServer` |
+| Benchmark aggregate | `aggregate_benchmark.py` ports cleanly (json/pathlib/math) |
+| Package .skill zip | `package_skill.py` / `zipfile` — optional skip or manual port |
+| Description optimization | `run_loop.py` / `run_eval.py` use **`claude -p`** — **skip in Web Agent** |
+| Parallel eval runs | `ProcessPoolExecutor` → sequential runs or **Task** subagents |
+
+**Non-negotiable:** Do not run `python`, `pip`, `nohup python`, or `claude -p` in Nodebox. The skill-creator **workflow** works; Claude Code CLI automation scripts do not run verbatim.
+
 ## Nodebox: API vs agent policy vs runtime
 
 Three layers — do not conflate them:

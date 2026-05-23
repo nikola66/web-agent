@@ -22,6 +22,11 @@
 | `matplotlib` | Markdown table, Mermaid, or inline SVG artifact |
 | `selenium` / `playwright` | Manual redesign around Web Agent web tools; no package assumed in Nodebox |
 | `subprocess.run(...)` | Unsupported; replace with dedicated tools or inline JS |
+| `python -m scripts.foo` | `node scripts/foo.js` after porting the module |
+| `zipfile.ZipFile` | Manual .skill zip or skip packaging; use `artifact_present` for folder output |
+| `http.server` / `HTTPServer` | Write standalone HTML (`--static` pattern) + `artifact_present` |
+| `webbrowser.open` | `artifact_present` or inline review markdown |
+| `ProcessPoolExecutor` / `claude -p` | Unsupported; use Task subagents or manual review loops |
 | `if __name__ == "__main__":` | `main().catch((e) => { console.error(e); process.exit(1); })` |
 | `print(x)` | `console.log(x)` |
 | `None` | `null` |

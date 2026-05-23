@@ -43,9 +43,9 @@
     "rank": 6,
     "slug": "skill-creator",
     "repo": "anthropics/skills",
-    "patterns": ["write_file"],
-    "tier": "native",
-    "notes": "File writes only"
+    "patterns": ["write_file", "python -m scripts", "generate_review.py"],
+    "tier": "limited",
+    "mapping": "import_dir + script-porting; skip claude -p / ProcessPoolExecutor; static eval viewer"
   },
   {
     "rank": 7,
