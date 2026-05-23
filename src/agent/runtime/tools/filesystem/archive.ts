@@ -67,10 +67,18 @@ async function listRecentArchivesInInbox(maxEntries = 5): Promise<string[]> {
 async function missingArchivePathError(toolName: string): Promise<Error> {
   const recent = await listRecentArchivesInInbox();
   const aliases = "Accepted keys: archive_path (preferred), archive, path, file, file_path, zip.";
-  const hint = recent.length
-    ? `Recent archives in workspace:\n- ${recent.join("\n- ")}`
-    : "No archives found under .webagent/telegram-inbox. If the user sent a file, it should already be saved there — call list_dir on .webagent/telegram-inbox to confirm before retrying.";
-  return new Error(`${toolName} requires a path. ${aliases}\n${hint}`);
+  if (recent.length) {
+    const newest = recent[recent.length - 1];
+    const retry = `RETRY NOW with: ${toolName}({"archive_path": "${newest}"}). Do not call ${toolName} again without a path.`;
+    const others = recent.slice(0, -1);
+    const othersBlock = others.length ? `\nOther archives in workspace:\n- ${others.join("\n- ")}` : "";
+    return new Error(`${toolName} requires a path. ${aliases}\n${retry}${othersBlock}`);
+  }
+  return new Error(
+    `${toolName} requires a path. ${aliases}\n` +
+      "No archives in `.webagent/telegram-inbox`. Call list_dir({\"path\":\".webagent/telegram-inbox\"}) " +
+      "to confirm what arrived. Do not retry " + toolName + " without a path."
+  );
 }
 
 export type ArchiveEntry = {

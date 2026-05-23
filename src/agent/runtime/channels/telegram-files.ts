@@ -164,8 +164,10 @@ export async function downloadTelegramAttachment(
   const apiBasename = nodePath.basename(resolved.filePath) || `file-${Date.now()}`;
   const desiredName = fileName && String(fileName).trim() ? String(fileName) : apiBasename;
   const safeName = safeFileNameSegment(desiredName, apiBasename);
-  const safeId = String(fileId).replace(/[^A-Za-z0-9_-]/g, "").slice(0, 24) || `att-${Date.now()}`;
-  const savedRel = `${ATTACHMENT_INBOX_REL}/${Date.now()}-${safeId}-${safeName}`;
+  // Short collision-avoidance prefix only (the previous safeId+timestamp made
+  // paths ~90 chars and broke Telegram outbound rendering).
+  const shortId = String(fileId).replace(/[^A-Za-z0-9]/g, "").slice(-6) || String(Date.now()).slice(-6);
+  const savedRel = `${ATTACHMENT_INBOX_REL}/${shortId}-${safeName}`;
   const savedAbs = workspaceStatePath(savedRel);
   await fs.mkdir(nodePath.dirname(savedAbs), { recursive: true });
   await fs.writeFile(savedAbs, buffer);
