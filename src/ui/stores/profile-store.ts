@@ -42,7 +42,7 @@ interface ProfileState {
     model?: string;
     accentColor: string;
     ttsVoice?: string;
-  }, options?: { setActive?: boolean }) => Promise<Profile>;
+  }, options?: { setActive?: boolean; id?: string }) => Promise<Profile>;
   updateProfile: (id: string, patch: Partial<Profile>) => Promise<void>;
   removeProfile: (id: string) => Promise<void>;
 }
@@ -75,7 +75,7 @@ export const useProfileStore = create<ProfileState>((set, get) => ({
     const t = Date.now();
     const existingNames = get().profiles.map((p) => p.name);
     const p: Profile = {
-      id: crypto.randomUUID(),
+      id: options?.id?.trim() || crypto.randomUUID(),
       name: partial.name.trim() || createAgentName(existingNames),
       userName: String(partial.userName || "User").trim() || "User",
       personality: partial.personality,

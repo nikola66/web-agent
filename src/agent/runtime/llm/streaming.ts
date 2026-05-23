@@ -1,7 +1,7 @@
 import { HIDDEN_STREAM_MARKERS, LLM_REQUEST_TIMEOUT_MS } from "../constants.js";
 import { ipcProxyStreamRequest, ipcProxyRequest } from "../ipc.js";
 import { logDebugEvent } from "../logging/debug-log.js";
-import { reasoningDisableExtras } from "./provider-config.js";
+import { llmChatCompletionExtras } from "./provider-config.js";
 import { classifyLlmProviderError, formatClassifiedLlmError } from "./llm-error-classifier.js";
 import {
   parseToolArguments,
@@ -153,20 +153,7 @@ function formatStreamIdleWait(ms) {
   return `${Math.round(n / 1000)}s`;
 }
 
-function sanitizeHeadersForFetch(headers = {}) {
-  const out = {};
-  for (const [rawName, rawValue] of Object.entries(headers || {})) {
-    const name = String(rawName || "").trim();
-    if (!name) continue;
-    const value = String(rawValue ?? "");
-    // Some fetch implementations validate headers as ByteString (0-255 only).
-    // Strip out out-of-range code points so user/model unicode in profile/config
-    // headers cannot crash request construction.
-    const byteSafeValue = value.replace(/[^\x00-\xFF]/g, "");
-    out[name] = byteSafeValue;
-  }
-  return out;
-}
+import { sanitizeHeadersForFetch } from "./http-utils.js";
 
 export function estimateTokens(text) {
   if (!text) return 0;
@@ -374,7 +361,7 @@ export async function streamOpenAI(messages, cfg, onDelta, tools, options = {}) 
   });
   if (cfg.apiKey) headers.Authorization = `Bearer ${cfg.apiKey}`;
   const toolList = Array.isArray(tools) ? tools : [];
-  const reasoningOff = reasoningDisableExtras(cfg.provider);
+  const requestExtras = llmChatCompletionExtras(cfg.provider, { stream: true });
   const withToolsBody =
     toolList.length > 0
       ? {
@@ -384,16 +371,14 @@ export async function streamOpenAI(messages, cfg, onDelta, tools, options = {}) 
           max_tokens: 8192,
           tools: toolList,
           tool_choice: "auto",
-          stream_options: { include_usage: true },
-          ...reasoningOff,
+          ...requestExtras,
         }
       : {
           model: cfg.model,
           messages,
           stream: true,
           max_tokens: 8192,
-          stream_options: { include_usage: true },
-          ...reasoningOff,
+          ...requestExtras,
         };
   const endpoint = `${cfg.baseUrl}/chat/completions`;
   const startedAt = Date.now();
@@ -438,6 +423,7 @@ export async function streamOpenAI(messages, cfg, onDelta, tools, options = {}) 
   };
   let res;
   let firstError = "";
+  const serializedBody = JSON.stringify(withToolsBody);
   for (let httpAttempt = 0; httpAttempt < STREAM_HTTP_MAX_ATTEMPTS; httpAttempt++) {
     if (httpAttempt > 0) {
       const d = computeRetryDelay(httpAttempt - 1);
@@ -458,7 +444,7 @@ export async function streamOpenAI(messages, cfg, onDelta, tools, options = {}) 
         toolAcc.clear();
         buf = "";
         await ipcProxyStreamRequest(
-          { method: "POST", url: endpoint, headers, body: JSON.stringify(withToolsBody) },
+          { method: "POST", url: endpoint, headers, body: serializedBody },
           {
             timeoutMs: STREAM_TOTAL_TIMEOUT_MS,
             signal: options.signal,
@@ -488,7 +474,7 @@ export async function streamOpenAI(messages, cfg, onDelta, tools, options = {}) 
       } else {
         res = await fetchWithTimeout(
           endpoint,
-          { method: "POST", headers, body: JSON.stringify(withToolsBody), signal: options.signal },
+          { method: "POST", headers, body: serializedBody, signal: options.signal },
           LLM_REQUEST_TIMEOUT_MS,
           `${cfg.provider} chat request`
         );
@@ -553,6 +539,9 @@ export async function streamOpenAI(messages, cfg, onDelta, tools, options = {}) 
     });
     return { text: fullText, toolCalls, sawReasoning, finishReason };
   }
+  if (!res.body) {
+    throw new Error(`${cfg.provider} stream response missing body`);
+  }
   const reader = res.body.getReader();
   const abortStream = () => {
     try {
@@ -577,22 +566,27 @@ export async function streamOpenAI(messages, cfg, onDelta, tools, options = {}) 
     }
     const chunkBudget = Math.min(STREAM_CHUNK_TIMEOUT_MS, remainingMs);
     const perReadTimeoutMs = Math.min(remainingMs, Math.max(STREAM_STALL_FLOOR_MS, chunkBudget));
-    return await Promise.race([
-      reader.read(),
-      new Promise((_, reject) =>
-        setTimeout(
-          () =>
-            reject(
-              new Error(
-                `${cfg.provider} stream stalled: no chunks received for ${formatStreamIdleWait(
-                  perReadTimeoutMs
-                )}`
-              )
-            ),
-          perReadTimeoutMs
-        )
-      ),
-    ]);
+    let timer;
+    try {
+      return await Promise.race([
+        reader.read(),
+        new Promise((_, reject) => {
+          timer = setTimeout(
+            () =>
+              reject(
+                new Error(
+                  `${cfg.provider} stream stalled: no chunks received for ${formatStreamIdleWait(
+                    perReadTimeoutMs
+                  )}`
+                )
+              ),
+            perReadTimeoutMs
+          );
+        }),
+      ]);
+    } finally {
+      if (timer) clearTimeout(timer);
+    }
   }
   try {
     while (true) {
@@ -691,7 +685,7 @@ export async function completeOpenAiChat(messages, cfg, options = {}) {
     messages,
     stream: false,
     max_tokens: maxTokens,
-    ...reasoningDisableExtras(cfg.provider),
+    ...llmChatCompletionExtras(cfg.provider),
   });
   const endpoint = `${cfg.baseUrl}/chat/completions`;
   const label = `${cfg.provider || "LLM"} chat completion`;
@@ -1154,6 +1148,7 @@ export function normalizeToolCalls(
   const knownTools = new Set(toolNames || []);
   const normalized: Array<{ name: string; arguments: Record<string, unknown> }> = [];
   const rejected: Array<{ reason: string; call: unknown }> = [];
+  const seenCallKeys = new Set<string>();
   const MAX_TOOL_CALLS_PER_TURN = 16;
   for (const raw of rawCalls || []) {
     if (normalized.length >= MAX_TOOL_CALLS_PER_TURN) {
@@ -1204,10 +1199,11 @@ export function normalizeToolCalls(
     // Deduplicate: same tool + same serialized args within one round = duplicate emission
     // (happens when model uses both native tool_calls and <<<TOOL>>> markers).
     const key = `${name}:${JSON.stringify(args)}`;
-    if (normalized.some((c) => `${c.name}:${JSON.stringify(c.arguments)}` === key)) {
+    if (seenCallKeys.has(key)) {
       rejected.push({ reason: "duplicate_call", call: raw });
       continue;
     }
+    seenCallKeys.add(key);
     normalized.push({ name, arguments: args });
   }
   return { normalized, rejected };

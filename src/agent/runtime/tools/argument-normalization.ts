@@ -363,7 +363,6 @@ const WORKSPACE_BROWSE_PATH_TOOLS = new Set([
   "make_dir",
   "edit_file",
   "multi_edit",
-  "file_stat",
   "delete_file",
 ]);
 

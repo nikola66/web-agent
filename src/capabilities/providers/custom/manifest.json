@@ -1,6 +1,7 @@
 {
   "id": "custom",
   "name": "Custom (OpenAI-compatible)",
+  "order": 5,
   "kind": "openai",
   "requiresUserApiKey": true,
   "model": "gpt-4o-mini",

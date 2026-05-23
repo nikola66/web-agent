@@ -1266,6 +1266,7 @@ export async function skillBulkSaveTool(args: ToolArgs = {}, ctx) {
     failed: result.summary?.failed,
     blocked: result.summary?.blocked,
   });
+  void import("../turn.js").then((m) => m.invalidateToolNamesCache?.());
   return result;
 }
 
@@ -1313,6 +1314,7 @@ export async function skillManageTool(args: ToolArgs = {}, ctx) {
     ok: result?.ok ?? null,
     blocked: result?.blocked ?? false,
   });
+  if (result?.ok) void import("../turn.js").then((m) => m.invalidateToolNamesCache?.());
   return result;
 }
 

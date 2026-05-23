@@ -13,6 +13,11 @@ import {
 } from "./src/agent/runtime/privacy";
 import { appVersionPlugin } from "./vite/app-version";
 import { transformersOrtAssetsPlugin } from "./vite/transformers-ort-assets";
+import {
+  handleSubscriptionHttp,
+  isSubscriptionProvider,
+  setSubscriptionProxyLogger,
+} from "./scripts/subscription/router.mjs";
 
 const PACKAGE_JSON = JSON.parse(
   fs.readFileSync(path.resolve(__dirname, "package.json"), "utf8"),
@@ -146,6 +151,7 @@ function parseProxyTarget(rawUrl: string): { upstreamBase: string; targetPath: s
   const targetPath = `/${segments.join("/")}${parsed.search}`;
   return { upstreamBase, targetPath };
 }
+
 
 const CORS_PROXY_PATH = "/api/proxy";
 const EDGE_TTS_PATH = "/api/edge-tts";
@@ -330,19 +336,34 @@ function rawRuntimeFilesPlugin() {
 }
 
 function llmProxyGate() {
+  setSubscriptionProxyLogger({
+    debug: (req, routeId, statusCode) => logProxyDebug(req, routeId, statusCode),
+    error: (req, routeId, error) => logProxyError(req, routeId, error),
+  });
   const gate = (server: {
     middlewares: {
       use: (fn: (req: IncomingMessage, res: import("node:http").ServerResponse, next: () => void) => void) => void;
     };
   }) => {
     server.middlewares.use((req, res, next) => {
+      const pathname = requestUrlPath(req);
+      if (
+        pathname.startsWith("/api/providers/oauth/") ||
+        pathname.startsWith("/api/llm/nous/") ||
+        pathname.startsWith("/api/llm/openai-codex/")
+      ) {
+        void handleSubscriptionHttp(req, res).then((handled) => {
+          if (!handled) next();
+        });
+        return;
+      }
       const url = req.url || "";
       if (!url.startsWith(LLM_PROXY_PREFIX)) return next();
       res.setHeader("access-control-allow-origin", "*");
       res.setHeader("access-control-allow-methods", "GET,POST,OPTIONS");
       res.setHeader(
         "access-control-allow-headers",
-        "authorization,content-type,http-referer,x-title,x-openrouter-title,x-webagent-session"
+        "authorization,content-type,http-referer,x-title,x-openrouter-title,x-webagent-session,x-webagent-profile-id"
       );
       res.setHeader("access-control-allow-private-network", "true");
       if (req.method === "OPTIONS") {
@@ -375,6 +396,7 @@ function llmProxyGate() {
 function buildLlmProxies(): Record<string, ProxyWithRouter> {
   const proxies: Record<string, ProxyWithRouter> = {};
   for (const [id, upstream] of Object.entries(PROVIDER_UPSTREAMS)) {
+    if (isSubscriptionProvider(id)) continue;
     const upstreamUrl = new URL(upstream);
     const basePath = upstreamUrl.pathname.replace(/\/$/, "") || "";
     const matchedPrefix = `/api/llm/${id}`;

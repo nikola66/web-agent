@@ -76,14 +76,13 @@ test("built-in tool registry and catalog keys match", async () => {
   }
 });
 
-test("buildOpenAiToolDefinitions passes JSON Schema examples on parameters", async () => {
+test("buildOpenAiToolDefinitions strips JSON Schema examples from LLM parameters", async () => {
   const registry = await import("../dist/agent-runtime/tools/registry.js");
   const catalog = await registry.loadToolCatalog();
   const defs = await registry.buildOpenAiToolDefinitions(catalog);
   const mem = defs.find((d) => d.function?.name === "memory_save");
-  assert.ok(mem?.function?.parameters?.examples, "memory_save should expose examples");
-  assert.ok(Array.isArray(mem.function.parameters.examples));
-  assert.equal(mem.function.parameters.examples.length >= 1, true);
+  assert.equal("examples" in (mem?.function?.parameters || {}), false);
+  assert.ok(Array.isArray(catalog.memory_save?.inputSchema?.examples));
 });
 
 test("source tool capabilities have manifests and handlers", async () => {

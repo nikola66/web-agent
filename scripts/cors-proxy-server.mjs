@@ -2,9 +2,12 @@
  * Same-origin sidecar for static + Caddy production deploys.
  * - POST /api/proxy — JSON CORS proxy (matches vite.config.ts corsProxyGate)
  * - POST /api/edge-tts — free Edge TTS synthesis (matches vite.config.ts edgeTtsGate)
+ * - /api/providers/oauth/* — subscription OAuth (Nous, OpenAI Codex)
+ * - /api/llm/nous/*, /api/llm/openai-codex/* — subscription LLM proxy
  */
 import http from "node:http";
 import { EDGE_TTS_PATH, handleEdgeTtsHttp, isEdgeTtsPath, requestPathname } from "./edge-tts-handler.mjs";
+import { handleSubscriptionHttp, isSubscriptionLlmPath, isSubscriptionOAuthPath } from "./subscription/router.mjs";
 
 const PROXY_PATH = "/api/proxy";
 const host = process.env.WEBAGENT_CORS_PROXY_HOST || "127.0.0.1";
@@ -22,6 +25,15 @@ const server = http.createServer((req, res) => {
     const pathname = requestPathname(req.url);
     if (isEdgeTtsPath(pathname)) {
       void handleEdgeTtsHttp(req, res, { pathname });
+      return;
+    }
+    if (isSubscriptionOAuthPath(req.url) || isSubscriptionLlmPath(req.url)) {
+      void handleSubscriptionHttp(req, res).then((handled) => {
+        if (!handled) {
+          res.statusCode = 404;
+          res.end();
+        }
+      });
       return;
     }
     if (pathname !== PROXY_PATH) {
@@ -87,6 +99,6 @@ const server = http.createServer((req, res) => {
 
 server.listen(port, host, () => {
   console.error(
-    `[cors-proxy-server] listening on http://${host}:${port} (${PROXY_PATH}, ${EDGE_TTS_PATH}, /api/edge-tts/voices)`,
+    `[cors-proxy-server] listening on http://${host}:${port} (${PROXY_PATH}, ${EDGE_TTS_PATH}, subscription OAuth/LLM)`,
   );
 });

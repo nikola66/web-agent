@@ -20,6 +20,11 @@ const ProfileEditor = lazyWithRetry(() =>
 import { mascotForAccentColor } from "../mascots";
 import { destroyWorkspace } from "@/core/workspace";
 import { clearProfileCredentials, loadProfileCredentials } from "@/core/credential-vault";
+import {
+  fetchSubscriptionAuthStatus,
+  isSubscriptionOAuthProvider,
+  logoutSubscriptionProfile,
+} from "@/core/subscription-auth-client";
 
 const STATUS_DOT_COLOR: Record<string, string> = {
   idle: "#444",
@@ -78,8 +83,9 @@ export function ProfileSelector() {
   const [editing, setEditing] = useState<Profile | null>(null);
   const [hoveredProfileId, setHoveredProfileId] = useState<string | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
-  /** Profile IDs whose provider needs a user API key but none is configured (vault + global settings). */
+  /** Profile IDs missing provider auth (API key or subscription OAuth). */
   const [missingApiKeyIds, setMissingApiKeyIds] = useState<Set<string>>(new Set());
+  const [missingAuthKindById, setMissingAuthKindById] = useState<Record<string, "apiKey" | "subscription">>({});
   const [credentialRefreshTick, setCredentialRefreshTick] = useState(0);
 
   useEffect(() => {
@@ -88,30 +94,45 @@ export function ProfileSelector() {
 
   useEffect(() => {
     let cancelled = false;
-    (async () => {
-      const results = await Promise.all(
-        profiles.map(async (p) => {
-          if (!providerRequiresUserApiKey(p.provider)) {
-            return { missing: false as const };
+    let debounceTimer: ReturnType<typeof setTimeout> | undefined;
+    debounceTimer = setTimeout(() => {
+      void (async () => {
+        const results = await Promise.all(
+          profiles.map(async (p) => {
+            if (isSubscriptionOAuthProvider(p.provider)) {
+              const result = await fetchSubscriptionAuthStatus(p.provider, p.id);
+              return { missing: !result.status.logged_in, kind: "subscription" as const };
+            }
+            if (!providerRequiresUserApiKey(p.provider)) {
+              return { missing: false as const, kind: "none" as const };
+            }
+            if (apiKeys[p.provider]?.trim()) {
+              return { missing: false as const, kind: "none" as const };
+            }
+            const creds = await loadProfileCredentials(p.id);
+            return { missing: !creds.apiKey?.trim(), kind: "apiKey" as const };
+          })
+        );
+        if (cancelled) return;
+        const next = new Set<string>();
+        const kinds: Record<string, "apiKey" | "subscription"> = {};
+        results.forEach((r, i) => {
+          if (r.missing) {
+            next.add(profiles[i]!.id);
+            if (r.kind === "apiKey" || r.kind === "subscription") {
+              kinds[profiles[i]!.id] = r.kind;
+            }
           }
-          if (apiKeys[p.provider]?.trim()) {
-            return { missing: false as const };
-          }
-          const creds = await loadProfileCredentials(p.id);
-          return { missing: !creds.apiKey?.trim() };
-        })
-      );
-      if (cancelled) return;
-      const next = new Set<string>();
-      results.forEach((r, i) => {
-        if (r.missing) next.add(profiles[i]!.id);
-      });
-      setMissingApiKeyIds(next);
-    })();
+        });
+        setMissingApiKeyIds(next);
+        setMissingAuthKindById(kinds);
+      })();
+    }, 300);
     return () => {
       cancelled = true;
+      if (debounceTimer) clearTimeout(debounceTimer);
     };
-  }, [profiles, apiKeys, credentialRefreshTick]);
+  }, [profiles, credentialRefreshTick, apiKeys]);
 
   const hasReachedCap = runningProfileIds.length >= 4;
   const hasReachedProfileLimit = profiles.length >= MAX_PROFILE_COUNT;
@@ -157,9 +178,13 @@ export function ProfileSelector() {
     }
     disposeProfileRuntime(profileId);
     await removeProfile(profileId);
+    const deleted = profiles.find((p) => p.id === profileId);
     await Promise.all([
       destroyWorkspace(profileId).catch(() => {}),
       clearProfileCredentials(profileId).catch(() => {}),
+      deleted && isSubscriptionOAuthProvider(deleted.provider)
+        ? logoutSubscriptionProfile(deleted.provider, profileId).catch(() => {})
+        : Promise.resolve(),
     ]);
     void refreshStorageUsage();
   };
@@ -297,7 +322,11 @@ export function ProfileSelector() {
                   <button
                     type="button"
                     aria-label={`Edit ${p.name}`}
-                    title="API key required — open editor to add your key"
+                    title={
+                      missingAuthKindById[p.id] === "subscription"
+                        ? "Subscription login required — open editor to connect"
+                        : "API key required — open editor to add your key"
+                    }
                     onClick={(e) => {
                       e.stopPropagation();
                       openEdit(p);

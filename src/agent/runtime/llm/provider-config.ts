@@ -6,19 +6,9 @@ import {
   OPENROUTER_FREE_DEFAULT_CONTEXT_WINDOW,
   PROVIDER_CATALOG_PATH,
 } from "../constants.js";
+import { sanitizeHeadersForFetch } from "./http-utils.js";
 
 let providerCatalogCache: ProviderDefinition[] | null = null;
-
-function sanitizeHeadersForFetch(headers = {}) {
-  const out = {};
-  for (const [rawName, rawValue] of Object.entries(headers || {})) {
-    const name = String(rawName || "").trim();
-    if (!name) continue;
-    const value = String(rawValue ?? "");
-    out[name] = value.replace(/[^\x00-\xFF]/g, "");
-  }
-  return out;
-}
 
 async function loadProviderCatalog(): Promise<ProviderDefinition[]> {
   if (providerCatalogCache) return providerCatalogCache;
@@ -75,7 +65,17 @@ function resolveBuiltInBaseUrl(selectedProvider, customBaseUrl, directBaseUrl) {
 export function reasoningDisableExtras(providerId) {
   const id = String(providerId || "").trim().toLowerCase();
   if (id === "openrouter") return { reasoning: { enabled: false } };
-  return { reasoning_effort: "none" };
+  return {};
+}
+
+/** Provider-specific chat/completions body fields (stream usage, etc.). */
+export function llmChatCompletionExtras(providerId, { stream = false } = {}) {
+  const id = String(providerId || "").trim().toLowerCase();
+  const extras = { ...reasoningDisableExtras(id) };
+  if (stream && id !== "nous" && id !== "openai-codex") {
+    extras.stream_options = { include_usage: true };
+  }
+  return extras;
 }
 
 export async function resolveLlm() {

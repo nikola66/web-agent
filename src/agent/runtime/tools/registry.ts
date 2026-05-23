@@ -33,6 +33,7 @@ import { hoistNestedToolArguments } from "./llm-arg-shape.js";
 import { gateToolExecution, summarizeToolApproval } from "./tool-policy.js";
 import { expandSkillBulkSaveArgs } from "./skill-bulk-args.js";
 import { classifyToolError } from "./error-classifier.js";
+import { invalidateSanitizedSchemaCache, sanitizeToolSchemas } from "../llm/tool-schema-sanitizer.js";
 
 type ToolExecutionContext = ReturnType<typeof createToolContext>;
 
@@ -71,13 +72,6 @@ function buildBuiltinTools(definitions: readonly ToolDefinition[]) {
 }
 
 export const BUILTIN_TOOLS = buildBuiltinTools(BUILTIN_TOOL_DEFINITIONS);
-
-export const TOOLS = Object.fromEntries(
-  Object.entries(BUILTIN_TOOLS).map(([name, entry]) => [
-    name,
-    (typeof entry === "function" ? entry : entry.fn) as ToolImplementFn,
-  ])
-);
 
 let capabilityToolsCache: Record<string, ToolImplementFn> | null = null;
 let toolsCache: Record<string, ToolImplementFn> | null = null;
@@ -244,6 +238,7 @@ export function reloadToolCapabilitiesForTest() {
   capabilityToolsCache = null;
   capabilityToolCatalogCache = null;
   toolsCache = null;
+  invalidateSanitizedSchemaCache();
 }
 
 export async function getToolNamesAsync() {
@@ -270,26 +265,8 @@ export async function loadToolCatalog() {
   return { ...builtinCatalog, ...capabilityCatalog };
 }
 
-export async function buildToolSpec(toolCatalog) {
-  const tools = await loadTools();
-  return Object.keys(tools)
-    .map((name) => {
-      const meta = toolCatalog?.[name];
-      if (meta?.emoji && meta?.description) {
-        const emoji = String(meta.emoji).replace(
-          /([\p{Extended_Pictographic}])\s+(\uFE0F)/gu,
-          "$1$2"
-        );
-        return `- ${emoji} | ${name}: ${meta.description}`;
-      }
-      return `- ${name}: see tool schema in system instructions`;
-    })
-    .join("\n");
-}
-
 export async function buildOpenAiToolDefinitions(toolCatalog) {
-  const tools = await loadTools();
-  return Object.keys(tools).flatMap((name) => {
+  const definitions = Object.keys(toolCatalog || {}).flatMap((name) => {
     const meta = toolCatalog?.[name] || null;
     const schema = resolveInputSchema(meta);
     if (!schema || typeof schema !== "object" || schema.type !== "object") return [];
@@ -304,6 +281,7 @@ export async function buildOpenAiToolDefinitions(toolCatalog) {
       },
     }];
   });
+  return sanitizeToolSchemas(definitions);
 }
 
 function nextCallId(runId, index) {

@@ -1,0 +1,12 @@
+{
+  "id": "openai-codex",
+  "name": "Codex (OpenAI subscription)",
+  "order": 4,
+  "kind": "openai",
+  "requiresUserApiKey": false,
+  "model": "gpt-5.4-mini",
+  "runtime": {
+    "basePath": "openai-codex",
+    "fallbackBaseUrl": "https://chatgpt.com/backend-api/codex"
+  }
+}

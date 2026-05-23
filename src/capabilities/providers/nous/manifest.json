@@ -1,0 +1,12 @@
+{
+  "id": "nous",
+  "name": "Nous Research (subscription)",
+  "order": 3,
+  "kind": "openai",
+  "requiresUserApiKey": false,
+  "model": "stepfun/step-3.5-flash",
+  "runtime": {
+    "basePath": "nous",
+    "fallbackBaseUrl": "https://inference-api.nousresearch.com/v1"
+  }
+}

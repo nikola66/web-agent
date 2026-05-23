@@ -3,11 +3,12 @@ import assert from "node:assert/strict";
 import fs from "node:fs/promises";
 import path from "node:path";
 
-test("reasoningDisableExtras uses OpenRouter reasoning object and reasoning_effort elsewhere", async () => {
+test("reasoningDisableExtras uses OpenRouter reasoning object only", async () => {
   const { reasoningDisableExtras } = await import("../dist/agent-runtime/llm/provider-config.js");
   assert.deepEqual(reasoningDisableExtras("openrouter"), { reasoning: { enabled: false } });
-  assert.deepEqual(reasoningDisableExtras("ollama"), { reasoning_effort: "none" });
-  assert.deepEqual(reasoningDisableExtras("custom"), { reasoning_effort: "none" });
+  assert.deepEqual(reasoningDisableExtras("ollama"), {});
+  assert.deepEqual(reasoningDisableExtras("nous"), {});
+  assert.deepEqual(reasoningDisableExtras("custom"), {});
 });
 
 test("resolveLlm routes built-in providers through the app LLM proxy in nodebox", async () => {
@@ -51,6 +52,16 @@ test("resolveLlm routes built-in providers through the app LLM proxy in nodebox"
     process.env.WEBAGENT_APP_ORIGIN = previous.origin;
     process.env.OLLAMA_API_KEY = previous.ollamaKey;
   }
+});
+
+test("llmChatCompletionExtras adds stream_options except for subscription providers", async () => {
+  const { llmChatCompletionExtras } = await import("../dist/agent-runtime/llm/provider-config.js");
+  assert.deepEqual(llmChatCompletionExtras("openrouter", { stream: true }), {
+    reasoning: { enabled: false },
+    stream_options: { include_usage: true },
+  });
+  assert.deepEqual(llmChatCompletionExtras("nous", { stream: true }), {});
+  assert.deepEqual(llmChatCompletionExtras("openai-codex", { stream: true }), {});
 });
 
 test("resolveLlm keeps direct upstream URLs outside nodebox", async () => {

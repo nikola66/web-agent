@@ -29,6 +29,11 @@ function adapterDeployPaths(adapterSource: string): Set<string> {
       paths.add(`tools/${rel}`);
     }
   }
+  if (adapterSource.includes("dist/agent-runtime/llm/**/*.js")) {
+    for (const rel of listDistJsFiles(path.join(distRuntime, "llm"))) {
+      paths.add(`llm/${rel}`);
+    }
+  }
   if (adapterSource.includes('dist/agent-runtime/*.js')) {
     for (const rel of listDistJsFiles(distRuntime)) {
       if (!rel.includes("/")) paths.add(rel);
@@ -57,5 +62,44 @@ test("adapter deploy covers all dist/agent-runtime/tools modules", () => {
     missing,
     [],
     `tools not deployed via adapter glob: ${missing.slice(0, 12).join(", ")}`
+  );
+});
+
+test("adapter deploys tool-schema-sanitizer.js for registry Nodebox imports", () => {
+  assert.ok(fs.existsSync(distRuntime), "run npm run build:embed-runtime first");
+  const adapterSource = fs.readFileSync(adapterPath, "utf8");
+  const deployed = adapterDeployPaths(adapterSource);
+  const sanitizerRel = "llm/tool-schema-sanitizer.js";
+  assert.ok(
+    deployed.has(sanitizerRel),
+    `adapter must deploy ${sanitizerRel} (registry imports ../llm/tool-schema-sanitizer.js)`
+  );
+  assert.ok(fs.existsSync(path.join(distRuntime, sanitizerRel)));
+  const registrySource = fs.readFileSync(path.join(distRuntime, "tools/registry.js"), "utf8");
+  assert.match(registrySource, /tool-schema-sanitizer\.js/);
+});
+
+test("production Caddyfile routes subscription OAuth and LLM through sidecar", () => {
+  const caddy = fs.readFileSync(path.join(root, "Caddyfile"), "utf8");
+  assert.match(caddy, /\/api\/providers\/oauth/);
+  assert.match(caddy, /\/api\/llm\/nous/);
+  assert.match(caddy, /\/api\/llm\/openai-codex/);
+});
+
+test("cors-proxy-server handles subscription routes", () => {
+  const source = fs.readFileSync(path.join(root, "scripts/cors-proxy-server.mjs"), "utf8");
+  assert.match(source, /subscription\/router\.mjs/);
+  assert.match(source, /handleSubscriptionHttp/);
+});
+
+test("adapter deploy covers all dist/agent-runtime/llm modules", () => {
+  const adapterSource = fs.readFileSync(adapterPath, "utf8");
+  const deployed = adapterDeployPaths(adapterSource);
+  const llmFiles = listDistJsFiles(path.join(distRuntime, "llm"));
+  const missing = llmFiles.filter((rel) => !deployed.has(`llm/${rel}`));
+  assert.deepEqual(
+    missing,
+    [],
+    `llm modules not deployed via adapter glob: ${missing.join(", ")}`
   );
 });

@@ -256,6 +256,13 @@ test("adapter injects every bootstrap static ./ import (runtime entry pulls the 
       );
       continue;
     }
+    if (runtimeImport.startsWith("llm/")) {
+      assert.ok(
+        adapterSource.includes("../../dist/agent-runtime/llm/**/*.js"),
+        `adapter must glob-copy ${runtimeImport} into .webagent`
+      );
+      continue;
+    }
     assert.ok(
       adapterSource.includes(`\${webagentDir}/${runtimeImport}`),
       `adapter must write ${runtimeImport} into .webagent`
@@ -276,6 +283,13 @@ test("adapter mirrors turn.js static runtime imports into .webagent", async () =
   assert.ok(runtimeImports.includes("message-sanitizer.js"));
   for (const runtimeImport of runtimeImports) {
     if (runtimeImport.startsWith("tools/")) continue;
+    if (runtimeImport.startsWith("llm/")) {
+      assert.ok(
+        adapterSource.includes("../../dist/agent-runtime/llm/**/*.js"),
+        `adapter must glob-copy ${runtimeImport} into .webagent`
+      );
+      continue;
+    }
     assert.ok(
       adapterSource.includes(`\${webagentDir}/${runtimeImport}`),
       `adapter must write ${runtimeImport} into .webagent`
@@ -283,9 +297,11 @@ test("adapter mirrors turn.js static runtime imports into .webagent", async () =
   }
 });
 
-test("adapter mirrors every tools/*.js relative dependency into .webagent", async () => {
+test("adapter mirrors every tools/*.js and llm/*.js relative dependency into .webagent", async () => {
   const adapterSource = await fs.readFile(path.join(process.cwd(), "src/agent/adapter.ts"), "utf8");
   assert.ok(adapterSource.includes("../../dist/agent-runtime/tools/**/*.js"));
   assert.ok(adapterSource.includes('replace(/^.*dist\\/agent-runtime\\/tools\\//, "tools/")'));
   assert.ok(adapterSource.includes("runtimeToolSources"));
+  assert.ok(adapterSource.includes("../../dist/agent-runtime/llm/**/*.js"));
+  assert.ok(adapterSource.includes("runtimeLlmModuleSources"));
 });

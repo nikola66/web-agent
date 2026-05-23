@@ -28,6 +28,16 @@ import {
 } from "@/core/personalities";
 import { CHANNELS } from "@/core/channels";
 import { SearchableSelect } from "./SearchableSelect";
+import {
+  fetchSubscriptionAuthStatus,
+  isSubscriptionOAuthProvider,
+  logoutSubscriptionProfile,
+  pollSubscriptionOAuth,
+  startSubscriptionOAuth,
+  type DeviceOAuthSession,
+  type SubscriptionAuthStatus,
+  type SubscriptionOAuthProviderId,
+} from "@/core/subscription-auth-client";
 
 const PROVIDERS: Profile["provider"][] = LLM_PROVIDERS.map((provider) => provider.id);
 const PERSONALITY_PRESETS = listPersonalityPresets();
@@ -91,6 +101,7 @@ export function ProfileEditor(props: {
   const [channelTokenVisible, setChannelTokenVisible] = useState<Record<string, boolean>>({});
   const [personalityExpanded, setPersonalityExpanded] = useState(false);
   const [activeTab, setActiveTab] = useState<EditorTab>("profile");
+  const [draftProfileId, setDraftProfileId] = useState(() => crypto.randomUUID());
   const [portalEditorToBody, setPortalEditorToBody] = useState(
     () => typeof window !== "undefined" && window.matchMedia(PROFILE_EDITOR_VIEWPORT_PORTAL_MQ).matches
   );
@@ -126,6 +137,7 @@ export function ProfileEditor(props: {
     if (!open) return;
     setPersonalityExpanded(false);
     setActiveTab("profile");
+    if (!editing) setDraftProfileId(crypto.randomUUID());
     (async () => {
       if (editing) {
         setName(editing.name);
@@ -161,7 +173,7 @@ export function ProfileEditor(props: {
         setChannelTokens({});
       }
     })();
-  }, [open, editing, profiles]);
+  }, [open, editing?.id]);
 
   useEffect(() => {
     if (!open) return;
@@ -175,6 +187,8 @@ export function ProfileEditor(props: {
   }, [open, onClose]);
 
   if (!open) return null;
+
+  const profileScopeId = editing?.id ?? draftProfileId;
 
   const save = async () => {
     let profileId: string;
@@ -202,7 +216,7 @@ export function ProfileEditor(props: {
         model: model.trim(),
         accentColor,
         ttsVoice,
-      }, { setActive: !keepActiveProfile });
+      }, { setActive: !keepActiveProfile, id: draftProfileId });
       profileId = created.id;
     }
     // Filter out empty channel tokens
@@ -485,6 +499,13 @@ export function ProfileEditor(props: {
                         </div>
                       </Field>
                     )}
+                    {isSubscriptionOAuthProvider(provider) ? (
+                      <SubscriptionProviderAuth
+                        providerId={provider}
+                        profileId={profileScopeId}
+                        open={open}
+                      />
+                    ) : null}
                   </>
                 );
               })()}
@@ -648,4 +669,220 @@ export function ProfileEditor(props: {
   );
 
   return portalEditorToBody ? createPortal(dialog, document.body) : dialog;
+}
+
+type DeviceOAuthSessionLocal = DeviceOAuthSession;
+
+const SUBSCRIPTION_PROVIDER_LABELS: Record<
+  SubscriptionOAuthProviderId,
+  { field: string; login: string; connected: string }
+> = {
+  nous: {
+    field: "Nous subscription",
+    login: "Log in with Nous",
+    connected: "Connected",
+  },
+  "openai-codex": {
+    field: "Codex (OpenAI subscription)",
+    login: "Log in with Codex",
+    connected: "Connected",
+  },
+};
+
+function SubscriptionProviderAuth(props: {
+  providerId: SubscriptionOAuthProviderId;
+  profileId: string;
+  open: boolean;
+}) {
+  const { providerId, profileId, open } = props;
+  const labels = SUBSCRIPTION_PROVIDER_LABELS[providerId];
+  const [status, setStatus] = useState<SubscriptionAuthStatus | null>(null);
+  const [deviceSession, setDeviceSession] = useState<DeviceOAuthSessionLocal | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  const refreshStatus = async () => {
+    const result = await fetchSubscriptionAuthStatus(providerId, profileId);
+    setStatus(result.status);
+    if (!result.ok && result.offline) {
+      setError("Could not verify subscription status");
+    }
+  };
+
+  useEffect(() => {
+    if (!open || !profileId) return;
+    void refreshStatus();
+  }, [open, profileId, providerId]);
+
+  useEffect(() => {
+    if (!deviceSession) return;
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const poll = async () => {
+      try {
+        const result = await pollSubscriptionOAuth(providerId, deviceSession.session_id);
+        if (!result.ok) throw new Error(result.error);
+        if (result.status === "approved") {
+          if (!cancelled) {
+            setDeviceSession(null);
+            setError("");
+            await refreshStatus();
+          }
+          return;
+        }
+        if (!cancelled) {
+          timer = setTimeout(
+            poll,
+            Math.max(1, Number(result.retry_after || deviceSession.poll_interval || 2)) * 1000
+          );
+        }
+      } catch (pollError) {
+        if (!cancelled) {
+          setError(pollError instanceof Error ? pollError.message : String(pollError));
+          setDeviceSession(null);
+        }
+      }
+    };
+    timer = setTimeout(poll, Math.max(1, Number(deviceSession.poll_interval || 2)) * 1000);
+    return () => {
+      cancelled = true;
+      if (timer) clearTimeout(timer);
+    };
+  }, [deviceSession, profileId, providerId]);
+
+  const startLogin = async () => {
+    setBusy(true);
+    setError("");
+    try {
+      const nextSession = await startSubscriptionOAuth(providerId, profileId);
+      setDeviceSession(nextSession);
+      if (providerId !== "openai-codex") {
+        window.open(nextSession.verification_url, "_blank", "noopener,noreferrer");
+      }
+    } catch (loginError) {
+      setError(loginError instanceof Error ? loginError.message : String(loginError));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const disconnect = async () => {
+    setBusy(true);
+    setError("");
+    try {
+      await logoutSubscriptionProfile(providerId, profileId);
+      setDeviceSession(null);
+      await refreshStatus();
+    } catch (logoutError) {
+      setError(logoutError instanceof Error ? logoutError.message : String(logoutError));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const sessionExpiry = status?.agent_key_expires_at || status?.access_expires_at;
+  const sessionExpiryLabel = sessionExpiry
+    ? new Date(sessionExpiry).toLocaleString(undefined, {
+        month: "numeric",
+        day: "numeric",
+        hour: "numeric",
+        minute: "2-digit",
+      })
+    : null;
+
+  return (
+    <Field label={labels.field}>
+      <div className="flex flex-col gap-2 text-[11px] text-text-secondary">
+        <div className="flex items-center justify-between gap-2 text-xs">
+          <div className="flex min-w-0 items-center gap-2">
+            <span
+              className={`h-1.5 w-1.5 shrink-0 rounded-full ${status?.logged_in ? "bg-emerald-400" : "bg-text-muted/60"}`}
+            />
+            <span className="min-w-0 truncate text-text-primary">
+              {status?.logged_in ? labels.connected : "Not connected"}
+              {status?.logged_in && sessionExpiryLabel ? (
+                <span className="text-text-muted"> · until {sessionExpiryLabel}</span>
+              ) : null}
+            </span>
+          </div>
+          {status?.logged_in ? (
+            <button
+              type="button"
+              onClick={() => void disconnect()}
+              disabled={busy}
+              className="shrink-0 text-[11px] text-text-muted transition-colors hover:text-red-400 disabled:opacity-60"
+            >
+              Disconnect
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={() => void startLogin()}
+              disabled={busy || !!deviceSession}
+              className="shrink-0 text-[11px] font-medium text-text-primary transition-colors hover:text-white disabled:opacity-60"
+            >
+              {busy ? "Starting…" : labels.login}
+            </button>
+          )}
+        </div>
+        {deviceSession ? (
+          <div
+            className="flex flex-col gap-1 rounded-sm p-2"
+            style={{ border: "1px solid var(--color-border)", borderRadius: "var(--radius-sm)" }}
+          >
+            {providerId === "openai-codex" ? (
+              <>
+                <div className="text-text-muted">
+                  Device auth (same flow as <span className="font-mono">codex login --device-auth</span>):
+                </div>
+                <ol className="list-decimal space-y-1 pl-4 text-text-muted">
+                  <li>
+                    <a
+                      href={deviceSession.verification_url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="underline underline-offset-2 hover:text-text-primary"
+                    >
+                      Open the verification page
+                    </a>{" "}
+                    and sign in
+                  </li>
+                  <li>Enter this one-time code on that page</li>
+                </ol>
+              </>
+            ) : (
+              <div className="text-text-muted">Enter this code in the browser tab:</div>
+            )}
+            <div className="flex items-center gap-2">
+              <div className="font-mono text-sm font-semibold text-text-primary">{deviceSession.user_code}</div>
+              <button
+                type="button"
+                onClick={() => void navigator.clipboard.writeText(deviceSession.user_code)}
+                className="text-[10px] text-text-muted underline underline-offset-2 hover:text-text-primary"
+              >
+                Copy
+              </button>
+            </div>
+            {providerId !== "openai-codex" ? (
+              <a
+                href={deviceSession.verification_url}
+                target="_blank"
+                rel="noreferrer"
+                className="text-[10px] underline underline-offset-2 hover:text-text-primary"
+              >
+                Open verification page
+              </a>
+            ) : null}
+            {providerId === "openai-codex" ? (
+              <div className="text-[10px] text-text-muted">
+                Waiting for approval… If the page shows an error, ensure device code auth is enabled for your
+                ChatGPT workspace, then try again.
+              </div>
+            ) : null}
+          </div>
+        ) : null}
+        {error ? <div className="text-[10px] text-red-400">{error}</div> : null}
+      </div>
+    </Field>
+  );
 }

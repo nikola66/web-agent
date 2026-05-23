@@ -35,11 +35,15 @@ export interface OpenAiToolDefinition {
 }
 
 export const BUILTIN_TOOLS: Record<string, BuiltinToolEntry>;
-export const TOOLS: Record<string, ToolImplementFn>;
 
-export function loadToolCatalog(): Promise<Record<string, ToolCatalogEntry>>;
-export function getToolNamesAsync(): Promise<string[]>;
-export function buildToolSpec(toolCatalog: Record<string, ToolCatalogEntry>): Promise<string>;
+export function loadTools(): Promise<Record<string, ToolImplementFn>>;
+export function prepareIncomingToolArguments(
+  toolName: string,
+  args: unknown,
+  toolCatalog?: Record<string, ToolCatalogEntry>,
+): Promise<{ name: string; args: Record<string, unknown> }>;
+export const PARALLEL_SAFE_TOOLS: ReadonlySet<string>;
+export function shouldParallelizeToolBatch(prepared: Array<{ name: string }>): boolean;
 export function buildOpenAiToolDefinitions(
   toolCatalog: Record<string, ToolCatalogEntry>,
 ): Promise<OpenAiToolDefinition[]>;

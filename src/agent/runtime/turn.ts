@@ -180,10 +180,18 @@ const STATIC_TOOL_DISCIPLINE =
 
 export { invalidateSystemPromptCache } from "./system-prompt-cache.js";
 
+function catalogSchemaFingerprint(catalog: Record<string, { inputSchema?: unknown } | undefined>) {
+  return Object.keys(catalog)
+    .sort()
+    .map((name) => `${name}:${JSON.stringify(catalog[name]?.inputSchema ?? null)}`)
+    .join("|");
+}
+
 export function invalidateToolNamesCache(): void {
   _cachedToolNames = null;
   _openAiToolsCacheKey = null;
   _openAiToolsCache = null;
+  void import("./llm/tool-schema-sanitizer.js").then((m) => m.invalidateSanitizedSchemaCache?.());
 }
 
 /** Serialize terminal turns and inbound channel turns (Telegram, etc.). */
@@ -323,7 +331,7 @@ export async function agentTurn(
     toolNames.length === allToolNames.length
       ? toolCatalog
       : Object.fromEntries(Object.entries(toolCatalog).filter(([name]) => toolNames.includes(name)));
-  const toolNamesKey = toolNames.join(",");
+  const toolNamesKey = `${toolNames.join(",")}::${catalogSchemaFingerprint(filteredCatalog)}`;
   let openAiTools = _openAiToolsCache;
   if (turnMeta?.textOnly !== true) {
     if (_openAiToolsCacheKey !== toolNamesKey || !openAiTools) {
@@ -416,6 +424,7 @@ export async function agentTurn(
         if (row.role === "user") {
           const cur = typeof row.content === "string" ? row.content : "";
           conv[i] = { ...row, content: `${hint}\n\n${cur}` };
+          injectedPlanningGate = true;
           break;
         }
       }

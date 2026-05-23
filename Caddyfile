@@ -66,6 +66,25 @@
 		}
 	}
 
+	# Subscription OAuth (Nous, OpenAI Codex) — same contract as Vite llmProxyGate.
+	handle /api/providers/oauth* {
+		reverse_proxy http://{$WEBAGENT_CORS_PROXY_HOST:127.0.0.1}:{$WEBAGENT_CORS_PROXY_PORT:8799} {
+			flush_interval -1
+		}
+	}
+
+	# Subscription LLM proxy (Nous passthrough, Codex Responses adapter).
+	handle /api/llm/nous* {
+		reverse_proxy http://{$WEBAGENT_CORS_PROXY_HOST:127.0.0.1}:{$WEBAGENT_CORS_PROXY_PORT:8799} {
+			flush_interval -1
+		}
+	}
+	handle /api/llm/openai-codex* {
+		reverse_proxy http://{$WEBAGENT_CORS_PROXY_HOST:127.0.0.1}:{$WEBAGENT_CORS_PROXY_PORT:8799} {
+			flush_interval -1
+		}
+	}
+
 	# WASM / ONNX: skip gzip/zstd — compressed binaries break ORT/sql.js in the browser.
 	@wasm {
 		path_regexp wasm \.wasm$

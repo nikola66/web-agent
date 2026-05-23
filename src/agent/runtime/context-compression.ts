@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { OPENROUTER_FREE_DEFAULT_CONTEXT_WINDOW, LLM_REQUEST_TIMEOUT_MS } from "./constants.js";
 import { logDebugEvent } from "./logging/debug-log.js";
 import { reasoningDisableExtras } from "./llm/provider-config.js";
+import { sanitizeHeadersForFetch } from "./llm/http-utils.js";
 import { estimateMessageTokens, estimateMessagesTokens, fetchWithTimeout } from "./llm/streaming.js";
 import { errorMessage } from "./utils.js";
 
@@ -12,16 +13,6 @@ const TOOL_RESULT_PREFIX = "Tool results (compact JSON):";
 const LARGE_TOOL_RESULT_CHAR_LIMIT = 1500;
 const DUPLICATE_TOOL_RESULT_NOTE = "[Duplicate tool output — same content as a more recent call]";
 const MIN_DEDUPE_TOOL_RESULT_CHARS = 200;
-
-function sanitizeHeadersForFetch(headers = {}) {
-  const out = {};
-  for (const [rawName, rawValue] of Object.entries(headers || {})) {
-    const name = String(rawName || "").trim();
-    if (!name) continue;
-    out[name] = String(rawValue ?? "").replace(/[^\x00-\xFF]/g, "");
-  }
-  return out;
-}
 
 function contextWindowTokens(cfg) {
   const value = Number(cfg?.contextWindowTokens);

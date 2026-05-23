@@ -30,6 +30,7 @@ import {
 import { CAPABILITY_RUNTIME_FILES, CAPABILITY_SUMMARY_JSON } from "@/capabilities";
 import { CHANNEL_CATALOG_JSON, CHANNELS } from "@/core/channels";
 import { DEFAULT_PROVIDER_ID, PROVIDER_CATALOG_JSON, PROVIDERS } from "@/core/providers";
+import { isSubscriptionLlmUrl } from "@/core/subscription-auth-client";
 import { toolGuardrailsEnvForRuntime } from "./tool-guardrails-config.js";
 import heartbeatSource from "./runtime/HEARTBEAT.md?raw";
 import soulSource from "./runtime/SOUL.md?raw";
@@ -67,9 +68,6 @@ import runtimeCommandsSource from "../../dist/agent-runtime/commands.js?raw";
 import runtimeSlashCommandViewsSource from "../../dist/agent-runtime/slash-command-views.js?raw";
 import runtimeChannelOutboundSource from "../../dist/agent-runtime/channel-outbound.js?raw";
 import runtimeOnboardingSource from "../../dist/agent-runtime/identity/onboarding.js?raw";
-import runtimeProviderConfigSource from "../../dist/agent-runtime/llm/provider-config.js?raw";
-import runtimeLlmErrorClassifierSource from "../../dist/agent-runtime/llm/llm-error-classifier.js?raw";
-import runtimeStreamingSource from "../../dist/agent-runtime/llm/streaming.js?raw";
 import runtimeDebugLogSource from "../../dist/agent-runtime/logging/debug-log.js?raw";
 import runtimePrivacySource from "../../dist/agent-runtime/privacy.js?raw";
 import { normalizeLaunchMode, sanitizeForLogs } from "./runtime/privacy";
@@ -109,6 +107,12 @@ import sqlWasmRuntimeSource from "sql.js/dist/sql-wasm.js?raw";
 import sqlWasmUrl from "sql.js/dist/sql-wasm.wasm?url";
 
 const runtimeToolSources = import.meta.glob("../../dist/agent-runtime/tools/**/*.js", {
+  eager: true,
+  query: "?raw",
+  import: "default",
+}) as Record<string, string>;
+
+const runtimeLlmModuleSources = import.meta.glob("../../dist/agent-runtime/llm/**/*.js", {
   eager: true,
   query: "?raw",
   import: "default",
@@ -496,9 +500,6 @@ async function writeRuntimeSources(profileId: string): Promise<void> {
   await emulator.fs.writeFile(`${webagentDir}/artifact-preview.js`, runtimeArtifactPreviewSource);
   await emulator.fs.writeFile(`${webagentDir}/privacy.js`, runtimePrivacySource);
   await emulator.fs.writeFile(`${webagentDir}/identity/onboarding.js`, runtimeOnboardingSource);
-  await emulator.fs.writeFile(`${webagentDir}/llm/provider-config.js`, runtimeProviderConfigSource);
-  await emulator.fs.writeFile(`${webagentDir}/llm/llm-error-classifier.js`, runtimeLlmErrorClassifierSource);
-  await emulator.fs.writeFile(`${webagentDir}/llm/streaming.js`, runtimeStreamingSource);
   await emulator.fs.writeFile(`${webagentDir}/logging/debug-log.js`, runtimeDebugLogSource);
   await emulator.fs.writeFile(`${webagentDir}/memory/index.js`, runtimeMemorySource);
   await emulator.fs.writeFile(`${webagentDir}/memory/sql.js`, runtimeMemorySqlSource);
@@ -530,6 +531,12 @@ async function writeRuntimeSources(profileId: string): Promise<void> {
   }
   for (const [sourcePath, content] of Object.entries(runtimeToolSources)) {
     const rel = sourcePath.replace(/^.*dist\/agent-runtime\/tools\//, "tools/");
+    const parent = rel.split("/").slice(0, -1).join("/");
+    if (parent) await emulator.fs.mkdir(`${webagentDir}/${parent}`, { recursive: true });
+    await emulator.fs.writeFile(`${webagentDir}/${rel}`, content);
+  }
+  for (const [sourcePath, content] of Object.entries(runtimeLlmModuleSources)) {
+    const rel = sourcePath.replace(/^.*dist\/agent-runtime\//, "");
     const parent = rel.split("/").slice(0, -1).join("/");
     if (parent) await emulator.fs.mkdir(`${webagentDir}/${parent}`, { recursive: true });
     await emulator.fs.writeFile(`${webagentDir}/${rel}`, content);
@@ -590,6 +597,18 @@ async function withTimeout<T>(
   }
 }
 
+function withSubscriptionProfileHeader(
+  profileId: string,
+  url: string,
+  headers: Record<string, string> | undefined
+): Record<string, string> {
+  const next = { ...(headers ?? {}) };
+  if (isSubscriptionLlmUrl(url)) {
+    next["x-webagent-profile-id"] = profileId;
+  }
+  return next;
+}
+
 function buildEnv(profileId: string, profile: Profile, apiKeys: Record<string, string>): Record<string, string> {
   const activeProvider = PROVIDERS.find((provider) => provider.id === profile.provider);
   const activeProviderId = activeProvider?.id || DEFAULT_PROVIDER_ID;
@@ -603,6 +622,7 @@ function buildEnv(profileId: string, profile: Profile, apiKeys: Record<string, s
     WEBAGENT_RUNTIME: "nodebox",
     WEBAGENT_APP_ORIGIN:
       typeof window !== "undefined" ? window.location.origin : "",
+    WEBAGENT_PROFILE_ID: profileId,
     WEBAGENT_PROFILE_NAME: profile.name,
     WEBAGENT_USER_NAME: profile.userName,
     WEBAGENT_PERSONALITY: profile.personality,
@@ -1249,13 +1269,14 @@ export async function startWebAgent(options: AgentStartOptions): Promise<void> {
               bodyEncoding?: string;
               binaryResponse?: boolean;
             };
+            const proxyHeaders = withSubscriptionProfileHeader(profile.id, req.url, req.headers);
             const res = await fetch("/api/proxy", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({
                 method: req.method ?? "GET",
                 url: req.url,
-                headers: req.headers ?? {},
+                headers: proxyHeaders,
                 body: req.body ?? null,
                 bodyEncoding: req.bodyEncoding,
                 binaryResponse: req.binaryResponse,
@@ -1299,9 +1320,10 @@ export async function startWebAgent(options: AgentStartOptions): Promise<void> {
               headers?: Record<string, string>;
               body?: string | null;
             }>(reqBody);
+            const proxyHeaders = withSubscriptionProfileHeader(profile.id, req.url, req.headers);
             const response = await fetch(req.url, {
               method: req.method ?? "GET",
-              headers: req.headers ?? {},
+              headers: proxyHeaders,
               ...(req.body != null ? { body: req.body } : {}),
             });
             await writeStreamEvent(

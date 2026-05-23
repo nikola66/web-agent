@@ -453,9 +453,6 @@ export function looksLikeCodexIntermediateAck(
   return userTargetsWorkspace || assistantTargetsWorkspace;
 }
 
-/** @deprecated alias — use looksLikeCodexIntermediateAck */
-export const looksLikeIntermediateAck = looksLikeCodexIntermediateAck;
-
 export function looksLikeEmptyAfterTools(visible: string, executedToolsInTurn: boolean): boolean {
   if (!executedToolsInTurn) return false;
   return !String(visible || "").trim();

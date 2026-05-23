@@ -10,6 +10,11 @@ import { useRuntimeStore } from "@/ui/stores/runtime-store";
 import { useProfileStore } from "@/ui/stores/profile-store";
 import { LLM_PROVIDERS, useSettingsStore } from "@/ui/stores/settings-store";
 import { loadApiKeys, saveApiKeys, loadProfileCredentials } from "./credential-vault";
+import {
+  fetchSubscriptionAuthStatus,
+  isSubscriptionOAuthProvider,
+  logoutSubscriptionProfile,
+} from "./subscription-auth-client";
 import { CHANNELS } from "./channels";
 import { requestPersistentStorage, getStorageEstimate } from "./persistence";
 import { runLegacySnapshotMigration } from "./migrate";
@@ -478,6 +483,14 @@ export async function startAgent(profileId?: string): Promise<void> {
       write(
         "\x1b[33m⚠ Missing API key for this agent. Click Edit (pencil icon) to configure it.\x1b[0m\n"
       );
+    }
+    if (isSubscriptionOAuthProvider(profile.provider)) {
+      const subStatus = await fetchSubscriptionAuthStatus(profile.provider, profile.id);
+      if (!subStatus.status.logged_in) {
+        write(
+          "\x1b[33m⚠ Subscription not connected for this agent. Click Edit (pencil icon) to log in.\x1b[0m\n"
+        );
+      }
     }
 
     try {
