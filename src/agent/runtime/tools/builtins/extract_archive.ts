@@ -7,11 +7,13 @@ export default defineTool({
   emoji: "🗜️",
   description:
     "Extract a ZIP, TAR, or TAR.GZ archive into a workspace directory. " +
-    "Required: `archive_path` (workspace-relative; aliases accepted: `path`, `file`, `file_path`, `zip`, `archive`). " +
-    "Files sent over Telegram land in `.webagent/telegram-inbox/` — call `list_dir` there if unsure. " +
+    "Strongly prefer `archive_path` (workspace-relative). Aliases accepted: `path`, `file`, `file_path`, `zip`, `archive`. " +
+    "If you call this with no path at all, the tool auto-picks the NEWEST archive in `.webagent/telegram-inbox/` " +
+    "and sets `autoPickedFromInbox: true` in the result — fine when the user just sent a single file, " +
+    "but pass the path explicitly when there's any ambiguity. " +
     "Optional: `destination` (defaults to `<archive>-extracted`), `max_files` (5000), `max_bytes` (256MB). " +
     "Path-traversal entries are blocked. ZIP64 / encryption / non-deflate methods are not supported. " +
-    "Returns { ok, format, extractedFiles, extractedBytes, skipped }.",
+    "Returns { ok, format, extractedFiles, extractedBytes, skipped, autoPickedFromInbox? }.",
   inputSchema: {
     type: "object",
     properties: {
@@ -32,7 +34,6 @@ export default defineTool({
         description: "Cap on total uncompressed bytes written (default 256MB).",
       },
     },
-    required: ["archive_path"],
     additionalProperties: true,
   },
 });

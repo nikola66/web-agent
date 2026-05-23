@@ -65,20 +65,32 @@ async function listRecentArchivesInInbox(maxEntries = 5): Promise<string[]> {
 }
 
 async function missingArchivePathError(toolName: string): Promise<Error> {
-  const recent = await listRecentArchivesInInbox();
-  const aliases = "Accepted keys: archive_path (preferred), archive, path, file, file_path, zip.";
-  if (recent.length) {
-    const newest = recent[recent.length - 1];
-    const retry = `RETRY NOW with: ${toolName}({"archive_path": "${newest}"}). Do not call ${toolName} again without a path.`;
-    const others = recent.slice(0, -1);
-    const othersBlock = others.length ? `\nOther archives in workspace:\n- ${others.join("\n- ")}` : "";
-    return new Error(`${toolName} requires a path. ${aliases}\n${retry}${othersBlock}`);
-  }
   return new Error(
-    `${toolName} requires a path. ${aliases}\n` +
-      "No archives in `.webagent/telegram-inbox`. Call list_dir({\"path\":\".webagent/telegram-inbox\"}) " +
-      "to confirm what arrived. Do not retry " + toolName + " without a path."
+    `${toolName} requires a path. ` +
+      "Accepted keys: archive_path (preferred), archive, path, file, file_path, zip. " +
+      "No archives in `.webagent/telegram-inbox` to auto-pick. " +
+      "Call list_dir({\"path\":\".webagent/telegram-inbox\"}) to confirm what arrived. " +
+      "Do not retry " + toolName + " without a path."
   );
+}
+
+/**
+ * Resolve the user-supplied archive path, or fall back to the newest archive
+ * in the Telegram inbox. LLMs frequently call these tools with no args after
+ * the user says "extract those" — auto-picking the freshest inbox file turns
+ * that into a successful action instead of a retry loop.
+ */
+async function resolveArchivePathArg(
+  args: Record<string, unknown>,
+  toolName: string
+): Promise<{ relPath: string; autoPicked: boolean }> {
+  const explicit = pickArchivePathArg(args);
+  if (explicit) return { relPath: explicit, autoPicked: false };
+  const recent = await listRecentArchivesInInbox();
+  if (recent.length) {
+    return { relPath: recent[recent.length - 1], autoPicked: true };
+  }
+  throw await missingArchivePathError(toolName);
 }
 
 export type ArchiveEntry = {
@@ -282,6 +294,7 @@ export type ExtractResult = {
   extractedFiles: number;
   extractedBytes: number;
   skipped: string[];
+  autoPickedFromInbox?: boolean;
 };
 
 const DEFAULT_MAX_BYTES = 256 * 1024 * 1024; // 256MB extracted total
@@ -297,8 +310,8 @@ export async function extractArchive(
     [key: string]: unknown;
   } = {}
 ): Promise<ExtractResult> {
-  const relArchive = pickArchivePathArg(args as Record<string, unknown>);
-  if (!relArchive) throw await missingArchivePathError("extract_archive");
+  const resolved = await resolveArchivePathArg(args as Record<string, unknown>, "extract_archive");
+  const relArchive = resolved.relPath;
   const relDest = String(
     args.destination || `${relArchive.replace(ARCHIVE_EXT_RE, "")}-extracted`
   ).trim();
@@ -361,6 +374,7 @@ export async function extractArchive(
     extractedFiles,
     extractedBytes,
     skipped,
+    ...(resolved.autoPicked ? { autoPickedFromInbox: true } : {}),
   };
 }
 
@@ -372,6 +386,7 @@ export type ListResult = {
   totalUncompressedBytes: number;
   entries: ArchiveEntry[];
   truncated: boolean;
+  autoPickedFromInbox?: boolean;
 };
 
 const DEFAULT_LIST_LIMIT = 500;
@@ -380,8 +395,8 @@ export async function listArchive(
   ctx: unknown,
   args: { archive_path?: string; limit?: number; [key: string]: unknown } = {}
 ): Promise<ListResult> {
-  const relArchive = pickArchivePathArg(args as Record<string, unknown>);
-  if (!relArchive) throw await missingArchivePathError("archive_list");
+  const resolved = await resolveArchivePathArg(args as Record<string, unknown>, "archive_list");
+  const relArchive = resolved.relPath;
   const absArchive = resolveWorkspacePath(ctx, relArchive);
   const parsed = await loadAndParseArchive(absArchive);
   const limit =
@@ -398,5 +413,6 @@ export async function listArchive(
     totalUncompressedBytes,
     entries: parsed.entries.slice(0, limit),
     truncated,
-  };
+    ...(resolved.autoPicked ? { autoPickedFromInbox: true } : {}),
+  } as ListResult;
 }
