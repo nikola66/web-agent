@@ -5,6 +5,7 @@
 
 import fs from "node:fs/promises";
 import { resolveWorkspacePath } from "../../workspace-paths.js";
+import { toolPathStringFromArgs } from "./path-hints.js";
 
 type ImageMeta = { format: string; width: number; height: number };
 
@@ -114,10 +115,12 @@ export type ImageInfoResult = {
 
 export async function imageInfo(
   ctx: unknown,
-  args: { path: string }
+  args: { path?: string; [key: string]: unknown } = {}
 ): Promise<ImageInfoResult> {
-  const rel = String(args.path || "").trim();
-  if (!rel) throw new Error("image_info requires `path`");
+  const rel =
+    (typeof args.path === "string" && args.path.trim()) ||
+    toolPathStringFromArgs(args as Record<string, unknown>);
+  if (!rel) throw new Error("image_info requires `path` (aliases: `file`, `file_path`, `filename`).");
   const abs = resolveWorkspacePath(ctx, rel);
   const buf = await fs.readFile(abs);
   const meta =

@@ -16,6 +16,6 @@ export default defineTool({
       path: { type: "string", description: "Workspace-relative image file path." },
     },
     required: ["path"],
-    additionalProperties: false,
+    additionalProperties: true,
   },
 });

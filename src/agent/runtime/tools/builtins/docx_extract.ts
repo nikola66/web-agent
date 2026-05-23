@@ -17,6 +17,6 @@ export default defineTool({
       max_chars: { type: "number", description: "Cap on returned text characters (default 500000)." },
     },
     required: ["path"],
-    additionalProperties: false,
+    additionalProperties: true,
   },
 });

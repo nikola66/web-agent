@@ -21,6 +21,7 @@
 import fs from "node:fs/promises";
 import zlib from "node:zlib";
 import { resolveWorkspacePath } from "../../workspace-paths.js";
+import { toolPathStringFromArgs } from "./path-hints.js";
 
 function indexOfBuffer(haystack: Buffer, needle: Buffer, from = 0): number {
   return haystack.indexOf(needle, from);
@@ -265,10 +266,12 @@ const DEFAULT_MAX_CHARS = 500_000;
 
 export async function pdfExtract(
   ctx: unknown,
-  args: { path: string; max_chars?: number }
+  args: { path?: string; max_chars?: number; [key: string]: unknown } = {}
 ): Promise<PdfExtractResult> {
-  const rel = String(args.path || "").trim();
-  if (!rel) throw new Error("pdf_extract requires `path`");
+  const rel =
+    (typeof args.path === "string" && args.path.trim()) ||
+    toolPathStringFromArgs(args as Record<string, unknown>);
+  if (!rel) throw new Error("pdf_extract requires `path` (aliases: `file`, `file_path`, `filename`).");
   const abs = resolveWorkspacePath(ctx, rel);
   const buf = await fs.readFile(abs);
   if (!buf.slice(0, 5).toString("ascii").startsWith("%PDF-")) {

@@ -20,6 +20,58 @@ import {
   assertAllowedWorkspaceWritePath,
   ensureParentDir,
 } from "../../workspace-paths.js";
+import { workspaceStatePath } from "../../constants.js";
+
+const ARCHIVE_EXT_RE = /\.(zip|tar\.gz|tgz|tar)$/i;
+const ATTACHMENT_INBOX = ".webagent/telegram-inbox";
+
+/** LLMs send paths under many names. Look in all of them before giving up. */
+function pickArchivePathArg(args: Record<string, unknown> | null | undefined): string {
+  if (!args || typeof args !== "object") return "";
+  const keys = [
+    "archive_path",
+    "archive",
+    "path",
+    "file",
+    "filename",
+    "file_path",
+    "filepath",
+    "source",
+    "input",
+    "zip",
+    "zip_path",
+    "target",
+  ];
+  for (const k of keys) {
+    const v = (args as Record<string, unknown>)[k];
+    if (typeof v === "string") {
+      const t = v.trim();
+      if (t) return t;
+    }
+  }
+  return "";
+}
+
+async function listRecentArchivesInInbox(maxEntries = 5): Promise<string[]> {
+  try {
+    const abs = workspaceStatePath(ATTACHMENT_INBOX);
+    const entries = await fs.readdir(abs);
+    const archives = entries.filter((n) => ARCHIVE_EXT_RE.test(n));
+    archives.sort();
+    return archives.slice(-maxEntries).map((n) => `${ATTACHMENT_INBOX}/${n}`);
+  } catch {
+    return [];
+  }
+}
+
+async function missingArchivePathError(toolName: string): Promise<Error> {
+  const recent = await listRecentArchivesInInbox();
+  const aliases = "Accepted keys: archive_path (preferred), archive, path, file, file_path, zip.";
+  const hint = recent.length
+    ? `Recent archives in workspace:\n- ${recent.join("\n- ")}`
+    : "No archives found under .webagent/telegram-inbox. If the user sent a file, it should already be saved there — call list_dir on .webagent/telegram-inbox to confirm before retrying.";
+  return new Error(`${toolName} requires a path. ${aliases}\n${hint}`);
+}
 
 export type ArchiveEntry = {
   name: string;
@@ -230,16 +282,17 @@ const DEFAULT_MAX_FILES = 5000;
 export async function extractArchive(
   ctx: unknown,
   args: {
-    archive_path: string;
+    archive_path?: string;
     destination?: string;
     max_bytes?: number;
     max_files?: number;
-  }
+    [key: string]: unknown;
+  } = {}
 ): Promise<ExtractResult> {
-  const relArchive = String(args.archive_path || "").trim();
-  if (!relArchive) throw new Error("extract_archive requires `archive_path`");
+  const relArchive = pickArchivePathArg(args as Record<string, unknown>);
+  if (!relArchive) throw await missingArchivePathError("extract_archive");
   const relDest = String(
-    args.destination || `${relArchive.replace(/\.(zip|tar\.gz|tgz|tar)$/i, "")}-extracted`
+    args.destination || `${relArchive.replace(ARCHIVE_EXT_RE, "")}-extracted`
   ).trim();
 
   const absArchive = resolveWorkspacePath(ctx, relArchive);
@@ -317,10 +370,10 @@ const DEFAULT_LIST_LIMIT = 500;
 
 export async function listArchive(
   ctx: unknown,
-  args: { archive_path: string; limit?: number }
+  args: { archive_path?: string; limit?: number; [key: string]: unknown } = {}
 ): Promise<ListResult> {
-  const relArchive = String(args.archive_path || "").trim();
-  if (!relArchive) throw new Error("archive_list requires `archive_path`");
+  const relArchive = pickArchivePathArg(args as Record<string, unknown>);
+  if (!relArchive) throw await missingArchivePathError("archive_list");
   const absArchive = resolveWorkspacePath(ctx, relArchive);
   const parsed = await loadAndParseArchive(absArchive);
   const limit =

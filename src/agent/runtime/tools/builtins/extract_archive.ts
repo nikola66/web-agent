@@ -7,16 +7,17 @@ export default defineTool({
   emoji: "🗜️",
   description:
     "Extract a ZIP, TAR, or TAR.GZ archive into a workspace directory. " +
-    "Required: `archive_path` (workspace-relative). Optional: `destination` (defaults to `<archive>-extracted`), " +
-    "`max_files` (default 5000), `max_bytes` (default 256MB). Path-traversal entries are blocked. " +
-    "ZIP64 / encryption / non-deflate methods are not supported — call `run_shell` with a node script for exotic archives. " +
+    "Required: `archive_path` (workspace-relative; aliases accepted: `path`, `file`, `file_path`, `zip`, `archive`). " +
+    "Files sent over Telegram land in `.webagent/telegram-inbox/` — call `list_dir` there if unsure. " +
+    "Optional: `destination` (defaults to `<archive>-extracted`), `max_files` (5000), `max_bytes` (256MB). " +
+    "Path-traversal entries are blocked. ZIP64 / encryption / non-deflate methods are not supported. " +
     "Returns { ok, format, extractedFiles, extractedBytes, skipped }.",
   inputSchema: {
     type: "object",
     properties: {
       archive_path: {
         type: "string",
-        description: "Workspace-relative path to a .zip / .tar / .tar.gz / .tgz file.",
+        description: "Workspace-relative path to a .zip / .tar / .tar.gz / .tgz file. Aliases: `path`, `file`, `file_path`, `zip`, `archive`.",
       },
       destination: {
         type: "string",
@@ -32,6 +33,6 @@ export default defineTool({
       },
     },
     required: ["archive_path"],
-    additionalProperties: false,
+    additionalProperties: true,
   },
 });

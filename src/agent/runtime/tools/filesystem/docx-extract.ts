@@ -13,6 +13,7 @@
 
 import { loadAndParseArchive } from "./archive.js";
 import { resolveWorkspacePath } from "../../workspace-paths.js";
+import { toolPathStringFromArgs } from "./path-hints.js";
 
 function decodeXmlEntities(s: string): string {
   return s
@@ -55,10 +56,12 @@ const DEFAULT_MAX_CHARS = 500_000;
 
 export async function docxExtract(
   ctx: unknown,
-  args: { path: string; max_chars?: number }
+  args: { path?: string; max_chars?: number; [key: string]: unknown } = {}
 ): Promise<DocxExtractResult> {
-  const rel = String(args.path || "").trim();
-  if (!rel) throw new Error("docx_extract requires `path`");
+  const rel =
+    (typeof args.path === "string" && args.path.trim()) ||
+    toolPathStringFromArgs(args as Record<string, unknown>);
+  if (!rel) throw new Error("docx_extract requires `path` (aliases: `file`, `file_path`, `filename`).");
   const abs = resolveWorkspacePath(ctx, rel);
   const parsed = await loadAndParseArchive(abs);
   if (parsed.format !== "zip") {

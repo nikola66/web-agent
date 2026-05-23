@@ -425,10 +425,15 @@ export function createChannelInboundHandler(deps) {
           const captionPart = text.startsWith("[Telegram attachment received")
             ? ""
             : text.trim();
-          const header = `The user sent ${attachments.length} Telegram attachment(s). Saved to workspace:`;
+          const header = `The user sent ${attachments.length} Telegram attachment(s). Saved to workspace at the paths below — pass these exact paths to your tool call.`;
+          const firstPath = lines[0]?.match(/^- (\S+)/)?.[1];
+          const exampleArg = firstPath
+            ? `Example: extract_archive({"archive_path": "${firstPath}"}) — the argument name is \`archive_path\`, not \`path\`.`
+            : "";
           const hints = [
-            "Use `read_file` for text/markdown/JSON/CSV. Use `vision_analyze` for images. Use `extract_archive` for .zip/.tar/.tar.gz. Use `pdf_extract` for PDFs. Use `docx_extract` for .docx.",
-          ];
+            "Use `read_file({ path })` for text/markdown/JSON/CSV. Use `vision_analyze({ workspace_relative_image_path })` for images. Use `extract_archive({ archive_path })` for .zip/.tar/.tar.gz (also accepts `path`, `file`, `zip`). Use `pdf_extract({ path })` for PDFs. Use `docx_extract({ path })` for .docx.",
+            exampleArg,
+          ].filter(Boolean);
           const sections = [header, ...lines];
           if (failures.length) sections.push(`Failures:\n- ${failures.join("\n- ")}`);
           sections.push(hints.join(" "));
