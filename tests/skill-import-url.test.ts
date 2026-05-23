@@ -6,6 +6,7 @@ import {
   resolveSkillImportUrlFromPage,
   resolveAllSkillImportUrlsFromPage,
   candidateRawSkillUrls,
+  extractSkillsCliInstallsFromPage,
   looksLikeSkillMarkdown,
   fetchSkillImportText,
 } from "../dist/agent-runtime/memory/skill-import-url.js";
@@ -64,6 +65,16 @@ test("resolveAllSkillImportUrlsFromPage returns all github links", () => {
   assert.equal(urls.length, 2);
   assert.match(urls[0], /anthropics\/skills/);
   assert.match(urls[1], /google-labs-code/);
+});
+
+test("extractSkillsCliInstallsFromPage reads skills.sh npx install command", () => {
+  const installs = extractSkillsCliInstallsFromPage(
+    "https://www.skills.sh/anthropics/skills/frontend-design",
+    '<code>npx skills add https://github.com/anthropics/skills --skill frontend-design</code>'
+  );
+  assert.deepEqual(installs, [
+    { owner: "anthropics", repo: "skills", skill: "frontend-design" },
+  ]);
 });
 
 test("candidateRawSkillUrls tries skills and dot-prefix paths", () => {
@@ -136,6 +147,118 @@ test("fetchSkillImportText retries candidate paths on 404", async () => {
     );
     assert.match(text, /name: alt/);
     assert.ok(calls.length >= 2);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("fetchSkillImportText resolves current skills.sh pages from npx install command", async () => {
+  const skillMd = [
+    "---",
+    "name: frontend-design",
+    "description: ok",
+    "---",
+    "",
+    "## Procedure",
+    "step",
+  ].join("\n");
+  const originalFetch = globalThis.fetch;
+  const calls: string[] = [];
+  globalThis.fetch = async (input: RequestInfo | URL) => {
+    const url = String(input);
+    calls.push(url);
+    if (url === "https://www.skills.sh/anthropics/skills/frontend-design") {
+      return {
+        ok: true,
+        status: 200,
+        headers: { get: () => "text/html" },
+        text: async () =>
+          '<code>npx skills add https://github.com/anthropics/skills --skill frontend-design</code>',
+      } as Response;
+    }
+    if (url === "https://raw.githubusercontent.com/anthropics/skills/main/skills/frontend-design/SKILL.md") {
+      return {
+        ok: true,
+        status: 200,
+        headers: { get: () => "text/plain" },
+        text: async () => skillMd,
+      } as Response;
+    }
+    return {
+      ok: false,
+      status: 404,
+      headers: { get: () => "text/plain" },
+      text: async () => "not found",
+    } as Response;
+  };
+  try {
+    const text = await fetchSkillImportText("https://www.skills.sh/anthropics/skills/frontend-design");
+    assert.match(text, /name: frontend-design/);
+    assert.ok(calls.includes("https://raw.githubusercontent.com/anthropics/skills/main/skills/frontend-design/SKILL.md"));
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("fetchSkillImportText searches repo tree when skills.sh skill id aliases path", async () => {
+  const skillMd = [
+    "---",
+    "name: vercel-react-best-practices",
+    "description: ok",
+    "---",
+    "",
+    "## Procedure",
+    "step",
+  ].join("\n");
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (input: RequestInfo | URL) => {
+    const url = String(input);
+    if (url === "https://www.skills.sh/vercel-labs/agent-skills/vercel-react-best-practices") {
+      return {
+        ok: true,
+        status: 200,
+        headers: { get: () => "text/html" },
+        text: async () =>
+          '<code>npx skills add https://github.com/vercel-labs/agent-skills --skill vercel-react-best-practices</code>',
+      } as Response;
+    }
+    if (url.includes("/vercel-react-best-practices/SKILL.md")) {
+      return {
+        ok: false,
+        status: 404,
+        headers: { get: () => "text/plain" },
+        text: async () => "not found",
+      } as Response;
+    }
+    if (url === "https://api.github.com/repos/vercel-labs/agent-skills/git/trees/main?recursive=1") {
+      return {
+        ok: true,
+        status: 200,
+        headers: { get: () => "application/json" },
+        text: async () =>
+          JSON.stringify({ tree: [{ path: "skills/react-best-practices/SKILL.md" }] }),
+      } as Response;
+    }
+    if (url === "https://raw.githubusercontent.com/vercel-labs/agent-skills/main/skills/react-best-practices/SKILL.md") {
+      return {
+        ok: true,
+        status: 200,
+        headers: { get: () => "text/plain" },
+        text: async () => skillMd,
+      } as Response;
+    }
+    return {
+      ok: false,
+      status: 404,
+      headers: { get: () => "text/plain" },
+      text: async () => "not found",
+    } as Response;
+  };
+  try {
+    const text = await fetchSkillImportText(
+      "https://www.skills.sh/vercel-labs/agent-skills/vercel-react-best-practices"
+    );
+    assert.match(text, /name: vercel-react-best-practices/);
   } finally {
     globalThis.fetch = originalFetch;
   }

@@ -9,6 +9,12 @@ import { errorMessage } from "../utils.js";
 const SKILL_IMPORT_BODY_CAP = 200_000;
 const FETCH_HEADERS = { "User-Agent": "web-agent-skills" };
 
+type GithubSkillInstall = {
+  owner: string;
+  repo: string;
+  skill: string;
+};
+
 function useIpcProxy(): boolean {
   return String(process.env.WEBAGENT_RUNTIME || "").trim() === "nodebox";
 }
@@ -155,6 +161,71 @@ function extractGithubSkillUrlsFromPage(body: string): string[] {
   return out;
 }
 
+function parseGithubRepoUrl(url: string): { owner: string; repo: string } | null {
+  const m = String(url || "").match(/^https:\/\/github\.com\/([^/\s]+)\/([^/\s#?]+)/i);
+  if (!m) return null;
+  return { owner: m[1], repo: m[2].replace(/\.git$/i, "") };
+}
+
+export function extractSkillsCliInstallsFromPage(sourceUrl: string, body: string): GithubSkillInstall[] {
+  const text = String(body || "");
+  const out: GithubSkillInstall[] = [];
+  const seen = new Set<string>();
+  const add = (install: GithubSkillInstall | null) => {
+    if (!install?.owner || !install.repo || !install.skill) return;
+    const key = `${install.owner}/${install.repo}/${install.skill}`.toLowerCase();
+    if (!seen.has(key)) {
+      seen.add(key);
+      out.push(install);
+    }
+  };
+
+  const cliRe =
+    /npx\s+skills\s+add\s+(https:\/\/github\.com\/[^\s<"'`]+)\s+--skill\s+([A-Za-z0-9_.-]+)/gi;
+  let cliMatch: RegExpExecArray | null;
+  while ((cliMatch = cliRe.exec(text))) {
+    const repo = parseGithubRepoUrl(cliMatch[1]);
+    if (repo) add({ ...repo, skill: cliMatch[2] });
+  }
+
+  try {
+    const url = new URL(sourceUrl);
+    if (isMarketplaceHost(url.hostname)) {
+      const parts = url.pathname.split("/").filter(Boolean);
+      if (parts.length >= 3) {
+        add({ owner: parts[0], repo: parts[1], skill: parts[2] });
+      }
+    }
+  } catch {
+  }
+
+  return out;
+}
+
+function rawSkillCandidatesForInstall(install: GithubSkillInstall): string[] {
+  const branches = ["main", "master"];
+  const paths = [`skills/${install.skill}/SKILL.md`, `${install.skill}/SKILL.md`];
+  const out: string[] = [];
+  for (const branch of branches) {
+    for (const path of paths) {
+      out.push(
+        `https://raw.githubusercontent.com/${install.owner}/${install.repo}/${branch}/${path}`
+      );
+    }
+  }
+  return out;
+}
+
+function frontmatterName(text: string): string | null {
+  const fm = String(text || "").match(/^---\s*\n([\s\S]*?)\n---/);
+  const name = fm?.[1]?.match(/^name:\s*["']?([^"'\r\n]+)["']?\s*$/m)?.[1]?.trim();
+  return name || null;
+}
+
+function skillNameMatches(text: string, skill: string): boolean {
+  return frontmatterName(text)?.toLowerCase() === skill.toLowerCase();
+}
+
 /** When a marketplace page was fetched, resolve a raw SKILL.md URL from embedded GitHub links. */
 export function resolveSkillImportUrlFromPage(sourceUrl: string, body: string): string | null {
   const host = (() => {
@@ -241,13 +312,64 @@ export async function fetchSkillImportText(url: string): Promise<string> {
     }
   };
 
+  const loadMarketplaceSkill = async (sourceUrl: string, html: string) => {
+    for (const install of extractSkillsCliInstallsFromPage(sourceUrl, html)) {
+      for (const candidate of rawSkillCandidatesForInstall(install)) {
+        try {
+          const loaded = await loadWithCandidates(candidate);
+          if (looksLikeSkillMarkdown(loaded.body)) return loaded;
+        } catch (err) {
+          if (!isFetch404Error(err)) throw err;
+        }
+      }
+
+      for (const branch of ["main", "master"]) {
+        try {
+          const treeUrl = `https://api.github.com/repos/${install.owner}/${install.repo}/git/trees/${branch}?recursive=1`;
+          const tree = await load(treeUrl);
+          let parsed: { tree?: Array<{ path?: unknown }> };
+          try {
+            parsed = JSON.parse(tree.body) as { tree?: Array<{ path?: unknown }> };
+          } catch {
+            continue;
+          }
+          const paths = (parsed.tree || [])
+            .map((item) => String(item.path || ""))
+            .filter((path) => /(^|\/)SKILL\.md$/i.test(path));
+          for (const path of paths) {
+            const raw = `https://raw.githubusercontent.com/${install.owner}/${install.repo}/${branch}/${path}`;
+            const loaded = await load(raw);
+            if (looksLikeSkillMarkdown(loaded.body) && skillNameMatches(loaded.body, install.skill)) {
+              return loaded;
+            }
+          }
+        } catch (err) {
+          if (!isFetch404Error(err)) throw err;
+        }
+      }
+    }
+    return null;
+  };
+
   let { body, contentType } = await loadWithCandidates(target);
   if (!looksLikeSkillMarkdown(body)) {
     const alt = resolveSkillImportUrlFromPage(target, body);
     if (alt && alt !== target) {
-      const second = await loadWithCandidates(alt);
-      body = second.body;
-      contentType = second.contentType;
+      try {
+        const second = await loadWithCandidates(alt);
+        body = second.body;
+        contentType = second.contentType;
+      } catch (err) {
+        if (!isFetch404Error(err)) throw err;
+      }
+    }
+  }
+
+  if (!looksLikeSkillMarkdown(body)) {
+    const marketplaceSkill = await loadMarketplaceSkill(target, body);
+    if (marketplaceSkill) {
+      body = marketplaceSkill.body;
+      contentType = marketplaceSkill.contentType;
     }
   }
 

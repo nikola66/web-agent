@@ -116,6 +116,41 @@ test("analyzeSkillCompat reads allowed-tools from frontmatter meta", () => {
   assert.equal(analysis.tier, "limited");
 });
 
+test("analyzeSkillCompat ignores passive category and SDK references", () => {
+  const analysis = analyzeSkillCompat(
+    [
+      "---",
+      "name: find-skills",
+      "---",
+      "",
+      "Use `npx skills find react testing`.",
+      "| Testing | testing, jest, playwright, e2e |",
+      "- **AI Search**: [Python](references/sdk/azure-search-documents-py.md)",
+    ].join("\n")
+  );
+  assert.equal(analysis.uses_playwright, false);
+  assert.equal(analysis.uses_python, false);
+  assert.equal(analysis.uses_npx, false);
+  assert.equal(analysis.tier, "native");
+});
+
+test("analyzeSkillCompat flags MCP and Azure CLI workflow requirements", () => {
+  const analysis = analyzeSkillCompat(
+    [
+      "---",
+      "name: azure-ai",
+      "---",
+      "",
+      "| AI Search | MCP Tools | CLI |",
+      "| Search | `azure__search` | `az search` |",
+      "Run actual validation commands (azd provision --preview, bicep build).",
+    ].join("\n")
+  );
+  assert.equal(analysis.uses_mcp, true);
+  assert.equal(analysis.uses_bash, true);
+  assert.equal(analysis.tier, "limited");
+});
+
 test("skills-sh-top10 fixture: every mapped tier declares a mapping", async () => {
   const rows = JSON.parse(await fs.readFile(FIXTURE, "utf8"));
   const mapped = rows.filter((row: { tier: string }) => row.tier === "mapped");

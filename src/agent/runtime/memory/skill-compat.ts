@@ -58,17 +58,22 @@ export function analyzeSkillCompat(
     /\bbash\s*\(/i.test(hay) ||
     toolNames.some((t) => t === "bash" || t.startsWith("bash(")) ||
     /\ballowed-tools:[^\n]*\bBash\b/i.test(body) ||
-    /\brequires-tools:[^\n]*\bBash\b/i.test(body);
+    /\brequires-tools:[^\n]*\bBash\b/i.test(body) ||
+    /`(?:azd|az|terraform|bicep)(?:\s|`)|\b(?:azd|terraform|bicep)\s+(?:up|deploy|provision|validate|build|plan|apply)\b|\baz\s+(?:deployment|cognitiveservices|search)\b/i.test(hay);
   const python_libraries = detectPythonLibraries(hay);
   const uses_python =
-    /\b(pip install|python3?|python\s+-m|\.py\b|pdftotext|qpdf)\b/i.test(hay) ||
+    /\b(pip install|python3?\s+(?:-|[\w./])|python\s+-m|python script|\.py\b|pdftotext|qpdf)\b/i.test(hay) ||
     python_libraries.length > 0;
-  const uses_playwright = /\bplaywright\b|\bpuppeteer\b/i.test(hay);
+  const uses_playwright =
+    /\b(npx\s+)?playwright\s+(test|install|codegen|open)\b/i.test(hay) ||
+    /\b(?:use|using|run|with)\s+Playwright\b/i.test(hay) ||
+    /\b@playwright\/test\b|\bfrom\s+["']playwright["']|\bpuppeteer\.(launch|connect)\b/i.test(hay) ||
+    toolNames.some((t) => t.includes("playwright") || t.includes("puppeteer"));
   const uses_agent_browser = /\bagent-browser\b/i.test(hay);
   const uses_mcp =
-    /\bCallMcpTool\b|\bmcp_[a-z]/i.test(hay) ||
+    /\bCallMcpTool\b|\bMCP\b|\bmcp_[a-z]|\bazure__[a-z]/i.test(hay) ||
     toolNames.some((t) => t.includes("mcp"));
-  const uses_npx = /\bnpx\b/i.test(hay);
+  const uses_npx = /\bnpx\s+(?!skills\b)/i.test(hay);
 
   const flags: string[] = [];
   if (uses_web_fetch) flags.push("web_fetch_mapping");
