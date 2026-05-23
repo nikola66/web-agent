@@ -285,6 +285,14 @@ function toolFailureRecoveryHint(
       "or use write_file when the file is new or empty."
     );
   }
+  if (toolName === "skill_manage") {
+    return (
+      common +
+      "Use action=create with full SKILL.md content, action=patch with old_string+new_string, " +
+      "or action=write_file with name+file_path+content for support files. If rewriting SKILL.md, " +
+      "include valid frontmatter (`name` and `description`) and use file_path=\"SKILL.md\"."
+    );
+  }
   return (
     common +
     "Try different arguments, a narrower query/path, an absolute path when relevant, or a different " +

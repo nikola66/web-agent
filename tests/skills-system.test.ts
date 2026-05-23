@@ -428,3 +428,95 @@ test("skill_view reads allowed support files and rejects unsafe paths", async (t
     /file_path/
   );
 });
+
+test("skill create derives metadata from full SKILL.md frontmatter", async (t) => {
+  const slug = `frontmatter-only-${Date.now()}`;
+  t.after(async () => {
+    await deleteSkill(slug).catch(() => {});
+  });
+
+  const saved = await skillManageTool({
+    action: "create",
+    content: [
+      "---",
+      `name: ${slug}`,
+      "description: Created from frontmatter",
+      "---",
+      "",
+      "## Procedure",
+      "",
+      "1. Use the frontmatter.",
+      "",
+    ].join("\n"),
+  });
+
+  assert.equal(saved.slug, slug);
+  assert.match(await loadSkill(slug), /Created from frontmatter/);
+});
+
+test("skill_manage write_file can infer SKILL.md target from content frontmatter", async (t) => {
+  const name = `Rewrite Skill ${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  const saved = await skillManageTool({
+    action: "create",
+    name,
+    description: "Original description",
+    category: "qa",
+    content: "## Procedure\n\n1. Original.",
+  });
+  t.after(async () => {
+    await deleteSkill(saved.slug).catch(() => {});
+  });
+
+  await skillManageTool({
+    action: "write_file",
+    content: [
+      "---",
+      `name: ${name}`,
+      "description: Rewritten description",
+      "---",
+      "",
+      "## Procedure",
+      "",
+      "1. Rewritten.",
+      "",
+    ].join("\n"),
+  });
+
+  const viewed = await skillViewTool({ name: saved.slug });
+  assert.match(viewed.content, /Rewritten description/);
+  assert.match(viewed.content, /Rewritten\./);
+});
+
+test("skill_bulk_save stores extracted archive support files", async (t) => {
+  const slug = `archive-skill-${Date.now()}`;
+  t.after(async () => {
+    await deleteSkill(slug).catch(() => {});
+  });
+
+  const result = await skillBulkSaveTool({
+    items: [
+      {
+        content: [
+          "---",
+          `name: ${slug}`,
+          "description: Archive import",
+          "---",
+          "",
+          "## Procedure",
+          "",
+          "1. Use support files.",
+          "",
+        ].join("\n"),
+        files: [
+          { path: "templates/run.js", content: "console.log('ok');\n" },
+          { path: "references/api.md", content: "# API\n" },
+        ],
+      },
+    ],
+  });
+
+  assert.equal(result.summary.saved, 1);
+  assert.equal(result.results[0].files_saved, 2);
+  const support = await skillViewTool({ name: slug, file_path: "templates/run.js" });
+  assert.equal(support.content, "console.log('ok');\n");
+});

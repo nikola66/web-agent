@@ -47,8 +47,49 @@ async function withIsolatedWorkspace<T>(run: () => Promise<T>): Promise<T> {
   }
 }
 
+function makeStoredZip(files: Array<{ name: string; content: string }>): Buffer {
+  const locals: Buffer[] = [];
+  const centrals: Buffer[] = [];
+  let offset = 0;
+  for (const file of files) {
+    const name = Buffer.from(file.name);
+    const data = Buffer.from(file.content);
+    const local = Buffer.alloc(30 + name.length);
+    local.writeUInt32LE(0x04034b50, 0);
+    local.writeUInt16LE(20, 4);
+    local.writeUInt32LE(0, 14);
+    local.writeUInt32LE(data.length, 18);
+    local.writeUInt32LE(data.length, 22);
+    local.writeUInt16LE(name.length, 26);
+    name.copy(local, 30);
+    locals.push(local, data);
+
+    const central = Buffer.alloc(46 + name.length);
+    central.writeUInt32LE(0x02014b50, 0);
+    central.writeUInt16LE(20, 4);
+    central.writeUInt16LE(20, 6);
+    central.writeUInt32LE(0, 16);
+    central.writeUInt32LE(data.length, 20);
+    central.writeUInt32LE(data.length, 24);
+    central.writeUInt16LE(name.length, 28);
+    central.writeUInt32LE(offset, 42);
+    name.copy(central, 46);
+    centrals.push(central);
+    offset += local.length + data.length;
+  }
+  const cdirSize = centrals.reduce((sum, item) => sum + item.length, 0);
+  const eocd = Buffer.alloc(22);
+  eocd.writeUInt32LE(0x06054b50, 0);
+  eocd.writeUInt16LE(files.length, 8);
+  eocd.writeUInt16LE(files.length, 10);
+  eocd.writeUInt32LE(cdirSize, 12);
+  eocd.writeUInt32LE(offset, 16);
+  return Buffer.concat([...locals, ...centrals, eocd]);
+}
+
 test("each builtin tool has a documented execution test path", () => {
   const covered = new Set([
+    "archive_list",
     "apply_patch",
     "artifact_present",
     "audio_analyze",
@@ -58,11 +99,14 @@ test("each builtin tool has a documented execution test path", () => {
     "cron_list",
     "cron_register",
     "delete_file",
+    "docx_extract",
     "edit_file",
     "email",
+    "extract_archive",
     "file_diff",
     "find_files",
     "grep",
+    "image_info",
     "list_dir",
     "make_dir",
     "memory_forget",
@@ -71,6 +115,7 @@ test("each builtin tool has a documented execution test path", () => {
     "memory_search",
     "move_file",
     "multi_edit",
+    "pdf_extract",
     "python_to_node",
     "read_file",
     "run_shell",
@@ -105,6 +150,48 @@ test("composio_status reports missing configuration without network", async () =
   assert.equal(result.configured, false);
   assert.equal(result.missing, "WEBAGENT_COMPOSIO_API_KEY");
   assert.ok((result.allowed_actions?.length ?? 0) >= 5);
+});
+
+test("archive tools honor explicit archive_path and extract skill archives", async () => {
+  await withIsolatedWorkspace(async () => {
+    const catalog = await loadToolCatalog();
+    const root = process.env.WEBAGENT_WORKSPACE_ROOT || "";
+    await fs.mkdir(nodePath.join(root, "work"), { recursive: true });
+    await fs.writeFile(
+      nodePath.join(root, "work", "directus-skill.zip"),
+      makeStoredZip([
+        {
+          name: "directus-5lang-blog-publisher/SKILL.md",
+          content: "---\nname: directus-5lang-blog-publisher\ndescription: Directus publisher\n---\n\n## Procedure\n\n1. Publish.\n",
+        },
+        {
+          name: "directus-5lang-blog-publisher/templates/publish-5lang.py",
+          content: "print('publish')\n",
+        },
+        {
+          name: "directus-5lang-blog-publisher/references/directus-api.md",
+          content: "# Directus API\n",
+        },
+      ])
+    );
+
+    const listed = await runOne("archive_list", { archive_path: "work/directus-skill.zip" }, catalog);
+    assert.ok(!listed?.error, listed?.error);
+    assert.equal((listed?.result as { totalEntries?: number })?.totalEntries, 3);
+
+    const extracted = await runOne(
+      "extract_archive",
+      { archive_path: "work/directus-skill.zip", destination: "work/directus-skill-extracted" },
+      catalog
+    );
+    assert.ok(!extracted?.error, extracted?.error);
+    assert.equal((extracted?.result as { extractedFiles?: number })?.extractedFiles, 3);
+    const skill = await fs.readFile(
+      nodePath.join(root, "work", "directus-skill-extracted", "directus-5lang-blog-publisher", "SKILL.md"),
+      "utf8"
+    );
+    assert.match(skill, /directus-5lang-blog-publisher/);
+  });
 });
 
 test("composio_connect discovers auth configs and links automatically when one exists", async () => {

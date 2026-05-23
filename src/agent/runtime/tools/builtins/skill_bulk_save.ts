@@ -8,6 +8,7 @@ const SKILL_BULK_EXAMPLES = [
         name: "demo_skill",
         content: "---\nname: demo\n---\nBody",
         description: "Example",
+        files: [{ path: "references/notes.md", content: "# Notes\n" }],
       },
     ],
   },
@@ -20,7 +21,8 @@ export default defineTool({
   run: skillBulkSaveTool,
   emoji: "📥",
   description:
-    "Use for HTTPS SKILL.md installs (including GitHub); do not use run_shell or npx to install skills. GitHub blob links are accepted (server normalizes to raw). Batch save or import (one approval). Required: non-empty `items` of `{ url }` (HTTPS SKILL.md) and/or `{ name, content, ... }` inline, or top-level `url` or `urls` (string[]) instead; optional `category` for URL imports. Never set `url` together with `name` or `content` on the same item. Examples (arguments JSON only): " +
+    "Use for HTTPS SKILL.md installs (including GitHub); do not use run_shell or npx to install skills. GitHub blob links are accepted (server normalizes to raw). Batch save or import (one approval). Required: non-empty `items` of `{ url }` (HTTPS SKILL.md) and/or `{ name, content, ... }` inline, or top-level `url` or `urls` (string[]) instead; optional `category` for URL imports. Never set `url` together with `name`, `content`, or `files` on the same item. Examples (arguments JSON only): " +
+    "Inline items may include `files: [{path, content}]` for extracted archive support files under references/, templates/, scripts/, or assets/. " +
     JSON.stringify(SKILL_BULK_EXAMPLES[0]) +
     " | " +
     JSON.stringify(SKILL_BULK_EXAMPLES[1]) +

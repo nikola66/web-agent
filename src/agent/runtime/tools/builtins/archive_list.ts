@@ -3,7 +3,7 @@ import { listArchive } from "../filesystem/archive.js";
 
 export default defineTool({
   name: "archive_list",
-  run: listArchive as unknown as (args: unknown, ctx: unknown) => Promise<unknown>,
+  run: (args, ctx) => listArchive(ctx, args),
   emoji: "📦",
   description:
     "List entries inside a ZIP / TAR / TAR.GZ archive without extracting. " +

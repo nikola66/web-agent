@@ -3,7 +3,7 @@ import { extractArchive } from "../filesystem/archive.js";
 
 export default defineTool({
   name: "extract_archive",
-  run: extractArchive as unknown as (args: unknown, ctx: unknown) => Promise<unknown>,
+  run: (args, ctx) => extractArchive(ctx, args),
   emoji: "🗜️",
   description:
     "Extract a ZIP, TAR, or TAR.GZ archive into a workspace directory. " +
