@@ -2,120 +2,20 @@
  * Telegram inbound voice-note plumbing.
  *
  * Downloads voice files Telegram references by `file_id` (OGG/Opus from
- * `api.telegram.org/file/bot<TOKEN>/<file_path>`). Nodebox routes HTTP via
- * adapter `/api/proxy`. Transcription runs in the browser (Whisper IPC).
+ * `api.telegram.org/file/bot<TOKEN>/<file_path>`). HTTP routes through
+ * shared `telegram-files` (proxied via adapter `/api/proxy` in Nodebox).
+ * Transcription runs in the browser (Whisper IPC).
  */
 
 import fs from "node:fs/promises";
 import nodePath from "node:path";
 import { workspaceStatePath } from "../constants.js";
 import { logDebugEvent } from "../logging/debug-log.js";
-import { ipcProxyRequest } from "../ipc.js";
+import { externalFetch, resolveTelegramFileUrl } from "../channels/telegram-files.js";
 
-function isNodeboxRuntime(): boolean {
-  return String(process.env.WEBAGENT_RUNTIME ?? "").trim() === "nodebox";
-}
-
-type ExternalFetchResult = {
-  ok: boolean;
-  status: number;
-  body: string | Buffer;
-  contentType: string;
-};
-
-/** Nodebox cannot reach external HTTPS directly; route through adapter /api/proxy. */
-async function externalFetch(
-  url: string,
-  init: {
-    method?: string;
-    headers?: Record<string, string>;
-    body?: Buffer;
-    binaryResponse?: boolean;
-  } = {}
-): Promise<ExternalFetchResult> {
-  const method = init.method ?? "GET";
-  if (!isNodeboxRuntime()) {
-    const res = await fetch(url, {
-      method,
-      headers: init.headers,
-      ...(init.body ? { body: init.body } : {}),
-    });
-    const contentType = res.headers.get("content-type") ?? "";
-    if (init.binaryResponse) {
-      return {
-        ok: res.ok,
-        status: res.status,
-        body: Buffer.from(await res.arrayBuffer()),
-        contentType,
-      };
-    }
-    return { ok: res.ok, status: res.status, body: await res.text(), contentType };
-  }
-
-  const proxyReq: Record<string, unknown> = {
-    method,
-    url,
-    headers: init.headers ?? {},
-    binaryResponse: init.binaryResponse ?? false,
-  };
-  if (init.body) {
-    proxyReq.body = init.body.toString("base64");
-    proxyReq.bodyEncoding = "base64";
-  }
-
-  const payload = (await ipcProxyRequest(proxyReq)) as {
-    error?: string;
-    status?: number;
-    body?: string;
-    contentType?: string;
-    bodyEncoding?: string;
-  };
-  if (payload?.error) throw new Error(String(payload.error));
-  const status = Number(payload?.status ?? 0);
-  const contentType = String(payload?.contentType ?? "");
-  if (!Number.isFinite(status) || status <= 0) {
-    throw new Error(`Proxy fetch failed (${status}) for ${url.slice(0, 120)}`);
-  }
-  const ok = status >= 200 && status < 300;
-  if (init.binaryResponse || payload?.bodyEncoding === "base64") {
-    return {
-      ok,
-      status,
-      body: Buffer.from(String(payload.body ?? ""), "base64"),
-      contentType,
-    };
-  }
-  return { ok, status, body: String(payload.body ?? ""), contentType };
-}
+export { resolveTelegramFileUrl };
 
 const VOICE_INBOX_REL = ".webagent/voice-inbox";
-
-/**
- * Resolve a Telegram `file_id` to a downloadable URL.
- * Returns `null` if the file cannot be located (size limit, expired, etc.).
- */
-export async function resolveTelegramFileUrl(
-  token: string,
-  fileId: string
-): Promise<{ url: string; filePath: string } | null> {
-  const apiUrl = new URL(`https://api.telegram.org/bot${encodeURIComponent(token)}/getFile`);
-  apiUrl.searchParams.set("file_id", fileId);
-  const res = await externalFetch(apiUrl.toString());
-  if (!res.ok) {
-    await logDebugEvent("telegram_getFile_failed", { fileId, status: res.status });
-    return null;
-  }
-  const payload = JSON.parse(String(res.body)) as { ok?: boolean; result?: { file_path?: string } };
-  const filePath = payload?.result?.file_path;
-  if (!payload?.ok || !filePath) {
-    await logDebugEvent("telegram_getFile_no_path", { fileId });
-    return null;
-  }
-  return {
-    filePath,
-    url: `https://api.telegram.org/file/bot${encodeURIComponent(token)}/${filePath}`,
-  };
-}
 
 /**
  * Download a Telegram voice file (OGG/Opus) into the workspace voice inbox.

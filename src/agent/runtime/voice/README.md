@@ -23,6 +23,6 @@ Whisper STT — `public/models/whisper-tiny-en/`. Refresh: `npm run download:whi
 
 ## File map
 
-- `telegram-voice.ts` — proxied getFile/download for inbound Telegram audio.
+- `telegram-voice.ts` — inbound Telegram audio (`downloadTelegramVoice`), built on shared `channels/telegram-files.ts`.
 - `src/core/voice/stt-worker.ts`, `stt-client.ts`, `audio-decode.ts` — local STT.
 - `audio-tools.ts` — `audio_analyze` built-in tool.

@@ -27,6 +27,7 @@ import {
   saveCheckpoint,
 } from "../state/persistence.js";
 import { downloadTelegramVoice } from "../voice/telegram-voice.js";
+import { downloadTelegramAttachment } from "./telegram-files.js";
 import { audioAnalyzeTool } from "../tools/audio-tools.js";
 
 function safeSegment(value) {
@@ -158,10 +159,23 @@ export function createChannelInboundHandler(deps) {
       msg?.voice && typeof msg.voice === "object" && typeof msg.voice.fileId === "string"
         ? (msg.voice as { fileId: string; duration?: number; mimeType?: string; fileSize?: number })
         : null;
+    const attachments = Array.isArray(msg?.attachments)
+      ? (msg.attachments as Array<{
+          kind: string;
+          fileId: string;
+          fileName?: string;
+          mimeType?: string;
+          fileSize?: number;
+        }>).filter((a) => a && typeof a.fileId === "string")
+      : [];
 
     if (voice && !text.trim() && channel === "telegram") {
       // Will be replaced inside the queued task once the file is downloaded.
       text = `[Telegram voice note received — file_id ${voice.fileId.slice(0, 12)}…, ~${Math.max(0, Math.round(voice.duration || 0))}s]`;
+    }
+    if (attachments.length > 0 && !text.trim() && channel === "telegram") {
+      // Placeholder — overwritten after attachments download in the queued task.
+      text = `[Telegram attachment received: ${attachments.length} file(s)]`;
     }
     const trimmed = text.trim();
     if (!channel || !chatId || !trimmed) return Promise.resolve();
@@ -372,8 +386,60 @@ export function createChannelInboundHandler(deps) {
         }
       }
 
+      let attachmentsPreamble: string | null = null;
+      if (attachments.length > 0 && channel === "telegram") {
+        const token = String(process.env.WEBAGENT_TELEGRAM_BOT_TOKEN || "").trim();
+        if (!token) {
+          attachmentsPreamble =
+            "The user sent Telegram attachment(s) but WEBAGENT_TELEGRAM_BOT_TOKEN is not set — cannot fetch the files. Apologize briefly and ask them to retry once the token is configured.";
+        } else {
+          const lines: string[] = [];
+          const failures: string[] = [];
+          for (const att of attachments) {
+            try {
+              const dl = await downloadTelegramAttachment(token, att.fileId, att.fileName);
+              if (!dl) {
+                failures.push(`${att.fileName || att.fileId} (${att.kind}): download failed (Telegram getFile — likely >20MB Bot API limit)`);
+                continue;
+              }
+              const mime = att.mimeType || "application/octet-stream";
+              const sizeKb = Math.max(1, Math.round(dl.byteLength / 1024));
+              lines.push(`- ${dl.relPath} — kind=${att.kind}, mime=${mime}, ${sizeKb}KB`);
+              await logDebugEvent("telegram_attachment_received", {
+                chatId,
+                kind: att.kind,
+                bytes: dl.byteLength,
+                savedPath: dl.relPath,
+                mimeType: mime,
+              });
+            } catch (err) {
+              const errMsg = err instanceof Error ? err.message : String(err);
+              failures.push(`${att.fileName || att.fileId}: ${errMsg}`);
+              await logDebugEvent("telegram_attachment_handle_failed", {
+                chatId,
+                fileId: att.fileId,
+                error: errMsg,
+              });
+            }
+          }
+          const captionPart = text.startsWith("[Telegram attachment received")
+            ? ""
+            : text.trim();
+          const header = `The user sent ${attachments.length} Telegram attachment(s). Saved to workspace:`;
+          const hints = [
+            "Use `read_file` for text/markdown/JSON/CSV. Use `vision_analyze` for images. Use `extract_archive` for .zip/.tar/.tar.gz. Use `pdf_extract` for PDFs. Use `docx_extract` for .docx.",
+          ];
+          const sections = [header, ...lines];
+          if (failures.length) sections.push(`Failures:\n- ${failures.join("\n- ")}`);
+          sections.push(hints.join(" "));
+          if (captionPart) sections.push(`User's accompanying message:\n${captionPart}`);
+          attachmentsPreamble = sections.join("\n\n");
+        }
+      }
+
       const slashRewrite = await resolveSlashUserMessage(trimmed);
       let userContent =
+        attachmentsPreamble ??
         voiceUserPrompt ??
         slashRewrite ??
         trimmed;

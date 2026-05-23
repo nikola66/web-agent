@@ -379,13 +379,60 @@ export function startTelegramTyping(token, chatId, opts = {}) {
   return stop;
 }
 
+function extractAttachments(msg) {
+  const out = [];
+
+  // Photos arrive as an ascending-size array; pick the largest preview.
+  if (Array.isArray(msg.photo) && msg.photo.length) {
+    let best = null;
+    for (const entry of msg.photo) {
+      if (!entry || typeof entry !== "object" || typeof entry.file_id !== "string") continue;
+      const w = Number(entry.width || 0);
+      const h = Number(entry.height || 0);
+      const area = w * h;
+      if (!best || area > best._area) best = { ...entry, _area: area };
+    }
+    if (best?.file_id) {
+      out.push({
+        kind: "photo",
+        fileId: String(best.file_id),
+        fileName: `photo-${msg.message_id ?? Date.now()}.jpg`,
+        mimeType: "image/jpeg",
+        fileSize: Number(best.file_size || 0),
+      });
+    }
+  }
+
+  const single = (kind, obj, defaultMime, defaultExt) => {
+    if (!obj || typeof obj !== "object" || typeof obj.file_id !== "string") return;
+    const fileName =
+      typeof obj.file_name === "string" && obj.file_name.trim()
+        ? obj.file_name
+        : `${kind}-${msg.message_id ?? Date.now()}${defaultExt}`;
+    out.push({
+      kind,
+      fileId: String(obj.file_id),
+      fileName,
+      mimeType: typeof obj.mime_type === "string" ? obj.mime_type : defaultMime,
+      fileSize: Number(obj.file_size || 0),
+    });
+  };
+
+  single("document", msg.document, "application/octet-stream", "");
+  single("video", msg.video, "video/mp4", ".mp4");
+  single("audio", msg.audio, "audio/mpeg", ".mp3");
+
+  return out;
+}
+
 function mapInboundUpdate(update) {
   const msg = update.message || update.channel_post;
   if (!msg || typeof msg !== "object") return null;
   if (msg.from?.is_bot) return null;
   const textRaw = typeof msg.text === "string" ? msg.text : typeof msg.caption === "string" ? msg.caption : "";
   const voice = msg.voice && typeof msg.voice === "object" ? msg.voice : null;
-  if (!textRaw.trim() && !voice?.file_id) return null;
+  const attachments = extractAttachments(msg);
+  if (!textRaw.trim() && !voice?.file_id && attachments.length === 0) return null;
   const payload = {
     channel: "telegram",
     chatId: String(msg.chat?.id ?? ""),
@@ -401,6 +448,9 @@ function mapInboundUpdate(update) {
       mimeType: typeof voice.mime_type === "string" ? voice.mime_type : "audio/ogg",
       fileSize: Number(voice.file_size || 0),
     };
+  }
+  if (attachments.length > 0) {
+    payload.attachments = attachments;
   }
   return payload;
 }

@@ -100,6 +100,7 @@ import runtimeMigrationsNotifySource from "../../dist/agent-runtime/migrations/n
 import runtimeChannelDispatcherSource from "../../dist/agent-runtime/channels/dispatcher.js?raw";
 import runtimeChannelIndexSource from "../../dist/agent-runtime/channels/index.js?raw";
 import runtimeChannelTelegramSource from "../../dist/agent-runtime/channels/telegram.js?raw";
+import runtimeChannelTelegramFilesSource from "../../dist/agent-runtime/channels/telegram-files.js?raw";
 import runtimeTelegramVoiceSource from "../../dist/agent-runtime/voice/telegram-voice.js?raw";
 import runtimeIpcSource from "../../dist/agent-runtime/ipc.js?raw";
 import runtimeUserInputFramingSource from "../../dist/agent-runtime/user-input-framing.js?raw";
@@ -534,6 +535,7 @@ async function writeRuntimeSources(profileId: string): Promise<void> {
     await emulator.fs.writeFile(`${webagentDir}/${rel}`, content);
   }
   await emulator.fs.writeFile(`${webagentDir}/channels/telegram.js`, runtimeChannelTelegramSource);
+  await emulator.fs.writeFile(`${webagentDir}/channels/telegram-files.js`, runtimeChannelTelegramFilesSource);
   await emulator.fs.writeFile(`${webagentDir}/channels/dispatcher.js`, runtimeChannelDispatcherSource);
   await emulator.fs.writeFile(`${webagentDir}/channels/index.js`, runtimeChannelIndexSource);
   await emulator.fs.writeFile(`${webagentDir}/voice/telegram-voice.js`, runtimeTelegramVoiceSource);
