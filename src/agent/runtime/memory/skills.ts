@@ -9,6 +9,7 @@ import {
   SKILLS_DIR,
   WS,
 } from "../constants.js";
+import { resolveWorkspacePath } from "../workspace-paths.js";
 import { errorMessage } from "../utils.js";
 import {
   getSkillWriteOrigin,
@@ -128,6 +129,17 @@ function parseSkillFrontmatter(raw: string): { meta: SkillMeta; body: string } {
   return { meta, body: match[2].trim() };
 }
 
+function skillDocumentDiagnostic(raw: string): string {
+  const text = String(raw || "");
+  const parsed = parseSkillFrontmatter(text);
+  const firstHeading = parsed.body.match(/^#{1,6}\s+\S.*$/m)?.[0] || "";
+  const preview = parsed.body
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .find(Boolean) || "";
+  return `chars=${text.length}, frontmatter=${text.trim().startsWith("---")}, first_heading=${firstHeading || "none"}, body_preview=${JSON.stringify(preview.slice(0, 80))}`;
+}
+
 function buildSkillFileContent({
   name,
   description,
@@ -164,7 +176,7 @@ function validateSkillDocument(raw: string): { meta: SkillMeta; body: string; sl
   if (!name) throw new Error("skill: frontmatter `name` is required.");
   if (!description) throw new Error("skill: frontmatter `description` is required.");
   if (!body || !/^##\s+/m.test(body)) {
-    throw new Error("skill: body must include at least one `##` section.");
+    throw new Error(`skill: body must include at least one \`##\` section (${skillDocumentDiagnostic(raw)}).`);
   }
   const slug = skillSlug(name);
   if (!slug) throw new Error("skill: `name` must contain letters or digits.");
@@ -352,6 +364,103 @@ async function writeSkillSupportFiles(record: SkillRecord, files: { path: string
     await fs.mkdir(nodePath.dirname(targetPath), { recursive: true });
     await fs.writeFile(targetPath, file.content, "utf8");
   }
+}
+
+async function findSkillDirectories(absDir: string, depth = 0): Promise<string[]> {
+  const skillPath = nodePath.join(absDir, SKILL_FILE_NAME);
+  if (await fs.stat(skillPath).then((s) => s.isFile()).catch(() => false)) return [absDir];
+  if (depth >= 4) return [];
+  const entries = await fs.readdir(absDir, { withFileTypes: true }).catch(() => []);
+  const found: string[] = [];
+  for (const entry of entries) {
+    if (!entry.isDirectory() || entry.name === "node_modules" || entry.name === ".git") continue;
+    found.push(...(await findSkillDirectories(nodePath.join(absDir, entry.name), depth + 1)));
+  }
+  return found;
+}
+
+async function readSkillSupportFilesFromDir(absDir: string): Promise<{
+  files: { path: string; content: string }[];
+  skipped: string[];
+}> {
+  const files: { path: string; content: string }[] = [];
+  const skipped: string[] = [];
+  const walk = async (abs: string, rel: string) => {
+    const entries = await fs.readdir(abs, { withFileTypes: true }).catch(() => []);
+    for (const entry of entries) {
+      const nextRel = rel ? `${rel}/${entry.name}` : entry.name;
+      const nextAbs = nodePath.join(abs, entry.name);
+      if (entry.isDirectory()) {
+        await walk(nextAbs, nextRel);
+        continue;
+      }
+      if (!entry.isFile()) continue;
+      const stat = await fs.stat(nextAbs).catch(() => null);
+      if (!stat || stat.size > SKILL_SAFE_FILE_MAX_BYTES) {
+        skipped.push(nextRel);
+        continue;
+      }
+      files.push({ path: nextRel, content: await fs.readFile(nextAbs, "utf8") });
+    }
+  };
+  for (const root of SKILL_SUPPORT_ROOTS) {
+    await walk(nodePath.join(absDir, root), root);
+  }
+  return { files, skipped };
+}
+
+async function installSkillFromDirectory({ path, category }) {
+  const rawPath = String(path || "").trim();
+  if (!rawPath) throw new Error("skill_manage import_dir: `path` is required.");
+  const absInput = resolveWorkspacePath(null, rawPath);
+  const stat = await fs.stat(absInput).catch(() => null);
+  if (!stat || !stat.isDirectory()) {
+    throw new Error(`skill_manage import_dir: directory "${rawPath}" not found.`);
+  }
+  const skillDirs = await findSkillDirectories(absInput);
+  if (skillDirs.length !== 1) {
+    const rels = skillDirs.map((dir) => nodePath.relative(absInput, dir) || ".").slice(0, 8);
+    throw new Error(
+      skillDirs.length
+        ? `skill_manage import_dir: expected one SKILL.md, found ${skillDirs.length}: ${rels.join(", ")}. Pass the specific skill folder.`
+        : "skill_manage import_dir: no SKILL.md found in directory."
+    );
+  }
+  const skillDir = skillDirs[0];
+  const raw = await fs.readFile(nodePath.join(skillDir, SKILL_FILE_NAME), "utf8");
+  const validation = validateSkillDocument(raw);
+  const support = await readSkillSupportFilesFromDir(skillDir);
+  const scan = scanSkillContent(raw, support.files);
+  if (!scan.ok) {
+    return {
+      ok: false,
+      blocked: true,
+      dangerous: scan.dangerous,
+      warnings: scan.warnings,
+      support_files: support.files.map((file) => file.path),
+      skipped_files: support.skipped,
+    };
+  }
+  const result = await saveSkill({
+    name: String(validation.meta.name || ""),
+    description: String(validation.meta.description || ""),
+    version: String(validation.meta.version || "1.0.0"),
+    tags: Array.isArray(validation.meta.tags) ? validation.meta.tags.map(String) : [],
+    category: String(category || validation.meta.category || DEFAULT_SKILL_CATEGORY),
+    content: raw,
+  });
+  const record = await findSkillRecord(String(result.slug));
+  if (!record) throw new Error(`skill_manage import_dir: saved skill "${result.slug}" not found.`);
+  await writeSkillSupportFiles(record, support.files);
+  return {
+    ...result,
+    action: "import_dir",
+    source_dir: rawPath,
+    files_saved: support.files.length,
+    support_files: support.files.map((file) => file.path),
+    skipped_files: support.skipped,
+    warnings: scan.warnings,
+  };
 }
 
 async function writeManagedSkillFile(
@@ -754,6 +863,12 @@ export async function manageSkill(args: Record<string, unknown> = {}) {
   if (action === "install_url" || action === "import_url") {
     return installSkillFromUrl({
       url: String(args.url || ""),
+      category: typeof args.category === "string" ? args.category : undefined,
+    });
+  }
+  if (action === "import_dir" || action === "install_dir") {
+    return installSkillFromDirectory({
+      path: args.path || args.dir || args.directory,
       category: typeof args.category === "string" ? args.category : undefined,
     });
   }

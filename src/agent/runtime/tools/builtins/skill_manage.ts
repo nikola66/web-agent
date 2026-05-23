@@ -11,13 +11,14 @@ export default defineTool({
     "patch (name+old_string+new_string), edit (name+full SKILL.md content), " +
     "write_file (name+file_path+content; SKILL.md allowed), delete (name — requires user approval), " +
     "install_url/import_url (url — raw GitHub SKILL.md, github tree path, or skillsmp/skills.sh page; " +
+    "import_dir/install_dir (path — extracted skill folder; saves SKILL.md plus references/templates/scripts/assets), " +
     "Nodebox uses web_fetch proxy). Applies immediately except delete. " +
     "For two or more skills or URLs in one request, prefer skill_bulk_save (one approval).",
   inputSchema: strictObjectSchema(
     {
       action: {
         type: "string",
-        enum: ["create", "patch", "edit", "delete", "install_url", "import_url", "write_file"],
+        enum: ["create", "patch", "edit", "delete", "install_url", "import_url", "import_dir", "install_dir", "write_file"],
         description: "Operation to perform.",
       },
       name: {
@@ -37,6 +38,7 @@ export default defineTool({
         description:
           "HTTPS URL: raw.githubusercontent.com/.../SKILL.md, github.com/.../tree/.../skill-dir, or skillsmp/skills.sh page.",
       },
+      path: { type: "string", description: "Workspace-relative extracted skill folder for import_dir/install_dir." },
       file_path: { type: "string", description: "Support file path relative to skill folder." },
     },
     ["action"],
@@ -46,6 +48,7 @@ export default defineTool({
       { action: "write_file", name: "deploy-checklist", file_path: "references/notes.md", content: "# Notes\n" },
       { action: "delete", name: "obsolete-skill" },
       { action: "install_url", url: "https://example.com/SKILL.md" },
+      { action: "import_dir", path: "work/skill.zip-extracted/directus-5lang-blog-publisher" },
     ]
   ),
 });

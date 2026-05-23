@@ -289,7 +289,7 @@ function toolFailureRecoveryHint(
     return (
       common +
       "Use action=create with full SKILL.md content, action=patch with old_string+new_string, " +
-      "or action=write_file with name+file_path+content for support files. If rewriting SKILL.md, " +
+      "action=import_dir with path to an extracted skill folder, or action=write_file with name+file_path+content for support files. If rewriting SKILL.md, " +
       "include valid frontmatter (`name` and `description`) and use file_path=\"SKILL.md\"."
     );
   }

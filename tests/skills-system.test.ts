@@ -520,3 +520,69 @@ test("skill_bulk_save stores extracted archive support files", async (t) => {
   const support = await skillViewTool({ name: slug, file_path: "templates/run.js" });
   assert.equal(support.content, "console.log('ok');\n");
 });
+
+test("skill_manage import_dir installs extracted skill folder support files", async (t) => {
+  const slug = `directus-import-${Date.now()}`;
+  const root = nodePath.join(process.cwd(), "tmp", `${slug}-archive`);
+  const skillDir = nodePath.join(root, slug);
+  await fs.mkdir(nodePath.join(skillDir, "templates"), { recursive: true });
+  await fs.mkdir(nodePath.join(skillDir, "references"), { recursive: true });
+  await fs.writeFile(
+    nodePath.join(skillDir, "SKILL.md"),
+    [
+      "---",
+      `name: ${slug}`,
+      "description: Directus import directory",
+      "---",
+      "",
+      "## Procedure",
+      "",
+      "1. Publish through Directus.",
+      "",
+    ].join("\n"),
+    "utf8"
+  );
+  await fs.writeFile(nodePath.join(skillDir, "templates/publish-5lang.py"), "print('ok')\n", "utf8");
+  await fs.writeFile(nodePath.join(skillDir, "references/directus-api.md"), "# API\n", "utf8");
+  t.after(async () => {
+    await deleteSkill(slug).catch(() => {});
+    await fs.rm(root, { recursive: true, force: true });
+  });
+
+  const result = await skillManageTool({
+    action: "import_dir",
+    path: nodePath.relative(process.cwd(), root),
+    category: "qa",
+  });
+
+  assert.equal(result.slug, slug);
+  assert.equal(result.files_saved, 2);
+  assert.deepEqual(result.support_files.sort(), [
+    "references/directus-api.md",
+    "templates/publish-5lang.py",
+  ]);
+  const support = await skillViewTool({ name: slug, file_path: "references/directus-api.md" });
+  assert.equal(support.content, "# API\n");
+});
+
+test("invalid skill document diagnostics include heading context", async (t) => {
+  const slug = `bad-skill-${Date.now()}`;
+  t.after(async () => {
+    await deleteSkill(slug).catch(() => {});
+  });
+
+  await assert.rejects(
+    skillManageTool({
+      action: "create",
+      content: [
+        "---",
+        `name: ${slug}`,
+        "description: Missing heading",
+        "---",
+        "",
+        "No heading here.",
+      ].join("\n"),
+    }),
+    /first_heading=none.*body_preview="No heading here\."/s
+  );
+});
