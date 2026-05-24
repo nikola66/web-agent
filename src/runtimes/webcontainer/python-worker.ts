@@ -57,6 +57,81 @@ async function loadRuntime(): Promise<PyodideRuntime> {
         indexURL: "https://cdn.jsdelivr.net/pyodide/v0.29.4/full/",
         fullStdLib: true,
       });
+      // One-time stdlib shims. Applied to the persistent interpreter so every
+      // user script inherits them without knowing about Pyodide's JS bridge.
+      await (pyodide as PyodideRuntime).runPythonAsync(`
+import urllib.request as _ur, ssl as _ssl
+
+# ssl.create_default_context() — the browser enforces TLS; the Python ssl
+# module in Pyodide is a stub. Returning a dummy context object silences
+# scripts that pass ctx= to urlopen.
+class _FakeSSLCtx:
+    check_hostname = False
+    verify_mode = 0
+    def load_verify_locations(self, *a, **kw): pass
+    def load_cert_chain(self, *a, **kw): pass
+_ssl.create_default_context = lambda *a, **kw: _FakeSSLCtx()
+
+# urllib.request.urlopen — Pyodide returns the XHR body as a JsProxy
+# (JavaScript Uint8Array / ArrayBuffer).  Wrap .read() / .readall() to
+# convert JsProxy → Python bytes transparently so scripts that do
+# r.read().decode('utf-8') just work.
+_orig_urlopen = _ur.urlopen
+
+def _js_to_bytes(val):
+    if val is None:
+        return b""
+    if isinstance(val, (bytes, bytearray)):
+        return bytes(val)
+    # JsProxy exposes .to_bytes() (Pyodide ≥0.21) or is directly iterable.
+    to_bytes = getattr(val, "to_bytes", None)
+    if callable(to_bytes):
+        return to_bytes()
+    to_memoryview = getattr(val, "to_memoryview", None)
+    if callable(to_memoryview):
+        return bytes(to_memoryview())
+    try:
+        return bytes(val)
+    except Exception:
+        return str(val).encode()
+
+class _WrappedResponse:
+    def __init__(self, resp):
+        self._r = resp
+        # Read raw body immediately so the JS response is consumed; subsequent
+        # .read() calls return from the buffer.
+        try:
+            raw = self._r.read()
+        except Exception:
+            raw = b""
+        self._body = _js_to_bytes(raw)
+        self._pos = 0
+    def read(self, amt=-1):
+        if amt < 0:
+            chunk, self._pos = self._body[self._pos:], len(self._body)
+        else:
+            chunk, self._pos = self._body[self._pos:self._pos + amt], self._pos + amt
+        return chunk
+    def readall(self):
+        return self.read()
+    def __getattr__(self, name):
+        return getattr(self._r, name)
+    def __enter__(self):
+        return self
+    def __exit__(self, *a):
+        pass
+
+def _patched_urlopen(url, data=None, timeout=None, **kwargs):
+    # Drop context= kwarg — Pyodide's urlopen doesn't accept it.
+    kwargs.pop("context", None)
+    kw = {}
+    if timeout is not None:
+        kw["timeout"] = timeout
+    resp = _orig_urlopen(url, data, **kw)
+    return _WrappedResponse(resp)
+
+_ur.urlopen = _patched_urlopen
+`);
       return pyodide as PyodideRuntime;
     });
   }

@@ -10,7 +10,7 @@ const WEB_POST_EXAMPLES = [
   {
     url: "https://api.example.com/items/posts",
     headers: { Authorization: "Bearer <token>" },
-    body: '{"title":"Hello","status":"draft"}',
+    body: '{"title":"Hello","status":"draft","author":1}',
   },
 ];
 
@@ -19,7 +19,7 @@ export default defineTool({
   run: webPostTool,
   emoji: "📮",
   description:
-    "POST http(s) with optional headers and body. Use for GraphQL, REST writes, and JSON APIs — prefer over run_shell + axios/fetch one-liners. Full REST/GraphQL procedure: skill_view **`http-api`**. Pair with `web_fetch` for GET reads. Pass Bearer/API keys in `headers`, not in the URL. Examples: " +
+    "POST http(s) with optional headers and body. Use for GraphQL, REST writes, and JSON APIs — prefer over run_shell + axios/fetch one-liners. Full REST/GraphQL procedure: skill_view **`http-api`**. Pair with `web_fetch` for GET reads. Pass Bearer/API keys in `headers`, not in the URL. `body` must be a JSON string — write it as '{\"key\":\"value\"}' or JSON.stringify({...}), never as an object literal with escaped-quote keys. Examples: " +
     JSON.stringify(WEB_POST_EXAMPLES[0]) +
     " | " +
     JSON.stringify(WEB_POST_EXAMPLES[1]),
@@ -28,7 +28,8 @@ export default defineTool({
     properties: {
       url: { type: "string", description: "Target http(s) URL." },
       body: {
-        description: "Request body (JSON string or object — stringified when object).",
+        type: "string",
+        description: "Request body as a JSON string — always stringify: JSON.stringify({...}) or '{\"key\":\"val\"}'. Do NOT pass a raw object with escaped quote keys.",
       },
       headers: {
         type: "object",
