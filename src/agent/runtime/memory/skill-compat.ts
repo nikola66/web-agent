@@ -1,8 +1,7 @@
 /**
  * Map external agent-host tool names (skills.sh / Claude Code) to Web Agent built-ins.
  */
-
-import { detectPythonLibraries } from "../tools/script-porting.js";
+import { extractTopLevelImports } from "../tools/python-preflight.js";
 
 export type CompatTier = "native" | "mapped" | "limited" | "unsupported";
 
@@ -38,6 +37,30 @@ function listIncludes(meta: Record<string, unknown> | undefined, key: string): s
       .filter(Boolean);
   }
   return [];
+}
+
+function normalizePythonLibraryName(name: string): string {
+  const lower = String(name || "").trim().toLowerCase();
+  const aliases: Record<string, string> = {
+    bs4: "beautifulsoup4",
+    beautifulsoup: "beautifulsoup4",
+    pil: "pillow",
+    dotenv: "dotenv",
+  };
+  return aliases[lower] || lower;
+}
+
+export function detectPythonLibraries(source: string): string[] {
+  const text = String(source || "");
+  const libs = new Set<string>();
+  for (const imp of extractTopLevelImports(text)) {
+    libs.add(normalizePythonLibraryName(imp));
+  }
+  if (/\bBeautifulSoup\b/.test(text)) libs.add("beautifulsoup4");
+  if (/\bload_dotenv\b/.test(text)) libs.add("dotenv");
+  if (/\bpip\s+install\b/.test(text)) libs.add("pip");
+  if (/\bpython3?\s+-m\b/.test(text)) libs.add("python-module-cli");
+  return [...libs].sort();
 }
 
 export function analyzeSkillCompat(
@@ -78,7 +101,7 @@ export function analyzeSkillCompat(
   const flags: string[] = [];
   if (uses_web_fetch) flags.push("web_fetch_mapping");
   if (uses_bash) flags.push("bash_shell");
-  if (uses_python) flags.push("python_porting");
+  if (uses_python) flags.push("python_runtime");
   if (uses_playwright) flags.push("playwright_unavailable");
   if (uses_agent_browser) flags.push("agent_browser_unavailable");
   if (uses_mcp) flags.push("mcp_unavailable");
@@ -115,8 +138,9 @@ export function buildWebAgentExecutionAppendix(analysis: SkillCompatAnalysis): s
     "| POST / GraphQL | `web_post` — `skill_view` **`http-api`** |",
     "| Read / Glob / Grep | `read_file` / `list_dir` / `find_files` / `grep` |",
     "| Skill / Read skill | `skill_view` `{ name }` |",
-    "| Bash / curl / npx | `skill_view` **`browser-runtime-map`** — Nodebox: `run_shell` **`node …` only** |",
-    "| Python / pip / `.py` | `skill_view` **`script-porting`** + `python_to_node` |",
+    "| Bash / curl / npx | `skill_view` **`browser-runtime-map`** — Nodebox has no POSIX shell |",
+    "| Python / `.py` | `run_python` for Pyodide-compatible scripts |",
+    "| pip / native Python deps | Unsupported as system installs — use Pyodide packages if available or replace the native dependency step |",
   ];
 
   if (analysis.uses_agent_browser || analysis.uses_playwright) {
@@ -176,7 +200,7 @@ export function compatScanWarnings(analysis: SkillCompatAnalysis): string[] {
     const libs = analysis.python_libraries.length
       ? ` (${analysis.python_libraries.slice(0, 8).join(", ")})`
       : "";
-    warnings.push(`contains Python/pip references${libs} — use python_to_node and skill_view script-porting`);
+    warnings.push(`contains Python/pip references${libs} — use run_python for Pyodide-compatible scripts; no system pip/native deps`);
   }
   if (analysis.uses_mcp) {
     warnings.push("references MCP tools — not built-in unless added as a capability");

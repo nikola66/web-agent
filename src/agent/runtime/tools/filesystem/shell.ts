@@ -23,6 +23,8 @@ import {
   formatShellHttpMisrouteError,
 } from "../http-tool-routing.js";
 import { shellMemorySpillBypassBlockedMessage } from "../../memory/internal-paths.js";
+import { runPythonTool } from "../python-tools.js";
+import { UNSUPPORTED_BINARIES } from "../python-preflight.js";
 
 const WATCH_MIN_INTERVAL_MS = 15_000;
 const WATCH_STRIKE_LIMIT = 3;
@@ -118,8 +120,8 @@ function parseNodeboxNodeArgv(command) {
   const trimmed = String(command || "").trim();
   if (!/^node\b/i.test(trimmed)) {
     throw new Error(
-      "run_shell (Nodebox): no OS shell — only `node …` is supported (spawned without `sh -c`). " +
-        "Use the `grep` tool, `read_file`, `web_fetch`, or write a small `node -e` script; avoid pipes and external binaries here. " +
+      "run_shell (Nodebox): no OS shell — only `node …`, `python3 …`, and simple probes are supported. " +
+        "Use `run_python`, `grep`, `read_file`, `web_fetch`, or write a small `node -e` script; avoid pipes and external binaries here. " +
         "Do not put generic `run_shell` steps in heartbeat cron on Nodebox."
     );
   }
@@ -212,13 +214,13 @@ function nodeboxUnsupportedCommand(command) {
   if (!trimmed || /^node\b/i.test(trimmed)) return null;
   const cmd = parseShellLineArgs(trimmed)[0] || "";
   const lower = cmd.toLowerCase();
-  if (["python", "python3", "pip", "pip3"].includes(lower)) {
+  if (["pip", "pip3"].includes(lower)) {
     return {
       error_code: "nodebox_python_unsupported",
-      unsupported_reason: "Nodebox has no Python or pip runtime.",
-      suggested_tool: "python_to_node",
+      unsupported_reason: "Nodebox has no system pip runtime.",
+      suggested_tool: "run_python",
       suggested_next_step:
-        "Use python_to_node or skill_view script-porting, then run the ported script with run_shell `node ...`.",
+        "Use run_python with Pyodide-compatible packages, or rewrite unsupported native dependency steps.",
     };
   }
   if (["curl", "wget"].includes(lower)) {
@@ -245,6 +247,16 @@ function nodeboxUnsupportedCommand(command) {
       suggested_next_step: "Use built-in tools or write a dependency-free ESM script runnable with `node ...`.",
     };
   }
+  // Office/PDF/OCR/codec native binaries — same set blocked at run_python preflight.
+  // Surfaces the identical fallback hint whether the caller reaches for run_shell or run_python.
+  if (UNSUPPORTED_BINARIES[lower]) {
+    return {
+      error_code: "nodebox_native_binary_unsupported",
+      unsupported_reason: `Native binary \`${lower}\` is not available in browser-only Nodebox.`,
+      suggested_tool: "run_python",
+      suggested_next_step: UNSUPPORTED_BINARIES[lower],
+    };
+  }
   if (/[|;&<>]/.test(trimmed)) {
     return {
       error_code: "nodebox_shell_syntax_unsupported",
@@ -255,10 +267,37 @@ function nodeboxUnsupportedCommand(command) {
   }
   return {
     error_code: "nodebox_command_unsupported",
-    unsupported_reason: "Browser-only run_shell supports common read-only probes and `node ...` scripts only.",
+    unsupported_reason: "Browser-only run_shell supports common read-only probes, `node ...` scripts, and `python3 ...` via Pyodide.",
     suggested_tool: "system_info",
     suggested_next_step: "Use a dedicated Web Agent tool, or rewrite the command as a dependency-free node script.",
   };
+}
+
+function parseNodeboxPythonCommand(command) {
+  const argv = parseShellLineArgs(command);
+  const cmd = String(argv[0] || "").toLowerCase();
+  if (cmd !== "python" && cmd !== "python3") return null;
+  const rest = argv.slice(1);
+  if (rest.length === 1 && (rest[0] === "--version" || rest[0] === "-V")) {
+    return { code: "import sys\nprint('Python ' + sys.version.split()[0])", args: [] };
+  }
+  if (rest.includes("-m")) {
+    throw new Error("run_shell (Nodebox): `python -m` is not supported in the shell alias. Use run_python with a script path.");
+  }
+  const codeIdx = rest.findIndex((arg) => arg === "-c");
+  if (codeIdx >= 0) {
+    const code = rest[codeIdx + 1];
+    if (!code) {
+      throw new Error("run_shell (Nodebox): `python -c` requires inline Python code.");
+    }
+    return { code, args: rest.slice(codeIdx + 2) };
+  }
+  const scriptIdx = rest.findIndex((arg) => arg && !arg.startsWith("-"));
+  const script = scriptIdx >= 0 ? rest[scriptIdx] : "";
+  if (!script) {
+    throw new Error("run_shell (Nodebox): Python needs a script path or `-c` code. Prefer run_python.");
+  }
+  return { path: script, args: rest.slice(scriptIdx + 1) };
 }
 
 async function runNodeboxVirtualCommand(command, cwd, ctxCwd, ctx) {
@@ -389,6 +428,10 @@ export function runShellTool(args, ctx) {
     }
     return Promise.resolve(runNodeboxVirtualCommand(command, cwd, ctxCwd, ctx)).then((virtualResult) => {
       if (virtualResult) return virtualResult;
+      const pythonArgs = parseNodeboxPythonCommand(command);
+      if (pythonArgs) {
+        return runPythonTool({ ...pythonArgs, cwd, env, timeout_ms }, ctx);
+      }
       const unsupported = nodeboxUnsupportedCommand(command);
       if (unsupported) {
         const message = `${unsupported.unsupported_reason} ${unsupported.suggested_next_step}`;

@@ -13,12 +13,12 @@ test("classifyToolError tags shell HTTP misroute", () => {
 
 test("classifyToolError tags Nodebox non-shell run_shell as nodebox_shell_unsupported", () => {
   const msg =
-    "run_shell (Nodebox): no OS shell — only `node …` is supported (spawned without `sh -c`). " +
-    "Use the `grep` tool, `read_file`, `web_fetch`, or write a small `node -e` script;";
+    "run_shell (Nodebox): no OS shell — only `node …`, `python3 …`, and simple probes are supported. " +
+    "Use `run_python`, `grep`, `read_file`, `web_fetch`, or write a small `node -e` script;";
   const c = classifyToolError(msg);
   assert.equal(c.error_code, "nodebox_shell_unsupported");
   assert.equal(c.retryable, false);
-  assert.match(c.recovery_hint, /grep|read_file|web_fetch/i);
+  assert.match(c.recovery_hint, /run_python|grep|read_file|web_fetch/i);
 });
 
 test("classifyToolError tags Nodebox background run_shell as nodebox_shell_unsupported", () => {
@@ -39,4 +39,22 @@ test("classifyToolError does not treat generic 'abort' substring as timeout/retr
   const c = classifyToolError("Something went wrong: abortedConnection=true");
   assert.notEqual(c.error_code, "timeout");
   assert.equal(c.retryable, false);
+});
+
+test("classifyToolError tags Pyodide busy workspace cleanup", () => {
+  const c = classifyToolError("OSError: [Errno 10] Resource busy: '/workspace/profile-id'");
+  assert.equal(c.error_code, "pyodide_workspace_busy");
+  assert.equal(c.retryable, true);
+  assert.match(c.recovery_hint, /web_fetch|web_post/);
+});
+
+test("classifyToolError tags Pyodide missing module (hallucinated SDK)", () => {
+  const c = classifyToolError(
+    "Traceback...\nModuleNotFoundError: No module named 'directus'"
+  );
+  assert.equal(c.error_code, "pyodide_missing_module");
+  assert.equal(c.retryable, false);
+  assert.equal(c.shouldFallback, true);
+  assert.match(c.recovery_hint, /directus/);
+  assert.match(c.recovery_hint, /web_fetch|web_post/);
 });

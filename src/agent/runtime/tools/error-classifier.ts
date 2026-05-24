@@ -93,7 +93,7 @@ function classifyFromMessage(message: string, statusHint: number | null): Omit<C
       shouldFallback,
       error_code,
       hintBase:
-        "Nodebox has no POSIX shell — only `node …`. Use web_fetch, web_post, grep, read_file, or local node scripts; do not retry shell pipelines or external binaries.",
+        "Nodebox has no POSIX shell — use web_fetch, web_post, grep, read_file, run_python, or local node scripts; do not retry shell pipelines or external binaries.",
     };
   }
 
@@ -124,6 +124,41 @@ function classifyFromMessage(message: string, statusHint: number | null): Omit<C
       shouldFallback,
       error_code,
       hintBase: "Shell run was aborted — do not retry unless the user asks.",
+    };
+  }
+
+  // Python imports a package that isn't stdlib and isn't bundled in Pyodide.
+  // Common when a skill or the model invents an SDK (e.g. `from directus import DirectusClient`).
+  const noModuleMatch = message.match(/ModuleNotFoundError:\s*No module named ['"]([\w.]+)['"]/i);
+  if (noModuleMatch) {
+    reason = "format_error";
+    retryable = false;
+    shouldFallback = true;
+    error_code = "pyodide_missing_module";
+    const mod = noModuleMatch[1];
+    return {
+      reason,
+      retryable,
+      shouldCompress,
+      shouldFallback,
+      error_code,
+      hintBase: `Pyodide has no module '${mod}'. Pyodide ships stdlib + a fixed package list — no pip and no arbitrary PyPI SDKs. For HTTP/REST/GraphQL targets, use web_fetch/web_post directly with the service's documented endpoints instead of importing a client library. For Pyodide-bundled packages, pass them via the run_python \`packages\` arg.`,
+    };
+  }
+
+  if (/Resource busy: ['"][^'"]*\/workspace\//i.test(message) || /pyodide[\s\S]*Resource busy/i.test(message)) {
+    reason = "unknown";
+    retryable = true;
+    shouldFallback = true;
+    error_code = "pyodide_workspace_busy";
+    return {
+      reason,
+      retryable,
+      shouldCompress,
+      shouldFallback,
+      error_code,
+      hintBase:
+        "Pyodide workspace cleanup failed. Retry once; for simple REST/GraphQL publishing, switch to web_fetch/web_post instead of Python.",
     };
   }
 
