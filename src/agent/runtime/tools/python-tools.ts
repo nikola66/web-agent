@@ -57,6 +57,7 @@ export async function runPythonTool(args: Record<string, unknown>, ctx: any) {
   for (const pkg of pre.autoPackages) {
     if (!packages.some((p) => p.toLowerCase() === pkg.toLowerCase())) packages.push(pkg);
   }
+  const micropipPackages = [...pre.micropipPackages];
 
   const payload = {
     code,
@@ -64,6 +65,7 @@ export async function runPythonTool(args: Record<string, unknown>, ctx: any) {
     ...(scriptPath ? { path: scriptPath } : {}),
     args: normalizeStringArray(args?.args),
     packages,
+    micropip_packages: micropipPackages,
     ...(normalizedEnv ? { env: normalizedEnv } : {}),
     timeout_ms: Number.isFinite(timeoutMs) && timeoutMs > 0 ? timeoutMs : undefined,
   };
@@ -91,6 +93,7 @@ export async function runPythonTool(args: Record<string, unknown>, ctx: any) {
     files_written: Array.isArray(raw.files_written) ? raw.files_written : [],
     ...(raw.pyodide_version ? { pyodide_version: raw.pyodide_version } : {}),
     ...(pre.autoPackages.length ? { auto_packages: pre.autoPackages } : {}),
+    ...(pre.micropipPackages.length ? { micropip_packages: pre.micropipPackages } : {}),
     ...(pre.warnings.length ? { preflight_warnings: pre.warnings } : {}),
   };
 }

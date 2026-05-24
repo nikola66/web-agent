@@ -1572,6 +1572,7 @@ export async function startWebAgent(options: AgentStartOptions): Promise<void> {
               args?: string[];
               env?: Record<string, string>;
               packages?: string[];
+              micropip_packages?: string[];
               timeout_ms?: number;
             };
             const result = await executePythonInNodebox(req, profileWorkspaceDir);

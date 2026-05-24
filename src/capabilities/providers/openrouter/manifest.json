@@ -1,7 +1,7 @@
 {
   "id": "openrouter",
   "name": "OpenRouter",
-  "order": 1,
+  "order": 0,
   "kind": "openai",
   "requiresUserApiKey": true,
   "model": "google/gemma-4-31b-it",

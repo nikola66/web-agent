@@ -25,6 +25,7 @@ import {
   compatNotesForView,
   compatScanWarnings,
 } from "./skill-compat.js";
+import { preflightPythonForSkillFile } from "../tools/python-preflight.js";
 
 const SKILLS_CONTEXT_CHAR_BUDGET = 9_800;
 const SKILL_INDEX_TRIGGERS_MAX_CHARS = 160;
@@ -39,6 +40,10 @@ export function invalidateSkillsContextCache(): void {
 }
 const DEFAULT_SKILL_CATEGORY = "local";
 const SKILL_SUPPORT_ROOTS = new Set(["references", "templates", "scripts", "assets"]);
+const SKILL_PACKAGE_ROOTS = new Set(["lib", "src"]);
+const SKILL_EXCLUDED_DIRS = new Set(["tests", "examples", "node_modules", ".git", "test", "docs", "dist", "build"]);
+const SKILL_SUPPORT_MAX_FILES = 64;
+const SKILL_SUPPORT_MAX_TOTAL_BYTES = 2 * 1024 * 1024;
 const SKILL_SAFE_FILE_MAX_BYTES = 512 * 1024;
 const BUNDLED_SKILLS_DIR = nodePath.join(CAPABILITIES_DIR, "skills");
 const SOURCE_BUNDLED_SKILLS_DIR = nodePath.join(WS, "src", "capabilities", "skills");
@@ -240,8 +245,15 @@ function isSafeSkillRelativePath(filePath, { allowSkillMd = false } = {}) {
     return false;
   }
   if (allowSkillMd && normalized === SKILL_FILE_NAME) return true;
-  const [root] = normalized.split("/");
-  return SKILL_SUPPORT_ROOTS.has(root);
+  const parts = normalized.split("/");
+  const [root, ...rest] = parts;
+  if (SKILL_SUPPORT_ROOTS.has(root)) return true;
+  if (!rest.length && normalized.endsWith(".py")) return true;
+  if (rest.length === 1 && rest[0].endsWith(".py")) {
+    if (SKILL_PACKAGE_ROOTS.has(root)) return true;
+    if (/^[a-z][a-z0-9_]*$/i.test(root) && !SKILL_EXCLUDED_DIRS.has(root)) return true;
+  }
+  return false;
 }
 
 function skillPublicPath(absPath) {
@@ -402,6 +414,30 @@ async function readSkillSupportFilesFromDir(absDir: string): Promise<{
 }> {
   const files: { path: string; content: string }[] = [];
   const skipped: string[] = [];
+  let totalBytes = 0;
+
+  const maybeAdd = async (abs: string, rel: string) => {
+    if (files.length >= SKILL_SUPPORT_MAX_FILES) {
+      skipped.push(rel);
+      return;
+    }
+    if (!isSafeSkillRelativePath(rel)) {
+      skipped.push(rel);
+      return;
+    }
+    const stat = await fs.stat(abs).catch(() => null);
+    if (!stat || !stat.isFile() || stat.size > SKILL_SAFE_FILE_MAX_BYTES) {
+      skipped.push(rel);
+      return;
+    }
+    if (totalBytes + stat.size > SKILL_SUPPORT_MAX_TOTAL_BYTES) {
+      skipped.push(rel);
+      return;
+    }
+    totalBytes += stat.size;
+    files.push({ path: rel, content: await fs.readFile(abs, "utf8") });
+  };
+
   const walk = async (abs: string, rel: string) => {
     const entries = await fs.readdir(abs, { withFileTypes: true }).catch(() => []);
     for (const entry of entries) {
@@ -412,16 +448,30 @@ async function readSkillSupportFilesFromDir(absDir: string): Promise<{
         continue;
       }
       if (!entry.isFile()) continue;
-      const stat = await fs.stat(nextAbs).catch(() => null);
-      if (!stat || stat.size > SKILL_SAFE_FILE_MAX_BYTES) {
-        skipped.push(nextRel);
-        continue;
-      }
-      files.push({ path: nextRel, content: await fs.readFile(nextAbs, "utf8") });
+      await maybeAdd(nextAbs, nextRel);
     }
   };
   for (const root of SKILL_SUPPORT_ROOTS) {
     await walk(nodePath.join(absDir, root), root);
+  }
+
+  const rootEntries = await fs.readdir(absDir, { withFileTypes: true }).catch(() => []);
+  for (const entry of rootEntries) {
+    if (!entry.isFile() && !entry.isDirectory()) continue;
+    if (entry.name === SKILL_FILE_NAME || entry.name.startsWith(".")) continue;
+    const nextAbs = nodePath.join(absDir, entry.name);
+    if (entry.isFile() && entry.name.endsWith(".py")) {
+      await maybeAdd(nextAbs, entry.name);
+      continue;
+    }
+    if (!entry.isDirectory() || SKILL_EXCLUDED_DIRS.has(entry.name) || SKILL_SUPPORT_ROOTS.has(entry.name)) continue;
+    if (SKILL_PACKAGE_ROOTS.has(entry.name) || /^[a-z][a-z0-9_]*$/i.test(entry.name)) {
+      const pkgEntries = await fs.readdir(nextAbs, { withFileTypes: true }).catch(() => []);
+      for (const pkgEntry of pkgEntries) {
+        if (!pkgEntry.isFile() || !pkgEntry.name.endsWith(".py")) continue;
+        await maybeAdd(nodePath.join(nextAbs, pkgEntry.name), `${entry.name}/${pkgEntry.name}`);
+      }
+    }
   }
   return { files, skipped };
 }
@@ -533,6 +583,10 @@ export async function saveSkill({
         content,
       });
   const validated = validateSkillDocument(raw);
+  const scan = scanSkillContent(raw);
+  if (!scan.ok) {
+    throw new Error(`skill_save: blocked — ${scan.dangerous.join("; ")}`);
+  }
   const { content: patchedRaw } = appendCompatSectionIfMissing(raw, validated.meta);
   const resolvedCategory = skillCategorySlug(category || validated.meta.category || DEFAULT_SKILL_CATEGORY);
   const skillDir = canonicalSkillDir({ category: resolvedCategory, slug: validated.slug });
@@ -585,6 +639,28 @@ export async function loadSkill(name) {
   return record.raw;
 }
 
+async function collectSkillSupportFiles(skillDir: string): Promise<{ path: string; content: string }[]> {
+  const out: { path: string; content: string }[] = [];
+  const walk = async (abs: string, rel: string) => {
+    const entries = await fs.readdir(abs, { withFileTypes: true }).catch(() => []);
+    for (const entry of entries) {
+      const nextRel = rel ? `${rel}/${entry.name}` : entry.name;
+      const nextAbs = nodePath.join(abs, entry.name);
+      if (entry.isDirectory()) {
+        await walk(nextAbs, nextRel);
+        continue;
+      }
+      if (!entry.isFile() || !nextRel.endsWith(".py")) continue;
+      if (!isSafeSkillRelativePath(nextRel)) continue;
+      const stat = await fs.stat(nextAbs).catch(() => null);
+      if (!stat || stat.size > SKILL_SAFE_FILE_MAX_BYTES) continue;
+      out.push({ path: nextRel, content: await fs.readFile(nextAbs, "utf8") });
+    }
+  };
+  await walk(skillDir, "");
+  return out.slice(0, SKILL_SUPPORT_MAX_FILES);
+}
+
 export async function viewSkill({ name, file_path }: { name?: string; file_path?: string } = {}) {
   const skillName = String(name || "").trim();
   if (!skillName) throw new Error("skill_view: `name` is required.");
@@ -615,7 +691,9 @@ export async function viewSkill({ name, file_path }: { name?: string; file_path?
   };
   if (requestedPath === SKILL_FILE_NAME) {
     const { meta } = parseSkillFrontmatter(content);
-    const compat = compatNotesForView(analyzeSkillCompat(content, meta), record.source);
+    const supportFiles = await collectSkillSupportFiles(record.dir);
+    const scriptWarnings = preflightSkillScriptWarnings(supportFiles);
+    const compat = compatNotesForView(analyzeSkillCompat(content, meta), record.source, scriptWarnings);
     if (compat) Object.assign(result, compat);
     result.primary_tools = record.primaryTools?.length
       ? record.primaryTools
@@ -639,10 +717,32 @@ export async function deleteSkill(name) {
   return { ok: true, name: record.name, slug: record.slug, category: record.category };
 }
 
+function preflightSkillScriptWarnings(
+  files: { path?: string; content?: string }[] = []
+): string[] {
+  const warnings: string[] = [];
+  for (const file of files) {
+    const filePath = String(file.path || "").trim();
+    if (!filePath.endsWith(".py")) continue;
+    const pre = preflightPythonForSkillFile(filePath, String(file.content || ""));
+    if (pre.block) {
+      warnings.push(pre.block);
+      continue;
+    }
+    for (const w of pre.warnings) {
+      warnings.push(`${filePath}: ${w}`);
+    }
+    if (pre.micropipPackages.length) {
+      warnings.push(`${filePath}: micropip allowlist — ${pre.micropipPackages.join(", ")}`);
+    }
+  }
+  return warnings;
+}
+
 function scanSkillContent(
   raw: string,
   files: { path?: string; content?: string }[] = []
-): { ok: boolean; dangerous: string[]; warnings: string[] } {
+): { ok: boolean; dangerous: string[]; warnings: string[]; script_warnings: string[] } {
   const warnings: string[] = [];
   const dangerous: string[] = [];
   const text = [raw, ...files.map((file) => file.content || "")].join("\n");
@@ -658,11 +758,13 @@ function scanSkillContent(
   }
   const { meta } = parseSkillFrontmatter(raw);
   warnings.push(...compatScanWarnings(analyzeSkillCompat(text, meta)));
+  const script_warnings = preflightSkillScriptWarnings(files);
+  warnings.push(...script_warnings);
   if (text.length > 120_000) warnings.push("large skill content");
   for (const file of files) {
     if (!isSafeSkillRelativePath(file.path)) dangerous.push(`unsafe support path: ${file.path}`);
   }
-  return { ok: dangerous.length === 0, dangerous, warnings };
+  return { ok: dangerous.length === 0, dangerous, warnings, script_warnings };
 }
 
 async function installSkillFromUrl({ url, category }) {

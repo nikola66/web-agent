@@ -1,9 +1,9 @@
 {
   "id": "opencode",
-  "name": "OpenCode",
-  "label": "OpenCode's Big Pickle (free)",
+  "name": "OpenCode (free, limited)",
+  "label": "OpenCode (free, limited)",
   "isDefault": true,
-  "order": 0,
+  "order": 2,
   "kind": "openai",
   "requiresUserApiKey": false,
   "model": "big-pickle",

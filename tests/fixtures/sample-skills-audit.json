@@ -1,0 +1,67 @@
+[
+  {
+    "skill": "bastos/conventional-commits",
+    "tier": "native",
+    "patterns": ["Conventional Commits formatting"],
+    "notes": "Markdown-only guidance"
+  },
+  {
+    "skill": "nesdeq/openclaw-feeds",
+    "tier": "limited",
+    "patterns": ["feedparser", "python3 scripts/feeds.py", "Bash(python3:*)"],
+    "mapping": "run_python + micropip feedparser",
+    "script": "scripts/feeds.py"
+  },
+  {
+    "skill": "asif2bd/wordpress-publishing-skill-for-claude",
+    "tier": "limited",
+    "patterns": ["requests", "wp-json", "content_to_gutenberg.py"],
+    "mapping": "run_python for converter; web_post for publisher",
+    "script": "scripts/content_to_gutenberg.py"
+  },
+  {
+    "skill": "mourad-ghafiri/git-notes-memory",
+    "tier": "limited",
+    "patterns": ["subprocess", "git notes"],
+    "mapping": "blocked in Pyodide — use memory_* tools",
+    "script": "memory.py",
+    "blocked": true
+  },
+  {
+    "skill": "seojoonkim/prompt-guard",
+    "tier": "limited",
+    "patterns": ["pyyaml", "prompt_guard"],
+    "mapping": "run_python offline mode with pyyaml auto-load",
+    "script": "prompt_guard/engine.py"
+  },
+  {
+    "skill": "bmdhodl/aws-infra",
+    "tier": "limited",
+    "patterns": ["aws cli", "aws s3"],
+    "mapping": "AWS REST APIs via web_fetch/web_post"
+  },
+  {
+    "skill": "rachmann-alexander/wikipedia-oc",
+    "tier": "limited",
+    "patterns": ["pip install wikipedia", "import wikipedia"],
+    "mapping": "Wikipedia REST API via web_fetch"
+  },
+  {
+    "skill": "arnarsson/bat-cat",
+    "tier": "limited",
+    "patterns": ["requires.bins: bat"],
+    "mapping": "read_file + grep instead of bat CLI"
+  },
+  {
+    "skill": "seanwyngaard/web-scraper-as-a-service",
+    "tier": "unsupported",
+    "patterns": ["Playwright", "requests"],
+    "mapping": "web_fetch + parsing only"
+  },
+  {
+    "skill": "whiteknight07/exa-web-search-free",
+    "tier": "limited",
+    "patterns": ["mcporter", "MCP"],
+    "mapping": "configure Exa MCP via /mcp add"
+  }
+]

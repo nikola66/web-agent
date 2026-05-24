@@ -36,3 +36,11 @@ declare module "sql.js/dist/sql-wasm.js" {
   }>;
   export default initSqlJs;
 }
+
+declare module "markdown-it-task-lists" {
+  import type MarkdownIt from "markdown-it";
+  export default function taskLists(
+    md: MarkdownIt,
+    options?: { enabled?: boolean; label?: boolean; labelAfter?: boolean },
+  ): void;
+}

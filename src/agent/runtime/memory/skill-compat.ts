@@ -17,6 +17,9 @@ export type SkillCompatAnalysis = {
   uses_deploy_cli: boolean;
   uses_native_media: boolean;
   uses_python_http: boolean;
+  uses_system_cli: boolean;
+  uses_python_subprocess: boolean;
+  uses_shell_scripts: boolean;
   python_libraries: string[];
   flags: string[];
 };
@@ -24,6 +27,9 @@ export type SkillCompatAnalysis = {
 export const WEB_AGENT_EXECUTION_HEADING = "## Web Agent execution (auto-appended)";
 
 const COMPAT_SECTION_MARKER = /## Web Agent execution \(auto-appended\)/i;
+
+const SYSTEM_CLI_PATTERN =
+  /(?:^|`|\$\s*|run\s+|npx\s+|invoke\s+|execute\s+|requires\.bins[^\n]*\b)(?:aws|azd|az\s|terraform|bicep|docker|kubectl|duckdb|openclaw|osascript|mcporter|edirect|coder|bat\b|brew\s+install|apt\s+install|npm\s+run|curl\b|wget\b|gh\b|git\b|python3\b)(?:\s|`|$|,)/im;
 
 function skillSourceForCompatAnalysis(text: string): string {
   const idx = text.search(COMPAT_SECTION_MARKER);
@@ -40,6 +46,47 @@ function listIncludes(meta: Record<string, unknown> | undefined, key: string): s
       .filter(Boolean);
   }
   return [];
+}
+
+function collectNestedMetaStrings(value: unknown, out: string[] = []): string[] {
+  if (value == null) return out;
+  if (typeof value === "string") {
+    if (value.trim()) out.push(value);
+    return out;
+  }
+  if (Array.isArray(value)) {
+    for (const item of value) collectNestedMetaStrings(item, out);
+    return out;
+  }
+  if (typeof value === "object") {
+    for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
+      if (k === "bins" || k === "requires") collectNestedMetaStrings(v, out);
+      else if (typeof v === "string" || Array.isArray(v)) collectNestedMetaStrings(v, out);
+      else if (v && typeof v === "object") collectNestedMetaStrings(v, out);
+    }
+  }
+  return out;
+}
+
+function metaHaystack(meta: Record<string, unknown>): string {
+  const parts: string[] = [];
+  parts.push(...listIncludes(meta, "allowed-tools"));
+  parts.push(...listIncludes(meta, "requires-tools"));
+  parts.push(...listIncludes(meta, "requires_tools"));
+  if (typeof meta.compatibility === "string") parts.push(meta.compatibility);
+  for (const key of ["openclaw", "clawdbot"]) {
+    if (meta.metadata && typeof meta.metadata === "object") {
+      collectNestedMetaStrings((meta.metadata as Record<string, unknown>)[key], parts);
+    }
+    collectNestedMetaStrings(meta[key], parts);
+  }
+  if (meta.requires && typeof meta.requires === "object") {
+    collectNestedMetaStrings(meta.requires, parts);
+  }
+  if (meta.metadata && typeof meta.metadata === "object") {
+    collectNestedMetaStrings(meta.metadata, parts);
+  }
+  return parts.join("\n");
 }
 
 function normalizePythonLibraryName(name: string): string {
@@ -61,6 +108,11 @@ export function detectPythonLibraries(source: string): string[] {
   }
   if (/\bBeautifulSoup\b/.test(text)) libs.add("beautifulsoup4");
   if (/\bload_dotenv\b/.test(text)) libs.add("dotenv");
+  if (/\bfeedparser\b/i.test(text)) libs.add("feedparser");
+  if (/\bpyyaml\b/i.test(text)) libs.add("pyyaml");
+  if (/\bwikipedia\b/i.test(text) && /\bpip\s+install\b|\bimport\s+wikipedia\b|\bfrom\s+wikipedia\b/i.test(text)) {
+    libs.add("wikipedia");
+  }
   if (/\bpip\s+install\b/.test(text)) libs.add("pip");
   if (/\bpython3?\s+-m\b/.test(text)) libs.add("python-module-cli");
   return [...libs].sort();
@@ -71,21 +123,27 @@ export function analyzeSkillCompat(
   meta: Record<string, unknown> = {}
 ): SkillCompatAnalysis {
   const body = skillSourceForCompatAnalysis(String(text || ""));
+  const metaText = metaHaystack(meta);
   const allowed = listIncludes(meta, "allowed-tools");
   const requires = listIncludes(meta, "requires-tools").concat(
     listIncludes(meta, "requires_tools")
   );
-  const toolText = [...allowed, ...requires].join(" ").toLowerCase();
+  const toolText = [...allowed, ...requires, metaText].join(" ").toLowerCase();
   const toolNames = [...allowed, ...requires].map((t) => String(t).trim().toLowerCase());
-  const hay = `${body}\n${toolText}`;
+  const hay = `${body}\n${metaText}\n${toolText}`;
 
   const uses_web_fetch = /\bWebFetch\b|\bweb_fetch\b(?!\s*\/)/i.test(hay);
+  const uses_system_cli =
+    SYSTEM_CLI_PATTERN.test(hay) ||
+    /\baws\s+(?:cli|s3|iam|ec2|lambda|cloudformation)\b/i.test(hay) ||
+    /\b(?:azd|openclaw|mcporter|duckdb|kubectl|docker|terraform)\b/i.test(hay);
   const uses_bash =
     /\bbash\s*\(/i.test(hay) ||
     toolNames.some((t) => t === "bash" || t.startsWith("bash(")) ||
     /\ballowed-tools:[^\n]*\bBash\b/i.test(body) ||
     /\brequires-tools:[^\n]*\bBash\b/i.test(body) ||
-    /`(?:azd|az|terraform|bicep)(?:\s|`)|\b(?:azd|terraform|bicep)\s+(?:up|deploy|provision|validate|build|plan|apply)\b|\baz\s+(?:deployment|cognitiveservices|search)\b/i.test(hay);
+    /`(?:azd|az|terraform|bicep)(?:\s|`)|\b(?:azd|terraform|bicep)\s+(?:up|deploy|provision|validate|build|plan|apply)\b|\baz\s+(?:deployment|cognitiveservices|search)\b/i.test(hay) ||
+    uses_system_cli;
   const python_libraries = detectPythonLibraries(hay);
   const uses_python =
     /\b(pip install|python3?\s+(?:-|[\w./])|python\s+-m|python script|\.py\b|pdftotext|qpdf)\b/i.test(hay) ||
@@ -100,19 +158,21 @@ export function analyzeSkillCompat(
     /\bCallMcpTool\b|\bMCP\b|\bmcp_[a-z]|\bazure__[a-z]/i.test(hay) ||
     toolNames.some((t) => t.includes("mcp"));
   const uses_npx = /\bnpx\s+(?!skills\b)/i.test(hay);
-  // Deploy / infra CLIs that can't run in Nodebox — agent must use REST API instead.
-  // Match only CLI invocation patterns (backtick, shell-prompt, `run X`, `npx X`, or CLI-flagged usage),
-  // not mere brand-name mentions in prose (e.g. "Vercel web guidelines").
   const uses_deploy_cli = /(?:^|`|\$\s*|run\s+|npx\s+|invoke\s+|execute\s+)(?:vercel|netlify|flyctl|fly\s+deploy|railway\s+(?:up|deploy|run)|heroku\s+\w|gh\s+(?:pr|issue|release|repo)|stripe\s+\w|firecrawl\s+\w)(?:\s|`|$)/im.test(hay);
-  // Native media/codec binaries (ffmpeg, whisper, tesseract) detected in prose or code blocks.
   const uses_native_media = /\b(?:ffmpeg|ffprobe|whisper|tesseract|pdftoppm|pdftotext|ghostscript|imagemagick|convert\s+-\w)\b/i.test(hay);
   const uses_python_http =
     /\burllib\.request\b|\bimport\s+requests\b|\bfrom\s+requests\b|\bimport\s+httpx\b|\bfrom\s+httpx\b/i.test(body);
+  const uses_python_subprocess = /\bsubprocess\b|\bos\.system\b|\bos\.popen\b/i.test(hay);
+  const uses_shell_scripts =
+    /(?:^|\s)(?:\.\/)?scripts\/[^\s`]+\.sh\b|`[^`]+\.sh`|^#!\/(?:usr\/)?bin\/(?:ba)?sh/im.test(hay);
 
   const flags: string[] = [];
   if (uses_web_fetch) flags.push("web_fetch_mapping");
   if (uses_bash) flags.push("bash_shell");
+  if (uses_system_cli) flags.push("system_cli_unavailable");
   if (uses_python) flags.push("python_runtime");
+  if (uses_python_subprocess) flags.push("python_subprocess");
+  if (uses_shell_scripts) flags.push("shell_scripts");
   if (uses_playwright) flags.push("playwright_unavailable");
   if (uses_agent_browser) flags.push("agent_browser_unavailable");
   if (uses_mcp) flags.push("mcp_requires_config");
@@ -123,7 +183,16 @@ export function analyzeSkillCompat(
 
   let tier: CompatTier = "native";
   if (uses_agent_browser || uses_playwright) tier = "unsupported";
-  else if (uses_python || uses_mcp || uses_bash || uses_npx || uses_deploy_cli || uses_native_media) tier = "limited";
+  else if (
+    uses_python ||
+    uses_mcp ||
+    uses_bash ||
+    uses_npx ||
+    uses_deploy_cli ||
+    uses_native_media ||
+    uses_python_subprocess ||
+    uses_shell_scripts
+  ) tier = "limited";
   else if (uses_web_fetch || flags.length > 0) tier = "mapped";
 
   return {
@@ -138,6 +207,9 @@ export function analyzeSkillCompat(
     uses_deploy_cli,
     uses_native_media,
     uses_python_http,
+    uses_system_cli,
+    uses_python_subprocess,
+    uses_shell_scripts,
     python_libraries,
     flags,
   };
@@ -168,6 +240,9 @@ export function buildWebAgentExecutionAppendix(analysis: SkillCompatAnalysis): s
   if (analysis.uses_mcp) {
     lines.push("| MCP / CallMcpTool | Configure via `/mcp add` or `.webagent/mcp-servers.json`, then `/reload-mcp` |");
   }
+  if (analysis.uses_system_cli || analysis.uses_bash) {
+    lines.push("| aws / az / azd / terraform / docker / kubectl / openclaw CLI | **Not available** — use that service's REST API via `web_fetch`/`web_post`; see **`browser-runtime-map`** CLI→REST table |");
+  }
   if (analysis.uses_deploy_cli) {
     lines.push("| vercel / netlify / gh / fly / railway / heroku CLI | **Not available** — use that service's REST API via `web_fetch`/`web_post` |");
   }
@@ -176,6 +251,18 @@ export function buildWebAgentExecutionAppendix(analysis: SkillCompatAnalysis): s
   }
   if (analysis.uses_python_http) {
     lines.push("| Python HTTP (`urllib`, `requests`) | `webagent.http` inside `run_python`, or `web_fetch`/`web_post` for REST/CMS — **`http-api`** |");
+  }
+  if (analysis.python_libraries.includes("feedparser")) {
+    lines.push("| RSS / feedparser scripts | `run_python` with micropip `feedparser`, or fetch RSS XML via `web_fetch` and parse with stdlib `xml.etree` |");
+  }
+  if (analysis.python_libraries.includes("wikipedia")) {
+    lines.push("| `wikipedia` Python module | Wikipedia REST API via `web_fetch` (`https://en.wikipedia.org/api/rest_v1/…`) |");
+  }
+  if (/\bwp-json\b|\bWordPress REST\b|\bwp_publisher\b/i.test(analysis.flags.join(" ") + analysis.python_libraries.join(" "))) {
+    lines.push("| WordPress REST publisher | `web_post` to `/wp-json/wp/v2/*` with Basic auth — **`http-api`** |");
+  }
+  if (analysis.uses_python_subprocess || analysis.flags.includes("shell_scripts")) {
+    lines.push("| subprocess / git / `.sh` scripts | **Not available** in Pyodide — use built-in `memory_*`/`session_*` tools instead of git-notes, or rewrite shell steps as `run_python`/`web_fetch` |");
   }
 
   lines.push(
@@ -219,6 +306,15 @@ export function compatScanWarnings(analysis: SkillCompatAnalysis): string[] {
   if (analysis.uses_bash) {
     warnings.push("references Bash/shell — Nodebox run_shell is node-only; see browser-runtime-map");
   }
+  if (analysis.uses_system_cli) {
+    warnings.push("references system CLI tools (aws/az/docker/kubectl/openclaw/etc.) — use REST APIs via web_fetch/web_post");
+  }
+  if (analysis.uses_shell_scripts) {
+    warnings.push("references shell scripts (.sh) — not runnable in Nodebox; rewrite as run_python or web_fetch/web_post");
+  }
+  if (analysis.uses_python_subprocess) {
+    warnings.push("references Python subprocess/os.system — blocked in Pyodide; use built-in tools or web_fetch/web_post");
+  }
   if (analysis.uses_web_fetch) {
     warnings.push("references WebFetch — use web_fetch with the same URL");
   }
@@ -248,13 +344,19 @@ export function compatScanWarnings(analysis: SkillCompatAnalysis): string[] {
 
 export function compatNotesForView(
   analysis: SkillCompatAnalysis,
-  source: string
-): { compatibility_notes: string[]; compatibility_tier: CompatTier } | null {
+  source: string,
+  scriptWarnings: string[] = []
+): { compatibility_notes: string[]; compatibility_tier: CompatTier; script_warnings?: string[] } | null {
   if (source === "bundled") return null;
-  if (analysis.tier === "native") return null;
+  if (analysis.tier === "native" && scriptWarnings.length === 0) return null;
   const notes = [
     `Tier: ${analysis.tier} — follow the "${WEB_AGENT_EXECUTION_HEADING}" section in this skill.`,
     ...compatScanWarnings(analysis),
   ];
-  return { compatibility_notes: notes, compatibility_tier: analysis.tier };
+  const out: { compatibility_notes: string[]; compatibility_tier: CompatTier; script_warnings?: string[] } = {
+    compatibility_notes: notes,
+    compatibility_tier: analysis.tier,
+  };
+  if (scriptWarnings.length) out.script_warnings = scriptWarnings;
+  return out;
 }

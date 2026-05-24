@@ -52,9 +52,9 @@ export function buildFindSkillsModeUserPrompt(query: string, source: "slash" | "
     "",
     "**Deliverable:** exactly **5** online agent skills ranked by installs, stars, or votes (deduped across registries).",
     "",
-    "**Registries to search:** skills.sh, SkillsMP, Cursor Marketplace, cursor.directory, GitHub SKILL.md repos.",
+    "**Registries to search (only these 3):** skills.sh, SkillsMP, Cursor Marketplace.",
     "",
-    "**Minimum:** ≥4 `web_search` + ≥3 `web_fetch` before the final answer. Present a pipe table with popularity metrics and install links.",
+    "**Minimum:** 3 `web_search` (one `site:` query per registry) + 2 `web_fetch` before the final answer. Present a pipe table with popularity metrics and install links.",
     "",
     "Do **not** install without explicit user confirmation — offer `/skills install <url>` after the table.",
   ].join("\n");

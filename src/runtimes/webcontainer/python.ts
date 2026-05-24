@@ -12,6 +12,7 @@ type PythonRequest = {
   args?: string[];
   env?: Record<string, string>;
   packages?: string[];
+  micropip_packages?: string[];
   timeout_ms?: number;
 };
 
@@ -214,6 +215,9 @@ async function executePythonNow(req: PythonRequest, workspaceRoot: string) {
     args: Array.isArray(req.args) ? req.args.map(String) : [],
     env: req.env && typeof req.env === "object" ? req.env : {},
     packages: Array.isArray(req.packages) ? req.packages.map(String) : [],
+    micropipPackages: Array.isArray(req.micropip_packages)
+      ? req.micropip_packages.map(String)
+      : [],
     timeoutMs,
     files,
   }, timeoutMs + 30_000);

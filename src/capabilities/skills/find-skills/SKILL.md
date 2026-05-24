@@ -13,12 +13,12 @@ triggers: [find skill, find skills, search skills, skill marketplace, skill regi
 | Step | Tool |
 |------|------|
 | Ambiguous query | Follow **`clarify`** — one `<<<CLARIFY>>>` block (no search yet) |
-| Registry discovery | `web_search` — ≥4 queries across the registries below |
-| Verify rankings | `web_fetch` — ≥3 registry result/detail pages before answering |
+| Registry discovery | `web_search` — **3** site-scoped queries (one per registry below) |
+| Verify rankings | `web_fetch` — **2** registry result or skill detail pages before answering |
 | Install chosen skill | `skill_manage` / `/skills install` — defer to **`web-agent-skill`** |
 | Present ranked table | plain assistant markdown (pipe table) |
 
-**Non-negotiable:** Search **multiple** registries, rank by **install count, stars, or votes** (whichever each registry exposes), return **exactly 5** deduped skills. Never answer from memory alone — fetch live registry pages first.
+**Non-negotiable:** Search **only** the three registries below (no GitHub trawling, no cursor.directory), rank by **install count, stars, or votes**, return **exactly 5** deduped skills. Never answer from memory alone — fetch live registry pages first.
 
 ## When to Use
 
@@ -32,22 +32,20 @@ triggers: [find skill, find skills, search skills, skill marketplace, skill regi
 
 - Ambiguous intent: **`clarify`**. Remote install rules: **`web-agent-skill`**. Open-web lists (creators, companies): **`open-web-research`**.
 
-## Registries (search all that respond)
+## Registries (exactly these three — no others)
 
-| Registry | Search pattern | Popularity metric | Notes |
-|----------|----------------|-------------------|-------|
-| [skills.sh](https://skills.sh/) | `site:skills.sh {query}` or `skills.sh {query}` | **Installs** | Open directory; install via HTTPS `SKILL.md` URL + `skill_bulk_save` / `skill_manage` |
-| [SkillsMP](https://skillsmp.com/) | `site:skillsmp.com {query}` | **Stars** / recency | Large marketplace; prefer pages showing star counts |
+| Registry | `web_search` query | Popularity metric | Notes |
+|----------|-------------------|-------------------|-------|
+| [skills.sh](https://skills.sh/) | `site:skills.sh {query}` | **Installs** | Primary source; install via HTTPS `SKILL.md` URL + `skill_manage` |
+| [SkillsMP](https://skillsmp.com/) | `site:skillsmp.com {query}` | **Stars** | Prefer pages showing star counts |
 | [Cursor Marketplace](https://cursor.com/marketplace) | `site:cursor.com/marketplace {query}` | Featured / plugin listing | Plugins bundling skills; link plugin page |
-| [cursor.directory](https://cursor.directory/) | `site:cursor.directory {query} skill` | Community votes if shown | MCP servers + skills |
-| GitHub (fallback) | `{query} agent skill filename:SKILL.md stars:>20` | **GitHub stars** | Raw `SKILL.md` URLs for `skill_manage import_url` |
 
-If a registry returns no hits, note it and continue — do not shrink the final list below 5 unless fewer than 5 exist across all sources.
+Do **not** search cursor.directory, GitHub, or the open web — they are slow and noisy. If a registry returns no hits, note it and continue with the other two.
 
 ## Minimum effort (before any final answer)
 
-1. **≥4** `web_search` calls — at least one per registry column above (vary query: topic, synonyms, `agent skill`, `SKILL.md`).
-2. **≥3** `web_fetch` calls on high-signal URLs (registry search results, skill detail pages, GitHub raw/tree links).
+1. **3** `web_search` calls — one `site:` query per registry (same `{query}`; add `agent skill` only if results are thin).
+2. **2** `web_fetch` calls — the two best registry pages (search results or skill detail) with clear popularity numbers.
 3. Extract for each candidate: **name**, **registry**, **popularity number** (installs / stars / votes), **one-line description**, **install command or HTTPS URL**.
 4. **Dedupe** by name or repo; when duplicates appear, keep the higher popularity score.
 5. Sort descending by popularity; take **top 5**.
@@ -62,7 +60,7 @@ If a registry returns no hits, note it and continue — do not shrink the final 
 | 1 | … | skills.sh | 12.4k installs | … | `https://…/SKILL.md` or `/skills install <url>` |
 | … | … | … | … | … | … |
 
-**Sources checked:** skills.sh, SkillsMP, Cursor Marketplace, …
+**Sources checked:** skills.sh, SkillsMP, Cursor Marketplace
 ```
 
 Rules:
@@ -76,8 +74,8 @@ Rules:
 When the user picks a skill:
 
 1. `skill_view` **`web-agent-skill`** — remote install rules (HTTPS + `skill_manage` / `skill_bulk_save`, never shell `git clone`).
-2. Install with `/skills install <https-url-to-SKILL.md>` or `skill_manage` `import_url`.
-3. `skill_view` **`imported-skill-compat`**, then `skill_view` the installed slug — follow the Web Agent execution section and `compatibility_notes`.
+2. Install with `/skills install <https-url-to-SKILL.md>` or `skill_manage` `import_url`. If the skill ships **Python/shell scripts** under `scripts/` or package dirs, prefer `skill_manage` **`import_dir`** on a cloned folder so support files are saved.
+3. `skill_view` **`imported-skill-compat`**, then `skill_view` the installed slug — follow the Web Agent execution section, `compatibility_notes`, and `script_warnings`.
 4. Confirm with `skill_list`.
 
 ## Pitfalls

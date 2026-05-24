@@ -22,10 +22,18 @@
 export type PythonPreflight = {
   /** If set, refuse to dispatch — message is the user-facing reason. */
   block?: string;
-  /** Pyodide packages to auto-add to the `packages` arg. */
+  /** Pyodide packages to auto-add to the `packages` arg (loadPackage). */
   autoPackages: string[];
+  /** Pure-Python PyPI packages to install via micropip in the worker. */
+  micropipPackages: string[];
   /** Soft warnings to surface to the model alongside output. */
   warnings: string[];
+};
+
+/** Pure-Python PyPI wheels verified for micropip.install in the browser worker. */
+export const MICOPIP_ALLOWLIST: Record<string, string> = {
+  feedparser: "feedparser",
+  wikipedia: "wikipedia",
 };
 
 /**
@@ -176,6 +184,13 @@ const KNOWN_BROKEN_IMPORTS: Record<string, string> = {
     "Use the Firecrawl REST API directly via `web_post` instead of the Python SDK.",
   vercel:
     "There is no `vercel` Python package. Use the Vercel REST API via `web_fetch`/`web_post`.",
+  peft: "PEFT requires PyTorch/transformers — not available in Pyodide.",
+  datasets: "Hugging Face `datasets` requires compiled deps — not available in Pyodide.",
+  accelerate: "Hugging Face `accelerate` requires PyTorch — not available in Pyodide.",
+  ultralytics: "Ultralytics YOLO requires PyTorch/CUDA — not available in Pyodide.",
+  discord: "discord.py requires raw WebSocket/TCP — not available in Pyodide.",
+  wikipedia:
+    "The `wikipedia` module is not in Pyodide. Use Wikipedia REST API via `web_fetch` (`https://en.wikipedia.org/api/rest_v1/`).",
 };
 
 /**
@@ -237,6 +252,19 @@ export const UNSUPPORTED_BINARIES: Record<string, string> = {
   firecrawl: "Firecrawl CLI is not available. Use the Firecrawl REST API (`https://api.firecrawl.dev`) via `web_post`.",
   stripe: "Stripe CLI is not available. Use the Stripe REST API via `web_fetch`/`web_post`.",
   heroku: "Heroku CLI is not available. Use the Heroku Platform API via `web_fetch`/`web_post`.",
+  aws: "AWS CLI is not available. Use AWS service REST APIs via `web_fetch`/`web_post`.",
+  az: "Azure CLI (`az`) is not available. Use Azure REST APIs via `web_fetch`/`web_post`.",
+  azd: "Azure Developer CLI (`azd`) is not available. Use Azure REST APIs via `web_fetch`/`web_post`.",
+  openclaw: "OpenClaw CLI is not available in Nodebox. Use built-in Web Agent tools instead.",
+  duckdb: "DuckDB CLI is not available. Use `run_python` with Pyodide SQL or fetch CSV and parse with pandas.",
+  docker: "Docker is not available in the browser sandbox.",
+  kubectl: "kubectl is not available in the browser sandbox.",
+  osascript: "osascript (macOS AppleScript) is not available in Nodebox.",
+  mcporter: "mcporter MCP CLI is not available — configure MCP via `/mcp add` instead.",
+  terraform: "Terraform CLI is not available. Use cloud provider REST APIs via `web_fetch`/`web_post`.",
+  bicep: "Bicep CLI is not available. Use Azure REST APIs via `web_fetch`/`web_post`.",
+  edirect: "NCBI EDirect tools are not available. Use NCBI E-utilities REST API via `web_fetch`.",
+  coder: "Coder CLI is not available in Nodebox.",
 };
 
 const STDLIB_TOP_LEVEL = new Set([
@@ -307,12 +335,27 @@ function findUnsupportedBinary(source: string): { binary: string; hint: string }
   return null;
 }
 
+export function preflightPythonForSkillFile(
+  filePath: string,
+  source: string
+): PythonPreflight {
+  const pre = preflightPython(source);
+  if (pre.block) {
+    return {
+      ...pre,
+      block: `${filePath}: ${pre.block}`,
+    };
+  }
+  return pre;
+}
+
 export function preflightPython(
   source: string,
   declaredPackages: readonly string[] = []
 ): PythonPreflight {
   const warnings: string[] = [];
   const autoPackages: string[] = [];
+  const micropipPackages: string[] = [];
   const text = String(source || "");
 
   // 1. Native binary spawn → hard block.
@@ -321,6 +364,7 @@ export function preflightPython(
     return {
       block: `run_python preflight: script invokes \`${binary.binary}\` via subprocess/os.system, which is not available in Pyodide (browser). ${binary.hint}`,
       autoPackages: [],
+      micropipPackages: [],
       warnings,
     };
   }
@@ -328,6 +372,7 @@ export function preflightPython(
   // 2. Imports.
   const imports = extractTopLevelImports(text);
   const declared = new Set(declaredPackages.map((p) => p.toLowerCase()));
+  const unknownImports: string[] = [];
 
   for (const imp of imports) {
     if (STDLIB_TOP_LEVEL.has(imp)) continue;
@@ -337,14 +382,35 @@ export function preflightPython(
       return {
         block: `run_python preflight: import of '${imp}' is not supported in Pyodide. ${KNOWN_BROKEN_IMPORTS[lower]}`,
         autoPackages: [],
+        micropipPackages: [],
         warnings,
       };
+    }
+
+    const micropip = MICOPIP_ALLOWLIST[imp] || MICOPIP_ALLOWLIST[lower];
+    if (micropip && !declared.has(micropip.toLowerCase()) && !micropipPackages.includes(micropip)) {
+      micropipPackages.push(micropip);
+      continue;
     }
 
     const pkg = PYODIDE_PACKAGE_MAP[imp] || PYODIDE_PACKAGE_MAP[lower];
     if (pkg && !declared.has(pkg.toLowerCase()) && !autoPackages.includes(pkg)) {
       autoPackages.push(pkg);
+      continue;
     }
+
+    if (!micropip && !pkg) unknownImports.push(imp);
+  }
+
+  if (unknownImports.length) {
+    warnings.push(
+      `Unknown imports (${unknownImports.slice(0, 6).join(", ")}): not in Pyodide built-ins or micropip allowlist — may fail at runtime. Prefer web_fetch/webagent.http or rewrite.`
+    );
+  }
+  if (micropipPackages.length) {
+    warnings.push(
+      `Will install via micropip (slower): ${micropipPackages.join(", ")}`
+    );
   }
 
   // 3. socket usage (raw TCP) — Pyodide stubs most of it. Warn but don't
@@ -396,5 +462,5 @@ export function preflightPython(
     );
   }
 
-  return { autoPackages, warnings };
+  return { autoPackages, micropipPackages, warnings };
 }

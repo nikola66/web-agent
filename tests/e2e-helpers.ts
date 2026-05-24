@@ -238,7 +238,7 @@ export async function expectProviderInProfileEditor(page: Page, providerLabel: s
 }
 
 export async function expectDefaultProviderInProfileEditor(page: Page) {
-  await expectProviderInProfileEditor(page, "OpenCode's Big Pickle (free)");
+  await expectProviderInProfileEditor(page, "OpenCode (free, limited)");
 }
 
 export async function createProfile(page: Page, name: string) {

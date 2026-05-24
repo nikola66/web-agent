@@ -84,6 +84,7 @@ Three layers:
 | `Pillow`, `numpy`, `pandas`, `scipy`, `scikit-learn` | **Works** (auto-loaded) | — |
 | `python-docx`, `python-pptx`, `openpyxl`, `pypdf`, `pdfplumber`, `reportlab` | **Works** (auto-loaded) | — |
 | `requests`, `httpx`, `beautifulsoup4`, `pyyaml`, `pydantic`, `rich`, `click`, `tqdm` | **Mixed** — parsing/utils often work; HTTP via `requests`/`httpx` may hit JsProxy | Use `webagent.http` in-script or `web_fetch`/`web_post` for HTTP |
+| `feedparser`, `wikipedia` (micropip allowlist) | **Works** (slower first run) | Auto-installed via micropip; prefer `web_fetch` for Wikipedia REST |
 | `matplotlib`, `seaborn`, `imageio`, `Jinja2`, `markitdown` | **Works** (auto-loaded) | — |
 | `subprocess` spawning `soffice`/`libreoffice` | **Blocked** — binary absent | `python-docx`/`python-pptx`/`openpyxl` |
 | `subprocess` spawning `ffmpeg`/`ffprobe` | **Blocked** — binary absent | Call a hosted transcoding API |

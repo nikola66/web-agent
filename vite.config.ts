@@ -483,6 +483,8 @@ export default defineConfig(({ mode }) => {
             if (normalized.includes("/node_modules/@xterm/")) return "xterm";
             if (normalized.includes("/node_modules/@codesandbox/nodebox/")) return "nodebox";
             if (normalized.includes("/node_modules/markdown-it/")) return "markdown";
+            if (normalized.includes("/node_modules/highlight.js/")) return "markdown";
+            if (normalized.includes("/node_modules/katex/")) return "markdown";
             if (normalized.includes("/node_modules/mermaid/")) return "mermaid";
             if (normalized.includes("/node_modules/lucide-react/")) return "icons";
             if (

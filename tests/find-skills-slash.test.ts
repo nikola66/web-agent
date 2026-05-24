@@ -16,8 +16,9 @@ test("buildFindSkillsModeUserPrompt includes query, skill_view, and top-5 contra
   assert.match(p, /skill_view.*find-skills/);
   assert.match(p, /exactly \*\*5\*\*/);
   assert.match(p, /skills\.sh/);
-  assert.match(p, /web_search/);
-  assert.match(p, /web_fetch/);
+  assert.match(p, /only these 3/);
+  assert.match(p, /3 `web_search`/);
+  assert.match(p, /2 `web_fetch`/);
 });
 
 test("rewriteFindSkillsSlashUserMessage accepts /find_skills only", () => {

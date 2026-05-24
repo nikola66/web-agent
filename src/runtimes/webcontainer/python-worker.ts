@@ -15,6 +15,7 @@ type PythonExecuteRequest = {
   args?: string[];
   env?: Record<string, string>;
   packages?: string[];
+  micropipPackages?: string[];
   timeoutMs?: number;
   files?: PythonFilePayload[];
 };
@@ -195,6 +196,15 @@ async function executePython(req: PythonExecuteRequest) {
 
   if (req.packages?.length) {
     await pyodide.loadPackage(req.packages);
+  }
+  if (req.micropipPackages?.length) {
+    await pyodide.loadPackage("micropip");
+    const quoted = req.micropipPackages.map((p) => JSON.stringify(p)).join(", ");
+    await pyodide.runPythonAsync(`
+import micropip
+for _pkg in [${quoted}]:
+    await micropip.install(_pkg)
+`);
   }
 
   pyodide.globals.set("__webagent_code", req.code || "");

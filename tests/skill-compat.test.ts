@@ -162,6 +162,51 @@ test("analyzeSkillCompat flags Python HTTP clients", () => {
   assert.match(appendix, /webagent\.http|web_fetch/i);
 });
 
+test("analyzeSkillCompat detects feedparser and metadata requires.bins", () => {
+  const analysis = analyzeSkillCompat(
+    [
+      "---",
+      "name: openclaw-feeds",
+      "compatibility: Requires Python 3, feedparser (pip install feedparser)",
+      "allowed-tools: Bash(python3:*)",
+      "metadata:",
+      "  openclaw:",
+      "    requires:",
+      "      bins: [curl, python3]",
+      "---",
+      "",
+      "Run scripts/feeds.py for RSS.",
+    ].join("\n"),
+    {
+      compatibility: "Requires Python 3, feedparser (pip install feedparser)",
+      metadata: { openclaw: { requires: { bins: ["curl", "python3"] } } },
+    }
+  );
+  assert.equal(analysis.tier, "limited");
+  assert.ok(analysis.python_libraries.includes("feedparser"));
+  assert.equal(analysis.uses_system_cli, true);
+  assert.equal(analysis.uses_shell_scripts, false);
+});
+
+test("analyzeSkillCompat detects subprocess and wikipedia module", () => {
+  const analysis = analyzeSkillCompat(
+    "---\nname: wiki\n---\n\npip install wikipedia\nimport subprocess\n"
+  );
+  assert.ok(analysis.python_libraries.includes("wikipedia"));
+  assert.equal(analysis.uses_python_subprocess, true);
+  assert.ok(analysis.flags.includes("python_subprocess"));
+});
+
+test("sample-skills-audit fixture tiers match analyzer", async () => {
+  const rows = JSON.parse(
+    await fs.readFile(nodePath.join(process.cwd(), "tests/fixtures/sample-skills-audit.json"), "utf8")
+  );
+  for (const row of rows) {
+    const analysis = analyzeSkillCompat(`Use ${row.patterns.join(" and ")}`);
+    assert.equal(analysis.tier, row.tier, `${row.skill} tier mismatch`);
+  }
+});
+
 test("skills-sh-top10 fixture: every mapped tier declares a mapping", async () => {
   const rows = JSON.parse(await fs.readFile(FIXTURE, "utf8"));
   const mapped = rows.filter((row: { tier: string }) => row.tier === "mapped");

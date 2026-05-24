@@ -24,7 +24,7 @@ triggers: [imported skill, skills.sh install, skill compat, WebFetch, agent-brow
 | MCP / CallMcpTool | `/mcp add` + `/reload-mcp`, then `tool_search` → `tool_activate` → call the MCP tool next round |
 | Rendered-fetch provider (JS-heavy pages) | `web_fetch` only — not DOM automation; optional backend for markdown text |
 
-**Non-negotiable:** After any remote install (`skill_manage import_url`, `skill_bulk_save`, `/skills install`), call `skill_view` on the installed slug and follow its **Web Agent execution (auto-appended)** section before tool fan-out.
+**Non-negotiable:** After any remote install (`skill_manage import_url`, `skill_bulk_save`, `/skills install`), call `skill_view` on the installed slug and follow its **Web Agent execution (auto-appended)** section before tool fan-out. Check `script_warnings` in the `skill_view` result for per-file Pyodide preflight notes.
 
 ## When to Use
 
@@ -37,7 +37,7 @@ triggers: [imported skill, skills.sh install, skill compat, WebFetch, agent-brow
 ## Procedure
 
 1. `skill_view` this skill (**`imported-skill-compat`**) — refresh the mapping table.
-2. `skill_view` `{ installed-slug }` — read the auto-appended **Web Agent execution** block and `compatibility_notes` in the tool result.
+2. `skill_view` `{ installed-slug }` — read the auto-appended **Web Agent execution** block, `compatibility_notes`, and **`script_warnings`** in the tool result.
 3. `skill_view` **`browser-runtime-map`** before the first filesystem/HTTP/shell choice.
 4. If tier is **limited** (Python/Bash/MCP): use `run_python` for compatible Python and `skill_view` **`http-api`** for API calls as needed.
 5. If tier is **unsupported** (Playwright/agent-browser): do not retry `npx` or browser automation — substitute `web_fetch`, `read_file`, and source inspection.

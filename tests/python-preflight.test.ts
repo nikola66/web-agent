@@ -134,3 +134,32 @@ test("warns on http.client HTTPConnection", () => {
   assert.equal(pre.block, undefined);
   assert.ok(pre.warnings.some((w) => /http\.client|webagent\.http/i.test(w)));
 });
+
+test("blocks subprocess git (git-notes-memory pattern)", () => {
+  const src = `import subprocess\nsubprocess.run(["git"] + ["status"], capture_output=True)`;
+  const pre = preflightPython(src);
+  assert.ok(pre.block);
+  assert.match(pre.block!, /git/i);
+});
+
+test("auto-loads feedparser via micropip allowlist", () => {
+  const src = `import feedparser\nfeedparser.parse("http://example.com/rss")`;
+  const pre = preflightPython(src);
+  assert.equal(pre.block, undefined);
+  assert.deepEqual(pre.micropipPackages, ["feedparser"]);
+});
+
+test("stdlib content_to_gutenberg pattern passes", () => {
+  const src = `import re, json, html, argparse\nfrom typing import List`;
+  const pre = preflightPython(src);
+  assert.equal(pre.block, undefined);
+  assert.deepEqual(pre.autoPackages, []);
+  assert.deepEqual(pre.micropipPackages, []);
+});
+
+test("blocks wikipedia import with REST fallback message", () => {
+  const src = `import wikipedia\nwikipedia.search("test")`;
+  const pre = preflightPython(src);
+  assert.ok(pre.block);
+  assert.match(pre.block!, /Wikipedia REST/i);
+});
