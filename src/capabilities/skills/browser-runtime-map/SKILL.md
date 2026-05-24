@@ -3,6 +3,7 @@ name: Browser Runtime Map
 description: Use when shell commands fail, npx/curl/git won't run, or you must choose run_shell vs web_fetch vs file tools in Nodebox vs host.
 version: 1.1.0
 category: bundled
+primary-tools: [read_file, browse_workspace, grep, web_fetch, web_post, run_python, run_shell]
 tags: [nodebox, shell, runtime, tools, webcontainer, run_shell, command-failed]
 triggers: [shell failed, command failed, npx, curl, git clone, nodebox, no such file, not found in path, webcontainer, run this command]
 ---
@@ -15,15 +16,21 @@ Canonical built-in tool picker. Other skills defer here for filesystem vs HTTP v
 |------|-----------|
 | Read a file | `read_file` |
 | Search file contents | `grep` |
-| Find files by name (cross-tree) | `find_files` |
-| List one directory | `list_dir` |
-| Directory tree view | `tree` |
+| Find files by name (cross-tree) | `browse_workspace` `{ "action": "find", "pattern": "…" }` |
+| List one directory | `browse_workspace` `{ "action": "list", "path": "…" }` |
+| Directory tree view | `browse_workspace` `{ "action": "tree", "path": "…" }` |
 | Create or overwrite | `write_file` |
-| Patch or multi-edit | `apply_patch`, `edit_file`, `multi_edit` |
+| Single find/replace hunk | `edit_file` |
+| Multiple find/replace hunks | `multi_edit` |
+| Unified patch blocks | `apply_patch` |
+| Patch or multi-edit (summary) | `apply_patch`, `edit_file`, `multi_edit` |
 | Move / delete | `move_file`, `delete_file` |
 | Compare files | `file_diff` |
 | HTTP(S) GET (public or Bearer) | `web_fetch` (+ optional `headers`, `params`) — see **`http-api`** |
 | HTTP(S) POST/PATCH/PUT/DELETE/GraphQL | `web_post` (+ `json`, `form`, `params`, `timeout_ms`) — see **`http-api`** |
+| OAuth-connected SaaS (Gmail, Sheets, …) | `composio_connect`, `composio_status`, `composio_action` |
+| DOM click/type automation | MCP browser tools (if configured via `/mcp add`) — see **`imported-skill-compat`** |
+| JS-heavy page as markdown text | `web_fetch` (optional rendered-fetch provider when unauthenticated) |
 | Web search | `web_search` |
 | Environment facts | `system_info` |
 | Recurring jobs | `cron_register`, `cron_list` — **`heartbeat-cron`** |
@@ -71,11 +78,12 @@ Three layers:
 
 | Python pattern | Status | Alternative |
 |---|---|---|
-| stdlib (`json`, `re`, `pathlib`, `urllib.request`, `csv`, …) | **Works** | — |
+| stdlib (`json`, `re`, `pathlib`, `csv`, …) | **Works** | — |
+| `urllib.request` / `webagent.http` | **Works** (proxy-backed via `/api/proxy`) | Prefer `web_fetch`/`web_post` for REST/CMS/GraphQL at agent level |
 | `zipfile` (create `.zip` bundles) | **Works** | No `create_archive` tool — use `run_python` + `zipfile`, output under `work/` or `projects/` |
 | `Pillow`, `numpy`, `pandas`, `scipy`, `scikit-learn` | **Works** (auto-loaded) | — |
 | `python-docx`, `python-pptx`, `openpyxl`, `pypdf`, `pdfplumber`, `reportlab` | **Works** (auto-loaded) | — |
-| `requests`, `httpx`, `beautifulsoup4`, `pyyaml`, `pydantic`, `rich`, `click`, `tqdm` | **Works** (auto-loaded) | — |
+| `requests`, `httpx`, `beautifulsoup4`, `pyyaml`, `pydantic`, `rich`, `click`, `tqdm` | **Mixed** — parsing/utils often work; HTTP via `requests`/`httpx` may hit JsProxy | Use `webagent.http` in-script or `web_fetch`/`web_post` for HTTP |
 | `matplotlib`, `seaborn`, `imageio`, `Jinja2`, `markitdown` | **Works** (auto-loaded) | — |
 | `subprocess` spawning `soffice`/`libreoffice` | **Blocked** — binary absent | `python-docx`/`python-pptx`/`openpyxl` |
 | `subprocess` spawning `ffmpeg`/`ffprobe` | **Blocked** — binary absent | Call a hosted transcoding API |

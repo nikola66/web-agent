@@ -1,0 +1,15 @@
+{
+  "id": "opencode",
+  "name": "OpenCode",
+  "label": "OpenCode's Big Pickle (free)",
+  "isDefault": true,
+  "order": 0,
+  "kind": "openai",
+  "requiresUserApiKey": false,
+  "model": "big-pickle",
+  "runtime": {
+    "basePath": "opencode",
+    "fallbackBaseUrl": "https://opencode.ai/zen/v1",
+    "builtinApiKey": "public"
+  }
+}

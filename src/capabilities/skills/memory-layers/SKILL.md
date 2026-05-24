@@ -3,6 +3,7 @@ name: Memory Layers
 description: Use when the user says remember this, save a preference, paste API keys, or you must pick memory_save vs session notes vs skill_manage vs wiki_* tools.
 version: 1.1.0
 category: bundled
+primary-tools: [memory_save, session_search, skill_view, wiki_search]
 tags: [memory, session, skills, facts, context, remember, preference, security, credentials, secrets]
 triggers: [remember this, save preference, session note, store fact, recall later, what do we remember, persistent note, knowledge vault, wiki sync, sync facts to wiki, wiki search, api key, secret, .env, paste key, sk-, bearer, rotate key, commit secrets, redact, password in chat]
 ---
@@ -17,6 +18,8 @@ Canonical picker for **what to persist**, **which memory tool**, and **secret ha
 | **Session** | `session_memory_append`, `session_memory_list`, `session_search` | Rolling notes, temporary decisions, artifact pointers this session. |
 | **Skills** | `skill_view`, `skill_list`, `skill_manage`, `skill_bulk_save` | Repeatable procedures with a clear trigger. |
 | **Wiki vault** | `wiki_setup`, `wiki_sync`, `wiki_search` | PARA markdown mirror (default `.webagent/knowledge-vault/`). Also `/wiki_setup`, `/wiki_sync`, `/wiki_search`. |
+| **OAuth SaaS** | `composio_connect`, `composio_status`, `composio_action` | Connected apps (Gmail, Sheets, HubSpot, …) — not raw `web_post` without OAuth setup. |
+| **MCP extensions** | Dynamic MCP tools (after `/mcp add`) | User-configured servers — see **`imported-skill-compat`**. |
 
 **Non-negotiable:** One-off facts → `memory_save`. Debugging trail → `session_memory_append`. Repeatable recipe → `skill_manage` create after `skill_view`. Secrets belong in **Settings / vault** — never in memory, session, skills, or workspace prose.
 

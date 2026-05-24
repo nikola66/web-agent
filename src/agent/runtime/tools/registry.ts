@@ -64,6 +64,8 @@ function toBuiltinEntry(def: ToolDefinition) {
     inputSchema: def.inputSchema,
     ...(def.requiresConfirmation !== undefined ? { requiresConfirmation: def.requiresConfirmation } : {}),
     ...(def.approvalSummary !== undefined ? { approvalSummary: def.approvalSummary } : {}),
+    ...(def.llmVisible === false ? { llmVisible: false } : {}),
+    ...(def.toolGroup !== undefined ? { toolGroup: def.toolGroup } : {}),
   };
 }
 
@@ -91,6 +93,7 @@ const PATH_ARG_ALIAS_TOOLS = new Set([
   "make_dir",
   "edit_file",
   "multi_edit",
+  "browse_workspace",
   "list_dir",
   "tree",
   "grep",
@@ -331,6 +334,8 @@ export async function loadToolCatalog() {
           inputSchema: entry.inputSchema as Record<string, unknown>,
           ...(entry.requiresConfirmation !== undefined ? { requiresConfirmation: entry.requiresConfirmation } : {}),
           ...(entry.approvalSummary !== undefined ? { approvalSummary: entry.approvalSummary } : {}),
+          ...(entry.llmVisible === false ? { llmVisible: false } : {}),
+          ...(entry.toolGroup !== undefined ? { toolGroup: entry.toolGroup } : {}),
         },
       ]];
     })
@@ -338,7 +343,7 @@ export async function loadToolCatalog() {
   const mcpCatalog = Object.fromEntries(
     Object.entries(getMcpCatalogCache()).flatMap(([name, entry]) => {
       if (BUILTIN_TOOLS[name] || capabilityCatalog[name] || !isValidToolName(name)) return [];
-      return [[name, { emoji: entry.emoji, description: entry.description, inputSchema: entry.inputSchema }]];
+      return [[name, { emoji: entry.emoji, description: entry.description, inputSchema: entry.inputSchema, llmVisible: false }]];
     })
   );
   return {
@@ -351,6 +356,7 @@ export async function loadToolCatalog() {
 export async function buildOpenAiToolDefinitions(toolCatalog) {
   const definitions = Object.keys(toolCatalog || {}).flatMap((name) => {
     const meta = toolCatalog?.[name] || null;
+    if (meta?.llmVisible === false) return [];
     const schema = resolveInputSchema(meta);
     if (!schema || typeof schema !== "object" || schema.type !== "object") return [];
     const description =
@@ -670,6 +676,7 @@ export const PARALLEL_SAFE_TOOLS = new Set([
   "web_fetch",
   "grep",
   "read_file",
+  "browse_workspace",
   "list_dir",
   "find_files",
   "skill_view",

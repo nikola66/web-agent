@@ -3,6 +3,7 @@ name: Artifact Delivery
 description: Use when finished work must be shown to the user—or when they ask to see/display a visual—artifact_present for files, inline markdown with remote image URLs, terminal preview, email or Telegram delivery.
 version: 1.1.0
 category: bundled
+primary-tools: [artifact_present, email]
 tags: [artifact, delivery, presentation, email, telegram, output, image, thumbnail, secrets, redact]
 triggers: [show me, show it, preview, display, thumbnail, image url, deliver, send via telegram, send email, attach, share result, package output, final output, redact, api key in report]
 ---

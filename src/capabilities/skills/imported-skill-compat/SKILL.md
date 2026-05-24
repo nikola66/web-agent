@@ -3,6 +3,7 @@ name: Imported Skill Compat
 description: Use when the user or agent installs a skill from skills.sh or GitHub — map WebFetch, Bash, Python, Playwright, and MCP references to Web Agent built-ins.
 version: 1.0.0
 category: bundled
+primary-tools: [skill_view, run_python, web_fetch, web_post, tool_search, tool_activate]
 tags: [skills, import, compatibility, skills.sh, webfetch, bash, python, playwright, mcp]
 triggers: [imported skill, skills.sh install, skill compat, WebFetch, agent-browser, playwright skill, remote skill mapping, after skill install]
 ---
@@ -13,13 +14,15 @@ triggers: [imported skill, skills.sh install, skill compat, WebFetch, agent-brow
 |------------------------|-----------|
 | WebFetch / fetch URL | `web_fetch` `{ url, headers? }` |
 | POST / GraphQL | `web_post` — **`http-api`** |
-| Read / Glob / Grep | `read_file` / `list_dir` / `find_files` / `grep` |
+| Read / Glob / Grep | `read_file` / `browse_workspace` / `grep` |
 | Skill / Read skill | `skill_view` `{ name }` |
 | Bash / curl / npx | **`browser-runtime-map`** — Nodebox has no POSIX shell |
 | Python / `.py` | `run_python` for Pyodide-compatible scripts |
+| Python HTTP (`urllib`, `requests`) | `webagent.http` inside `run_python`, or `web_fetch`/`web_post` for REST/CMS — **`http-api`** |
 | pip / native deps | No system pip; use Pyodide packages if available or replace the native dependency step |
 | agent-browser / Playwright | **Not available** — `web_fetch` + file tools |
-| MCP / CallMcpTool | Configure via `/mcp add` or `.webagent/mcp-servers.json`, then `/reload-mcp` |
+| MCP / CallMcpTool | `/mcp add` + `/reload-mcp`, then `tool_search` → `tool_activate` → call the MCP tool next round |
+| Rendered-fetch provider (JS-heavy pages) | `web_fetch` only — not DOM automation; optional backend for markdown text |
 
 **Non-negotiable:** After any remote install (`skill_manage import_url`, `skill_bulk_save`, `/skills install`), call `skill_view` on the installed slug and follow its **Web Agent execution (auto-appended)** section before tool fan-out.
 

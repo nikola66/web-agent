@@ -85,3 +85,16 @@ test("CodexResponsesStreamAdapter maps output_text deltas to content", () => {
   const last = JSON.parse(chunks[chunks.length - 1].slice(6));
   assert.equal(last.choices[0].finish_reason, "stop");
 });
+
+test("parseSubscriptionLlmTarget resolves codex models passthrough path", async () => {
+  const { parseSubscriptionLlmTarget } = await import("../scripts/subscription/llm-handler.mjs");
+  assert.deepEqual(parseSubscriptionLlmTarget("/api/llm/openai-codex/v1/models"), {
+    provider: "openai-codex",
+    targetPath: "/v1/models",
+  });
+  assert.deepEqual(parseSubscriptionLlmTarget("/api/llm/openai-codex/chat/completions"), {
+    provider: "openai-codex",
+    targetPath: "/chat/completions",
+  });
+  assert.equal(parseSubscriptionLlmTarget("/api/llm/openrouter/v1/models"), null);
+});

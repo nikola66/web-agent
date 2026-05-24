@@ -34,6 +34,15 @@
 	@shell path /index.html /sw.js /sw-register.js /version.json
 	header @shell Cache-Control "no-cache, no-store, must-revalidate"
 
+	# OpenCode Zen (Big Pickle free): /api/llm/opencode/* -> https://opencode.ai/zen/v1/*
+	handle /api/llm/opencode* {
+		uri replace /api/llm/opencode /zen/v1
+		reverse_proxy https://opencode.ai:443 {
+			flush_interval -1
+			header_up Host opencode.ai
+		}
+	}
+
 	# OpenRouter: /api/llm/openrouter/* -> https://openrouter.ai/api/v1/*
 	handle /api/llm/openrouter* {
 		uri replace /api/llm/openrouter /api/v1

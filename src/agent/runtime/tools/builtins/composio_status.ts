@@ -10,6 +10,7 @@ export default defineTool({
   name: "composio_status",
   run: composioStatusTool,
   emoji: "🔌",
+  toolGroup: "composio",
   description:
     "Check Composio configuration, connected accounts, missing app auth, and the curated marketing action allowlist. Use before external app work. Returns setup guidance when `WEBAGENT_COMPOSIO_API_KEY` is missing. Examples: " +
     JSON.stringify(EXAMPLES[0]) +

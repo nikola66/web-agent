@@ -13,7 +13,7 @@ export function setSubscriptionProxyLogger(next) {
   logger = next || null;
 }
 
-function parseSubscriptionLlmTarget(url) {
+export function parseSubscriptionLlmTarget(url) {
   const parsed = new URL(url, "http://localhost");
   const prefix = "/api/llm/";
   if (!parsed.pathname.startsWith(prefix)) return null;
@@ -42,9 +42,20 @@ export async function handleSubscriptionLlmProxy(req, res) {
 
   try {
     const body = await readRequestBody(req);
-    if (parsed.provider === "openai-codex" && parsed.targetPath.startsWith("/chat/completions")) {
+    if (parsed.provider === "openai-codex") {
       const credential = await resolveCodexSubscriptionCredential(profileId);
-      await proxyCodexChatCompletions(req, res, credential.apiKey, credential.baseUrl, body || Buffer.from("{}"));
+      if (parsed.targetPath.startsWith("/chat/completions")) {
+        await proxyCodexChatCompletions(req, res, credential.apiKey, credential.baseUrl, body || Buffer.from("{}"));
+        logger?.debug?.(req, routeId, res.statusCode);
+        return true;
+      }
+      await passthroughSubscriptionProxy(
+        req,
+        res,
+        `${credential.baseUrl}${parsed.targetPath}`,
+        credential.apiKey,
+        body
+      );
       logger?.debug?.(req, routeId, res.statusCode);
       return true;
     }

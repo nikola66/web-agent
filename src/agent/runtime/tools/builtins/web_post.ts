@@ -35,7 +35,7 @@ export default defineTool({
   run: webPostTool,
   emoji: "📮",
   description:
-    "Primary HTTP client for writes (POST/PATCH/PUT/DELETE/HEAD/OPTIONS) — Axios-like: url, method, headers, body/json/form, params, timeout_ms. Prefer over run_shell/run_python for REST, GraphQL, CMS, and webhooks. Full procedure: skill_view **`http-api`**. Pair with `web_fetch` for GET reads. Pass Bearer/API keys in `headers`, not in the URL. `body` is a JSON string when used directly; pass objects via `json`. Examples: " +
+    "Primary HTTP client for writes (POST/PATCH/PUT/DELETE/HEAD/OPTIONS). Procedure: skill_view **`http-api`**. Not for OAuth SaaS — use `composio_*`. Pair with `web_fetch` for GET. Pass Bearer/API keys in `headers`. Examples: " +
     JSON.stringify(WEB_POST_EXAMPLES[0]) +
     " | " +
     JSON.stringify(WEB_POST_EXAMPLES[2]) +

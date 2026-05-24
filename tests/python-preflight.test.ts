@@ -113,3 +113,24 @@ test("ignores subprocess python/python3 (Pyodide-friendly meta-invocation)", () 
   const pre = preflightPython(src);
   assert.equal(pre.block, undefined);
 });
+
+test("warns on urllib.request.urlopen", () => {
+  const src = `import urllib.request\nurllib.request.urlopen("https://api.example.com/x")`;
+  const pre = preflightPython(src);
+  assert.equal(pre.block, undefined);
+  assert.ok(pre.warnings.some((w) => /urllib\.request|web_fetch/i.test(w)));
+});
+
+test("warns on requests import", () => {
+  const src = `import requests\nrequests.get("https://api.example.com/x")`;
+  const pre = preflightPython(src);
+  assert.equal(pre.block, undefined);
+  assert.ok(pre.warnings.some((w) => /requests|webagent\.http/i.test(w)));
+});
+
+test("warns on http.client HTTPConnection", () => {
+  const src = `import http.client\nhttp.client.HTTPConnection("example.com")`;
+  const pre = preflightPython(src);
+  assert.equal(pre.block, undefined);
+  assert.ok(pre.warnings.some((w) => /http\.client|webagent\.http/i.test(w)));
+});

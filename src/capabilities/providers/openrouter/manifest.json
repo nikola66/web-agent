@@ -1,7 +1,6 @@
 {
   "id": "openrouter",
   "name": "OpenRouter",
-  "isDefault": true,
   "order": 1,
   "kind": "openai",
   "requiresUserApiKey": true,

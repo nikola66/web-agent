@@ -3,6 +3,14 @@ import { getDefaultPersonalityPrompt } from "@/core/personalities";
 import { DEFAULT_PROVIDER_ID, PROVIDERS } from "@/core/providers";
 import { DEFAULT_ACCENT_COLOR } from "@/core/mascots";
 import { DEFAULT_EDGE_TTS_VOICE } from "@/core/voice/edge-tts-client";
+import type { ProviderModelOverrides } from "@/core/profile-provider-models";
+export type { ProviderModelOverrides } from "@/core/profile-provider-models";
+export {
+  activeProfileModel,
+  buildProviderModelsFromProfile,
+  resolveProviderModelOverride,
+  storeProviderModelOverride,
+} from "@/core/profile-provider-models";
 
 const STORAGE_KEY = "profiles:v1";
 const STORAGE_SCHEMA_VERSION = 2;
@@ -75,8 +83,10 @@ export interface Profile {
   userName: string;
   personality: string;
   provider: ProfileProvider;
-  /** Optional model id override for the chosen provider */
+  /** Optional model id override for the active provider (denormalized from providerModels). */
   model?: string;
+  /** Per-provider model overrides for this agent profile. */
+  providerModels?: ProviderModelOverrides;
   accentColor: string;
   /** Edge TTS voice id (en-US only), e.g. en-US-AvaNeural */
   ttsVoice?: string;
@@ -168,14 +178,14 @@ const DEFAULT_PERSONALITY = getDefaultPersonalityPrompt();
 
 export function createDefaultProfile(): Profile {
   const id = crypto.randomUUID();
-  const defaultProvider = LLM_PROVIDER_CONFIG.find((provider) => provider.id === DEFAULT_PROVIDER_ID);
   return {
     id,
     name: createAgentName(),
     userName: "User",
     personality: DEFAULT_PERSONALITY,
     provider: DEFAULT_PROVIDER_ID,
-    model: defaultProvider?.model || "",
+    model: "",
+    providerModels: {},
     accentColor: DEFAULT_ACCENT_COLOR,
     ttsVoice: DEFAULT_EDGE_TTS_VOICE,
     createdAt: now(),

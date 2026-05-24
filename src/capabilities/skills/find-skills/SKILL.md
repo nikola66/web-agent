@@ -3,6 +3,7 @@ name: Find Skills
 description: Use when the user wants to discover, search, or install agent skills from online registries—top results by installs, stars, or votes. Or user sends /find_skills.
 version: 1.0.0
 category: bundled
+primary-tools: [web_search, web_fetch, skill_manage]
 tags: [skills, discovery, registry, marketplace, install, search, skills.sh, skillsmp, cursor]
 triggers: [find skill, find skills, search skills, skill marketplace, skill registry, install skill, discover skill, skills.sh, skillsmp, cursor marketplace, /find_skills, skill library, agent skill pack]
 ---

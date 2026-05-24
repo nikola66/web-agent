@@ -6,7 +6,7 @@ export default defineTool({
   run: pdfExtract as unknown as (args: unknown, ctx: unknown) => Promise<unknown>,
   emoji: "📕",
   description:
-    "Best-effort plain-text extraction from a PDF. Required: `path` (workspace-relative). " +
+    "Best-effort plain-text extraction from a PDF — try before `run_python` for simple text. Required: `path` (workspace-relative). " +
     "Optional: `max_chars` (default 500000). Supports FlateDecode content streams; " +
     "encrypted PDFs and PDFs with custom font encodings (often: scanned, exported from design tools) may return gibberish or empty text. " +
     "If `text` is empty or unreadable, treat the PDF as needing OCR / a richer extractor and tell the user. " +

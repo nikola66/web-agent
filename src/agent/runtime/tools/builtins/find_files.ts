@@ -5,9 +5,10 @@ export default defineTool({
   name: "find_files",
   run: findFilesTool,
   emoji: "🔎",
+  llmVisible: false,
+  toolGroup: "core",
   description:
-    "Find files by name/path across the workspace (cross-tree). One pattern: substring or glob (*.md, **/plan.md). " +
-    "For listing a single directory only, use `list_dir`. " +
+    "Find files by **name/path** across the workspace (cross-tree). Uses **`pattern`** (not for content — use `grep`). For listing one directory only, use `list_dir`. " +
     "Multiple tokens: patterns: [\"ainex\",\"outreach\"] (AND) or matchMode: \"any\" for OR. " +
     "Comma-separated AND: pattern: \"ainex,outreach\". Avoid *token* globs—use patterns without stars. " +
     "Optional root/path (default `.`). Skips node_modules, dist, etc.",

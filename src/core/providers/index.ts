@@ -19,6 +19,7 @@ export interface ProviderDefinition {
     customBaseUrlEnvVar?: string;
     ensureV1Suffix?: boolean;
     extraHeaders?: Record<string, string>;
+    builtinApiKey?: string;
   };
 }
 

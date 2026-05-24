@@ -3,6 +3,7 @@ name: Systematic Debugging
 description: Use when the user reports a bug, error, flaky test, crash, regression, or "it doesn't work"—hypothesis-first debugging before random edits.
 version: 1.0.0
 category: bundled
+primary-tools: [read_file, grep, file_diff]
 tags: [debugging, bug, error, flaky, crash, regression, test-failure, investigation]
 triggers: [bug, error, fails, flaky, crash, regression, test failure, doesn't work, debug this, broken, not working, read_file, grep, file_diff]
 ---

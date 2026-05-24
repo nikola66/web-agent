@@ -10,6 +10,12 @@ import {
 import { startAgent, stopAgent } from "@/core/orchestrator";
 import { createAgentName, type Profile } from "@/core/profiles";
 import {
+  type ProviderModelOverrides,
+  buildProviderModelsFromProfile,
+  resolveProviderModelOverride,
+  storeProviderModelOverride,
+} from "@/core/profile-provider-models";
+import {
   DEFAULT_EDGE_TTS_VOICE,
   EDGE_TTS_LOCALE_LABEL,
   fetchEdgeTtsVoices,
@@ -90,6 +96,7 @@ export function ProfileEditor(props: {
   const [personality, setPersonality] = useState("");
   const [provider, setProvider] = useState<Profile["provider"]>(DEFAULT_PROVIDER_ID);
   const [model, setModel] = useState("");
+  const [providerModels, setProviderModels] = useState<ProviderModelOverrides>({});
   const [accentColor, setAccentColor] = useState(DEFAULT_ACCENT_COLOR);
   const [ttsVoice, setTtsVoice] = useState(DEFAULT_EDGE_TTS_VOICE);
   const [ttsVoiceOptions, setTtsVoiceOptions] = useState<EdgeTtsVoiceOption[]>([]);
@@ -149,10 +156,18 @@ export function ProfileEditor(props: {
         setPersonalityPresetId(matchingPreset?.id ?? CUSTOM_PERSONALITY_OPTION);
         setProvider(isKnownProvider(editing.provider) ? editing.provider : DEFAULT_PROVIDER_ID);
         const loadedProvider = isKnownProvider(editing.provider) ? editing.provider : DEFAULT_PROVIDER_ID;
-        const providerDefaultModel =
-          LLM_PROVIDERS.find((p) => p.id === loadedProvider)?.model?.trim() ?? "";
-        const storedModel = (editing.model || "").trim();
-        setModel(storedModel && storedModel !== providerDefaultModel ? storedModel : "");
+        const loadedProviderModels = buildProviderModelsFromProfile(
+          editing,
+          LLM_PROVIDERS.find((p) => p.id === loadedProvider)?.model?.trim() ?? ""
+        );
+        setProviderModels(loadedProviderModels);
+        setModel(
+          resolveProviderModelOverride(
+            loadedProvider,
+            loadedProviderModels,
+            LLM_PROVIDERS.find((p) => p.id === loadedProvider)?.model?.trim() ?? ""
+          )
+        );
         setAccentColor(editing.accentColor);
         setTtsVoice(resolveProfileTtsVoice(editing));
         const creds = await loadProfileCredentials(editing.id);
@@ -166,6 +181,7 @@ export function ProfileEditor(props: {
         setPersonality(getDefaultPersonalityPrompt());
         setProvider(DEFAULT_PROVIDER_ID);
         setModel("");
+        setProviderModels({});
         setAccentColor(randomAccentColor());
         setTtsVoice(DEFAULT_EDGE_TTS_VOICE);
         setApiKey("");
@@ -190,7 +206,21 @@ export function ProfileEditor(props: {
 
   const profileScopeId = editing?.id ?? draftProfileId;
 
+  const providerDefaultModel = (providerId: string) =>
+    LLM_PROVIDERS.find((p) => p.id === providerId)?.model?.trim() ?? "";
+
   const save = async () => {
+    const finalProviderModels = storeProviderModelOverride(
+      providerModels,
+      provider,
+      model,
+      providerDefaultModel(provider)
+    );
+    const activeModelOverride = resolveProviderModelOverride(
+      provider,
+      finalProviderModels,
+      providerDefaultModel(provider)
+    );
     let profileId: string;
     if (editing) {
       profileId = editing.id;
@@ -199,7 +229,8 @@ export function ProfileEditor(props: {
         userName,
         personality,
         provider,
-        model: model.trim(),
+        model: activeModelOverride,
+        providerModels: finalProviderModels,
         accentColor,
         ttsVoice,
       });
@@ -213,7 +244,8 @@ export function ProfileEditor(props: {
         userName,
         personality,
         provider,
-        model: model.trim(),
+        model: activeModelOverride,
+        providerModels: finalProviderModels,
         accentColor,
         ttsVoice,
       }, { setActive: !keepActiveProfile, id: draftProfileId });
@@ -240,6 +272,24 @@ export function ProfileEditor(props: {
 
   const providerDefaultModelPlaceholder =
     LLM_PROVIDERS.find((p) => p.id === provider)?.model?.trim() || "Default";
+
+  const onProviderChange = (nextProvider: string) => {
+    const updatedProviderModels = storeProviderModelOverride(
+      providerModels,
+      provider,
+      model,
+      providerDefaultModel(provider)
+    );
+    setProviderModels(updatedProviderModels);
+    setProvider(nextProvider as Profile["provider"]);
+    setModel(
+      resolveProviderModelOverride(
+        nextProvider,
+        updatedProviderModels,
+        providerDefaultModel(nextProvider)
+      )
+    );
+  };
 
   const dialog = (
     <div
@@ -376,30 +426,42 @@ export function ProfileEditor(props: {
                 )}
               </div>
 
-              <div className="grid grid-cols-2 gap-2">
+              {provider === "opencode" ? (
                 <Field label="Provider">
                   <SearchableSelect
                     value={provider}
                     options={PROVIDER_OPTIONS}
                     searchPlaceholder="Search provider..."
                     className="w-full"
-                    onChange={(nextProvider) => setProvider(nextProvider as Profile["provider"])}
+                    onChange={onProviderChange}
                   />
                 </Field>
-                <Field label="Model override">
-                  <input
-                    value={model}
-                    onChange={(e) => setModel(e.target.value)}
-                    placeholder={providerDefaultModelPlaceholder}
-                    aria-label="Model override"
-                    className="w-full bg-transparent px-2.5 py-1.5 text-xs text-text-primary outline-none placeholder:text-text-muted"
-                    style={{
-                      border: "1px solid var(--color-border)",
-                      borderRadius: "var(--radius-sm)",
-                    }}
-                  />
-                </Field>
-              </div>
+              ) : (
+                <div className="grid grid-cols-2 gap-2">
+                  <Field label="Provider">
+                    <SearchableSelect
+                      value={provider}
+                      options={PROVIDER_OPTIONS}
+                      searchPlaceholder="Search provider..."
+                      className="w-full"
+                      onChange={onProviderChange}
+                    />
+                  </Field>
+                  <Field label="Model override">
+                    <input
+                      value={model}
+                      onChange={(e) => setModel(e.target.value)}
+                      placeholder={providerDefaultModelPlaceholder}
+                      aria-label="Model override"
+                      className="w-full bg-transparent px-2.5 py-1.5 text-xs text-text-primary outline-none placeholder:text-text-muted"
+                      style={{
+                        border: "1px solid var(--color-border)",
+                        borderRadius: "var(--radius-sm)",
+                      }}
+                    />
+                  </Field>
+                </div>
+              )}
 
               {(() => {
                 const selectedProvider = LLM_PROVIDERS.find((p) => p.id === provider);

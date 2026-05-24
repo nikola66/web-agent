@@ -3,6 +3,7 @@ name: Open Web Research
 description: Use when the user wants to find, list, or discover people, creators, companies, or content on the open web—search many queries, fetch URLs, then synthesize.
 version: 1.1.0
 category: bundled
+primary-tools: [web_search, web_fetch, artifact_present]
 tags: [research, web, search, discovery, creators, influencers, competitors, list]
 triggers: [find youtubers, list creators, who posts about, discover, search for, competitors, influencers, channels about, posting about, web_search, web_fetch, artifact_present]
 ---

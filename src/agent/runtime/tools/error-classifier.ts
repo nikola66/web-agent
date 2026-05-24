@@ -163,6 +163,24 @@ function classifyFromMessage(message: string, statusHint: number | null): Omit<C
   }
 
   if (
+    /JsProxy.*not iterable|pyodide\.ffi\.JsProxy|urllib\.request\.urlopen/i.test(message)
+  ) {
+    reason = "format_error";
+    retryable = false;
+    shouldFallback = true;
+    error_code = "pyodide_http_jsproxy";
+    return {
+      reason,
+      retryable,
+      shouldCompress,
+      shouldFallback,
+      error_code,
+      hintBase:
+        "Pyodide HTTP failed with a JsProxy/urllib error. Decision tree: agent one-off REST → web_fetch/web_post; reusable Python script → `import webagent.http as http` inside run_python; avoid requests/httpx in Pyodide.",
+    };
+  }
+
+  if (
     TIMEOUT_RE.test(message) ||
     statusHint === 408
   ) {

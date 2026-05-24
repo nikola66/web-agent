@@ -447,7 +447,7 @@ export function ChatInput() {
   const onSubmit = async () => {
     if (uploadInFlight) return;
     const line = value.trim();
-    if (!line && readyAttachmentPaths.length === 0) return;
+    if (!line && readyAttachmentPaths.length === 0 && !onboardingActive) return;
     const pid = activeProfileId;
     let message = line;
     message = appendReferencedFilesNote(message, extractAtReferences(message));
@@ -812,17 +812,19 @@ export function ChatInput() {
           disabled={disabled || recState === "recording" || voiceSending}
           className="min-h-10 resize-none overflow-y-hidden flex-1 bg-transparent py-2 text-sm leading-5 text-text-primary outline-none placeholder:text-text-muted disabled:cursor-not-allowed disabled:opacity-60 md:min-h-7 md:py-1.5"
           placeholder={
-            runtimeStatus === "running"
-              ? recState === "recording"
-                ? "Recording… click mic to stop and send"
-                : voiceSending
-                  ? "Sending voice message…"
-                  : uploadInFlight
-                    ? "Uploading files…"
-                    : readyAttachmentPaths.length > 0
-                      ? "Add a message about these files (Enter to send)"
-                      : "Type message (Enter to send, @ to reference files)"
-              : "Launch the agent to start chatting"
+            onboardingActive
+              ? "Press Enter to accept default, or type a name"
+              : runtimeStatus === "running"
+                ? recState === "recording"
+                  ? "Recording… click mic to stop and send"
+                  : voiceSending
+                    ? "Sending voice message…"
+                    : uploadInFlight
+                      ? "Uploading files…"
+                      : readyAttachmentPaths.length > 0
+                        ? "Add a message about these files (Enter to send)"
+                        : "Type message (Enter to send, @ to reference files)"
+                : "Launch the agent to start chatting"
           }
         />
 

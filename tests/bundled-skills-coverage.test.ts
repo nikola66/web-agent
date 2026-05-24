@@ -131,8 +131,9 @@ test("every bundled capability skill is indexed and viewable on demand", async (
 test("skills context index matches user message to triggers", async () => {
   invalidateSkillsContextCache();
   const context = await buildSkillsContextBlock();
-  assert.match(context, /Before replying, scan the skills below/);
-  assert.match(context, /MUST call `skill_view`/);
+  assert.match(context, /one capability surface with built-in tools/);
+  assert.match(context, /Capability router.*above picks the hub/);
+  assert.match(context, /skill_view/);
   assert.match(context, /systematic-debugging/);
   assert.match(context, /\| triggers:.*\bbug\b/);
 });

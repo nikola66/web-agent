@@ -1,0 +1,33 @@
+import { defineTool } from "../definition.js";
+import { describeDeferredTool } from "../tool-search-tools.js";
+
+export default defineTool({
+  name: "tool_activate",
+  run: async (args) => {
+    const name = String(args?.name ?? args?.tool ?? "").trim();
+    if (!name) throw new Error("tool_activate requires `name`.");
+    const meta = await describeDeferredTool(name);
+    if (!meta) {
+      throw new Error(`Tool '${name}' is not a deferred tool or is already active. Use tool_search first.`);
+    }
+    return {
+      ok: true,
+      activated: name,
+      description: meta.description,
+      activates_next_round: true,
+    };
+  },
+  emoji: "🔓",
+  toolGroup: "core",
+  description:
+    "Activate a deferred tool (usually MCP) for the next agent round in this turn. " +
+    "Call `tool_search` first, then `tool_activate` with the exact tool name, then call the tool on the following round.",
+  inputSchema: {
+    type: "object",
+    properties: {
+      name: { type: "string", description: "Exact deferred tool name (e.g. mcp_github_create_issue)." },
+    },
+    required: ["name"],
+    additionalProperties: false,
+  },
+});

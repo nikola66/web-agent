@@ -67,7 +67,6 @@ export const PYODIDE_PACKAGE_MAP: Record<string, string> = {
   matplotlib: "matplotlib",
   seaborn: "seaborn",
   statsmodels: "statsmodels",
-  sklearn: "scikit-learn",
   joblib: "joblib",
   // Bio / science (some in Pyodide)
   biopython: "biopython",
@@ -367,6 +366,33 @@ export function preflightPython(
   if (/\bsys\.(?:stdout|stderr)\.reconfigure\s*\(/.test(text)) {
     warnings.push(
       "sys.stdout.reconfigure / sys.stderr.reconfigure are host-Python only — remove them for Pyodide or the script may crash with JsProxy errors."
+    );
+  }
+
+  // 6. HTTP clients — urllib is proxy-shimmed; requests/httpx may still hit JsProxy.
+  if (/\burllib\.request\.(?:urlopen|urlretrieve)\s*\(/.test(text)) {
+    warnings.push(
+      "Script uses urllib.request HTTP — routed via /api/proxy in Pyodide. For REST/CMS/GraphQL workflows, prefer agent `web_fetch`/`web_post`."
+    );
+  }
+  if (/\bimport\s+requests\b|\bfrom\s+requests\b/.test(text)) {
+    warnings.push(
+      "Script imports `requests` — may hit Pyodide JsProxy issues. Prefer `webagent.http` inside run_python or `web_fetch`/`web_post` at agent level."
+    );
+  }
+  if (/\bimport\s+httpx\b|\bfrom\s+httpx\b/.test(text)) {
+    warnings.push(
+      "Script imports `httpx` — may hit Pyodide JsProxy issues. Prefer `webagent.http` inside run_python or `web_fetch`/`web_post` at agent level."
+    );
+  }
+  if (/\bimport\s+aiohttp\b|\bfrom\s+aiohttp\b/.test(text)) {
+    warnings.push(
+      "Script imports `aiohttp` — async HTTP is fragile in Pyodide. Prefer `webagent.http` or agent `web_fetch`/`web_post`."
+    );
+  }
+  if (/\bhttp\.client\.(?:HTTPConnection|HTTPSConnection)\s*\(/.test(text)) {
+    warnings.push(
+      "Script uses http.client raw sockets — unavailable in Pyodide. Use `webagent.http` or agent `web_fetch`/`web_post`."
     );
   }
 

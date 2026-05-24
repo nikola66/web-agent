@@ -1,6 +1,7 @@
 import { HIDDEN_STREAM_MARKERS, LLM_REQUEST_TIMEOUT_MS } from "../constants.js";
 import { ipcProxyStreamRequest, ipcProxyRequest } from "../ipc.js";
 import { logDebugEvent } from "../logging/debug-log.js";
+import { shouldUseNodeboxLlmProxy } from "./http-utils.js";
 import { llmChatCompletionExtras } from "./provider-config.js";
 import { classifyLlmProviderError, formatClassifiedLlmError } from "./llm-error-classifier.js";
 import {
@@ -168,6 +169,15 @@ export function estimateMessagesTokens(messages) {
   let total = 0;
   for (const msg of messages || []) total += estimateMessageTokens(msg);
   return total + 2;
+}
+
+export function estimateToolSchemaTokens(tools) {
+  if (!Array.isArray(tools) || !tools.length) return 0;
+  try {
+    return estimateTokens(JSON.stringify(tools));
+  } catch {
+    return 0;
+  }
 }
 
 export async function fetchWithTimeout(url, options = {}, timeoutMs = LLM_REQUEST_TIMEOUT_MS, label = "LLM request") {
@@ -348,12 +358,6 @@ function parseOpenAiStreamPayload(payload, toolAcc, onContent) {
   return { sawReasoning, finishReason };
 }
 
-function shouldUseIpcStream(endpoint) {
-  if (String(process.env.WEBAGENT_RUNTIME || "").trim() !== "nodebox") return false;
-  const appOrigin = String(process.env.WEBAGENT_APP_ORIGIN || "").trim().replace(/\/$/, "");
-  return !!(appOrigin && String(endpoint || "").startsWith(`${appOrigin}/api/llm/`));
-}
-
 export async function streamOpenAI(messages, cfg, onDelta, tools, options = {}) {
   const headers = sanitizeHeadersForFetch({
     "Content-Type": "application/json",
@@ -391,7 +395,7 @@ export async function streamOpenAI(messages, cfg, onDelta, tools, options = {}) 
     toolCount: toolList.length,
   });
   const STREAM_HTTP_MAX_ATTEMPTS = getLlmInitialHttpMaxAttempts();
-  const useIpcStream = shouldUseIpcStream(endpoint);
+  const useIpcStream = shouldUseNodeboxLlmProxy(endpoint);
   let buf = "";
   const fullParts: string[] = [];
   let sawReasoning = false;
@@ -706,7 +710,7 @@ export async function completeOpenAiChat(messages, cfg, options = {}) {
       await sleepMs(delayMs);
     }
     try {
-      if (shouldUseIpcStream(endpoint)) {
+      if (shouldUseNodeboxLlmProxy(endpoint)) {
         const raw = await ipcProxyRequest({
           method: "POST",
           url: endpoint,

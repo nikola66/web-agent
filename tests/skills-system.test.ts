@@ -368,6 +368,13 @@ test("saveSkill appends Web Agent execution section for imported WebFetch skills
   assert.ok(Array.isArray(viewed.compatibility_notes));
 });
 
+test("skill_view returns primary_tools from bundled skill frontmatter", async () => {
+  const viewed = await viewSkill({ name: "http-api" });
+  assert.ok(Array.isArray(viewed.primary_tools));
+  assert.ok(viewed.primary_tools.includes("web_fetch"));
+  assert.ok(viewed.primary_tools.includes("web_post"));
+});
+
 test("skill_view returns compatibility_notes for imported external-tool skills", async (t) => {
   const name = `Compat View ${Date.now()}`;
   const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");

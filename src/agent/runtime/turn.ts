@@ -39,6 +39,7 @@ import {
 import {
   createToolAwareStreamWriter,
   estimateMessagesTokens,
+  estimateToolSchemaTokens,
   extractClarifyMarkers,
   extractJsonToolCallPayloads,
   extractMarkerTools,
@@ -85,6 +86,16 @@ import {
   setCachedSystemPrompt,
 } from "./system-prompt-cache.js";
 import { buildMemoryLayerGuidanceBlock } from "./memory-guidance.js";
+import { buildCapabilityRouterBlock } from "./capability-router.js";
+import {
+  ensureDefaultToolPolicy,
+  loadToolPolicy,
+  resolveInitialActiveToolNames,
+  resolvePolicyToolNames,
+  canUnlockTool,
+  type ToolPolicyConfig,
+} from "./tools/tool-policy-config.js";
+import { resolveSkillPrimaryToolsForSlug } from "./memory/skills.js";
 import {
   buildContinuationNudge,
   buildEmptyRecoveryUserMessage,
@@ -175,8 +186,7 @@ const STATIC_TOOL_DISCIPLINE =
   "\n\nTools: prefer native tool calls and respect each tool's schema (especially `required` fields). For files/URLs/shell/external/memory data, use tools first, then answer. Never copy terminal status lines (e.g. lines starting with ✓ or parenthetical summaries) into tool arguments—use real paths, URLs, and queries only. When the user asks for a sequence (for example, testing tools one by one), continue step-by-step without waiting for another user nudge: after you announce a step, immediately emit the corresponding tool call. No fake <tool_call> markup. Text fallback: <<<TOOL>>>{\"name\":\"read_file\",\"arguments\":{\"path\":\"relative/path\"}}<<<END>>>. Memory example: <<<TOOL>>>{\"name\":\"memory_save\",\"arguments\":{\"key\":\"user_timezone\",\"value\":\"America/New_York\"}}<<<END>>> — never call memory_save without both `key` and `value`. Tool results (compact JSON batches): each entry may contain `result` (inlined payload — use this first) or `result_ref` (spill under `memory/snapshots/` — read_file that exact path once; auto-unwrapped). Never list/grep/find_files under `memory/snapshots/` or `memory/runs/` for API data — `memory/runs/` is agent logs only. If spill files are stale/nested/missing, rerun the originating tool (`web_fetch`, `web_post`, etc.) or `session_search` for chat context — not run_shell head/tail on memory paths." +
   "\n\nExact text discipline: when the user asks for an exact string, token, filename, identifier, code symbol, JSON key, or command output, copy it byte-for-byte. Preserve underscores, hyphens, slashes, capitalization, digits, punctuation, and spacing. Never normalize or prettify exact tokens such as FOO_BAR_TOKEN." +
   "\n\nTopic discipline: when the user's latest message changes the subject or starts a new request, treat that as the active task. Do not continue earlier plans, files, or tools from older turns unless the user explicitly asks you to resume them." +
-  "\n\nSkill discipline: skills are procedural knowledge, separate from memory facts. The prompt contains only a compact skills index; call `skill_view` before relying on detailed skill instructions. Memory layer boundaries are in **Memory layers** above; for the full picker table call `skill_view` **`memory-layers`**. Saving or installing skills: `skill_view` **`web-agent-skill`**." +
-  "\n\nDomain tool discipline: bundled skills own tool choice—call `skill_view` for the matching skill before fan-out. Hubs: **`find-skills`** (online skill registries → top 5 by installs/stars/votes), **`imported-skill-compat`** (skills.sh / GitHub imports → Web Agent tool mappings), **`browser-runtime-map`** (filesystem/HTTP/shell/Python runtime), **`http-api`** (REST/GraphQL via web_fetch/web_post), **`memory-layers`** (memory/session/skills/wiki/secrets), **`artifact-delivery`** + **`chart`** (present/show/Mermaid), **`clarify`** (ambiguous intent → `<<<CLARIFY>>>` option buttons, no tools), **`open-web-research`** (discovery), **`heartbeat-cron`** (scheduled jobs), **`project-scaffold`** (projects/work paths), **`task-execution`** (multi-step plan+run). Prefer GitHub-flavored Markdown pipe tables in assistant-visible text." +
+  "\n\nSkill discipline: skills are procedural knowledge, separate from memory facts. Follow the **Capability router** below before tool fan-out; call `skill_view` on the listed hub (or matching skill from the index) before detailed work. Memory layer boundaries are in **Memory layers**; saving or installing skills: `skill_view` **`web-agent-skill`**. Prefer GitHub-flavored Markdown pipe tables in assistant-visible text." +
   "\n\nCron discipline: heartbeat jobs in `.webagent/cronjobs.json` run only on heartbeat ticks while the tab is open (`everyMinutes` + `lastRunAt`); there is no manual cron run tool. `cron_register` refresh reschedules—it does not execute the job unless a heartbeat tick is due at that moment. If the user wants work now, run the job step tools in this chat (or invoke the relevant skill)—never claim to \"run the cron manually\". Before explaining cron timing or where output goes, call `cron_list` or `skill_view` **`heartbeat-cron`** and cite `outputDestination`, `nextEligibleAtMs`, and `schedulingNote` from tool output. Delivery: Silent (logs only), Web UI (`delivery: terminal`), Web UI + Telegram (`terminal` + `notifyChannel`), Email (`delivery: email` + `deliveryEmailTo`)." +
   "\n\nArchive discipline: `extract_archive` / `archive_list` are read-only. There is no `create_archive` tool. To bundle files into a `.zip`, use `run_python` with stdlib `zipfile`, write to `work/<slug>/` or `projects/<slug>/`, verify with `archive_list`, deliver with `artifact_present`. Do not invent `create_archive`, use shell `zip`, or substitute a `.txt` concat unless the user explicitly accepts non-zip delivery.";
 
@@ -325,24 +335,33 @@ export async function agentTurn(
       [...safeList].reverse().find((message) => message.role === "user")?.content ||
       ""
   ).trim();
-  const toolNames = focusToolNamesForIntent(filterToolNames(allToolNames, turnMeta), originalUserInput);
+  await ensureDefaultToolPolicy();
+  const toolPolicy: ToolPolicyConfig | null = await loadToolPolicy();
+  const policyToolNames = resolvePolicyToolNames(allToolNames, toolPolicy, process.env);
+  const filteredPolicyNames = focusToolNamesForIntent(
+    filterToolNames(policyToolNames, turnMeta),
+    originalUserInput
+  );
+  const unlockedTools = new Set<string>();
+  let activeToolNames = resolveInitialActiveToolNames(
+    filteredPolicyNames,
+    allToolNames,
+    toolPolicy,
+    process.env,
+    unlockedTools
+  );
+  const executionToolNames = allToolNames;
   const memoryBlock = await buildMemoryContextBlock({ goal: originalUserInput });
-  const skillsBlock = await buildSkillsContextBlock(toolNames);
+  const skillsBlock = await buildSkillsContextBlock(activeToolNames);
   const toolCatalog = await loadToolCatalog();
-  const filteredCatalog =
-    toolNames.length === allToolNames.length
-      ? toolCatalog
-      : Object.fromEntries(Object.entries(toolCatalog).filter(([name]) => toolNames.includes(name)));
-  const toolNamesKey = `${toolNames.join(",")}::${catalogSchemaFingerprint(filteredCatalog)}`;
-  let openAiTools = _openAiToolsCache;
-  if (turnMeta?.textOnly !== true) {
-    if (_openAiToolsCacheKey !== toolNamesKey || !openAiTools) {
-      openAiTools = await buildOpenAiToolDefinitions(filteredCatalog);
-      _openAiToolsCacheKey = toolNamesKey;
-      _openAiToolsCache = openAiTools;
-    }
-  }
-  const streamTools = turnMeta?.textOnly === true ? [] : openAiTools!;
+  const buildActiveCatalog = (names: string[]) =>
+    Object.fromEntries(Object.entries(toolCatalog).filter(([name]) => names.includes(name)));
+  const rebuildStreamTools = async (names: string[]) => {
+    if (turnMeta?.textOnly === true) return [];
+    return buildOpenAiToolDefinitions(buildActiveCatalog(names));
+  };
+  let streamTools = await rebuildStreamTools(activeToolNames);
+  let streamToolsKey = `${activeToolNames.join(",")}::${catalogSchemaFingerprint(buildActiveCatalog(activeToolNames))}`;
   const planExecutionPrefix =
     !turnMeta?.textOnly && originalUserInput
       ? buildPlanExecutionContextPrefix(originalUserInput)
@@ -360,11 +379,70 @@ export async function agentTurn(
       ? buildApiCallContextPrefix(originalUserInput)
       : null;
   const volatileToolHint =
+    buildCapabilityRouterBlock(activeToolNames) +
     buildExecutionGuidanceBlock(typeof cfg.model === "string" ? cfg.model : null) +
-    buildMemoryLayerGuidanceBlock(toolNames) +
-    "\n\nTool names: " +
-    toolNames.join(", ") +
-    ".";
+    buildMemoryLayerGuidanceBlock(activeToolNames);
+
+  const refreshActiveToolState = async () => {
+    activeToolNames = resolveInitialActiveToolNames(
+      filteredPolicyNames,
+      allToolNames,
+      toolPolicy,
+      process.env,
+      unlockedTools
+    );
+    const nextKey = `${activeToolNames.join(",")}::${catalogSchemaFingerprint(buildActiveCatalog(activeToolNames))}`;
+    if (nextKey !== streamToolsKey) {
+      streamToolsKey = nextKey;
+      streamTools = await rebuildStreamTools(activeToolNames);
+    }
+    const activeState = turnCtx.services?.activeToolNamesState as { list?: string[] } | undefined;
+    if (activeState) activeState.list = activeToolNames;
+    const systemRow = conv[0] as ChatTurnMsg | undefined;
+    if (systemRow?.role === "system") {
+      const refreshedSkills = await buildSkillsContextBlock(activeToolNames);
+      systemRow.content =
+        sys +
+        memoryBlock +
+        refreshedSkills +
+        buildCapabilityRouterBlock(activeToolNames) +
+        buildExecutionGuidanceBlock(typeof cfg.model === "string" ? cfg.model : null) +
+        buildMemoryLayerGuidanceBlock(activeToolNames);
+    }
+  };
+
+  const noteToolUnlocksFromResults = async (
+    exec: Array<Record<string, unknown>>,
+    calls: Array<{ name?: string; arguments?: unknown }>
+  ) => {
+    let changed = false;
+    for (const item of exec) {
+      if (item?.error) continue;
+      const tname = String(item?.tool || "");
+      const call = calls.find((row) => String(row?.name || "") === tname);
+      if (tname === "tool_activate") {
+        const activated = String((item.result as { activated?: string } | undefined)?.activated || "").trim();
+        if (activated && canUnlockTool(activated, allToolNames, toolPolicy, process.env)) {
+          unlockedTools.add(activated);
+          changed = true;
+        }
+        continue;
+      }
+      if (tname !== "skill_view") continue;
+      const result = item.result as { primary_tools?: string[]; slug?: string } | undefined;
+      const fromResult = Array.isArray(result?.primary_tools) ? result.primary_tools : [];
+      const slug = String(result?.slug || (call?.arguments as { name?: string })?.name || "").trim();
+      const primaryTools = fromResult.length ? fromResult : (slug ? await resolveSkillPrimaryToolsForSlug(slug) : []);
+      for (const toolName of primaryTools) {
+        if (!canUnlockTool(toolName, allToolNames, toolPolicy, process.env)) continue;
+        if (!unlockedTools.has(toolName)) {
+          unlockedTools.add(toolName);
+          changed = true;
+        }
+      }
+    }
+    if (changed) await refreshActiveToolState();
+  };
 
   const fullMessages = [
     { role: "system", content: sys + memoryBlock + skillsBlock + volatileToolHint },
@@ -385,7 +463,11 @@ export async function agentTurn(
       providerId: (cfg.provider as string | undefined) ?? null,
       modelId: (cfg.model as string | undefined) ?? null,
     },
-    services: { memory: memoryServices, ...(turnMeta?.services ?? {}) },
+    services: {
+      memory: memoryServices,
+      activeToolNamesState: { list: activeToolNames },
+      ...(turnMeta?.services ?? {}),
+    },
     ask: typeof turnMeta?.ask === "function" ? turnMeta.ask : null,
     onTranscript: typeof turnMeta?.onTranscript === "function" ? turnMeta.onTranscript : null,
     autoApprove:
@@ -482,7 +564,8 @@ export async function agentTurn(
       emitContextUpdate({
         modelId: cfg.model || null,
         contextWindowTokens: cfg.contextWindowTokens ?? null,
-        estimatedPromptTokens: estimateMessagesTokens(conv),
+        estimatedPromptTokens:
+          estimateMessagesTokens(conv) + estimateToolSchemaTokens(streamTools),
       });
       let acc = "";
       let streamedVisible = "";
@@ -527,18 +610,18 @@ export async function agentTurn(
       const nativeOrMarkerCount =
         (streamResult?.toolCalls?.length || 0) + markerParsed.tools.length + toolCallTagParsed.tools.length;
       const jsonFallbackParsed = nativeOrMarkerCount === 0
-        ? extractJsonToolCallPayloads(toolCallTagParsed.visible, toolNames)
+        ? extractJsonToolCallPayloads(toolCallTagParsed.visible, activeToolNames)
         : { tools: [], visible: toolCallTagParsed.visible };
       const jsonFallbackCalls = jsonFallbackParsed.tools;
       const looseCallParsed =
         nativeOrMarkerCount === 0 && jsonFallbackCalls.length === 0
-          ? extractLooseCallToolLines(jsonFallbackParsed.visible, toolNames)
+          ? extractLooseCallToolLines(jsonFallbackParsed.visible, activeToolNames)
           : { tools: [], visible: jsonFallbackParsed.visible };
       const plainCommandParsed =
         nativeOrMarkerCount === 0 &&
         jsonFallbackCalls.length === 0 &&
         looseCallParsed.tools.length === 0
-          ? extractPlainToolCommandLines(looseCallParsed.visible, toolNames)
+          ? extractPlainToolCommandLines(looseCallParsed.visible, activeToolNames)
           : { tools: [], visible: looseCallParsed.visible };
       const rawToolCalls = [
         ...(streamResult?.toolCalls || []),
@@ -548,7 +631,7 @@ export async function agentTurn(
         ...looseCallParsed.tools,
         ...plainCommandParsed.tools,
       ];
-      let { normalized: tools, rejected } = normalizeToolCalls(rawToolCalls, toolNames);
+      let { normalized: tools, rejected } = normalizeToolCalls(rawToolCalls, executionToolNames);
       if (clarifyEmitted) tools = [];
       const duplicateSuccessfulTools: typeof tools = [];
       tools = tools.filter((tool) => {
@@ -565,9 +648,9 @@ export async function agentTurn(
         rejectedReasons: rejected.map((entry) => entry.reason),
         skippedAlreadySuccessfulToolCalls: duplicateSuccessfulTools.length,
       });
-      let visible = sanitizeAssistantVisibleText(plainCommandParsed.visible, toolNames);
+      let visible = sanitizeAssistantVisibleText(plainCommandParsed.visible, activeToolNames);
       if (!visible.trim() && streamedVisible.trim()) {
-        visible = sanitizeAssistantVisibleText(streamedVisible, toolNames);
+        visible = sanitizeAssistantVisibleText(streamedVisible, activeToolNames);
       }
       visible = normalizeLatexInlineSymbols(repairExactResponseText(originalUserInput, visible));
       const reasoningOnlyNoVisible =
@@ -929,7 +1012,7 @@ export async function agentTurn(
       }
 
       const runResults =
-        runnableTools.length > 0 ? await runTools(runnableTools, turnCtx, filteredCatalog) : [];
+        runnableTools.length > 0 ? await runTools(runnableTools, turnCtx, toolCatalog) : [];
       let resultIdx = 0;
       for (let i = 0; i < exec.length; i++) {
         if (!exec[i]?.__pending) continue;
@@ -972,6 +1055,7 @@ export async function agentTurn(
       }
 
       lastToolExecutions = exec;
+      await noteToolUnlocksFromResults(exec, tools);
       if (exec.length > 0) {
         executedToolsInTurn = true;
         toolCallCountInTurn += exec.length;

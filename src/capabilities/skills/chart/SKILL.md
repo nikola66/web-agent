@@ -3,6 +3,7 @@ name: Chart
 description: Use when a visual would clarify a plan, flow, or report — ```mermaid fences plus artifact_present View popup for SVG (GitHub-style).
 version: 1.0.0
 category: bundled
+primary-tools: [artifact_present]
 tags: [chart, mermaid, diagram, visual, flowchart, sequence, gantt, mindmap, artifact]
 triggers: [chart, diagram, mermaid, flowchart, sequence diagram, gantt, mindmap, draw, visualize, show the flow, architecture diagram, state machine, artifact_present, show diagram, render diagram]
 ---

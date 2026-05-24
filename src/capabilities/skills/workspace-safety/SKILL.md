@@ -3,6 +3,7 @@ name: Workspace Safety
 description: Use when the user wants backup, export, checkpoint, or before bulk deletes, rm -rf, or wide refactors.
 version: 1.0.0
 category: bundled
+primary-tools: [write_file, delete_file, move_file]
 tags: [backup, export, checkpoint, safety, destructive, rollback, isolate]
 triggers: [backup, export profile, checkpoint, rollback, before delete, rm -rf, wipe workspace, risky refactor, save state, delete_file, move_file]
 ---

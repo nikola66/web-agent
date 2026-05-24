@@ -209,6 +209,19 @@ function normalizeShellEnv(env) {
   return Object.keys(out).length ? out : undefined;
 }
 
+function suggestedToolFromHint(hint: string, binary = ""): string {
+  const lower = String(binary || "").toLowerCase();
+  if (["curl", "wget"].includes(lower)) return "web_fetch";
+  if (lower === "gh") return "web_fetch";
+  if (["vercel", "netlify", "flyctl", "fly", "railway", "heroku", "stripe", "firecrawl", "tesseract"].includes(lower)) {
+    return /web_fetch|GET\b/i.test(hint) && !/web_post|POST|GraphQL/i.test(hint) ? "web_fetch" : "web_post";
+  }
+  if (/web_post|GraphQL|POST https/i.test(hint)) return "web_post";
+  if (/web_fetch|GET https|REST API via `web_fetch`/i.test(hint)) return "web_fetch";
+  if (/grep tool/i.test(hint)) return "grep";
+  return "run_python";
+}
+
 function nodeboxUnsupportedCommand(command) {
   const trimmed = String(command || "").trim();
   if (!trimmed || /^node\b/i.test(trimmed)) return null;
@@ -260,11 +273,12 @@ function nodeboxUnsupportedCommand(command) {
   // Native binary / platform tool — pull hint from shared registry.
   // Surfaces the same actionable message whether the caller reaches for run_shell or run_python.
   if (UNSUPPORTED_BINARIES[lower]) {
+    const hint = UNSUPPORTED_BINARIES[lower];
     return {
       error_code: "nodebox_native_binary_unsupported",
       unsupported_reason: `Native binary \`${lower}\` is not available in browser-only Nodebox.`,
-      suggested_tool: "run_python",
-      suggested_next_step: UNSUPPORTED_BINARIES[lower],
+      suggested_tool: suggestedToolFromHint(hint, lower),
+      suggested_next_step: hint,
     };
   }
   if (/[|;&<>]/.test(trimmed)) {
@@ -450,7 +464,10 @@ export function runShellTool(args, ctx) {
       if (virtualResult) return virtualResult;
       const pythonArgs = parseNodeboxPythonCommand(command);
       if (pythonArgs) {
-        return runPythonTool({ ...pythonArgs, cwd, env, timeout_ms }, ctx);
+        return runPythonTool({ ...pythonArgs, cwd, env, timeout_ms }, ctx).then((result) => ({
+          ...(result && typeof result === "object" ? result : { stdout: String(result ?? ""), stderr: "", exit_code: 0, signal: null }),
+          routed_via: "run_python",
+        }));
       }
       const unsupported = nodeboxUnsupportedCommand(command);
       if (unsupported) {

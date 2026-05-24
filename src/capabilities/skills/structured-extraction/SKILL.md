@@ -3,6 +3,7 @@ name: Structured Extraction
 description: Use when the user wants tables, lists, or JSON pulled from fetched pages, feeds, or APIs—web_fetch then parse cleanly.
 version: 1.0.0
 category: bundled
+primary-tools: [web_fetch, run_python, write_file]
 tags: [extraction, scraping, parsing, etl, web_fetch, data]
 triggers: [scrape, extract table, parse html, structured data, csv from page, json from feed, normalize results, dedupe rows, list from page, web_fetch, write_file]
 ---
@@ -12,7 +13,7 @@ triggers: [scrape, extract table, parse html, structured data, csv from page, js
 | Step | Tool |
 |------|------|
 | Fetch source | `web_fetch` (or URLs from **`open-web-research`**) |
-| Parse on Nodebox | `run_python` or a small `run_shell` `node -e` snippet — see **`browser-runtime-map`** |
+| Parse on Nodebox | `run_python` + beautifulsoup4/lxml (auto-loaded) — see **`browser-runtime-map`** |
 | Persist rows | `write_file` under `work/<slug>/` |
 | Deliver to user | `artifact_present` — **`artifact-delivery`** |
 | Scholarly APIs | defer to **`research-pack`** |
@@ -35,7 +36,7 @@ triggers: [scrape, extract table, parse html, structured data, csv from page, js
 
 1. **Inspect raw** `web_fetch.text` first — note whether HTML, RSS/Atom, or JSON. Do not parse blind.
 2. **Prefer feeds/APIs** over HTML: RSS/Atom, sitemap.xml, JSON endpoints, oEmbed. Cheaper, stabler, less noise.
-3. **Parse narrowly.** On Nodebox use small `run_shell` `node -e` snippets — `DOMParser` is unavailable; use `parse5` if present, otherwise targeted regex on canonical tags (`<a href>`, `<title>`, JSON-LD `<script type="application/ld+json">`).
+3. **Parse narrowly.** On Nodebox use `run_python` with `beautifulsoup4` or `lxml` (Pyodide auto-loaded) for HTML; for JSON/RSS/Atom parse with stdlib `json`/`xml.etree`. Target regex only on canonical tags or JSON-LD `<script type="application/ld+json">`.
 4. **Normalize** before emitting: lowercase hostnames, strip tracking params, ISO-8601 dates, trimmed text, stable key order.
 5. **Dedupe** by canonical URL or id, not display title.
 6. **Emit JSON array** plus a short pipe-table summary for the user.

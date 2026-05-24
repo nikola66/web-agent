@@ -152,6 +152,16 @@ test("analyzeSkillCompat flags MCP and Azure CLI workflow requirements", () => {
   assert.ok(analysis.flags.includes("mcp_requires_config"));
 });
 
+test("analyzeSkillCompat flags Python HTTP clients", () => {
+  const analysis = analyzeSkillCompat(
+    "import urllib.request\nresp = urllib.request.urlopen('https://api.example.com/x')"
+  );
+  assert.equal(analysis.uses_python_http, true);
+  assert.ok(analysis.flags.includes("python_http_mapping"));
+  const appendix = buildWebAgentExecutionAppendix(analysis);
+  assert.match(appendix, /webagent\.http|web_fetch/i);
+});
+
 test("skills-sh-top10 fixture: every mapped tier declares a mapping", async () => {
   const rows = JSON.parse(await fs.readFile(FIXTURE, "utf8"));
   const mapped = rows.filter((row: { tier: string }) => row.tier === "mapped");

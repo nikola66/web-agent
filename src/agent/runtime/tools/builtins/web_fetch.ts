@@ -14,7 +14,7 @@ export default defineTool({
   run: webFetchTool,
   emoji: "🌐",
   description:
-    "GET http(s) URL(s) — public pages or authenticated REST reads. Pass optional `headers` (e.g. Authorization Bearer). Full REST/GraphQL procedure: skill_view **`http-api`**. Prefer over run_shell for one-off HTTP GET; use `web_post` for POST/GraphQL. Batch up to 5 URLs via `urls`. Examples: " +
+    "GET http(s) URL(s) — public pages or authenticated REST reads. Pass optional `headers` (e.g. Authorization Bearer). Procedure: skill_view **`http-api`**. Not for OAuth SaaS — use `composio_*`. Prefer over run_shell for HTTP GET. Batch up to 5 URLs via `urls`. Examples: " +
     JSON.stringify(WEB_FETCH_EXAMPLES[0]) +
     " | " +
     JSON.stringify(WEB_FETCH_EXAMPLES[1]),

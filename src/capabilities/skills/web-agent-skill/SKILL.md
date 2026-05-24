@@ -3,6 +3,7 @@ name: Web Agent Skill
 description: Use when fixing or extending Web Agent itself—runtime, bundled skills, capabilities, adapter, or self-evolution of this repo.
 version: 1.1.0
 category: bundled
+primary-tools: [skill_manage, capability_list, read_file]
 tags: [web-agent, self-evolution, maintenance, skills, memory, cron, capability]
 triggers: [web agent, this agent, bundled skill, capability folder, fix runtime, self-evolution, improve skill, web-agent repo, skill_manage, skill_bulk_save, capability_list]
 ---

@@ -3,6 +3,7 @@ name: Research Pack
 description: Use when the user wants papers, arXiv, citations, literature review, or Semantic Scholar—not general creator or product discovery.
 version: 1.0.0
 category: bundled
+primary-tools: [web_fetch, write_file]
 tags: [research, papers, citations, academic, arxiv, semantic-scholar, literature]
 triggers: [arxiv, paper, citation, semantic scholar, literature review, academic, research paper, who cited, references, web_fetch, write_file]
 ---

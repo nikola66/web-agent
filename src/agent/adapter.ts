@@ -16,7 +16,7 @@ import {
   restoreFilesystem,
   saveWorkspaceSnapshot,
 } from "@/runtimes/webcontainer/filesystem-sync";
-import type { Profile } from "@/core/profiles";
+import { activeProfileModel, type Profile } from "@/core/profiles";
 import { getPersonalityDisplayLabelForPrompt } from "@/core/personalities";
 import { clearAll } from "@/core/persistence";
 import {
@@ -47,6 +47,7 @@ import runtimeTurnSequencingSource from "../../dist/agent-runtime/turn-sequencin
 import runtimeTurnContinuationSource from "../../dist/agent-runtime/turn-continuation.js?raw";
 import runtimeStartupContextSource from "../../dist/agent-runtime/startup-context.js?raw";
 import runtimeMemoryGuidanceSource from "../../dist/agent-runtime/memory-guidance.js?raw";
+import runtimeCapabilityRouterSource from "../../dist/agent-runtime/capability-router.js?raw";
 import runtimeExecutionGuidanceSource from "../../dist/agent-runtime/execution-guidance.js?raw";
 import runtimeUtilsSource from "../../dist/agent-runtime/utils.js?raw";
 import runtimeBootstrapSource from "../../dist/agent-runtime/bootstrap.js?raw";
@@ -455,6 +456,31 @@ async function ensureOnboardingFiles(profileId: string): Promise<void> {
     await emulator.fs.mkdir(`${workspaceDir}/.webagent`, { recursive: true });
     await emulator.fs.writeFile(cronjobsPath, JSON.stringify({ jobs: [] }, null, 2));
   }
+
+  const toolPolicyPath = `${workspaceDir}/.webagent/tool-policy.json`;
+  try {
+    await emulator.fs.readFile(toolPolicyPath);
+  } catch {
+    await emulator.fs.mkdir(`${workspaceDir}/.webagent`, { recursive: true });
+    await emulator.fs.writeFile(
+      toolPolicyPath,
+      `${JSON.stringify(
+        {
+          allow: [
+            "group:core",
+            "group:filesystem_mutate",
+            "group:memory",
+            "group:session",
+            "group:skills",
+          ],
+          deny: [],
+          auto: { composio: "when_configured" },
+        },
+        null,
+        2
+      )}\n`
+    );
+  }
 }
 
 async function writeRuntimeSources(profileId: string): Promise<void> {
@@ -489,6 +515,7 @@ async function writeRuntimeSources(profileId: string): Promise<void> {
   await emulator.fs.writeFile(`${webagentDir}/turn-continuation.js`, runtimeTurnContinuationSource);
   await emulator.fs.writeFile(`${webagentDir}/startup-context.js`, runtimeStartupContextSource);
   await emulator.fs.writeFile(`${webagentDir}/memory-guidance.js`, runtimeMemoryGuidanceSource);
+  await emulator.fs.writeFile(`${webagentDir}/capability-router.js`, runtimeCapabilityRouterSource);
   await emulator.fs.writeFile(`${webagentDir}/execution-guidance.js`, runtimeExecutionGuidanceSource);
   await emulator.fs.writeFile(`${webagentDir}/utils.js`, runtimeUtilsSource);
   await emulator.fs.writeFile(`${webagentDir}/bootstrap.js`, runtimeBootstrapSource);
@@ -656,7 +683,8 @@ function buildEnv(profileId: string, profile: Profile, apiKeys: Record<string, s
   };
   const personalityLabel = getPersonalityDisplayLabelForPrompt(profile.personality);
   if (personalityLabel) env.WEBAGENT_PERSONALITY_LABEL = personalityLabel;
-  if (profile.model?.trim()) env.WEBAGENT_MODEL = profile.model.trim();
+  const modelOverride = activeProfileModel(profile, activeProvider?.model?.trim() ?? "");
+  if (modelOverride) env.WEBAGENT_MODEL = modelOverride;
 
   const assignIfPresent = (targetKey: string, sourceKey: string) => {
     const value = apiKeys[sourceKey]?.trim();

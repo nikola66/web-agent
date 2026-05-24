@@ -7,6 +7,7 @@ import {
   createAgentName,
   type Profile,
 } from "@/core/profiles";
+import type { ProviderModelOverrides } from "@/core/profile-provider-models";
 
 const ACTIVE_PROFILE_KEY = "web-agent:active-profile-id";
 
@@ -40,6 +41,7 @@ interface ProfileState {
     personality: string;
     provider: Profile["provider"];
     model?: string;
+    providerModels?: ProviderModelOverrides;
     accentColor: string;
     ttsVoice?: string;
   }, options?: { setActive?: boolean; id?: string }) => Promise<Profile>;
@@ -81,6 +83,7 @@ export const useProfileStore = create<ProfileState>((set, get) => ({
       personality: partial.personality,
       provider: partial.provider,
       model: partial.model ?? "",
+      providerModels: partial.providerModels ?? {},
       accentColor: partial.accentColor,
       ttsVoice: partial.ttsVoice,
       createdAt: t,

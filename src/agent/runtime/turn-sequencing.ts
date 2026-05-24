@@ -35,9 +35,8 @@ export function isSkillInstallIntent(input) {
 export const SKILL_INSTALL_FOCUSED_TOOL_NAMES = [
   "archive_list",
   "extract_archive",
-  "find_files",
+  "browse_workspace",
   "grep",
-  "list_dir",
   "read_file",
   "skill_bulk_save",
   "skill_list",

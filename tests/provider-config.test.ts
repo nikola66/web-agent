@@ -54,6 +54,88 @@ test("resolveLlm routes built-in providers through the app LLM proxy in nodebox"
   }
 });
 
+test("resolveLlm routes OpenCode Big Pickle through the app LLM proxy in nodebox", async () => {
+  const providers = await Promise.all(
+    (await fs.readdir(path.join(process.cwd(), "src/capabilities/providers"))).map(
+      async (dir) =>
+        JSON.parse(
+          await fs.readFile(
+            path.join(process.cwd(), "src/capabilities/providers", dir, "manifest.json"),
+            "utf8"
+          )
+        )
+    )
+  );
+
+  await fs.mkdir(".webagent", { recursive: true });
+  await fs.writeFile(".webagent/providers.json", JSON.stringify(providers, null, 2));
+
+  const previous = {
+    provider: process.env.WEBAGENT_PROVIDER,
+    runtime: process.env.WEBAGENT_RUNTIME,
+    origin: process.env.WEBAGENT_APP_ORIGIN,
+  };
+
+  process.env.WEBAGENT_PROVIDER = "opencode";
+  process.env.WEBAGENT_RUNTIME = "nodebox";
+  process.env.WEBAGENT_APP_ORIGIN = "http://localhost:5173";
+
+  try {
+    const { resolveLlm } = await import("../dist/agent-runtime/llm/provider-config.js");
+    const cfg = await resolveLlm();
+    assert.ok(cfg);
+    assert.equal(cfg.provider, "opencode");
+    assert.equal(cfg.apiKey, "public");
+    assert.equal(cfg.baseUrl, "http://localhost:5173/api/llm/opencode");
+    assert.equal(cfg.model, "big-pickle");
+  } finally {
+    process.env.WEBAGENT_PROVIDER = previous.provider;
+    process.env.WEBAGENT_RUNTIME = previous.runtime;
+    process.env.WEBAGENT_APP_ORIGIN = previous.origin;
+  }
+});
+
+test("resolveLlm ignores model override for OpenCode Big Pickle", async () => {
+  const providers = await Promise.all(
+    (await fs.readdir(path.join(process.cwd(), "src/capabilities/providers"))).map(
+      async (dir) =>
+        JSON.parse(
+          await fs.readFile(
+            path.join(process.cwd(), "src/capabilities/providers", dir, "manifest.json"),
+            "utf8"
+          )
+        )
+    )
+  );
+
+  await fs.mkdir(".webagent", { recursive: true });
+  await fs.writeFile(".webagent/providers.json", JSON.stringify(providers, null, 2));
+
+  const previous = {
+    provider: process.env.WEBAGENT_PROVIDER,
+    model: process.env.WEBAGENT_MODEL,
+    runtime: process.env.WEBAGENT_RUNTIME,
+    origin: process.env.WEBAGENT_APP_ORIGIN,
+  };
+
+  process.env.WEBAGENT_PROVIDER = "opencode";
+  process.env.WEBAGENT_MODEL = "other-model";
+  process.env.WEBAGENT_RUNTIME = "nodebox";
+  process.env.WEBAGENT_APP_ORIGIN = "http://localhost:5173";
+
+  try {
+    const { resolveLlm } = await import("../dist/agent-runtime/llm/provider-config.js");
+    const cfg = await resolveLlm();
+    assert.ok(cfg);
+    assert.equal(cfg.model, "big-pickle");
+  } finally {
+    process.env.WEBAGENT_PROVIDER = previous.provider;
+    process.env.WEBAGENT_MODEL = previous.model;
+    process.env.WEBAGENT_RUNTIME = previous.runtime;
+    process.env.WEBAGENT_APP_ORIGIN = previous.origin;
+  }
+});
+
 test("llmChatCompletionExtras adds stream_options except for subscription providers", async () => {
   const { llmChatCompletionExtras } = await import("../dist/agent-runtime/llm/provider-config.js");
   assert.deepEqual(llmChatCompletionExtras("openrouter", { stream: true }), {
@@ -62,6 +144,9 @@ test("llmChatCompletionExtras adds stream_options except for subscription provid
   });
   assert.deepEqual(llmChatCompletionExtras("nous", { stream: true }), {});
   assert.deepEqual(llmChatCompletionExtras("openai-codex", { stream: true }), {});
+  assert.deepEqual(llmChatCompletionExtras("opencode", { stream: true }), {
+    stream_options: { include_usage: true },
+  });
 });
 
 test("resolveLlm keeps direct upstream URLs outside nodebox", async () => {

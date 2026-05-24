@@ -26,7 +26,7 @@ import {
   compatScanWarnings,
 } from "./skill-compat.js";
 
-const SKILLS_CONTEXT_CHAR_BUDGET = 8_500;
+const SKILLS_CONTEXT_CHAR_BUDGET = 9_800;
 const SKILL_INDEX_TRIGGERS_MAX_CHARS = 160;
 const SKILL_FILE_NAME = "SKILL.md";
 
@@ -43,6 +43,21 @@ const SKILL_SAFE_FILE_MAX_BYTES = 512 * 1024;
 const BUNDLED_SKILLS_DIR = nodePath.join(CAPABILITIES_DIR, "skills");
 const SOURCE_BUNDLED_SKILLS_DIR = nodePath.join(WS, "src", "capabilities", "skills");
 const MAX_BULK_SKILL_ITEMS = 75;
+const BUNDLED_SKILL_PRIMARY_TOOLS: Record<string, string[]> = {};
+
+function skillPrimaryTools(meta: SkillMeta, slug: string): string[] {
+  const fromMeta = Array.isArray(meta["primary-tools"])
+    ? meta["primary-tools"].map(String).filter(Boolean)
+    : [];
+  if (fromMeta.length) return fromMeta;
+  return BUNDLED_SKILL_PRIMARY_TOOLS[slug] || [];
+}
+
+export async function resolveSkillPrimaryToolsForSlug(slug: string): Promise<string[]> {
+  const record = await findSkillRecord(slug);
+  if (!record) return [];
+  return record.primaryTools?.length ? record.primaryTools : skillPrimaryTools({}, record.slug);
+}
 
 type SkillMeta = Record<string, unknown>;
 
@@ -57,6 +72,7 @@ interface SkillRecord {
   platforms: string[];
   allowedTools: string[];
   requiresTools: string[];
+  primaryTools: string[];
   path: string;
   dir: string;
   skillPath: string;
@@ -120,7 +136,7 @@ function parseSkillFrontmatter(raw: string): { meta: SkillMeta; body: string } {
         list.push(lines[i].replace(/^\s*-\s+/, "").trim());
       }
       meta[k] = list.length ? list : "";
-    } else if (["tags", "triggers", "allowed-tools", "requires-tools", "requires_tools", "platforms", "required_environment_variables"].includes(k)) {
+    } else if (["tags", "triggers", "allowed-tools", "requires-tools", "requires_tools", "platforms", "required_environment_variables", "primary-tools"].includes(k)) {
       meta[k] = parseInlineList(v);
     } else {
       meta[k] = v.replace(/^["']|["']$/g, "").trim();
@@ -304,6 +320,7 @@ async function collectSkillRecords(): Promise<SkillRecord[]> {
             platforms: Array.isArray(meta.platforms) ? meta.platforms : [],
             allowedTools: Array.isArray(meta["allowed-tools"]) ? meta["allowed-tools"] : [],
             requiresTools: normalizeSkillRequiresTools(meta),
+            primaryTools: skillPrimaryTools(meta, slug),
             path: skillPublicPath(skillPath),
             dir: abs,
             skillPath,
@@ -600,6 +617,9 @@ export async function viewSkill({ name, file_path }: { name?: string; file_path?
     const { meta } = parseSkillFrontmatter(content);
     const compat = compatNotesForView(analyzeSkillCompat(content, meta), record.source);
     if (compat) Object.assign(result, compat);
+    result.primary_tools = record.primaryTools?.length
+      ? record.primaryTools
+      : skillPrimaryTools(meta, record.slug);
   }
   return result;
 }
@@ -969,8 +989,8 @@ export async function buildSkillsContextBlock(availableToolNames: string[] = [])
     });
     if (!skills.length) return "";
     const lines = [
-      "Available skills (procedural knowledge, compact index):",
-      "Before replying, scan the skills below. If a skill matches or is even partially relevant to the task, you MUST call `skill_view` with `{\"name\":\"<slug>\"}` on the best match before acting — err on the side of loading. Full procedures load only via `skill_view`. Only proceed without loading a skill if genuinely none are relevant. `skill_manage` create/patch/import applies immediately; `skill_manage` delete and `skill_bulk_save` each show one approval gate. Prefer `skill_bulk_save` when adding many skills in one request.",
+      "Available skills (procedural knowledge — one capability surface with built-in tools):",
+      "The **Capability router** above picks the hub; call `skill_view` on the best match before acting. Full procedures load only via `skill_view`. `skill_manage` create/patch/import applies immediately; delete and `skill_bulk_save` each show one approval gate.",
     ];
     let budget = SKILLS_CONTEXT_CHAR_BUDGET;
     for (const skill of skills) {
@@ -978,7 +998,10 @@ export async function buildSkillsContextBlock(availableToolNames: string[] = [])
       const triggerText = skill.triggers?.length
         ? ` | triggers: ${formatTriggersForIndex(skill.triggers)}`
         : "";
-      const line = `- ${skill.name} (slug: ${skill.slug}, category: ${skill.category}${tagText}): ${skill.description}${triggerText}`;
+      const toolHint = skill.primaryTools?.length
+        ? ` | tools: ${skill.primaryTools.slice(0, 6).join(", ")}${skill.primaryTools.length > 6 ? ", …" : ""}`
+        : "";
+      const line = `- ${skill.name} (slug: ${skill.slug}, category: ${skill.category}${tagText}): ${skill.description}${toolHint}${triggerText}`;
       if (line.length > budget) {
         lines.push("- [more skills omitted from prompt; call skill_list to search]");
         break;

@@ -3,6 +3,7 @@ name: Project Scaffold
 description: Use when starting a new app, demo, spike, starter, or multi-file project—make_dir under projects/ or work/ before any writes.
 version: 1.0.0
 category: bundled
+primary-tools: [make_dir, write_file]
 tags: [project, scaffold, verification, demo, starter, spike, greenfield]
 triggers: [new app, create project, demo, starter, spike, sandbox, test harness, greenfield, bootstrap project, mini-project, make_dir, write_file]
 ---

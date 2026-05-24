@@ -8,6 +8,8 @@ export type ToolDefinition = {
   inputSchema: Record<string, unknown>;
   requiresConfirmation?: boolean;
   approvalSummary?: string;
+  llmVisible?: boolean;
+  toolGroup?: string;
 };
 
 export function defineTool<T extends ToolDefinition>(tool: T): T {

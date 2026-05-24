@@ -16,6 +16,7 @@ export type SkillCompatAnalysis = {
   uses_npx: boolean;
   uses_deploy_cli: boolean;
   uses_native_media: boolean;
+  uses_python_http: boolean;
   python_libraries: string[];
   flags: string[];
 };
@@ -105,6 +106,8 @@ export function analyzeSkillCompat(
   const uses_deploy_cli = /(?:^|`|\$\s*|run\s+|npx\s+|invoke\s+|execute\s+)(?:vercel|netlify|flyctl|fly\s+deploy|railway\s+(?:up|deploy|run)|heroku\s+\w|gh\s+(?:pr|issue|release|repo)|stripe\s+\w|firecrawl\s+\w)(?:\s|`|$)/im.test(hay);
   // Native media/codec binaries (ffmpeg, whisper, tesseract) detected in prose or code blocks.
   const uses_native_media = /\b(?:ffmpeg|ffprobe|whisper|tesseract|pdftoppm|pdftotext|ghostscript|imagemagick|convert\s+-\w)\b/i.test(hay);
+  const uses_python_http =
+    /\burllib\.request\b|\bimport\s+requests\b|\bfrom\s+requests\b|\bimport\s+httpx\b|\bfrom\s+httpx\b/i.test(body);
 
   const flags: string[] = [];
   if (uses_web_fetch) flags.push("web_fetch_mapping");
@@ -116,6 +119,7 @@ export function analyzeSkillCompat(
   if (uses_npx) flags.push("npx_unavailable");
   if (uses_deploy_cli) flags.push("deploy_cli_unavailable");
   if (uses_native_media) flags.push("native_media_unavailable");
+  if (uses_python_http) flags.push("python_http_mapping");
 
   let tier: CompatTier = "native";
   if (uses_agent_browser || uses_playwright) tier = "unsupported";
@@ -133,6 +137,7 @@ export function analyzeSkillCompat(
     uses_npx,
     uses_deploy_cli,
     uses_native_media,
+    uses_python_http,
     python_libraries,
     flags,
   };
@@ -168,6 +173,9 @@ export function buildWebAgentExecutionAppendix(analysis: SkillCompatAnalysis): s
   }
   if (analysis.uses_native_media) {
     lines.push("| ffmpeg / whisper / tesseract / pdftoppm / ghostscript | **Not available** — call a hosted transcoding/OCR API, or use pure-Python alternatives (`pypdf`, `Pillow`, `imageio`) |");
+  }
+  if (analysis.uses_python_http) {
+    lines.push("| Python HTTP (`urllib`, `requests`) | `webagent.http` inside `run_python`, or `web_fetch`/`web_post` for REST/CMS — **`http-api`** |");
   }
 
   lines.push(
@@ -231,6 +239,9 @@ export function compatScanWarnings(analysis: SkillCompatAnalysis): string[] {
   }
   if (analysis.uses_native_media) {
     warnings.push("references native media/codec binaries (ffmpeg/whisper/tesseract/ghostscript) — call a hosted API or use pure-Python alternatives (pypdf, Pillow, imageio)");
+  }
+  if (analysis.uses_python_http) {
+    warnings.push("references Python HTTP clients — use webagent.http in run_python or web_fetch/web_post for REST/CMS calls");
   }
   return warnings;
 }

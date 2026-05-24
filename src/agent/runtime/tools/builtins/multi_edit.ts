@@ -5,6 +5,6 @@ export default defineTool({
   name: "multi_edit",
   run: multiEditTool,
   emoji: "🛠️",
-  description: "Apply multiple find/replace edits in one file. New multi-file efforts should anchor under `projects/<slug>/` or `work/<slug>/` (make_dir first); avoid sprinkling unrelated new files at workspace root—the root guard may reject many basenames there.",
+  description: "Multiple find/replace edits in one file. For a single hunk use `edit_file`; for unified patch blocks use `apply_patch`. Anchor new work under `projects/<slug>/` or `work/<slug>/`.",
   inputSchema: { type: "object", properties: {}, additionalProperties: true },
 });

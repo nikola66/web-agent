@@ -5,6 +5,6 @@ export default defineTool({
   name: "apply_patch",
   run: applyPatchTool,
   emoji: "🩹",
-  description: "Apply unified patch operations. Supports `*** Add File:` and `*** Update File:` blocks inside `*** Begin Patch`/`*** End Patch`. For **new** adds, prefer targets under `projects/<slug>/` or `work/<slug>/` (make_dir first), not stray top-level clutter; workspace root rejects most new basenames.",
+  description: "Unified patch blocks (`*** Begin Patch`). For single hunk use `edit_file`; for many inline replacements use `multi_edit`. Prefer targets under `projects/<slug>/` or `work/<slug>/`.",
   inputSchema: { type: "object", properties: {}, additionalProperties: true },
 });

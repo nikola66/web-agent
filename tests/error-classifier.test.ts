@@ -59,6 +59,14 @@ test("classifyToolError tags Pyodide missing module (hallucinated SDK)", () => {
   assert.match(c.recovery_hint, /web_fetch|web_post/);
 });
 
+test("classifyToolError tags Pyodide JsProxy urllib HTTP failure", () => {
+  const c = classifyToolError(
+    "TypeError: 'pyodide.ffi.JsProxy' object is not iterable"
+  );
+  assert.equal(c.error_code, "pyodide_http_jsproxy");
+  assert.match(c.recovery_hint, /webagent\.http|web_fetch/i);
+});
+
 test("classifyToolError tags workspace root write guard", () => {
   const c = classifyToolError(
     "Refusing to write at workspace root (backup.txt). Put deliverables under projects/<slug>/ or work/<slug>/"

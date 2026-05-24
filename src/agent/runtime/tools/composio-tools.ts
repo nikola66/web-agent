@@ -327,6 +327,10 @@ function allowedActions() {
   }));
 }
 
+export function listComposioMarketingActions() {
+  return allowedActions();
+}
+
 function targetFrom(meta: MarketingAction, input: Record<string, unknown>) {
   const parts = [];
   for (const field of meta.targetFields) {

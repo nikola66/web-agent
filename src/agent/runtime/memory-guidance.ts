@@ -23,19 +23,17 @@ export const SESSION_SEARCH_GUIDANCE =
   "prompt — search when you need older or keyword-specific detail.";
 
 export const WORKSPACE_BROWSE_GUIDANCE =
-  "Workspace paths in `list_dir`, `read_file`, `find_files`, `grep`, and `tree` are **relative to " +
+  "Workspace paths in `browse_workspace`, `read_file`, and `grep` are **relative to " +
   "the workspace root** (`.` = top level). Never use `/` or host paths like `/home/...`. " +
-  "**First browse step:** run `list_dir({\"path\":\".\"})` or `tree({\"path\":\".\"})` before assuming " +
-  "files exist — profile workspaces are often agent-centric (AGENT.md, USER.md, projects/, work/) not " +
-  "full app repos unless the user added them. Do not guess paths from training (e.g. src/agent/..., " +
-  ".webagent/package.json); `package.json` when present is usually at `.` not under `.webagent/`. " +
+  "**First browse step:** run `browse_workspace({\"action\":\"list\",\"path\":\".\"})` or " +
+  "`browse_workspace({\"action\":\"tree\",\"path\":\".\"})` before assuming files exist. " +
+  "`browse_workspace` **`action`**: `list` (one directory), `tree` (layout), `find` (cross-tree by name). " +
   "`grep` **`root`** is a directory to recurse (default `.`) or a single file path to search. " +
-  "`grep` / `find_files` use **`pattern`**; **`query`** is only for `session_search`. " +
-  "Use `list_dir` for one directory; `find_files` to locate a file by name.";
+  "`grep` / browse `find` use **`pattern`**; **`query`** is only for `session_search`.";
 
 export const TOOL_JSON_ARGS_GUIDANCE =
   "Tool arguments must be plain JSON with the schema keys each tool declares — do not swap names " +
-  "(grep/find_files: `pattern`; session_search: `query`; read_file/list_dir/tree: `path` or `root`; " +
+  "(grep/browse find: `pattern`; session_search: `query`; read_file/browse_workspace: `path` or `root`; " +
   "skill_view/skill_manage: `name` — not `slug`). " +
   "Examples: {\"pattern\":\"TODO\"}, {\"query\":\"last outreach\"}, {\"path\":\".\"}. " +
   "Do not escape property names and do not wrap values in extra quote layers.";
@@ -53,7 +51,7 @@ export const SKILLS_GUIDANCE =
   "don't wait to be asked. Skills capture procedures; memory captures durable facts.";
 
 export const SCRIPT_PORTING_GUIDANCE =
-  "Nodebox has no POSIX shell or system pip. For Python skills, use `run_python` for stdlib/Pyodide-compatible scripts and `python3 ...` only as a run_shell alias. Map simple HTTP to `web_fetch`/`web_post`; use Pyodide HTTP APIs inside reusable Python. Do not use axios/fetch shell one-liners or native pip/subprocess assumptions.";
+  "Nodebox has no POSIX shell or system pip. For Python skills, use `run_python` for stdlib/Pyodide-compatible scripts and `python3 ...` only as a run_shell alias. Map REST/CMS HTTP to `web_fetch`/`web_post`; inside reusable Python use `webagent.http` (proxy-backed) or Pyodide-safe parsing only. Do not use axios/fetch shell one-liners or native pip/subprocess assumptions.";
 
 export const HTTP_API_GUIDANCE =
   "REST GET → `web_fetch` with `url` + optional `headers` (Bearer). POST / GraphQL → `web_post` with `url`, `body`, `headers`. " +
@@ -88,6 +86,7 @@ export function buildMemoryLayerGuidanceBlock(toolNames: string[] = []): string 
     parts.push(TOOL_JSON_ARGS_GUIDANCE);
   }
   if (
+    tools.has("browse_workspace") ||
     tools.has("list_dir") ||
     tools.has("read_file") ||
     tools.has("find_files") ||
@@ -99,13 +98,7 @@ export function buildMemoryLayerGuidanceBlock(toolNames: string[] = []): string 
   if (tools.has("skill_manage") || tools.has("skill_bulk_save")) {
     parts.push(SKILLS_GUIDANCE);
   }
-  if (tools.has("run_shell")) {
-    parts.push(SCRIPT_PORTING_GUIDANCE);
-  }
-  if (tools.has("web_fetch") && tools.has("web_post")) {
-    parts.push(HTTP_API_GUIDANCE);
-  }
-  if (tools.has("read_file") || tools.has("grep") || tools.has("find_files") || tools.has("list_dir")) {
+  if (tools.has("read_file") || tools.has("grep") || tools.has("browse_workspace") || tools.has("find_files") || tools.has("list_dir")) {
     parts.push(MEMORY_SPILL_RECOVERY_GUIDANCE);
   }
   if (!parts.length) return "";

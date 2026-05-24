@@ -3,6 +3,7 @@ name: Task Execution
 description: Use when a multi-step goal needs decomposition and end-to-end delivery—todo_write plan, one-at-a-time execution, failure recovery, and a final report.
 version: 1.1.0
 category: bundled
+primary-tools: [todo_write, artifact_present]
 tags: [planning, execution, multi-step, todo, report, agentic, delivery]
 triggers: [plan this, multi-step, break down, decompose, ordered steps, several things, do all of, then do, execute the plan, run the plan, go ahead, proceed with execution, start executing, kick off, run all steps, do it now, ship it, work the list]
 ---

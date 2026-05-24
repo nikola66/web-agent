@@ -8,6 +8,7 @@ const EXPECTED_TOOLS = [
   "archive_list",
   "artifact_present",
   "audio_analyze",
+  "browse_workspace",
   "composio_action",
   "composio_connect",
   "composio_status",
@@ -43,6 +44,8 @@ const EXPECTED_TOOLS = [
   "skill_view",
   "system_info",
   "todo_write",
+  "tool_activate",
+  "tool_search",
   "tree",
   "vision_analyze",
   "web_fetch",
@@ -54,6 +57,8 @@ const EXPECTED_TOOLS = [
   "write_file",
   "youtube_transcribe",
 ].sort();
+
+const LLM_HIDDEN_TOOLS = new Set(["find_files", "list_dir", "tree"]);
 
 test("built-in tool registry and catalog keys match", async () => {
   const registry = await import("../dist/agent-runtime/tools/registry.js");
@@ -73,6 +78,17 @@ test("built-in tool registry and catalog keys match", async () => {
   const nodeCatalog = await registry.loadToolCatalog();
   for (const name of EXPECTED_TOOLS) {
     assert.deepEqual(browser.BUILTIN_TOOLS[name], nodeCatalog[name], `${name} browser metadata should match runtime metadata`);
+  }
+});
+
+test("buildOpenAiToolDefinitions omits llmVisible:false alias tools", async () => {
+  const registry = await import("../dist/agent-runtime/tools/registry.js");
+  const catalog = await registry.loadToolCatalog();
+  const defs = await registry.buildOpenAiToolDefinitions(catalog);
+  const names = defs.map((d) => d.function?.name).filter(Boolean);
+  assert.ok(names.includes("browse_workspace"));
+  for (const hidden of LLM_HIDDEN_TOOLS) {
+    assert.ok(!names.includes(hidden), `${hidden} should be execution-only alias`);
   }
 });
 

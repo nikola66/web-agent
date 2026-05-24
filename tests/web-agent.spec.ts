@@ -9,7 +9,8 @@ import {
   editProfileButton,
   ensureProfilesTab,
   expectChatReady,
-  expectOpenRouterDefaultInProfileEditor,
+  expectDefaultProviderInProfileEditor,
+  expectProviderInProfileEditor,
   launchDefaultAgent,
   runningChatInput,
   stopAgentAndWait,
@@ -75,11 +76,11 @@ test("creates and persists an active profile across reloads", async ({ page }) =
   await assertProfileHasCustomModel(page, "Smoke Profile", "local-smoke-model");
 });
 
-test("default profile editor shows OpenRouter provider", async ({ page }) => {
+test("default profile editor shows OpenCode Big Pickle provider", async ({ page }) => {
   await clearBrowserStorage(page);
   await page.goto("/");
   await waitForProfilesLoaded(page);
-  await expectOpenRouterDefaultInProfileEditor(page);
+  await expectDefaultProviderInProfileEditor(page);
 });
 
 test("auto provider with OpenRouter key displays OpenRouter", async ({ page }) => {
@@ -90,7 +91,7 @@ test("auto provider with OpenRouter key displays OpenRouter", async ({ page }) =
   await configureOpenRouter(page);
   await launchDefaultAgent(page);
 
-  await expectOpenRouterDefaultInProfileEditor(page);
+  await expectProviderInProfileEditor(page, "OpenRouter");
   await ensureProfilesTab(page);
   await expect(page.getByRole("button", { name: "Stop", exact: true })).toBeVisible();
 });
@@ -238,7 +239,7 @@ test("first launch can rename the agent and capture the user name", async ({ pag
   await expect(page.locator("p.text-sm.font-semibold").filter({ hasText: /^Astra Prime$/ })).toBeVisible({
     timeout: 30_000,
   });
-  await expectOpenRouterDefaultInProfileEditor(page);
+  await expectProviderInProfileEditor(page, "OpenRouter");
   await ensureProfilesTab(page);
   await expect(page.getByRole("button", { name: "Stop", exact: true })).toBeVisible();
 });

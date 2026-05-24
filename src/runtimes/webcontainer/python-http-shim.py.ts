@@ -1,0 +1,187 @@
+/** Python source injected once at Pyodide init — kept in TS for test visibility. */
+export const PYTHON_HTTP_SHIM = `
+import urllib.request as _ur, ssl as _ssl, sys, json, types
+from urllib.parse import urlencode, urlparse, urlunparse, parse_qsl
+from webagent_http_bridge import request as _bridge_request
+
+class _FakeSSLCtx:
+    check_hostname = False
+    verify_mode = 0
+    def load_verify_locations(self, *a, **kw): pass
+    def load_cert_chain(self, *a, **kw): pass
+_ssl.create_default_context = lambda *a, **kw: _FakeSSLCtx()
+
+def _to_bytes(val):
+    if val is None:
+        return b""
+    if isinstance(val, (bytes, bytearray)):
+        return bytes(val)
+    to_bytes = getattr(val, "to_bytes", None)
+    if callable(to_bytes):
+        return to_bytes()
+    to_memoryview = getattr(val, "to_memoryview", None)
+    if callable(to_memoryview):
+        return bytes(to_memoryview())
+    try:
+        return bytes(val)
+    except Exception:
+        return str(val).encode("utf-8", errors="replace")
+
+def _merge_params(url, params):
+    if not params:
+        return url
+    parsed = urlparse(str(url))
+    query = dict(parse_qsl(parsed.query, keep_blank_values=True))
+    if isinstance(params, dict):
+        query.update({str(k): str(v) for k, v in params.items()})
+    else:
+        query.update(dict(params))
+    return urlunparse(parsed._replace(query=urlencode(query, doseq=True)))
+
+def _bridge_call(method, url, headers=None, body=None):
+    result = _bridge_request(method, str(url), dict(headers or {}), body)
+    if getattr(result, "error", None):
+        raise OSError(str(result.error))
+    status = int(getattr(result, "status", 0) or 0)
+    body_bytes = _to_bytes(getattr(result, "bodyBytes", None))
+    body_text = getattr(result, "bodyText", None)
+    if not body_bytes and body_text:
+        body_bytes = str(body_text).encode("utf-8", errors="replace")
+    if body_text is None:
+        body_text = body_bytes.decode("utf-8", errors="replace")
+    hdrs = dict(getattr(result, "headers", None) or {})
+    return status, hdrs, body_bytes, str(body_text)
+
+class _ProxyResponse:
+    def __init__(self, url, status, headers, body_bytes):
+        self._url = str(url)
+        self._status = int(status)
+        self._headers = dict(headers or {})
+        self._body = bytes(body_bytes or b"")
+        self._pos = 0
+    def read(self, amt=-1):
+        if amt is None or amt < 0:
+            chunk, self._pos = self._body[self._pos:], len(self._body)
+        else:
+            end = self._pos + int(amt)
+            chunk, self._pos = self._body[self._pos:end], end
+        return chunk
+    def readall(self):
+        return self.read()
+    def readline(self, size=-1):
+        if self._pos >= len(self._body):
+            return b""
+        nl = self._body.find(b"\\n", self._pos)
+        if nl < 0:
+            return self.read()
+        end = nl + 1
+        if size >= 0:
+            end = min(end, self._pos + int(size))
+        chunk = self._body[self._pos:end]
+        self._pos = end
+        return chunk
+    def readlines(self, hint=-1):
+        lines = []
+        while True:
+            line = self.readline()
+            if not line:
+                break
+            lines.append(line)
+            if hint >= 0 and len(lines) >= hint:
+                break
+        return lines
+    def __iter__(self):
+        return self
+    def __next__(self):
+        line = self.readline()
+        if not line:
+            raise StopIteration
+        return line
+    def getcode(self):
+        return self._status
+    @property
+    def status(self):
+        return self._status
+    @property
+    def headers(self):
+        return self._headers
+    def geturl(self):
+        return self._url
+    def info(self):
+        return self._headers
+    def __enter__(self):
+        return self
+    def __exit__(self, *a):
+        pass
+
+def _patched_urlopen(url, data=None, timeout=None, **kwargs):
+    kwargs.pop("context", None)
+    method = "POST" if data is not None else "GET"
+    req_url = url
+    headers = {}
+    body = None
+    if isinstance(url, _ur.Request):
+        req_url = url.full_url
+        method = url.get_method()
+        headers = dict(url.header_items())
+        if data is None and url.data is not None:
+            body = url.data
+        else:
+            body = data
+    else:
+        body = data
+    if isinstance(body, (bytes, bytearray)):
+        body = bytes(body).decode("latin-1")
+    elif body is not None:
+        body = str(body)
+    status, hdrs, body_bytes, _text = _bridge_call(method, req_url, headers, body)
+    return _ProxyResponse(req_url, status, hdrs, body_bytes)
+
+_ur.urlopen = _patched_urlopen
+
+class _HttpResponse:
+    def __init__(self, status_code, text, content, headers, url):
+        self.status_code = int(status_code)
+        self.text = str(text)
+        self.content = bytes(content or b"")
+        self.headers = dict(headers or {})
+        self.url = str(url)
+    @property
+    def ok(self):
+        return 200 <= self.status_code < 300
+    def json(self):
+        return json.loads(self.text)
+
+def _http_request(method, url, headers=None, params=None, json_body=None, data=None, timeout_ms=30000):
+    del timeout_ms
+    final_url = _merge_params(url, params)
+    hdrs = dict(headers or {})
+    body = None
+    if json_body is not None:
+        body = json.dumps(json_body)
+        hdrs.setdefault("Content-Type", "application/json")
+    elif data is not None:
+        if isinstance(data, (bytes, bytearray)):
+            body = bytes(data).decode("latin-1")
+        elif isinstance(data, str):
+            body = data
+        else:
+            body = json.dumps(data)
+    status, resp_headers, content, text = _bridge_call(method.upper(), final_url, hdrs, body)
+    return _HttpResponse(status, text, content, resp_headers, final_url)
+
+def _http_get(url, headers=None, params=None, timeout_ms=30000):
+    return _http_request("GET", url, headers=headers, params=params, timeout_ms=timeout_ms)
+
+def _http_post(url, json=None, data=None, headers=None, params=None, timeout_ms=30000):
+    return _http_request("POST", url, headers=headers, params=params, json_body=json, data=data, timeout_ms=timeout_ms)
+
+_http_mod = types.ModuleType("webagent.http")
+_http_mod.get = _http_get
+_http_mod.post = _http_post
+_http_mod.request = _http_request
+sys.modules["webagent.http"] = _http_mod
+if "webagent" not in sys.modules:
+    sys.modules["webagent"] = types.ModuleType("webagent")
+sys.modules["webagent"].http = _http_mod
+`.trim();

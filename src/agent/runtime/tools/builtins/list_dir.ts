@@ -11,6 +11,8 @@ export default defineTool({
   name: "list_dir",
   run: listDirTool,
   emoji: "📁",
+  llmVisible: false,
+  toolGroup: "core",
   description:
     "List entries in **one directory**. Use `.` for workspace root. Optional `pattern` filters names " +
     "within that directory tree when `recursive` is true — for cross-tree name search use `find_files` instead. " +

@@ -5,6 +5,6 @@ export default defineTool({
   name: "edit_file",
   run: editFileTool,
   emoji: "🛠️",
-  description: "Edit a file either by replacing the first matching snippet (`find` + `replace`) or by fully replacing file contents (`new_content`). New deliverables belong under `projects/<slug>/` or `work/<slug>/`; avoid new loose top-level directories or root-level files unrelated to workspace config—the root write guard may reject them.",
+  description: "Single find/replace hunk or full replace via `new_content`. For many hunks use `multi_edit`; for patch blocks use `apply_patch`. New deliverables under `projects/<slug>/` or `work/<slug>/`.",
   inputSchema: { type: "object", properties: {}, additionalProperties: true },
 });

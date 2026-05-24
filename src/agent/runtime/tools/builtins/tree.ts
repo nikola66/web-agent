@@ -5,6 +5,8 @@ export default defineTool({
   name: "tree",
   run: treeTool,
   emoji: "🌲",
+  llmVisible: false,
+  toolGroup: "core",
   description:
     "Render a directory tree (bounded depth). Use on `.` first to learn workspace layout before read_file. " +
     "Skips node_modules, dist, etc.",

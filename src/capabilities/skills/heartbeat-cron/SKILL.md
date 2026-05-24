@@ -3,6 +3,7 @@ name: Heartbeat Cron
 description: Use when the user wants scheduled jobs, daily digests, recurring reminders, or cron_register—not host crontab or shell pipelines.
 version: 1.0.0
 category: bundled
+primary-tools: [cron_register, cron_list]
 tags: [cron, schedule, heartbeat, automation, telegram, email, recurring, digest]
 triggers: [schedule, cron, daily digest, recurring, every day, reminder job, cron_register, cron_list, periodic, automate daily]
 ---

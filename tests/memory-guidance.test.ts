@@ -21,13 +21,13 @@ test("buildMemoryLayerGuidanceBlock includes session guidance when session tools
   assert.match(block, /session_memory_append/);
   assert.match(block, /past conversation/);
   assert.match(block, /plain JSON with the schema keys/);
-  assert.match(block, /grep\/find_files: `pattern`/);
+  assert.match(block, /grep\/browse find: `pattern`/);
 });
 
-test("buildMemoryLayerGuidanceBlock includes workspace browse guidance for list_dir", () => {
-  const block = buildMemoryLayerGuidanceBlock(["list_dir", "read_file"]);
+test("buildMemoryLayerGuidanceBlock includes workspace browse guidance for browse_workspace", () => {
+  const block = buildMemoryLayerGuidanceBlock(["browse_workspace", "read_file"]);
   assert.match(block, /Never use `\/`/);
-  assert.match(block, /run `list_dir/);
+  assert.match(block, /browse_workspace/);
   assert.match(block, /`pattern`/);
   assert.match(block, /grep.*`root`/i);
 });
@@ -38,20 +38,12 @@ test("buildMemoryLayerGuidanceBlock includes spill recovery when read_file enabl
   assert.match(block, /memory\/runs/);
 });
 
-test("buildMemoryLayerGuidanceBlock returns empty when no memory layer tools", () => {
+test("buildMemoryLayerGuidanceBlock returns empty when only web_fetch enabled", () => {
   assert.equal(buildMemoryLayerGuidanceBlock(["web_fetch"]), "");
 });
 
-test("buildMemoryLayerGuidanceBlock includes python runtime guidance when run_shell enabled", () => {
-  const block = buildMemoryLayerGuidanceBlock(["run_shell", "read_file"]);
-  assert.match(block, /run_python/);
-  assert.match(block, /web_fetch/);
-  assert.match(block, /web_post/);
-  assert.match(block, /Nodebox has no POSIX shell or system pip/);
-});
-
-test("buildMemoryLayerGuidanceBlock includes http-api guidance when web_fetch and web_post enabled", () => {
-  const block = buildMemoryLayerGuidanceBlock(["web_fetch", "web_post", "read_file"]);
-  assert.match(block, /http-api/);
-  assert.match(block, /Do not invent GraphQL root fields/);
+test("buildMemoryLayerGuidanceBlock omits http and script porting guidance (capability router owns those)", () => {
+  const block = buildMemoryLayerGuidanceBlock(["web_fetch", "web_post", "run_shell", "read_file"]);
+  assert.doesNotMatch(block, /Do not invent GraphQL root fields/);
+  assert.doesNotMatch(block, /Nodebox has no POSIX shell or system pip/);
 });

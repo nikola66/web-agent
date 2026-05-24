@@ -3,6 +3,7 @@ name: HTTP API
 description: Use when calling REST or GraphQL APIs with web_fetch/web_post — auth headers, query params, GraphQL shape, discovery order, and reading error bodies.
 version: 1.0.0
 category: bundled
+primary-tools: [web_fetch, web_post]
 tags: [rest, graphql, api, web_fetch, web_post, bearer, cms, headers, discovery]
 triggers: [graphql, REST API, bearer token, web_post, authenticated fetch, api call, authorization header, CMS, list collections, resource count, metadata endpoint]
 ---
@@ -22,6 +23,16 @@ Canonical procedure for **REST GET** (`web_fetch`) and **HTTP writes** (`web_pos
 | Secrets | `headers.Authorization` (or API-key header docs specify) | Never in URL query; prefer Settings/vault over `memory_save` |
 
 **Non-negotiable:** Read the API's real schema before inventing field names. On `ok: false` or GraphQL `errors`, fix the query — do not retry the same malformed call in a loop.
+
+## HTTP decision tree
+
+| Context | Use |
+|---------|-----|
+| Agent one-off REST/GraphQL call | `web_fetch` (GET) or `web_post` (writes/GraphQL) |
+| Reusable Python skill script | `import webagent.http as http` inside `run_python` |
+| Legacy `urllib.request` in imported `.py` | Works (proxy-patched); prefer `webagent.http` for new code |
+| OAuth SaaS with Composio connector | `composio_action` — not raw `web_post` without setup |
+| `requests` / `httpx` in Pyodide | Avoid — may JsProxy-fail; use agent tools or `webagent.http` |
 
 ## When to Use
 

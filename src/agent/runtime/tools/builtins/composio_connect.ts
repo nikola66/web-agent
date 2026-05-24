@@ -10,6 +10,7 @@ export default defineTool({
   name: "composio_connect",
   run: composioConnectTool,
   emoji: "🔐",
+  toolGroup: "composio",
   description:
     "Create a Composio hosted auth link for one app. Requires `WEBAGENT_COMPOSIO_API_KEY` and an `auth_config_id` (or env `WEBAGENT_COMPOSIO_AUTH_CONFIG_<APP>`). Return the `redirect_url` for the user to approve OAuth/API auth. Examples: " +
     JSON.stringify(EXAMPLES[0]) +

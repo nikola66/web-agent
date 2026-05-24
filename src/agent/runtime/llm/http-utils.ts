@@ -1,3 +1,9 @@
+export function shouldUseNodeboxLlmProxy(endpoint: string): boolean {
+  if (String(process.env.WEBAGENT_RUNTIME || "").trim() !== "nodebox") return false;
+  const appOrigin = String(process.env.WEBAGENT_APP_ORIGIN || "").trim().replace(/\/$/, "");
+  return !!(appOrigin && String(endpoint || "").startsWith(`${appOrigin}/api/llm/`));
+}
+
 export function sanitizeHeadersForFetch(headers: Record<string, unknown> = {}) {
   const out: Record<string, string> = {};
   for (const [rawName, rawValue] of Object.entries(headers || {})) {

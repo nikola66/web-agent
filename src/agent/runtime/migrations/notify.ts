@@ -87,24 +87,31 @@ async function broadcastToTelegram(applied: AppliedMigrationSummaryEntry[]): Pro
   }
 }
 
+function migrationsWithUserVisibleChanges(
+  applied: AppliedMigrationSummaryEntry[]
+): AppliedMigrationSummaryEntry[] {
+  return applied.filter((entry) => entry.moved.length > 0);
+}
+
 export async function notifyMigrationsApplied(
   summary: RunMigrationsSummary,
   onOutput: (chunk: string) => void
 ): Promise<void> {
-  if (!summary.applied.length) return;
+  const noteworthy = migrationsWithUserVisibleChanges(summary.applied);
+  if (!noteworthy.length) return;
 
   try {
-    onOutput(formatTerminalBanner(summary.applied));
+    onOutput(formatTerminalBanner(noteworthy));
   } catch {
     /* terminal sink optional */
   }
 
   await Promise.allSettled([
-    appendSessionMemoryNotice(summary.applied),
-    broadcastToTelegram(summary.applied),
+    appendSessionMemoryNotice(noteworthy),
+    broadcastToTelegram(noteworthy),
   ]);
 
   await logDebugEvent("migrations_user_notified", {
-    appliedIds: summary.applied.map((entry) => entry.id),
+    appliedIds: noteworthy.map((entry) => entry.id),
   });
 }

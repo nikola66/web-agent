@@ -1,0 +1,62 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import {
+  DEFAULT_TOOL_POLICY,
+  resolvePolicyToolNames,
+  resolveInitialActiveToolNames,
+  canUnlockTool,
+  resetToolPolicyCacheForTest,
+  TOOL_GROUPS,
+} from "../src/agent/runtime/tools/tool-policy-config.ts";
+
+test("empty allow expands to all registered tools", () => {
+  const all = ["read_file", "wiki_search", "composio_action"];
+  assert.deepEqual(resolvePolicyToolNames(all, { allow: [], deny: [] }), all.sort());
+  assert.deepEqual(resolvePolicyToolNames(all, null), all.sort());
+});
+
+test("default policy allow groups omit deferred wiki tools initially", () => {
+  const all = Object.values(TOOL_GROUPS).flat();
+  const policyNames = resolvePolicyToolNames(all, DEFAULT_TOOL_POLICY, {});
+  assert.ok(policyNames.includes("read_file"));
+  assert.ok(policyNames.includes("browse_workspace"));
+  assert.ok(!policyNames.includes("wiki_search"));
+  assert.ok(!policyNames.includes("composio_action"));
+});
+
+test("auto composio when configured adds composio tools to allow expansion", () => {
+  const all = Object.values(TOOL_GROUPS).flat();
+  const policy = {
+    ...DEFAULT_TOOL_POLICY,
+    allow: [...(DEFAULT_TOOL_POLICY.allow || []), "group:composio"],
+  };
+  const withoutKey = resolvePolicyToolNames(all, policy, {});
+  assert.ok(!withoutKey.includes("composio_action"));
+  const withKey = resolvePolicyToolNames(all, policy, { WEBAGENT_COMPOSIO_API_KEY: "test-key" });
+  assert.ok(withKey.includes("composio_action"));
+});
+
+test("resolveInitialActiveToolNames unlocks deferred tools after skill_view", () => {
+  const all = Object.values(TOOL_GROUPS).flat();
+  const policyNames = resolvePolicyToolNames(all, DEFAULT_TOOL_POLICY, {});
+  const initial = resolveInitialActiveToolNames(policyNames, all, DEFAULT_TOOL_POLICY, {}, []);
+  assert.ok(!initial.includes("wiki_search"));
+  const unlocked = resolveInitialActiveToolNames(
+    policyNames,
+    all,
+    DEFAULT_TOOL_POLICY,
+    {},
+    ["wiki_search"]
+  );
+  assert.ok(unlocked.includes("wiki_search"));
+});
+
+test("canUnlockTool permits mcp deferred tools", () => {
+  const all = ["tool_search", "mcp_github_create_issue"];
+  assert.equal(canUnlockTool("mcp_github_create_issue", all, DEFAULT_TOOL_POLICY, {}), true);
+});
+
+test("resetToolPolicyCacheForTest clears cached policy", () => {
+  resetToolPolicyCacheForTest();
+  assert.doesNotThrow(() => resetToolPolicyCacheForTest());
+});

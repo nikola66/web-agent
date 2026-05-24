@@ -1,12 +1,9 @@
 import fs from "node:fs/promises";
 import type { ProviderDefinition } from "../../../core/providers/index.js";
-import {
-  LLM_METADATA_TIMEOUT_MS,
-  MODEL_CONTEXT_WINDOWS,
-  OPENROUTER_FREE_DEFAULT_CONTEXT_WINDOW,
-  PROVIDER_CATALOG_PATH,
-} from "../constants.js";
-import { sanitizeHeadersForFetch } from "./http-utils.js";
+import { PROVIDER_CATALOG_PATH } from "../constants.js";
+import { fetchContextWindow } from "./model-metadata.js";
+
+export { fetchContextWindow };
 
 let providerCatalogCache: ProviderDefinition[] | null = null;
 
@@ -90,7 +87,9 @@ export async function resolveLlm() {
   if (!selectedProvider) return null;
 
   const apiKeyEnvVar = selectedProvider.apiKey?.envVar;
-  const apiKey = apiKeyEnvVar ? String(process.env[apiKeyEnvVar] || "").trim() : "";
+  const apiKey = apiKeyEnvVar
+    ? String(process.env[apiKeyEnvVar] || "").trim()
+    : String(selectedProvider.runtime?.builtinApiKey || "").trim();
   if (selectedProvider.requiresUserApiKey && !apiKey) return null;
 
   const customBaseUrlEnvVar = selectedProvider.runtime?.customBaseUrlEnvVar;
@@ -112,7 +111,10 @@ export async function resolveLlm() {
     kind: "openai",
     baseUrl,
     apiKey,
-    model: modelOverride || selectedProvider.model || "",
+    model:
+      selectedProvider.id === "opencode"
+        ? selectedProvider.model || "big-pickle"
+        : modelOverride || selectedProvider.model || "",
     extraHeaders: {
       ...(selectedProvider.runtime?.extraHeaders || {}),
       ...envExtraHeaders,
@@ -120,45 +122,3 @@ export async function resolveLlm() {
   };
 }
 
-export function getKnownContextWindow(model) {
-  const m = String(model || "").trim();
-  if (!m) return null;
-  const exact = MODEL_CONTEXT_WINDOWS[m];
-  if (typeof exact === "number") return exact;
-  const key = Object.keys(MODEL_CONTEXT_WINDOWS).find((name) => m.startsWith(name));
-  return key ? MODEL_CONTEXT_WINDOWS[key] : null;
-}
-
-export async function fetchContextWindow(cfg, fetchWithTimeout) {
-  if (!cfg?.model) return null;
-  const known = getKnownContextWindow(cfg.model);
-  if (known) return known;
-  const isOpenRouterFreeModel =
-    cfg.model === "openrouter/free";
-  if (cfg.provider === "openrouter") {
-    try {
-      const res = await fetchWithTimeout(
-        `${cfg.baseUrl}/models/${encodeURIComponent(cfg.model)}`,
-        {
-          headers: sanitizeHeadersForFetch({
-            Authorization: `Bearer ${cfg.apiKey}`,
-            ...cfg.extraHeaders,
-          }),
-        },
-        LLM_METADATA_TIMEOUT_MS,
-        "OpenRouter model metadata request"
-      );
-      if (res.ok) {
-        const payload = await res.json();
-        const value = payload?.data?.context_length ?? payload?.context_length;
-        if (typeof value === "number" && Number.isFinite(value) && value > 0) {
-          return Math.round(value);
-        }
-      }
-    } catch {
-      /* non-fatal */
-    }
-  }
-  if (isOpenRouterFreeModel) return OPENROUTER_FREE_DEFAULT_CONTEXT_WINDOW;
-  return null;
-}

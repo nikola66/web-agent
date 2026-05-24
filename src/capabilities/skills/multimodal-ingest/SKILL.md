@@ -3,6 +3,7 @@ name: Multimodal Ingest
 description: Use when the input is an image, screenshot, diagram, or YouTube link—vision_analyze and youtube_transcribe before text reasoning.
 version: 1.0.0
 category: bundled
+primary-tools: [vision_analyze, audio_analyze, youtube_transcribe]
 tags: [vision, multimodal, ocr, youtube, transcript, image]
 triggers: [screenshot, image, diagram, ocr, what is in this image, youtube link, transcribe, video summary, vision_analyze, youtube_transcribe, audio_analyze]
 ---

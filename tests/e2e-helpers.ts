@@ -228,13 +228,17 @@ export async function stopAgentAndWait(page: Page) {
   });
 }
 
-export async function expectOpenRouterDefaultInProfileEditor(page: Page) {
+export async function expectProviderInProfileEditor(page: Page, providerLabel: string) {
   await ensureProfilesTab(page);
   await page.locator('button[aria-label^="Edit "]').first().click();
   const dialog = page.getByRole("dialog");
-  await expect(dialog.getByRole("button", { name: "OpenRouter" }).first()).toBeVisible();
+  await expect(dialog.getByRole("button", { name: providerLabel }).first()).toBeVisible();
   await dialog.getByRole("button", { name: "Close" }).click();
   await expect(dialog).toBeHidden();
+}
+
+export async function expectDefaultProviderInProfileEditor(page: Page) {
+  await expectProviderInProfileEditor(page, "OpenCode's Big Pickle (free)");
 }
 
 export async function createProfile(page: Page, name: string) {

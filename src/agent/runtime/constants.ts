@@ -69,6 +69,8 @@ export const TELEGRAM_AUTH_REL = ".webagent/telegram-auth.json";
 export const COMPOSIO_AUDIT_REL = ".webagent/composio-actions.jsonl";
 /** MCP server definitions. Must match `WORKSPACE_MCP_SERVERS_REL` in `src/core/workspace-layout.ts`. */
 export const MCP_SERVERS_REL = ".webagent/mcp-servers.json";
+/** Tool allow/deny policy. Must match `WORKSPACE_TOOL_POLICY_REL` in `src/core/workspace-layout.ts`. */
+export const TOOL_POLICY_REL = ".webagent/tool-policy.json";
 /** Skill documents — reusable procedure markdown files injected into system prompt. */
 export const SKILLS_DIR = `${WS}/.webagent/skills`;
 /** Conversation history checkpoints for rollback. */
@@ -111,12 +113,3 @@ export const HIDDEN_STREAM_MARKERS = [
   { start: CLARIFY_PROMPT_START, end: TOOL_END_MARKER },
   { start: TOOLCALL_XML_START_MARKER, end: TOOLCALL_XML_END_MARKER },
 ];
-
-// Hints for context window sizes when the provider doesn't expose them.
-// Most resolution happens via the OpenRouter `/models/<id>` endpoint at runtime;
-// these are quick fallbacks for the bundled defaults.
-export const MODEL_CONTEXT_WINDOWS = {
-  "gpt-4o-mini": 128000,
-  "google/gemma-4-31b-it": 262144,
-  "stepfun/step-3.5-flash": 262144,
-};
