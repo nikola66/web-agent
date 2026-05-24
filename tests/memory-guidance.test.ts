@@ -42,13 +42,12 @@ test("buildMemoryLayerGuidanceBlock returns empty when no memory layer tools", (
   assert.equal(buildMemoryLayerGuidanceBlock(["web_fetch"]), "");
 });
 
-test("buildMemoryLayerGuidanceBlock includes script porting when run_shell enabled", () => {
+test("buildMemoryLayerGuidanceBlock includes python runtime guidance when run_shell enabled", () => {
   const block = buildMemoryLayerGuidanceBlock(["run_shell", "read_file"]);
-  assert.match(block, /script-porting/);
-  assert.match(block, /python_to_node/);
+  assert.match(block, /run_python/);
   assert.match(block, /web_fetch/);
   assert.match(block, /web_post/);
-  assert.match(block, /Nodebox runs JavaScript only/);
+  assert.match(block, /Nodebox has no POSIX shell or system pip/);
 });
 
 test("buildMemoryLayerGuidanceBlock includes http-api guidance when web_fetch and web_post enabled", () => {

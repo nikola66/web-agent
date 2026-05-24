@@ -29,7 +29,7 @@ Canonical procedure for **REST GET** (`web_fetch`) and **POST / GraphQL** (`web_
 
 ## Relation to other skills
 
-- Tool picker (shell vs HTTP): **`browser-runtime-map`**. Python skills: **`script-porting`**. Secrets: **`memory-layers`**.
+- Tool picker (shell vs HTTP): **`browser-runtime-map`**. Python scripts: **`run_python`** when Pyodide-compatible. Secrets: **`memory-layers`**.
 - **Imported skills own endpoints** — call `skill_view` on the imported skill first; use this skill for generic REST/GraphQL mechanics.
 
 ## Procedure

@@ -229,7 +229,7 @@ test("skill import warning names likely Python libraries", async (t) => {
     assert.equal(result.ok, true);
     assert.match((result.warnings || []).join("\n"), /requests/);
     assert.match((result.warnings || []).join("\n"), /beautifulsoup4/);
-    assert.match((result.warnings || []).join("\n"), /python_to_node/);
+    assert.match((result.warnings || []).join("\n"), /run_python/);
   } finally {
     globalThis.fetch = originalFetch;
   }

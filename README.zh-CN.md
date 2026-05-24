@@ -26,7 +26,7 @@
 
 Web Agent 是在 WebContainers 上直接在浏览器中运行的开源 AI 代理。终端用户无需安装：无 Docker、无 VPS、无 VM、无 Mac mini、无 Hostinger、无本地 Python 栈。打开应用、启动 profile 即可工作。
 
-面向普通用户简单、面向高级用户强大：隔离 profile、浏览器本地持久化、**38 个内置工具**、**16 个 bundled 技能**、会话、反思、学习、cron、**规划模式**（`/plan`）、**PARA + Obsidian 风格知识库**（`wiki_*` 工具与 `/wiki_*` 斜杠命令），以及留在用户机器上的自改进运行时。可复制场景见 **[个人助手 Playbook](docs/zh-CN/use-cases-playbook.md)**。
+面向普通用户简单、面向高级用户强大：隔离 profile、浏览器本地持久化、**49 个内置工具**、**19 个 bundled 技能**、会话、反思、学习、cron、**规划模式**（`/plan`）、**PARA + Obsidian 风格知识库**（`wiki_*` 工具与 `/wiki_*` 斜杠命令），以及留在用户机器上的自改进运行时。可复制场景见 **[个人助手 Playbook](docs/zh-CN/use-cases-playbook.md)**。
 
 ## 目录
 

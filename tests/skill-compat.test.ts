@@ -164,7 +164,7 @@ test("skills-sh-top10 fixture: every mapped tier declares a mapping", async () =
   }
 });
 
-test("skills-sh-top10 fixture: every limited tier maps to porting or runtime guidance", async () => {
+test("skills-sh-top10 fixture: every limited tier maps to runtime guidance", async () => {
   const rows = JSON.parse(await fs.readFile(FIXTURE, "utf8"));
   const limited = rows.filter((row: { tier: string }) => row.tier === "limited");
   assert.ok(limited.length >= 1);
@@ -175,8 +175,8 @@ test("skills-sh-top10 fixture: every limited tier maps to porting or runtime gui
     );
     assert.match(
       appendix,
-      /script-porting|browser-runtime-map/i,
-      `${row.slug} appendix should mention script-porting or browser-runtime-map`
+      /run_python|browser-runtime-map/i,
+      `${row.slug} appendix should mention run_python or browser-runtime-map`
     );
   }
 });

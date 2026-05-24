@@ -15,8 +15,9 @@ triggers: [imported skill, skills.sh install, skill compat, WebFetch, agent-brow
 | POST / GraphQL | `web_post` — **`http-api`** |
 | Read / Glob / Grep | `read_file` / `list_dir` / `find_files` / `grep` |
 | Skill / Read skill | `skill_view` `{ name }` |
-| Bash / curl / npx | **`browser-runtime-map`** — Nodebox: `run_shell` **`node …` only** |
-| Python / pip / `.py` | **`script-porting`** + `python_to_node` |
+| Bash / curl / npx | **`browser-runtime-map`** — Nodebox has no POSIX shell |
+| Python / `.py` | `run_python` for Pyodide-compatible scripts |
+| pip / native deps | No system pip; use Pyodide packages if available or replace the native dependency step |
 | agent-browser / Playwright | **Not available** — `web_fetch` + file tools |
 | MCP / CallMcpTool | **Not built-in** — add capability or use HTTP tools |
 
@@ -35,7 +36,7 @@ triggers: [imported skill, skills.sh install, skill compat, WebFetch, agent-brow
 1. `skill_view` this skill (**`imported-skill-compat`**) — refresh the mapping table.
 2. `skill_view` `{ installed-slug }` — read the auto-appended **Web Agent execution** block and `compatibility_notes` in the tool result.
 3. `skill_view` **`browser-runtime-map`** before the first filesystem/HTTP/shell choice.
-4. If tier is **limited** (Python/Bash/MCP): also `skill_view` **`script-porting`** and **`http-api`** as needed.
+4. If tier is **limited** (Python/Bash/MCP): use `run_python` for compatible Python and `skill_view` **`http-api`** for API calls as needed.
 5. If tier is **unsupported** (Playwright/agent-browser): do not retry `npx` or browser automation — substitute `web_fetch`, `read_file`, and source inspection.
 
 ## Compatibility tiers
@@ -44,14 +45,14 @@ triggers: [imported skill, skills.sh install, skill compat, WebFetch, agent-brow
 |------|---------|----------|
 | **native** | No external-host tools | frontend-design (code-only body) |
 | **mapped** | Direct built-in swap | web-design-guidelines (`WebFetch` → `web_fetch`) |
-| **limited** | Needs porting or host-only shell | pdf (Python), mcp-builder, tdd (shell), **skill-creator** (Python scripts + skip `claude -p`) |
+| **limited** | Needs Pyodide compatibility checks or host-only shell | pdf (Python), mcp-builder, tdd (shell), **skill-creator** (Python scripts + skip `claude -p`) |
 | **unsupported** | No browser automation in Nodebox | agent-browser, webapp-testing (Playwright) |
 
 Remote imports auto-append a **Web Agent execution (auto-appended)** section to saved `SKILL.md` files under `.webagent/skills/`. Bundled skills under `src/capabilities/skills/` are not patched.
 
 ## Relation to other skills
 
-- Install discovery: **`find-skills`**. Remote install rules: **`web-agent-skill`**. Runtime picker: **`browser-runtime-map`**. HTTP: **`http-api`**. Python ports: **`script-porting`**.
+- Install discovery: **`find-skills`**. Remote install rules: **`web-agent-skill`**. Runtime picker: **`browser-runtime-map`**. HTTP: **`http-api`**. Python: **`run_python`**.
 
 ## Pitfalls
 

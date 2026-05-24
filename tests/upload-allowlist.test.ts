@@ -16,4 +16,5 @@ test("isAllowedUploadFile is case-insensitive and requires an extension", () => 
   assert.equal(isAllowedUploadFile("archive"), false);
   assert.equal(isAllowedUploadFile(".env"), true);
   assert.equal(isAllowedUploadFile("script.sh"), true);
+  assert.equal(isAllowedUploadFile("bundle.ZIP"), true);
 });

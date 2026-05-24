@@ -85,6 +85,7 @@ The same framing is used for streaming LLM responses (`ipcProxyStreamRequest` in
 - Built-in tools: `src/agent/runtime/tools/builtins/` — registered at module load.
 - Capability tools: `src/capabilities/tools/<id>/{manifest.json, handler.js}` — loaded lazily; **skipped if name collides with a built-in** (warns to console + JSONL debug log).
 - Tool catalog re-exported to browser via `src/agent/tool-catalog.ts` for emoji/icon hints in the UI.
+- Python execution: `run_python` sends an IPC request from the Nodebox agent runtime to the browser adapter, which lazy-loads a Pyodide worker after boot and mirrors the selected workspace cwd into Pyodide's virtual FS for the run. This is CPython-in-Wasm, not host Python: no subprocess, system pip, native sockets, or arbitrary compiled wheels.
 
 ## Skills
 

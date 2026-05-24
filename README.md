@@ -24,7 +24,7 @@
 
 Web Agent is an open-source AI agent that runs directly in the browser on top of WebContainers. There is nothing to install to use it: no Docker, no VPS, no VM, no Mac mini, no Hostinger box, no local Python stack. Open the app, launch a profile, and start working.
 
-It is designed to feel simple for end users and capable for power users: isolated profiles, browser-local persistence, **44 built-in tools**, **18 bundled skills**, sessions, reflections, learnings, cron jobs, **planning mode** (`/plan`), a **PARA + Obsidian-style knowledge vault** (`wiki_*` tools and `/wiki_*` slash commands), and a self-improving runtime that stays on the user’s machine. For copy-paste scenarios mapped to skills and tools, start with the **[Personal Helper Playbook](docs/use-cases-playbook.md)**.
+It is designed to feel simple for end users and capable for power users: isolated profiles, browser-local persistence, **49 built-in tools**, **19 bundled skills**, sessions, reflections, learnings, cron jobs, **planning mode** (`/plan`), a **PARA + Obsidian-style knowledge vault** (`wiki_*` tools and `/wiki_*` slash commands), and a self-improving runtime that stays on the user’s machine. For copy-paste scenarios mapped to skills and tools, start with the **[Personal Helper Playbook](docs/use-cases-playbook.md)**.
 
 ## Contents
 
@@ -85,8 +85,8 @@ Web Agent is not just a chat box. It is a browser-native agent runtime with thre
 
 | Layer | Count | Notes |
 | --- | --- | --- |
-| Built-in tools | **44** | Eight groups below; skill CRUD consolidated into **`skill_manage`** (plus list, view, bulk import) |
-| Bundled skills | **16** | Four **hub** skills route related workflows; twelve **workflow** skills cover research, planning, delivery, and ops |
+| Built-in tools | **49** | Eight groups below; skill CRUD consolidated into **`skill_manage`** (plus list, view, bulk import) |
+| Bundled skills | **19** | Hub skills route related workflows; workflow skills cover research, planning, delivery, and ops |
 | Playbook scenarios | **25** | Full prompts in **[docs/use-cases-playbook.md](docs/use-cases-playbook.md)** |
 
 ```mermaid
@@ -278,7 +278,7 @@ These power built-in web actions from the Settings panel:
 
 ## Tooling
 
-Web Agent ships with **44 native built-in tools** in eight groups. The surface was consolidated so models see four skill tools (`skill_list`, `skill_view`, `skill_manage`, `skill_bulk_save`) instead of seven overlapping names; `list_dir` lists one directory level while `find_files` searches by glob pattern.
+Web Agent ships with **49 native built-in tools** in eight groups. The surface was consolidated so models see four skill tools (`skill_list`, `skill_view`, `skill_manage`, `skill_bulk_save`) instead of seven overlapping names; `list_dir` lists one directory level while `find_files` searches by glob pattern.
 
 ### Tool Groups
 
@@ -291,7 +291,7 @@ Web Agent ships with **44 native built-in tools** in eight groups. The surface w
 | `⏱️ Automation` | `cron_register`, `cron_list`, `todo_write` | Recurring jobs, heartbeat-driven workflows, and checklists |
 | `🔌 App Integrations` | `composio_status`, `composio_connect`, `composio_action` | Connecting marketing apps and running allowlisted external actions through Composio |
 | `🌐 Remote & Multimodal` | `web_search`, `web_fetch`, `web_post`, `vision_analyze`, `youtube_transcribe`, `email` | Research, fetching live content, authenticated POST/GraphQL, image analysis, transcripts, and outbound delivery |
-| `🖥️ System & Output` | `run_shell`, `python_to_node`, `system_info`, `artifact_present`, `apply_patch` | Browser-safe Node scripts, Python→Node porting hints, environment state, artifacts, and surgical patching |
+| `🖥️ System & Output` | `run_shell`, `run_python`, `system_info`, `artifact_present`, `apply_patch` | Browser-safe Node scripts, Pyodide-backed Python, environment state, artifacts, and surgical patching |
 
 <details>
 <summary><strong>🛠️ Full tool catalog</strong></summary>
@@ -320,8 +320,8 @@ Web Agent ships with **44 native built-in tools** in eight groups. The surface w
 | `📦 move_file` | Move or rename a workspace path. |
 | `🛠️ multi_edit` | Apply multiple find-and-replace edits in one file. |
 | `📄 read_file` | Read a UTF-8 file from the workspace. |
-| `🐍 python_to_node` | Read-only Python→Node compatibility report with library recipes, templates, and cache-backed hints for Nodebox (not an auto-transpiler). |
-| `🖥️ run_shell` | Run browser-safe `node ...` scripts and simple read-only probes in the workspace runtime. |
+| `🐍 run_python` | Run stdlib/Pyodide-compatible Python in browser-only Nodebox with optional args, env, packages, and workspace file sync. |
+| `🖥️ run_shell` | Run browser-safe `node ...`, `python3 ...`, and simple read-only probes in the workspace runtime. |
 | `📝 session_memory_append` | Append a lightweight note to rolling session memory. |
 | `🗂️ session_memory_list` | Read the newest entries from rolling session memory. |
 | `📇 session_search` | Search archived workspace conversations by keywords. |
@@ -349,7 +349,7 @@ Web Agent ships with **44 native built-in tools** in eight groups. The surface w
 
 Skills are reusable procedures stored as `SKILL.md` files. They let Web Agent switch from raw tool usage to structured workflows that can be invoked on demand.
 
-### Bundled Skills (18)
+### Bundled Skills (19)
 
 **Hub skills** — route related workflows and cross-skill tables:
 
@@ -358,7 +358,7 @@ Skills are reusable procedures stored as `SKILL.md` files. They let Web Agent sw
 | `/memory-layers` | Facts, session notes, wiki mirror, secret hygiene, `session_search` |
 | `/browser-runtime-map` | WebContainer limits, shell failures, file layout |
 | `/http-api` | REST GET (`web_fetch`) and POST/GraphQL (`web_post`) — auth, query shapes, CMS patterns |
-| `/script-porting` | Python/bash skill scripts → web_fetch/web_post + node scripts for Nodebox |
+| `/imported-skill-compat` | Imported skills from other hosts → Web Agent tools, including `run_python` |
 | `/artifact-delivery` | Reports, email, charts, presentation patterns |
 | `/web-agent-skill` | Evolving Web Agent itself (runtime, skills, cron, repo truth) |
 
@@ -371,6 +371,7 @@ Skills are reusable procedures stored as `SKILL.md` files. They let Web Agent sw
 | `/structured-extraction` | Tables or JSON from live pages |
 | `/find_skills` | Search online skill registries (top 5 matches) |
 | `/task-execution` | In-session plan (`todo_write`) then execute |
+| `/knowledge-vault` | Wiki-backed project knowledge and searchable markdown context |
 | `/heartbeat-cron` | Recurring jobs while the tab is open |
 | `/project-scaffold` | Isolated folder before generating files |
 | `/workspace-safety` | Checkpoints, bulk ops, safe reorganize |

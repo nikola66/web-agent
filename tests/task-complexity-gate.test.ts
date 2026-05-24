@@ -9,6 +9,7 @@ import {
   buildPlanExecutionContextPrefix,
   isExecutionContinuationIntent,
   isSkillInstallIntent,
+  focusToolNamesForIntent,
   buildSkillInstallContextPrefix,
   buildApiCallContextPrefix,
   skillBulkSaveAllUrlItemsFailed,
@@ -149,11 +150,21 @@ test("buildSkillInstallContextPrefix warns about curated indexes", () => {
   assert.doesNotMatch(prefix!, /VoltAgent/i);
 });
 
-test("buildSkillInstallContextPrefix nudges script-porting for python skills", () => {
+test("buildSkillInstallContextPrefix nudges python runtime for python skills", () => {
   const prefix = buildSkillInstallContextPrefix("install python skill with pip install helpers");
   assert.ok(prefix);
-  assert.match(prefix!, /script-porting/);
+  assert.match(prefix!, /run_python/);
   assert.match(prefix!, /http-api/);
+});
+
+test("focusToolNamesForIntent narrows skill install tools", () => {
+  assert.deepEqual(
+    focusToolNamesForIntent(
+      ["read_file", "extract_archive", "skill_manage", "run_shell", "composio_action"],
+      "Install this skill from uploads/archive.zip"
+    ),
+    ["read_file", "extract_archive", "skill_manage"]
+  );
 });
 
 test("buildApiCallContextPrefix nudges http-api and skill discovery for graphql tasks", () => {

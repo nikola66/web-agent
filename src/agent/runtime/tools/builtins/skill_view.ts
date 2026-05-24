@@ -4,7 +4,7 @@ import { skillViewTool } from "../remote-tools.js";
 const SKILL_VIEW_EXAMPLES = [
   { name: "http-api" },
   { name: "memory-layers" },
-  { name: "script-porting", file_path: "references/porting-cheatsheet.md" },
+  { name: "browser-runtime-map" },
 ];
 
 export default defineTool({

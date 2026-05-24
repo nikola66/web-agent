@@ -10,6 +10,7 @@ import {
   type NodeboxProcess,
   type SpawnPtySize,
 } from "@/runtimes/webcontainer/boot";
+import { executePythonInNodebox } from "@/runtimes/webcontainer/python";
 import {
   hasWorkspaceSnapshot,
   restoreFilesystem,
@@ -212,6 +213,10 @@ const SPAWN_REQ_PREFIX = "<<<WEBAGENT_SPAWN_REQ:";
 const SPAWN_REQ_END = "<<<END_WEBAGENT_SPAWN_REQ>>>";
 const SPAWN_RESP_PREFIX = "<<<WEBAGENT_SPAWN_RESP:";
 const SPAWN_RESP_END = "<<<END_WEBAGENT_SPAWN_RESP>>>";
+const PYTHON_REQ_PREFIX = "<<<WEBAGENT_PYTHON_REQ:";
+const PYTHON_REQ_END = "<<<END_WEBAGENT_PYTHON_REQ>>>";
+const PYTHON_RESP_PREFIX = "<<<WEBAGENT_PYTHON_RESP:";
+const PYTHON_RESP_END = "<<<END_WEBAGENT_PYTHON_RESP>>>";
 const STT_REQ_PREFIX = "<<<WEBAGENT_STT_REQ:";
 const STT_REQ_END = "<<<END_WEBAGENT_STT_REQ>>>";
 const STT_RESP_PREFIX = "<<<WEBAGENT_STT_RESP:";
@@ -1007,6 +1012,7 @@ export async function startWebAgent(options: AgentStartOptions): Promise<void> {
       const proxyReqStart = agentOutputBuffer.indexOf(PROXY_REQ_PREFIX);
       const proxyStreamReqStart = agentOutputBuffer.indexOf(PROXY_STREAM_REQ_PREFIX);
       const spawnReqStart = agentOutputBuffer.indexOf(SPAWN_REQ_PREFIX);
+      const pythonReqStart = agentOutputBuffer.indexOf(PYTHON_REQ_PREFIX);
       const sttReqStart = agentOutputBuffer.indexOf(STT_REQ_PREFIX);
       const fatalStart = agentOutputBuffer.indexOf(FATAL_ERROR_START);
       const nextStartCandidates = [
@@ -1022,6 +1028,7 @@ export async function startWebAgent(options: AgentStartOptions): Promise<void> {
         proxyReqStart,
         proxyStreamReqStart,
         spawnReqStart,
+        pythonReqStart,
         sttReqStart,
         fatalStart,
       ].filter((v) => v >= 0);
@@ -1430,6 +1437,40 @@ export async function startWebAgent(options: AgentStartOptions): Promise<void> {
             });
           }
           await agentProcess.write(`${SPAWN_RESP_PREFIX}${reqId}>>>${respPayload}${SPAWN_RESP_END}`);
+        })();
+        continue;
+      }
+
+      if (agentOutputBuffer.startsWith(PYTHON_REQ_PREFIX)) {
+        const idEnd = agentOutputBuffer.indexOf(">>>", PYTHON_REQ_PREFIX.length);
+        if (idEnd < 0) break;
+        const reqId = agentOutputBuffer.slice(PYTHON_REQ_PREFIX.length, idEnd);
+        const bodyStart = idEnd + 3;
+        const bodyEnd = agentOutputBuffer.indexOf(PYTHON_REQ_END, bodyStart);
+        if (bodyEnd < 0) break;
+        const reqBody = agentOutputBuffer.slice(bodyStart, bodyEnd);
+        agentOutputBuffer = agentOutputBuffer.slice(bodyEnd + PYTHON_REQ_END.length);
+        void (async () => {
+          let respPayload: string;
+          try {
+            const req = JSON.parse(reqBody) as {
+              code?: string;
+              path?: string;
+              cwd?: string;
+              args?: string[];
+              env?: Record<string, string>;
+              packages?: string[];
+              timeout_ms?: number;
+            };
+            const result = await executePythonInNodebox(req, profileWorkspaceDir);
+            respPayload = JSON.stringify(result);
+          } catch (e) {
+            respPayload = JSON.stringify({
+              ok: false,
+              error: String((e as Error)?.message ?? e),
+            });
+          }
+          await agentProcess.write(`${PYTHON_RESP_PREFIX}${reqId}>>>${respPayload}${PYTHON_RESP_END}`);
         })();
         continue;
       }

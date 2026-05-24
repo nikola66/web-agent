@@ -32,6 +32,28 @@ export function isSkillInstallIntent(input) {
   return SKILL_INSTALL_INTENT_RE.test(String(input || ""));
 }
 
+export const SKILL_INSTALL_FOCUSED_TOOL_NAMES = [
+  "archive_list",
+  "extract_archive",
+  "find_files",
+  "grep",
+  "list_dir",
+  "read_file",
+  "skill_bulk_save",
+  "skill_list",
+  "skill_manage",
+  "skill_view",
+  "web_fetch",
+  "web_search",
+];
+
+export function focusToolNamesForIntent(allNames: string[] = [], input = ""): string[] {
+  if (!isSkillInstallIntent(input)) return allNames;
+  const focused = new Set(SKILL_INSTALL_FOCUSED_TOOL_NAMES);
+  const next = allNames.filter((name) => focused.has(name));
+  return next.length ? next : allNames;
+}
+
 const PYTHON_SKILL_INSTALL_RE = /\b(pip install|python3?|python\s+-m|\.py\b)\b/i;
 
 const API_CALL_INTENT_RE = new RegExp(
@@ -70,13 +92,14 @@ export function buildSkillInstallContextPrefix(input) {
   if (!isSkillInstallIntent(input)) return null;
   let prefix =
     "[Skill install] Some GitHub repos are curated indexes (README + outbound links), not skill hosts. " +
+    "For uploaded/extracted skill archives: after `extract_archive`, locate the directory containing `SKILL.md`, then call `skill_manage` with `action: \"import_dir\"` and that directory path. " +
     "Read the README, follow registry links (officialskills.sh / skills.sh / skillsmp) or source-repo URLs — " +
     "do not guess raw paths from list labels. On 404: web_fetch registry pages, resolve GitHub links, " +
     "try alternate repo layouts, web_search — pivot before declaring a blocker. " +
     "After install, call skill_view **`imported-skill-compat`**, then skill_view the installed skill; follow the Web Agent execution section.";
   if (PYTHON_SKILL_INSTALL_RE.test(String(input || ""))) {
     prefix +=
-      " After install, if the skill references Python, pip, or HTTP clients: call skill_view **`http-api`** (REST/GraphQL) and **`script-porting`** (Python ports); use `web_fetch`/`web_post` for API steps; `run_shell` only for local node scripts.";
+      " After install, if the skill references Python, pip, or HTTP clients: use `run_python` for compatible Python, call skill_view **`http-api`** for REST/GraphQL, use `web_fetch`/`web_post` for simple API steps, and avoid system pip/native shell assumptions.";
   }
   return prefix;
 }

@@ -12,7 +12,7 @@ triggers: [scrape, extract table, parse html, structured data, csv from page, js
 | Step | Tool |
 |------|------|
 | Fetch source | `web_fetch` (or URLs from **`open-web-research`**) |
-| Parse on Nodebox | `run_shell` with `node -e` snippet only — see **`browser-runtime-map`** |
+| Parse on Nodebox | `run_python` or a small `run_shell` `node -e` snippet — see **`browser-runtime-map`** |
 | Persist rows | `write_file` under `work/<slug>/` |
 | Deliver to user | `artifact_present` — **`artifact-delivery`** |
 | Scholarly APIs | defer to **`research-pack`** |

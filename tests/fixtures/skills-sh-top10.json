@@ -45,7 +45,7 @@
     "repo": "anthropics/skills",
     "patterns": ["write_file", "python -m scripts", "generate_review.py"],
     "tier": "limited",
-    "mapping": "import_dir + script-porting; skip claude -p / ProcessPoolExecutor; static eval viewer"
+    "mapping": "import_dir + run_python where Pyodide-compatible; skip claude -p / ProcessPoolExecutor; static eval viewer"
   },
   {
     "rank": 7,
@@ -53,7 +53,7 @@
     "repo": "anthropics/skills",
     "patterns": ["pip install", "python", "pdftotext"],
     "tier": "limited",
-    "mapping": "script-porting + python_to_node"
+    "mapping": "run_python for Pyodide-compatible scripts; native binaries remain unsupported"
   },
   {
     "rank": 8,

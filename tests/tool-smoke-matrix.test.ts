@@ -48,8 +48,8 @@ const SMOKE_TIERS = {
   move_file: "local-setup",
   multi_edit: "local-setup",
   pdf_extract: "local-setup",
-  python_to_node: "local",
   read_file: "local-setup",
+  run_python: "manual",
   run_shell: "local-setup",
   session_memory_append: "local",
   session_memory_list: "local",
@@ -149,15 +149,6 @@ test("local smoke tier tools execute without error", async (t) => {
     check?: (result: unknown) => void | Promise<void>;
   }> = [
     { name: "system_info", args: {}, check: (r) => assert.equal((r as { ok?: boolean }).ok, true) },
-    {
-      name: "python_to_node",
-      args: { python: "import requests\nprint('ok')" },
-      check: (r) => {
-        const rec = r as { skill_ref?: string; hints?: string[] };
-        assert.equal(rec.skill_ref, "script-porting");
-        assert.ok(rec.hints?.some((h) => /requests/i.test(h)));
-      },
-    },
     { name: "cron_list", args: {} },
     {
       name: "composio_status",
@@ -529,6 +520,7 @@ test("smoke tier manifest documents manual and proxy-only tools", () => {
     "audio_analyze",
     "composio_action",
     "composio_connect",
+    "run_python",
     "skill_bulk_save",
     "skill_manage",
   ]);

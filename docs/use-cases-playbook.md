@@ -2,7 +2,7 @@
 
 Twenty-five copy-paste scenarios for getting real work done with Web Agent. Each entry maps to bundled skills and the tools those skills expect. Prompts stay in English — paste them as-is into chat.
 
-**Surface this playbook assumes:** **38** built-in tools (skill CRUD via **`skill_manage`** only), **16** bundled skills (four hubs + twelve workflows). Full catalog: [README § Tooling](../README.md#tooling) · [README § Skills](../README.md#skills).
+**Surface this playbook assumes:** **49** built-in tools (skill CRUD via **`skill_manage`** plus list, view, and bulk import), **19** bundled skills. Full catalog: [README § Tooling](../README.md#tooling) · [README § Skills](../README.md#skills).
 
 **Filter by category:** [Research](#playbook-research) · [Memory](#playbook-memory) · [Planning](#playbook-planning) · [Automation](#playbook-automation) · [Workspace](#playbook-workspace) · [Debug](#playbook-debug) · [Multimodal](#playbook-multimodal) · [Delivery](#playbook-delivery) · [UX](#playbook-ux) · [Safety](#playbook-safety) · [Meta](#playbook-meta)
 

@@ -53,7 +53,7 @@ export const SKILLS_GUIDANCE =
   "don't wait to be asked. Skills capture procedures; memory captures durable facts.";
 
 export const SCRIPT_PORTING_GUIDANCE =
-  "Nodebox runs JavaScript only — no `python`, `pip`, or POSIX shell. When a skill references Python scripts or HTTP clients: map `requests.get` → `web_fetch` (+ `headers`), `requests.post`/GraphQL → `web_post`; use `run_shell` only for local `node` scripts (not axios/fetch one-liners). Call `skill_view` **`http-api`** for REST/GraphQL shapes, **`script-porting`** for Python ports, or `python_to_node` before shell/API steps.";
+  "Nodebox has no POSIX shell or system pip. For Python skills, use `run_python` for stdlib/Pyodide-compatible scripts and `python3 ...` only as a run_shell alias. Map simple HTTP to `web_fetch`/`web_post`; use Pyodide HTTP APIs inside reusable Python. Do not use axios/fetch shell one-liners or native pip/subprocess assumptions.";
 
 export const HTTP_API_GUIDANCE =
   "REST GET → `web_fetch` with `url` + optional `headers` (Bearer). POST / GraphQL → `web_post` with `url`, `body`, `headers`. " +

@@ -30,6 +30,11 @@ export const IPC_SPAWN_REQ_END = "<<<END_WEBAGENT_SPAWN_REQ>>>";
 export const IPC_SPAWN_RESP_PREFIX = "<<<WEBAGENT_SPAWN_RESP:";
 export const IPC_SPAWN_RESP_END = "<<<END_WEBAGENT_SPAWN_RESP>>>";
 
+export const IPC_PYTHON_REQ_PREFIX = "<<<WEBAGENT_PYTHON_REQ:";
+export const IPC_PYTHON_REQ_END = "<<<END_WEBAGENT_PYTHON_REQ>>>";
+export const IPC_PYTHON_RESP_PREFIX = "<<<WEBAGENT_PYTHON_RESP:";
+export const IPC_PYTHON_RESP_END = "<<<END_WEBAGENT_PYTHON_RESP>>>";
+
 export const IPC_STT_REQ_PREFIX = "<<<WEBAGENT_STT_REQ:";
 export const IPC_STT_REQ_END = "<<<END_WEBAGENT_STT_REQ>>>";
 export const IPC_STT_RESP_PREFIX = "<<<WEBAGENT_STT_RESP:";
@@ -42,6 +47,9 @@ const _streamPending = new Map(); // id → { resolve, reject, onStart, onChunk,
 
 let _spawnNextId = 0;
 const _spawnPending = new Map(); // id → { resolve, reject, timer }
+
+let _pythonNextId = 0;
+const _pythonPending = new Map(); // id → { resolve, reject, timer }
 
 let _sttNextId = 0;
 const _sttPending = new Map(); // id → { resolve, reject, timer }
@@ -88,6 +96,26 @@ function stripSpawnResponses(text) {
         entry.resolve(JSON.parse(payload));
       } catch (e) {
         entry.reject(new Error(`IPC spawn response parse error: ${e?.message || e}`));
+      }
+    }
+    return "";
+  });
+}
+
+function stripPythonResponses(text) {
+  const re = new RegExp(
+    IPC_PYTHON_RESP_PREFIX.replace(/</g, "<") + "([^>]+)>>>" + "([\\s\\S]*?)" + IPC_PYTHON_RESP_END,
+    "g"
+  );
+  return text.replace(re, (_, id, payload) => {
+    const entry = _pythonPending.get(id);
+    if (entry) {
+      clearTimeout(entry.timer);
+      _pythonPending.delete(id);
+      try {
+        entry.resolve(JSON.parse(payload));
+      } catch (e) {
+        entry.reject(new Error(`IPC Python response parse error: ${e?.message || e}`));
       }
     }
     return "";
@@ -160,6 +188,7 @@ function stripStreamResponses(text) {
 export function processStdinChunk(text) {
   let out = stripSttResponses(text);
   out = stripSpawnResponses(out);
+  out = stripPythonResponses(out);
   out = stripStreamResponses(out);
   out = stripProxyResponses(out);
   return out;
@@ -278,6 +307,30 @@ export function ipcSpawnRequest(payload) {
     _spawnPending.set(id, { resolve, reject, timer });
     process.stdout.write(
       `${IPC_SPAWN_REQ_PREFIX}${id}>>>${JSON.stringify(payload)}${IPC_SPAWN_REQ_END}`
+    );
+  });
+}
+
+export function ipcPythonRequest(payload) {
+  return new Promise((resolve, reject) => {
+    const id = String(++_pythonNextId);
+    const waitMs = Math.min(
+      typeof payload.timeout_ms === "number" &&
+        Number.isFinite(payload.timeout_ms) &&
+        payload.timeout_ms > 0
+        ? payload.timeout_ms + 30_000
+        : 180_000,
+      900_000
+    );
+    const timer = setTimeout(() => {
+      if (_pythonPending.has(id)) {
+        _pythonPending.delete(id);
+        reject(new Error(`IPC Python request timed out after ${waitMs}ms.`));
+      }
+    }, waitMs);
+    _pythonPending.set(id, { resolve, reject, timer });
+    process.stdout.write(
+      `${IPC_PYTHON_REQ_PREFIX}${id}>>>${JSON.stringify(payload)}${IPC_PYTHON_REQ_END}`
     );
   });
 }

@@ -56,6 +56,7 @@ const RAW_ALLOWED_UPLOAD_EXTENSIONS = [
   "docx",
   "ppt",
   "pptx",
+  "zip",
 ]
   .map((ext) => String(ext).trim().toLowerCase().replace(/^\.+/, ""))
   .filter(Boolean);
