@@ -244,9 +244,9 @@ function toolFailureRecoveryHint(
   if (toolName === "run_shell") {
     return (
       common +
-      "For terminal failures, run a small diagnostic such as `pwd && ls -la` in the same tool, " +
-      "then try an absolute path, a simpler command, a different working directory, or a different " +
-      "tool such as read_file/write_file/apply_patch."
+      "In Nodebox, run_shell is not a POSIX shell — prefer run_python (with env) for .py publishers, " +
+      "web_fetch/web_post for HTTP/API workflows, and read_file/write_file for workspace files. " +
+      "Do not retry export/&& chains or silent node script loops."
     );
   }
   if (toolName === "grep") {

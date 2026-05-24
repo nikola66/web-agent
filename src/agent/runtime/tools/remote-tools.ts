@@ -269,9 +269,61 @@ async function browserAgentFetch(
   }
 }
 
-export async function proxyRequest(request, _ctx) {
-  const { method = "GET", url, headers = {}, body = null } = request;
-  return ipcProxyRequest({ method, url, headers, body });
+export async function proxyRequest(request, _ctx, timeoutMs?) {
+  const { method = "GET", url, headers = {}, body = null, bodyEncoding } = request;
+  const ipcTimeout = Number.isFinite(Number(timeoutMs)) && Number(timeoutMs) > 0 ? Number(timeoutMs) : undefined;
+  return ipcProxyRequest({ method, url, headers, body, bodyEncoding }, ipcTimeout);
+}
+
+export const WEB_POST_METHODS = ["POST", "PATCH", "PUT", "DELETE", "HEAD", "OPTIONS"] as const;
+const WEB_POST_BODY_OPTIONAL = new Set(["DELETE", "HEAD", "OPTIONS"]);
+
+export function mergeUrlQueryParams(url: string, params: Record<string, unknown> | undefined): string {
+  if (!params || typeof params !== "object" || Array.isArray(params)) return url;
+  const u = new URL(url);
+  for (const [key, val] of Object.entries(params)) {
+    if (val === undefined || val === null) continue;
+    if (Array.isArray(val)) {
+      for (const item of val) {
+        if (item != null) u.searchParams.append(key, String(item));
+      }
+    } else {
+      u.searchParams.set(key, String(val));
+    }
+  }
+  return u.toString();
+}
+
+export function normalizeWebPostMethod(raw: unknown, defaultMethod = "POST"): string {
+  const m = String(raw ?? defaultMethod).trim().toUpperCase();
+  return (WEB_POST_METHODS as readonly string[]).includes(m) ? m : defaultMethod;
+}
+
+export function resolveWebPostBody(
+  args: ToolArgs,
+  method: string
+): { body: string | null; bodyEncoding?: "base64"; contentTypeHint?: string } {
+  const m = method.toUpperCase();
+  if (args.form && typeof args.form === "object" && !Array.isArray(args.form)) {
+    const params = new URLSearchParams();
+    for (const [k, v] of Object.entries(args.form as Record<string, unknown>)) {
+      if (v !== undefined && v !== null) params.append(k, String(v));
+    }
+    return { body: params.toString(), contentTypeHint: "application/x-www-form-urlencoded" };
+  }
+  let raw = args.body;
+  if (raw === undefined || raw === null) {
+    raw = args.data ?? args.payload ?? args.json;
+  }
+  if (raw === undefined || raw === null) {
+    if (WEB_POST_BODY_OPTIONAL.has(m)) return { body: null };
+    throw new Error(
+      "`body` is required for web_post (POST/PATCH/PUT). Pass a JSON string, object via `json`, or use `form` for urlencoded fields."
+    );
+  }
+  const body = typeof raw === "string" ? raw : JSON.stringify(raw);
+  if (args.body_encoding === "base64") return { body, bodyEncoding: "base64" };
+  return { body };
 }
 
 export async function cronRegisterTool(args: ToolArgs = {}, ctx) {
@@ -420,18 +472,27 @@ export async function httpProxyCall(
     url,
     headers = {},
     body = null,
-  }: { method?: string; url: string; headers?: Record<string, string>; body?: string | null },
-  ctx
+    bodyEncoding,
+  }: {
+    method?: string;
+    url: string;
+    headers?: Record<string, string>;
+    body?: string | null;
+    bodyEncoding?: "base64";
+  },
+  ctx,
+  options?: { timeoutMs?: number }
 ): Promise<HttpProxyResult> {
   const normHeaders = normalizeHttpHeaders(headers);
   const m = String(method || "GET").toUpperCase();
+  const ipcTimeout = pickRemoteTimeoutMs(ctx, options?.timeoutMs, 120_000);
   await logDebugEvent("http_proxy_call", {
     method: m,
     url: String(url).slice(0, 800),
     headers: redactHttpHeadersForLog(normHeaders),
   });
   const { status, body: respBody, contentType } = readProxyResponse(
-    await proxyRequest({ method: m, url, headers: normHeaders, body }, ctx)
+    await proxyRequest({ method: m, url, headers: normHeaders, body, bodyEncoding }, ctx, ipcTimeout)
   );
   const ok = status >= 200 && status < 300;
   const sliced = sliceProxyFetchBody(respBody);
@@ -639,13 +700,17 @@ export async function webFetchTool(args: ToolArgs = {}, ctx) {
   }
 
   const headers = normalizeHttpHeaders(args.headers);
+  const queryParams =
+    args.params && typeof args.params === "object" && !Array.isArray(args.params)
+      ? (args.params as Record<string, unknown>)
+      : undefined;
 
   const rawUrls = Array.isArray(args.urls) ? args.urls : [];
   const single = typeof args.url === "string" ? args.url.trim() : "";
   const targets = [
     ...(single ? [single] : []),
     ...rawUrls.map((u) => String(u || "").trim()).filter(Boolean),
-  ];
+  ].map((url) => (queryParams ? mergeUrlQueryParams(url, queryParams) : url));
   if (!targets.length) throw new Error("`url` or `urls` is required for web_fetch.");
   if (targets.length > WEB_FETCH_BATCH_MAX) {
     throw new Error(`web_fetch accepts at most ${WEB_FETCH_BATCH_MAX} URLs per call.`);
@@ -666,28 +731,35 @@ export async function webFetchTool(args: ToolArgs = {}, ctx) {
 }
 
 export async function webPostTool(args: ToolArgs = {}, ctx) {
-  const url = typeof args.url === "string" ? args.url.trim() : "";
+  let url = typeof args.url === "string" ? args.url.trim() : "";
   if (!url) throw new Error("`url` is required for web_post.");
+  if (args.params && typeof args.params === "object" && !Array.isArray(args.params)) {
+    url = mergeUrlQueryParams(url, args.params as Record<string, unknown>);
+  }
   const u = new URL(url);
   if (!["http:", "https:"].includes(u.protocol)) {
     throw new Error(`web_post only supports http(s) URLs, got: ${u.protocol}`);
   }
-  if (args.body === undefined || args.body === null) {
-    throw new Error("`body` is required for web_post.");
-  }
-  const body =
-    typeof args.body === "string" ? args.body : JSON.stringify(args.body);
+  const method = normalizeWebPostMethod(args.method);
+  const { body, bodyEncoding, contentTypeHint } = resolveWebPostBody(args, method);
   const headers = normalizeHttpHeaders(args.headers);
   const contentType =
-    typeof args.content_type === "string" ? args.content_type.trim() : "";
+    typeof args.content_type === "string" ? args.content_type.trim() : contentTypeHint || "";
   if (contentType) headers["Content-Type"] = contentType;
-  else if (!headers["Content-Type"] && !headers["content-type"]) {
+  else if (!headers["Content-Type"] && !headers["content-type"] && body) {
     const trimmed = body.trim();
     if (trimmed.startsWith("{") || trimmed.startsWith("[")) {
       headers["Content-Type"] = "application/json";
     }
   }
-  return httpProxyCall({ method: "POST", url, headers, body }, ctx);
+  const timeoutMs = Number(args.timeout_ms);
+  const proxyCtx =
+    Number.isFinite(timeoutMs) && timeoutMs > 0 ? { ...ctx, timeoutMs } : ctx;
+  return httpProxyCall(
+    { method, url, headers, body, bodyEncoding },
+    proxyCtx,
+    Number.isFinite(timeoutMs) && timeoutMs > 0 ? { timeoutMs } : undefined
+  );
 }
 
 export async function memorySaveTool(args: ToolArgs = {}, ctx) {

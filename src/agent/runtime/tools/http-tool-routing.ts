@@ -13,7 +13,7 @@ export type HttpIntentDetection = {
 };
 
 const POST_MARKERS =
-  /\baxios\.post\b|\bfetch\s*\([^)]*,\s*\{[^}]*method\s*:\s*['"]POST|\bmethod\s*:\s*['"]POST['"]|\bPOST\b.*\/graphql/i;
+  /\baxios\.(post|patch|put|delete)\b|\bfetch\s*\([^)]*,\s*\{[^}]*method\s*:\s*['"](?:POST|PATCH|PUT|DELETE)['"]|\bmethod\s*:\s*['"](?:POST|PATCH|PUT|DELETE)['"]|\b(?:POST|PATCH|PUT|DELETE)\b.*\/graphql/i;
 const GRAPHQL_MARKERS = /\/graphql\b|"query"\s*:|'query'\s*:|graphql\s*\(/i;
 const GET_MARKERS =
   /\baxios\.get\b|\brequire\s*\(\s*['"]axios['"]\)|\bfrom\s+['"]axios['"]|\bfetch\s*\(|\bhttps?\.request\b|\bnode:https\b|\bnode:http\b/i;

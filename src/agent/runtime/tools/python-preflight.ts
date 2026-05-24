@@ -363,5 +363,12 @@ export function preflightPython(
     );
   }
 
+  // 5. Host-only stdout/stderr APIs (common in skills written for CPython).
+  if (/\bsys\.(?:stdout|stderr)\.reconfigure\s*\(/.test(text)) {
+    warnings.push(
+      "sys.stdout.reconfigure / sys.stderr.reconfigure are host-Python only — remove them for Pyodide or the script may crash with JsProxy errors."
+    );
+  }
+
   return { autoPackages, warnings };
 }

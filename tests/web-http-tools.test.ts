@@ -4,10 +4,14 @@ import assert from "node:assert/strict";
 import {
   graphqlSchemaRecoveryHint,
   guessedResourceRecoveryHint,
+  mergeUrlQueryParams,
+  normalizeWebPostMethod,
+  resolveWebPostBody,
   summarizeHttpErrorBody,
   webFetchTool,
   webPostTool,
 } from "../dist/agent-runtime/tools/remote-tools.js";
+import { BUILTIN_TOOLS } from "../dist/agent-runtime/tools/registry.js";
 
 test("webFetchTool rejects non-GET method", async () => {
   await assert.rejects(
@@ -23,9 +27,42 @@ test("webFetchTool rejects body and points to web_post", async () => {
   );
 });
 
-test("webPostTool requires url and body", async () => {
+test("webPostTool requires url", async () => {
   await assert.rejects(() => webPostTool({}, {}), /`url` is required/);
+});
+
+test("webPostTool requires body for POST", async () => {
   await assert.rejects(() => webPostTool({ url: "https://example.com" }, {}), /`body` is required/);
+});
+
+test("resolveWebPostBody allows DELETE without body", () => {
+  assert.deepEqual(resolveWebPostBody({ url: "https://example.com/x" }, "DELETE"), { body: null });
+});
+
+test("resolveWebPostBody stringifies json alias", () => {
+  assert.deepEqual(resolveWebPostBody({ json: { a: 1 } }, "POST"), { body: '{"a":1}' });
+});
+
+test("resolveWebPostBody builds urlencoded form", () => {
+  const r = resolveWebPostBody({ form: { grant_type: "client_credentials", client_id: "x" } }, "POST");
+  assert.equal(r.body, "grant_type=client_credentials&client_id=x");
+  assert.equal(r.contentTypeHint, "application/x-www-form-urlencoded");
+});
+
+test("mergeUrlQueryParams merges params and preserves existing query", () => {
+  const out = mergeUrlQueryParams("https://api.example.com/items?limit=5", {
+    fields: "id,title",
+    limit: 10,
+  });
+  const u = new URL(out);
+  assert.equal(u.searchParams.get("limit"), "10");
+  assert.equal(u.searchParams.get("fields"), "id,title");
+});
+
+test("normalizeWebPostMethod accepts HEAD and OPTIONS", () => {
+  assert.equal(normalizeWebPostMethod("head"), "HEAD");
+  assert.equal(normalizeWebPostMethod("options"), "OPTIONS");
+  assert.equal(normalizeWebPostMethod("bogus"), "POST");
 });
 
 test("graphqlSchemaRecoveryHint points to skill discovery", () => {
@@ -60,4 +97,20 @@ test("webPostTool rejects non-http URL", async () => {
     () => webPostTool({ url: "file:///tmp/x", body: "{}" }, {}),
     /http\(s\) URLs/
   );
+});
+
+test("webPostTool schema includes extended methods and optional body", () => {
+  const schema = BUILTIN_TOOLS.web_post.inputSchema;
+  assert.deepEqual(schema.properties.method.enum, [
+    "POST",
+    "PATCH",
+    "PUT",
+    "DELETE",
+    "HEAD",
+    "OPTIONS",
+  ]);
+  assert.deepEqual(schema.required, ["url"]);
+  assert.ok(schema.properties.params);
+  assert.ok(schema.properties.form);
+  assert.ok(schema.properties.timeout_ms);
 });

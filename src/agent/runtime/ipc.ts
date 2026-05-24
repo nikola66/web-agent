@@ -198,15 +198,16 @@ export function processStdinChunk(text) {
  * Send a proxy request via IPC and wait for the adapter to fulfill it.
  * The adapter makes the actual fetch from the browser page context.
  */
-export function ipcProxyRequest(request) {
+export function ipcProxyRequest(request, timeoutMs = 120_000) {
+  const wait = Math.min(Math.max(Number(timeoutMs) || 120_000, 5_000), 600_000);
   return new Promise((resolve, reject) => {
     const id = String(++_nextId);
     const timer = setTimeout(() => {
       if (_pending.has(id)) {
         _pending.delete(id);
-        reject(new Error("IPC proxy request timed out after 30s."));
+        reject(new Error(`IPC proxy request timed out after ${wait}ms.`));
       }
-    }, 30_000);
+    }, wait);
     _pending.set(id, { resolve, reject, timer });
     process.stdout.write(
       `${IPC_PROXY_REQ_PREFIX}${id}>>>${JSON.stringify(request)}${IPC_PROXY_REQ_END}`

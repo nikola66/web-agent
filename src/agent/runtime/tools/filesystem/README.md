@@ -8,8 +8,8 @@ Pure-JS ZIP and TAR parser. Backs both `extract_archive` and `archive_list`.
 
 | Format     | Read | Write | Notes                                                      |
 |------------|------|-------|------------------------------------------------------------|
-| ZIP store  | ✓    | —     |                                                            |
-| ZIP deflate| ✓    | —     | via `node:zlib.inflateRawSync`                             |
+| ZIP store  | ✓    | via `run_python` + `zipfile` | No `create_archive` builtin — see recipe below |
+| ZIP deflate| ✓    | via `run_python` + `zipfile` | via `zipfile.ZIP_DEFLATED` in Pyodide |
 | ZIP64      | ✗    | —     | rejected with explicit error                               |
 | ZIP encrypt| ✗    | —     |                                                            |
 | TAR (ustar)| ✓    | —     |                                                            |
@@ -19,6 +19,16 @@ Safety:
 - Path traversal (`..`, absolute paths) blocked.
 - `max_files` default **5000**, `max_bytes` default **256 MB**.
 - Refusals are reported in `skipped` rather than throwing — partial extractions are useful.
+
+## Creating ZIP archives (agent-facing)
+
+There is **no** `create_archive` tool. The canonical write path in Nodebox:
+
+1. Put sources under `work/<slug>/` or `projects/<slug>/`.
+2. `run_python` with stdlib `zipfile.ZipFile` → output `work/<slug>/bundle.zip`.
+3. `archive_list` to verify, `artifact_present` to deliver.
+
+Do not use shell `zip`/`tar` or concat `.txt` bundles unless the user explicitly accepts a non-zip format.
 
 ## Document extraction
 

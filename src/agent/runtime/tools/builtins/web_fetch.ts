@@ -32,6 +32,11 @@ export default defineTool({
         additionalProperties: { type: "string" },
         description: "Optional HTTP headers for authenticated GET (Bearer token, API keys).",
       },
+      params: {
+        type: "object",
+        additionalProperties: true,
+        description: "Query params merged into url (Axios-style).",
+      },
     },
     additionalProperties: true,
     examples: WEB_FETCH_EXAMPLES,

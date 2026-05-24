@@ -11,10 +11,10 @@ export const MAX_INTERMEDIATE_ACK_CONTINUATIONS = 2;
 export const MAX_EMPTY_AFTER_TOOLS_CONTINUATIONS = 1;
 export const MAX_EMPTY_RESPONSE_CONTINUATIONS = 2;
 export const MAX_TRUNCATION_CONTINUATIONS = 2;
-export const MAX_POST_TOOL_STALL_CONTINUATIONS = 2;
+export const MAX_POST_TOOL_STALL_CONTINUATIONS = 5;
 export const MAX_SNAPSHOT_READ_STALL_CONTINUATIONS = 2;
 export const MAX_API_DISCOVERY_STALL_CONTINUATIONS = 1;
-export const MAX_PRE_TOOL_PROMISE_CONTINUATIONS = 2;
+export const MAX_PRE_TOOL_PROMISE_CONTINUATIONS = 5;
 export const MAX_CRON_VERIFY_CONTINUATIONS = 1;
 export const MAX_INCOMPLETE_TODO_CONTINUATIONS = 2;
 
@@ -80,6 +80,10 @@ const FUTURE_ACTION_INTENT_RES: RegExp[] = [
   /\b(?:step \d+|step one|step two):?\s/i,
   /\bworking on (?:this|it|that) now\b/i,
   /\block(?:ing)? (?:this )?in now\b/i,
+  /\bi['']?m switching to\b/i,
+  /\bswitching to the native\b/i,
+  /\blet's start with\b/i,
+  /\bstarting with the\b/i,
 ];
 
 export function matchesFutureActionIntent(text: string): boolean {
@@ -315,7 +319,15 @@ function tailHasStrongToolCommitment(text: string): boolean {
 export function shouldSuppressContinuationNudge(text: string): boolean {
   const raw = String(text || "").trim();
   if (!raw) return false;
-  if (matchesUserInputRequest(raw)) return true;
+  if (matchesUserInputRequest(raw)) {
+    if (
+      (tailPromisesFurtherAction(raw) || tailPromisesPivotAction(raw)) &&
+      /\b(?:plan:|sequence:|step \d+|let's start|starting with|i'm switching)\b/i.test(raw)
+    ) {
+      return false;
+    }
+    return true;
+  }
   if (matchesTaskCompletionOrFinalState(raw)) {
     if (tailPromisesFurtherAction(raw) || tailPromisesPivotAction(raw)) return false;
     return true;
@@ -462,19 +474,24 @@ function looksLikeActionPromiseStall(visible: string): boolean {
   const text = String(visible || "").trim();
   if (!text) return false;
   const low = text.toLowerCase();
-  if (low.length > 1200) return false;
   const tailCommit = tailHasStrongToolCommitment(text);
+  if (tailCommit) {
+    if (shouldSuppressContinuationNudge(text)) {
+      if (!(looksLikeAgentSelfSelection(low) && tailCommit)) return false;
+    }
+    return true;
+  }
+  if (low.length > 1200) return false;
   if (
     looksLikeFalseManualCronPromise(low) &&
-    (tailCommit || matchesFutureActionIntent(low))
+    matchesFutureActionIntent(low)
   ) {
     return true;
   }
   if (shouldSuppressContinuationNudge(text)) {
     if (!(looksLikeAgentSelfSelection(low) && tailCommit)) return false;
   }
-  if (!matchesFutureActionIntent(low) && !tailCommit) return false;
-  if (tailCommit) return true;
+  if (!matchesFutureActionIntent(low)) return false;
   return ACTION_MARKERS.some((marker) => low.includes(marker));
 }
 
@@ -690,6 +707,9 @@ export function cronJobIdsFromListResult(result: unknown): Set<string> {
   return ids;
 }
 
+const REPEATED_STALL_NUDGE =
+  " Do not send another status message — emit the next tool call in this same turn.";
+
 export function buildContinuationNudge(
   kind: ContinuationNudgeKind,
   extra?: {
@@ -698,8 +718,12 @@ export function buildContinuationNudge(
     openTodos?: number;
     totalTodos?: number;
     rejectedToolNames?: string[];
+    continuationCount?: number;
   }
 ): string {
+  const repeatedStall =
+    (extra?.continuationCount ?? 0) >= 2 &&
+    (kind === "post_tool_stall" || kind === "pre_tool_promise");
   if (kind === "empty_after_tools") {
     return (
       "You just executed tool calls but returned an empty response. " +
@@ -722,7 +746,8 @@ export function buildContinuationNudge(
     return (
       "You executed tool calls but ended with only a promise to take the next step. " +
       "Process the tool results above and continue now by calling the tools needed for that step." +
-      cronHint
+      cronHint +
+      (repeatedStall ? REPEATED_STALL_NUDGE : "")
     );
   }
   if (kind === "snapshot_read_stall") {
@@ -742,7 +767,8 @@ export function buildContinuationNudge(
   if (kind === "pre_tool_promise") {
     return (
       "You ended with only a promise to take the next step. " +
-      "Continue now by calling the tools needed for that step."
+      "Continue now by calling the tools needed for that step." +
+      (repeatedStall ? REPEATED_STALL_NUDGE : "")
     );
   }
   if (kind === "cron_verify") {

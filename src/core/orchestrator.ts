@@ -49,6 +49,7 @@ import {
 import { isVoiceEnabled, useVoiceStore } from "@/ui/stores/voice-store";
 import { resolveProfileTtsVoice } from "@/core/voice/edge-tts-client";
 import { snapXtermViewportToLatest } from "./terminal-viewport-sync";
+import { maybeTrimTerminalScrollback } from "./terminal-scrollback-gc";
 import { fitTerminalForViewport } from "./xterm-fit-viewport";
 
 interface OrchestratorAgentState {
@@ -118,6 +119,12 @@ function getTerminal(profileId: string | null): Terminal | null {
 /** Snap the profile xterm viewport to the latest line (e.g. after sending from ChatInput). */
 function scrollProfileTerminalToBottom(profileId: string | null): void {
   snapXtermViewportToLatest(getTerminal(profileId));
+}
+
+function clearProfileTerminal(profileId: string): void {
+  flushTerminalTypewriter(profileId, getTerminal);
+  disposeTypewriter(profileId);
+  getTerminal(profileId)?.clear();
 }
 
 /** Attach xterm instance for a specific profile */
@@ -224,6 +231,9 @@ async function onAgentPromptReady(profileId: string): Promise<void> {
     flushVoiceBuffer(profileId, isVoiceEnabled);
     flushAgentVoiceLineCarry(profileId, isVoiceEnabled);
     markAgentVoiceTurnStart(profileId);
+    flushTerminalTypewriter(profileId, getTerminal);
+    const term = getTerminal(profileId);
+    if (term) maybeTrimTerminalScrollback(term);
     const state = getOrCreateAgentState(profileId);
     state.agentReadyForInput = true;
     const rt = useRuntimeStore.getState();
@@ -303,6 +313,7 @@ export async function submitUserInput(raw: string): Promise<void> {
     useRuntimeStore.getState().resetModelContext(targetProfileId);
     state.agentReadyForInput = false;
     useRuntimeStore.getState().setAwaitingResponse(targetProfileId, true);
+    clearProfileTerminal(targetProfileId);
     await writeToWebAgent(targetProfileId, "/clear\n");
     return;
   }

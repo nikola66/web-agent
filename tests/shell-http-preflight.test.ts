@@ -47,3 +47,20 @@ test("run_shell supports simple virtual date on Nodebox", async (t) => {
   assert.equal((out as { exit_code?: number }).exit_code, 0);
   assert.match(String((out as { stdout?: string }).stdout || ""), /\d{4}/);
 });
+
+test("run_shell rejects export chains on Nodebox", async (t) => {
+  const prev = process.env.WEBAGENT_RUNTIME;
+  process.env.WEBAGENT_RUNTIME = "nodebox";
+  t.after(() => {
+    if (prev === undefined) delete process.env.WEBAGENT_RUNTIME;
+    else process.env.WEBAGENT_RUNTIME = prev;
+  });
+
+  const out = await runShellTool(
+    { command: "export DIRECTUS_API_TOKEN=abc && python3 publish.py" },
+    { cwd: "." }
+  );
+  assert.equal((out as { exit_code?: number }).exit_code, 127);
+  assert.equal((out as { error_code?: string }).error_code, "nodebox_shell_syntax_unsupported");
+  assert.match(String((out as { suggested_next_step?: string }).suggested_next_step || ""), /env/i);
+});

@@ -89,6 +89,8 @@ test("estimateTaskComplexity stays simple for continuation directives", () => {
   assert.equal(isExecutionContinuationIntent("Shall we continue installing them?"), true);
   assert.equal(isExecutionContinuationIntent("Let's continue with the skill install"), true);
   assert.equal(isExecutionContinuationIntent("continue installing the remaining skills"), true);
+  assert.equal(isExecutionContinuationIntent("Don't pause anymore"), true);
+  assert.equal(isExecutionContinuationIntent("no more pauses"), true);
   const r = estimateTaskComplexity("Continue until completion");
   assert.equal(r.tier, "simple");
   assert.equal(r.estimatedSteps, 1);

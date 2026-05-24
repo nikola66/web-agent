@@ -227,6 +227,69 @@ function classifyFromMessage(message: string, statusHint: number | null): Omit<C
     return { reason, retryable, shouldCompress, shouldFallback, error_code, hintBase: "Transient network/backend issue — retry once or alternate tool." };
   }
 
+  if (/Refusing to write at workspace root/i.test(message)) {
+    reason = "format_error";
+    retryable = false;
+    shouldFallback = true;
+    error_code = "workspace_root_write_guard";
+    return {
+      reason,
+      retryable,
+      shouldCompress,
+      shouldFallback,
+      error_code,
+      hintBase:
+        "Root-level writes are blocked. Call make_dir, then write under work/<slug>/ or projects/<slug>/ — not the workspace root.",
+    };
+  }
+
+  if (/missing required field\(s\) \[url\].*web_post/i.test(message)) {
+    reason = "format_error";
+    retryable = false;
+    shouldFallback = true;
+    error_code = "invalid_arguments";
+    return {
+      reason,
+      retryable,
+      shouldCompress,
+      shouldFallback,
+      error_code,
+      hintBase:
+        'web_post requires `url`. POST/PATCH/PUT need `body`, `json`, or `form`. DELETE/HEAD/OPTIONS omit body. Example: {"url":"https://api.example.com/items/posts","headers":{"Authorization":"Bearer <token>"},"json":{"title":"Hello"}}',
+    };
+  }
+
+  if (/missing required field\(s\) \[command\].*run_shell/i.test(message)) {
+    reason = "format_error";
+    retryable = false;
+    shouldFallback = true;
+    error_code = "invalid_arguments";
+    return {
+      reason,
+      retryable,
+      shouldCompress,
+      shouldFallback,
+      error_code,
+      hintBase: 'run_shell requires command. Example: {"command":"node --version"}',
+    };
+  }
+
+  if (/run_shell exited with code 1/i.test(message)) {
+    reason = "format_error";
+    retryable = false;
+    shouldFallback = true;
+    error_code = "run_shell_silent_failure";
+    return {
+      reason,
+      retryable,
+      shouldCompress,
+      shouldFallback,
+      error_code,
+      hintBase:
+        "run_shell failed with exit code 1. For Python publishers use run_python with env; for REST/CMS workflows use web_fetch/web_post instead of node/python shell scripts.",
+    };
+  }
+
   if (FORMAT_RE.test(message) || statusHint === 422) {
     reason = "format_error";
     retryable = false;
@@ -245,7 +308,11 @@ function classifyFromMessage(message: string, statusHint: number | null): Omit<C
     retryable = false;
     error_code = message.includes("unknown tool") ? "unknown_tool" : "invalid_arguments";
     shouldFallback = true;
-    return { reason, retryable, shouldCompress, shouldFallback, error_code, hintBase: "Fix tool name and arguments per schema." };
+    const hintBase =
+      /create_archive/i.test(message)
+        ? "There is no create_archive tool. Use run_python with stdlib zipfile to write work/<slug>/bundle.zip, then archive_list and artifact_present."
+        : "Fix tool name and arguments per schema.";
+    return { reason, retryable, shouldCompress, shouldFallback, error_code, hintBase };
   }
 
   return { reason, retryable: false, shouldCompress, shouldFallback, error_code, hintBase: "Tool failed." };

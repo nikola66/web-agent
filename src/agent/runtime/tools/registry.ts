@@ -115,6 +115,46 @@ function applyWriteFileBodyAliases(argsObj) {
   return argsObj;
 }
 
+function applyWebPostArgAliases(argsObj) {
+  if (!argsObj || typeof argsObj !== "object") return argsObj;
+  const next = { ...argsObj };
+  const urlStr = typeof next.url === "string" ? next.url.trim() : "";
+  if (!urlStr) {
+    if (typeof next.endpoint === "string" && next.endpoint.trim()) {
+      next.url = next.endpoint.trim();
+    } else if (typeof next.uri === "string" && next.uri.trim()) {
+      next.url = next.uri.trim();
+    }
+  }
+  if (next.body === undefined || next.body === null) {
+    if (next.data !== undefined) {
+      next.body = typeof next.data === "string" ? next.data : JSON.stringify(next.data);
+    } else if (next.payload !== undefined) {
+      next.body =
+        typeof next.payload === "string" ? next.payload : JSON.stringify(next.payload);
+    } else if (next.json !== undefined) {
+      next.body = typeof next.json === "string" ? next.json : JSON.stringify(next.json);
+    }
+  }
+  return next;
+}
+
+function applyRunShellArgAliases(argsObj) {
+  if (!argsObj || typeof argsObj !== "object") return argsObj;
+  const cmdStr = typeof argsObj.command === "string" ? argsObj.command.trim() : "";
+  if (cmdStr) return argsObj;
+  if (typeof argsObj.cmd === "string" && argsObj.cmd.trim()) {
+    return { ...argsObj, command: argsObj.cmd.trim() };
+  }
+  if (typeof argsObj.shell === "string" && argsObj.shell.trim()) {
+    return { ...argsObj, command: argsObj.shell.trim() };
+  }
+  if (typeof argsObj.script === "string" && argsObj.script.trim()) {
+    return { ...argsObj, command: argsObj.script.trim() };
+  }
+  return argsObj;
+}
+
 function capabilityToolRoots() {
   return [
     nodePath.join(CAPABILITIES_DIR, "tools"),
@@ -383,6 +423,12 @@ export function prepareIncomingToolArguments(
     argsForNormalize = applyWikiPathArgs(name, argsForNormalize);
     if (name === "write_file") {
       argsForNormalize = applyWriteFileBodyAliases(argsForNormalize);
+    }
+    if (name === "web_post") {
+      argsForNormalize = applyWebPostArgAliases(argsForNormalize);
+    }
+    if (name === "run_shell") {
+      argsForNormalize = applyRunShellArgAliases(argsForNormalize);
     }
     if (name === "skill_bulk_save") {
       argsForNormalize = expandSkillBulkSaveArgs(argsForNormalize);

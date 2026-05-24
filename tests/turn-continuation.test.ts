@@ -557,3 +557,36 @@ test("looksLikeTruncatedResponse and shouldContinueTruncation detect length fini
   assert.equal(shouldContinueTruncation("length", MAX_TRUNCATION_CONTINUATIONS), false);
   assert.match(buildContinuationNudge("truncation"), /continue exactly where you left off/i);
 });
+
+test("looksLikePostToolStall detects Executing now after long blueprint text", () => {
+  const blueprint =
+    "Article Blueprint:\n".repeat(80) +
+    "• Title: When Prompts Become Shells\n• Angle: Agent hijacking\n• Key Point: Execution boundary\n\nExecuting now.";
+  assert.equal(looksLikePostToolStall(blueprint, true), true);
+});
+
+test("buildContinuationNudge post_tool_stall adds repeated stall hint from 2nd nudge", () => {
+  const first = buildContinuationNudge("post_tool_stall", { continuationCount: 1 });
+  const second = buildContinuationNudge("post_tool_stall", { continuationCount: 2 });
+  assert.doesNotMatch(first, /Do not send another status message/i);
+  assert.match(second, /Do not send another status message/i);
+});
+
+test("shouldContinuePostToolStall allows up to MAX cap", () => {
+  const text = "I'm creating the English translation record now.\n\nExecuting now.";
+  assert.equal(
+    shouldContinuePostToolStall(text, true, MAX_POST_TOOL_STALL_CONTINUATIONS - 1),
+    true
+  );
+  assert.equal(
+    shouldContinuePostToolStall(text, true, MAX_POST_TOOL_STALL_CONTINUATIONS),
+    false
+  );
+});
+
+test("looksLikePostToolStall nudges plan after offer when user already approved task", () => {
+  const text =
+    "Want me to try the native sequence?\n\nPlan:\n1. Parse the markdown.\n2. Create parent records.\n\nLet's start with parsing.";
+  assert.equal(looksLikePostToolStall(text, true), true);
+  assert.equal(shouldSuppressContinuationNudge(text), false);
+});

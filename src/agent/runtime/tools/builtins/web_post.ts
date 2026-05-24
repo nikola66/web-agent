@@ -10,7 +10,23 @@ const WEB_POST_EXAMPLES = [
   {
     url: "https://api.example.com/items/posts",
     headers: { Authorization: "Bearer <token>" },
-    body: '{"title":"Hello","status":"draft","author":1}',
+    json: { title: "Hello", status: "draft", author: 1 },
+  },
+  {
+    url: "https://api.example.com/items/posts/42",
+    method: "PATCH",
+    headers: { Authorization: "Bearer <token>" },
+    body: '{"status":"published"}',
+  },
+  {
+    url: "https://api.example.com/items/posts/42",
+    method: "DELETE",
+    headers: { Authorization: "Bearer <token>" },
+  },
+  {
+    url: "https://api.example.com/oauth/token",
+    method: "POST",
+    form: { grant_type: "client_credentials", client_id: "<id>", client_secret: "<secret>" },
   },
 ];
 
@@ -19,17 +35,39 @@ export default defineTool({
   run: webPostTool,
   emoji: "📮",
   description:
-    "POST http(s) with optional headers and body. Use for GraphQL, REST writes, and JSON APIs — prefer over run_shell + axios/fetch one-liners. Full REST/GraphQL procedure: skill_view **`http-api`**. Pair with `web_fetch` for GET reads. Pass Bearer/API keys in `headers`, not in the URL. `body` must be a JSON string — write it as '{\"key\":\"value\"}' or JSON.stringify({...}), never as an object literal with escaped-quote keys. Examples: " +
+    "Primary HTTP client for writes (POST/PATCH/PUT/DELETE/HEAD/OPTIONS) — Axios-like: url, method, headers, body/json/form, params, timeout_ms. Prefer over run_shell/run_python for REST, GraphQL, CMS, and webhooks. Full procedure: skill_view **`http-api`**. Pair with `web_fetch` for GET reads. Pass Bearer/API keys in `headers`, not in the URL. `body` is a JSON string when used directly; pass objects via `json`. Examples: " +
     JSON.stringify(WEB_POST_EXAMPLES[0]) +
     " | " +
-    JSON.stringify(WEB_POST_EXAMPLES[1]),
+    JSON.stringify(WEB_POST_EXAMPLES[2]) +
+    " | " +
+    JSON.stringify(WEB_POST_EXAMPLES[3]),
   inputSchema: {
     type: "object",
     properties: {
       url: { type: "string", description: "Target http(s) URL." },
       body: {
         type: "string",
-        description: "Request body as a JSON string — always stringify: JSON.stringify({...}) or '{\"key\":\"val\"}'. Do NOT pass a raw object with escaped quote keys.",
+        description:
+          "Request body as string (JSON.stringify for objects). Required for POST/PATCH/PUT unless `json` or `form` is set.",
+      },
+      json: {
+        type: "object",
+        description: "JSON object body — auto-stringified (alias-friendly alternative to `body`).",
+      },
+      form: {
+        type: "object",
+        additionalProperties: { type: "string" },
+        description: "application/x-www-form-urlencoded fields (OAuth token exchange, HTML forms).",
+      },
+      params: {
+        type: "object",
+        additionalProperties: true,
+        description: "Query params merged into url (Axios-style). Values stringified; arrays append repeated keys.",
+      },
+      method: {
+        type: "string",
+        enum: ["POST", "PATCH", "PUT", "DELETE", "HEAD", "OPTIONS"],
+        description: "HTTP method (default POST). PATCH/PUT update; DELETE/HEAD/OPTIONS omit body.",
       },
       headers: {
         type: "object",
@@ -40,8 +78,17 @@ export default defineTool({
         type: "string",
         description: "Optional Content-Type override (defaults to application/json for JSON-looking bodies).",
       },
+      body_encoding: {
+        type: "string",
+        enum: ["base64"],
+        description: "Send `body` as base64-decoded bytes (binary uploads).",
+      },
+      timeout_ms: {
+        type: "number",
+        description: "Request timeout in ms (default 120000; max 600000). Use for large CMS payloads.",
+      },
     },
-    required: ["url", "body"],
+    required: ["url"],
     additionalProperties: true,
     examples: WEB_POST_EXAMPLES,
   },

@@ -101,6 +101,13 @@ lib = ctypes.CDLL("/tmp/shim.so")
   assert.ok(pre.warnings.some((w) => /LD_PRELOAD|ctypes/.test(w)));
 });
 
+test("warns on sys.stdout.reconfigure (host-only Pyodide crash)", () => {
+  const src = `import sys\nsys.stdout.reconfigure(line_buffering=True)`;
+  const pre = preflightPython(src);
+  assert.equal(pre.block, undefined);
+  assert.ok(pre.warnings.some((w) => /reconfigure|JsProxy/i.test(w)));
+});
+
 test("ignores subprocess python/python3 (Pyodide-friendly meta-invocation)", () => {
   const src = `import subprocess\nsubprocess.run(["python3", "-c", "print(1)"])`;
   const pre = preflightPython(src);

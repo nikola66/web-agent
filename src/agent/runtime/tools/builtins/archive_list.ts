@@ -7,6 +7,7 @@ export default defineTool({
   emoji: "📦",
   description:
     "List entries inside a ZIP / TAR / TAR.GZ archive without extracting. " +
+    "**To create a `.zip`:** there is no `create_archive` tool — use `run_python` + stdlib `zipfile`; verify the result with this tool. " +
     "Strongly prefer `archive_path` (workspace-relative). Aliases accepted: `path`, `file`, `file_path`, `zip`, `archive`. " +
     "If called with no path, auto-picks the NEWEST archive in `.webagent/telegram-inbox/` and sets `autoPickedFromInbox: true`. " +
     "Optional: `limit` (default 500, max 5000). " +

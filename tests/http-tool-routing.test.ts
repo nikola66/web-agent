@@ -15,6 +15,14 @@ test("detectHttpIntentInShellCommand flags axios require as web_fetch", () => {
   assert.equal(d.suggested_tool, "web_fetch");
 });
 
+test("detectHttpIntentInShellCommand flags axios patch as web_post", () => {
+  const d = detectHttpIntentInShellCommand(
+    'node -e "const axios = require(\'axios\'); axios.patch(\'https://api.example.com/items/42\', { status: \'published\' })"'
+  );
+  assert.equal(d.detected, true);
+  assert.equal(d.suggested_tool, "web_post");
+});
+
 test("detectHttpIntentInShellCommand flags GraphQL as web_post", () => {
   const d = detectHttpIntentInShellCommand(
     'node -e "fetch(\'https://hub.example.com/graphql\', { method: \'POST\', body: JSON.stringify({ query: \'{ __typename }\' }) })"'

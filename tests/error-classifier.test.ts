@@ -58,3 +58,41 @@ test("classifyToolError tags Pyodide missing module (hallucinated SDK)", () => {
   assert.match(c.recovery_hint, /directus/);
   assert.match(c.recovery_hint, /web_fetch|web_post/);
 });
+
+test("classifyToolError tags workspace root write guard", () => {
+  const c = classifyToolError(
+    "Refusing to write at workspace root (backup.txt). Put deliverables under projects/<slug>/ or work/<slug>/"
+  );
+  assert.equal(c.error_code, "workspace_root_write_guard");
+  assert.match(c.recovery_hint, /work\/<slug>/);
+});
+
+test("classifyToolError tags web_post missing url with example", () => {
+  const c = classifyToolError(
+    "invalid arguments: missing required field(s) [url] for web_post. Provide all required fields from the tool schema."
+  );
+  assert.equal(c.error_code, "invalid_arguments");
+  assert.match(c.recovery_hint, /web_post requires `url`/i);
+  assert.match(c.recovery_hint, /api\.example\.com/);
+});
+
+test("classifyToolError tags run_shell missing command", () => {
+  const c = classifyToolError(
+    "invalid arguments: missing required field(s) [command] for run_shell. Provide all required fields from the tool schema."
+  );
+  assert.equal(c.error_code, "invalid_arguments");
+  assert.match(c.recovery_hint, /run_shell requires command/i);
+});
+
+test("classifyToolError tags run_shell exit 1 with pivot hint", () => {
+  const c = classifyToolError("run_shell exited with code 1");
+  assert.equal(c.error_code, "run_shell_silent_failure");
+  assert.match(c.recovery_hint, /run_python|web_post/i);
+});
+
+test("classifyToolError tags unknown create_archive with zipfile recipe", () => {
+  const c = classifyToolError("unknown tool: create_archive");
+  assert.equal(c.error_code, "unknown_tool");
+  assert.match(c.recovery_hint, /zipfile/i);
+  assert.match(c.recovery_hint, /create_archive/i);
+});

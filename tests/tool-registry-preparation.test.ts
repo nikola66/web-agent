@@ -67,3 +67,65 @@ test("prepareIncomingToolArguments strips glob stars and keeps matchMode any", (
   assert.deepEqual(args.patterns, ["outreach", "sequence"]);
   assert.equal(args.matchMode, "any");
 });
+
+test("prepareIncomingToolArguments maps web_post endpoint and payload aliases", () => {
+  const { args } = prepareIncomingToolArguments(
+    "web_post",
+    {
+      endpoint: "https://hub.aratech.ae/items/Blog_Posts",
+      payload: { status: "draft", author: 1 },
+      headers: { Authorization: "Bearer tok" },
+    },
+    BUILTIN_TOOLS.web_post
+  );
+  assert.equal(args.url, "https://hub.aratech.ae/items/Blog_Posts");
+  assert.equal(args.body, '{"status":"draft","author":1}');
+  const schema = resolveInputSchema(BUILTIN_TOOLS.web_post);
+  assert.equal(validateRequiredArguments("web_post", args, schema), null);
+});
+
+test("prepareIncomingToolArguments maps web_post json alias", () => {
+  const { args } = prepareIncomingToolArguments(
+    "web_post",
+    {
+      url: "https://api.example.com/items/posts",
+      json: { title: "Hello" },
+    },
+    BUILTIN_TOOLS.web_post
+  );
+  assert.equal(args.body, '{"title":"Hello"}');
+});
+
+test("prepareIncomingToolArguments validates web_post DELETE with url only", () => {
+  const { args } = prepareIncomingToolArguments(
+    "web_post",
+    { url: "https://api.example.com/items/posts/42", method: "DELETE" },
+    BUILTIN_TOOLS.web_post
+  );
+  const schema = resolveInputSchema(BUILTIN_TOOLS.web_post);
+  assert.equal(validateRequiredArguments("web_post", args, schema), null);
+});
+
+test("prepareIncomingToolArguments preserves web_post method PATCH", () => {
+  const { args } = prepareIncomingToolArguments(
+    "web_post",
+    {
+      url: "https://api.example.com/items/posts/42",
+      method: "PATCH",
+      body: '{"status":"published"}',
+    },
+    BUILTIN_TOOLS.web_post
+  );
+  assert.equal(args.method, "PATCH");
+});
+
+test("prepareIncomingToolArguments maps run_shell cmd alias to command", () => {
+  const { args } = prepareIncomingToolArguments(
+    "run_shell",
+    { cmd: "node --version" },
+    BUILTIN_TOOLS.run_shell
+  );
+  assert.equal(args.command, "node --version");
+  const schema = resolveInputSchema(BUILTIN_TOOLS.run_shell);
+  assert.equal(validateRequiredArguments("run_shell", args, schema), null);
+});

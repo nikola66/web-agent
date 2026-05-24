@@ -15,6 +15,7 @@ triggers: [new app, create project, demo, starter, spike, sandbox, test harness,
 | Add files | `write_file`, `apply_patch` |
 | Verify layout | `list_dir`, `tree` |
 | Smoke test / run | `run_shell` (host) or project entrypoint — see **`browser-runtime-map`** |
+| ZIP bundle output | `run_python` + `zipfile` — no `create_archive` tool; see **`browser-runtime-map`** |
 | Folder diagram in README | Mermaid via **`chart`** |
 | Risky new tree | checkpoint via **`workspace-safety`** |
 

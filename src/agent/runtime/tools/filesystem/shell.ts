@@ -271,8 +271,18 @@ function nodeboxUnsupportedCommand(command) {
     return {
       error_code: "nodebox_shell_syntax_unsupported",
       unsupported_reason: "Pipes, redirects, and shell control operators require a POSIX shell.",
-      suggested_tool: "grep",
-      suggested_next_step: "Use dedicated file, HTTP, or search tools instead of shell syntax.",
+      suggested_tool: "run_python",
+      suggested_next_step:
+        "Nodebox has no POSIX shell — use run_python with env for Python scripts, or web_fetch/web_post for HTTP. Do not use export/&&; pass env on the tool call.",
+    };
+  }
+  if (/^\s*export\b/i.test(trimmed) || /\bexport\s+[A-Za-z_][\w]*=/.test(trimmed)) {
+    return {
+      error_code: "nodebox_shell_syntax_unsupported",
+      unsupported_reason: "Nodebox run_shell does not support shell export or env chaining.",
+      suggested_tool: "run_python",
+      suggested_next_step:
+        "Pass credentials via the tool env object (run_python env or run_shell env), not export/&& in the command string.",
     };
   }
   return {

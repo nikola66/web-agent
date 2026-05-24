@@ -15,6 +15,7 @@ Ad-hoc delivery in a single turn — not scheduled jobs (see **`heartbeat-cron`*
 |------|------|
 | Persist deliverable file | `write_file` under `projects/` or `work/` — see **`project-scaffold`** |
 | Show file / open View popup | `artifact_present` with `title` + `path` |
+| **ZIP bundle deliverable** | `run_python` + `zipfile` → `.zip` under `work/` or `projects/`, then `artifact_present` — see **`browser-runtime-map`** (no `create_archive` tool) |
 | Inline markdown or remote image | `artifact_present` with `markdown` (e.g. `![alt](https://…)`) |
 | Email a result | `email` with `subject` + body — redact secrets first |
 | Mermaid SVG in View popup | ` ```mermaid ` fence + `artifact_present` — see **`chart`** |
@@ -46,6 +47,7 @@ Owns choice between inline reply, **`artifact_present`**, **`email`**, and cron 
 4. **Do not duplicate** the artifact body in chat.
 5. **Email**: always set `subject`; redact secrets before send.
 6. **Confirm receipt** when the channel supports it.
+7. **ZIP bundles:** there is no `create_archive` tool. Stage files, zip with `run_python` + stdlib `zipfile`, write to `work/<slug>/name.zip`, verify with `archive_list`, present with `artifact_present`.
 
 ## Secrets before delivery
 
@@ -65,3 +67,4 @@ Owns choice between inline reply, **`artifact_present`**, **`email`**, and cron 
 - `read_file` followed by inline paste when `artifact_present` is available.
 - Binary blobs inlined as base64.
 - Writing deliverables at workspace root — use `projects/` or `work/`.
+- Bundling multiple files as a plain `.txt` when the user asked for a zip — use `run_python` + `zipfile` instead.

@@ -177,7 +177,8 @@ const STATIC_TOOL_DISCIPLINE =
   "\n\nTopic discipline: when the user's latest message changes the subject or starts a new request, treat that as the active task. Do not continue earlier plans, files, or tools from older turns unless the user explicitly asks you to resume them." +
   "\n\nSkill discipline: skills are procedural knowledge, separate from memory facts. The prompt contains only a compact skills index; call `skill_view` before relying on detailed skill instructions. Memory layer boundaries are in **Memory layers** above; for the full picker table call `skill_view` **`memory-layers`**. Saving or installing skills: `skill_view` **`web-agent-skill`**." +
   "\n\nDomain tool discipline: bundled skills own tool choice—call `skill_view` for the matching skill before fan-out. Hubs: **`find-skills`** (online skill registries → top 5 by installs/stars/votes), **`imported-skill-compat`** (skills.sh / GitHub imports → Web Agent tool mappings), **`browser-runtime-map`** (filesystem/HTTP/shell/Python runtime), **`http-api`** (REST/GraphQL via web_fetch/web_post), **`memory-layers`** (memory/session/skills/wiki/secrets), **`artifact-delivery`** + **`chart`** (present/show/Mermaid), **`clarify`** (ambiguous intent → `<<<CLARIFY>>>` option buttons, no tools), **`open-web-research`** (discovery), **`heartbeat-cron`** (scheduled jobs), **`project-scaffold`** (projects/work paths), **`task-execution`** (multi-step plan+run). Prefer GitHub-flavored Markdown pipe tables in assistant-visible text." +
-  "\n\nCron discipline: heartbeat jobs in `.webagent/cronjobs.json` run only on heartbeat ticks while the tab is open (`everyMinutes` + `lastRunAt`); there is no manual cron run tool. `cron_register` refresh reschedules—it does not execute the job unless a heartbeat tick is due at that moment. If the user wants work now, run the job step tools in this chat (or invoke the relevant skill)—never claim to \"run the cron manually\". Before explaining cron timing or where output goes, call `cron_list` or `skill_view` **`heartbeat-cron`** and cite `outputDestination`, `nextEligibleAtMs`, and `schedulingNote` from tool output. Delivery: Silent (logs only), Web UI (`delivery: terminal`), Web UI + Telegram (`terminal` + `notifyChannel`), Email (`delivery: email` + `deliveryEmailTo`).";
+  "\n\nCron discipline: heartbeat jobs in `.webagent/cronjobs.json` run only on heartbeat ticks while the tab is open (`everyMinutes` + `lastRunAt`); there is no manual cron run tool. `cron_register` refresh reschedules—it does not execute the job unless a heartbeat tick is due at that moment. If the user wants work now, run the job step tools in this chat (or invoke the relevant skill)—never claim to \"run the cron manually\". Before explaining cron timing or where output goes, call `cron_list` or `skill_view` **`heartbeat-cron`** and cite `outputDestination`, `nextEligibleAtMs`, and `schedulingNote` from tool output. Delivery: Silent (logs only), Web UI (`delivery: terminal`), Web UI + Telegram (`terminal` + `notifyChannel`), Email (`delivery: email` + `deliveryEmailTo`)." +
+  "\n\nArchive discipline: `extract_archive` / `archive_list` are read-only. There is no `create_archive` tool. To bundle files into a `.zip`, use `run_python` with stdlib `zipfile`, write to `work/<slug>/` or `projects/<slug>/`, verify with `archive_list`, deliver with `artifact_present`. Do not invent `create_archive`, use shell `zip`, or substitute a `.txt` concat unless the user explicitly accepts non-zip delivery.";
 
 export { invalidateSystemPromptCache } from "./system-prompt-cache.js";
 
@@ -766,6 +767,7 @@ export async function agentTurn(
             role: "user",
             content: buildContinuationNudge("post_tool_stall", {
               falseManualCron: looksLikeFalseManualCronPromise(visible),
+              continuationCount: postToolStallContinuations + 1,
             }),
           });
           await logDebugEvent("turn_post_tool_stall_continuation", {
@@ -804,7 +806,12 @@ export async function agentTurn(
         ) {
           preToolPromiseContinuations++;
           continuationRecoveriesFired++;
-          conv.push({ role: "user", content: buildContinuationNudge("pre_tool_promise") });
+          conv.push({
+            role: "user",
+            content: buildContinuationNudge("pre_tool_promise", {
+              continuationCount: preToolPromiseContinuations + 1,
+            }),
+          });
           await logDebugEvent("turn_pre_tool_promise_continuation", {
             round,
             count: preToolPromiseContinuations,

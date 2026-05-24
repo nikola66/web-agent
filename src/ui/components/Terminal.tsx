@@ -6,6 +6,7 @@ import { Unicode11Addon } from "@xterm/addon-unicode11";
 import { terminalFontFamily, terminalTheme } from "../theme";
 import { attachProfileTerminal, detachTerminal, notifyAgentTerminalResized, switchToProfile } from "@/core/orchestrator";
 import { fitTerminalForViewport } from "@/core/xterm-fit-viewport";
+import { TERMINAL_SCROLLBACK_MAX } from "@/core/terminal-scrollback-gc";
 import { useRuntimeStore } from "../stores/runtime-store";
 import { useProfileStore } from "../stores/profile-store";
 
@@ -139,7 +140,7 @@ export function Terminal() {
       cursorStyle: "bar",
       allowTransparency: true,
       allowProposedApi: true,
-      scrollback: 10000,
+      scrollback: TERMINAL_SCROLLBACK_MAX,
       convertEol: true,
     });
 

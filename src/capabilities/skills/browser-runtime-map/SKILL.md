@@ -22,12 +22,14 @@ Canonical built-in tool picker. Other skills defer here for filesystem vs HTTP v
 | Patch or multi-edit | `apply_patch`, `edit_file`, `multi_edit` |
 | Move / delete | `move_file`, `delete_file` |
 | Compare files | `file_diff` |
-| HTTP(S) GET (public or Bearer) | `web_fetch` (+ optional `headers`) — see **`http-api`** |
-| HTTP(S) POST / GraphQL / JSON body | `web_post` — see **`http-api`** |
+| HTTP(S) GET (public or Bearer) | `web_fetch` (+ optional `headers`, `params`) — see **`http-api`** |
+| HTTP(S) POST/PATCH/PUT/DELETE/GraphQL | `web_post` (+ `json`, `form`, `params`, `timeout_ms`) — see **`http-api`** |
 | Web search | `web_search` |
 | Environment facts | `system_info` |
 | Recurring jobs | `cron_register`, `cron_list` — **`heartbeat-cron`** |
 | Show file to user | `artifact_present` — **`artifact-delivery`** |
+| **Create ZIP** (no `create_archive` tool) | **`run_python`** + stdlib **`zipfile`** → `work/<slug>/bundle.zip`, then **`artifact_present`** |
+| **Extract / inspect ZIP** | **`extract_archive`** / **`archive_list`** (read-only) |
 | Image / audio / video | `vision_analyze`, `audio_analyze`, `youtube_transcribe` — **`multimodal-ingest`** |
 | Memory / skills / wiki | see **`memory-layers`** (`memory_*`, `session_*`, `skill_list`, `skill_view`, `skill_manage`, `skill_bulk_save`, `wiki_*`) |
 | Skill has Python scripts | `run_python` first for stdlib/Pyodide-compatible scripts |
@@ -70,6 +72,7 @@ Three layers:
 | Python pattern | Status | Alternative |
 |---|---|---|
 | stdlib (`json`, `re`, `pathlib`, `urllib.request`, `csv`, …) | **Works** | — |
+| `zipfile` (create `.zip` bundles) | **Works** | No `create_archive` tool — use `run_python` + `zipfile`, output under `work/` or `projects/` |
 | `Pillow`, `numpy`, `pandas`, `scipy`, `scikit-learn` | **Works** (auto-loaded) | — |
 | `python-docx`, `python-pptx`, `openpyxl`, `pypdf`, `pdfplumber`, `reportlab` | **Works** (auto-loaded) | — |
 | `requests`, `httpx`, `beautifulsoup4`, `pyyaml`, `pydantic`, `rich`, `click`, `tqdm` | **Works** (auto-loaded) | — |
@@ -105,6 +108,30 @@ Three layers:
 | `stripe payments list` | Stripe API `GET https://api.stripe.com/v1/payment_intents` via `web_fetch` |
 | `firecrawl scrape` | `POST https://api.firecrawl.dev/v1/scrape` via `web_post` |
 | `git clone` | Upload zip → `extract_archive`, or use GitHub API to fetch files |
+| Create a zip bundle | **`run_python`** + `zipfile.ZipFile` — there is **no** `create_archive` tool |
+
+## Create ZIP archives (no `create_archive` tool)
+
+**Read:** `extract_archive` / `archive_list`. **Write:** only via **`run_python`** and stdlib `zipfile` (Pyodide-safe).
+
+1. Stage files under `work/<slug>/` or `projects/<slug>/` with `write_file` / `make_dir`.
+2. Run a short `run_python` script that writes `work/<slug>/bundle.zip` (never workspace root).
+3. Verify with `archive_list`, deliver with `artifact_present` (`path` to the `.zip`).
+
+```python
+import zipfile
+from pathlib import Path
+
+root = Path("work/my-bundle")
+out = root / "bundle.zip"
+with zipfile.ZipFile(out, "w", compression=zipfile.ZIP_DEFLATED) as zf:
+    for f in root.rglob("*"):
+        if f.is_file() and f != out:
+            zf.write(f, f.relative_to(root))
+print(out.as_posix())
+```
+
+Do **not** use `run_shell` + `zip`/`tar` CLI, invent `create_archive`, or fall back to a `.txt` concat unless the user explicitly accepts that format.
 
 ## Pitfalls
 

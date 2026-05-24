@@ -147,7 +147,7 @@ export function buildWebAgentExecutionAppendix(analysis: SkillCompatAnalysis): s
     "| External | Web Agent |",
     "|----------|-----------|",
     "| WebFetch / fetch URL | `web_fetch` `{ url, headers? }` |",
-    "| POST / GraphQL | `web_post` — `skill_view` **`http-api`** |",
+    "| POST / GraphQL / PATCH / PUT / DELETE | `web_post` — optional `method`; `skill_view` **`http-api`** |",
     "| Read / Glob / Grep | `read_file` / `list_dir` / `find_files` / `grep` |",
     "| Skill / Read skill | `skill_view` `{ name }` |",
     "| Bash / curl / npx | `skill_view` **`browser-runtime-map`** — Nodebox has no POSIX shell |",
