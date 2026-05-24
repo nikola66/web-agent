@@ -30,8 +30,9 @@ Canonical built-in tool picker. Other skills defer here for filesystem vs HTTP v
 | Show file to user | `artifact_present` — **`artifact-delivery`** |
 | Image / audio / video | `vision_analyze`, `audio_analyze`, `youtube_transcribe` — **`multimodal-ingest`** |
 | Memory / skills / wiki | see **`memory-layers`** (`memory_*`, `session_*`, `skill_list`, `skill_view`, `skill_manage`, `skill_bulk_save`, `wiki_*`) |
-| Skill has Python/bash scripts | **`script-porting`**, `python_to_node`, `web_fetch`/`web_post` for API steps, `run_shell` **`node …`** only for local scripts |
-| One-off shell (last resort) | `run_shell` — Nodebox: **`node …`** plus simple read-only probes (`date`, `pwd`, `echo`, `wc -l`) |
+| Skill has Python scripts | `run_python` first for stdlib/Pyodide-compatible scripts |
+| Skill has bash scripts | Dedicated tools, or a small `node …`/`python3 …` script when a tool does not exist |
+| One-off shell (last resort) | `run_shell` — Nodebox: **`node …`**, `python3 …` via Pyodide, plus simple read-only probes (`date`, `pwd`, `echo`, `wc -l`) |
 
 **Non-negotiable:** No `curl`/`npx`/`git clone` when a row above fits. Nodebox has **no** POSIX shell. Skill installs: `skill_bulk_save` / `skill_manage`, never shell.
 
@@ -47,13 +48,13 @@ Canonical built-in tool picker. Other skills defer here for filesystem vs HTTP v
 
 ## Surfaces
 
-Three layers (see **`script-porting`** for porting Python skills):
+Three layers:
 
 | Layer | Capability |
 |-------|------------|
 | **Nodebox API** | `shell.runCommand(binary, args, { cwd, env })` — bootstrap also uses `npm` |
-| **Agent `run_shell`** | **`node …` plus simple read-only probes** — optional `cwd`, `env` for node scripts; no POSIX `sh -c`, pipes, `curl`, `npx`, Python, git, or package managers |
-| **Nodebox runtime** | Node.js only — **no Python/pip binary** |
+| **Agent `run_shell`** | **`node …`, `python3 …` via Pyodide, plus simple read-only probes** — optional `cwd`, `env`; no POSIX `sh -c`, pipes, `curl`, `npx`, git, or package managers |
+| **Python layer** | `run_python` lazy-loads Pyodide after Nodebox boot — no subprocess, system pip, native sockets, or arbitrary compiled wheels |
 
 - Unsupported Nodebox commands return recovery metadata (`suggested_tool`, `suggested_next_step`) instead of acting like a real host shell.
 
@@ -64,13 +65,56 @@ Three layers (see **`script-porting`** for porting Python skills):
 3. On Nodebox, use `web_fetch`/`web_post` instead of curl; dedicated file tools instead of shell file ops.
 3. For cron, use `cron_register` — not host crontab or shell wrappers.
 
+## Python in Pyodide — what works vs. what doesn't
+
+| Python pattern | Status | Alternative |
+|---|---|---|
+| stdlib (`json`, `re`, `pathlib`, `urllib.request`, `csv`, …) | **Works** | — |
+| `Pillow`, `numpy`, `pandas`, `scipy`, `scikit-learn` | **Works** (auto-loaded) | — |
+| `python-docx`, `python-pptx`, `openpyxl`, `pypdf`, `pdfplumber`, `reportlab` | **Works** (auto-loaded) | — |
+| `requests`, `httpx`, `beautifulsoup4`, `pyyaml`, `pydantic`, `rich`, `click`, `tqdm` | **Works** (auto-loaded) | — |
+| `matplotlib`, `seaborn`, `imageio`, `Jinja2`, `markitdown` | **Works** (auto-loaded) | — |
+| `subprocess` spawning `soffice`/`libreoffice` | **Blocked** — binary absent | `python-docx`/`python-pptx`/`openpyxl` |
+| `subprocess` spawning `ffmpeg`/`ffprobe` | **Blocked** — binary absent | Call a hosted transcoding API |
+| `subprocess` spawning `pdftoppm`/`pdftotext`/`ghostscript` | **Blocked** — binary absent | `pypdf` for text; rasterize server-side |
+| `subprocess` spawning `tesseract`/`pytesseract`/`whisper` | **Blocked** — binary absent | Hosted OCR/transcription API |
+| `subprocess` spawning `pandoc`/`wkhtmltopdf` | **Blocked** — binary absent | `markitdown`, `python-docx`, `reportlab` |
+| `subprocess` spawning `git`/`gh`/`curl`/`wget` | **Blocked** — binary absent | `web_fetch`/`web_post` + GitHub REST API |
+| `subprocess` spawning `vercel`/`netlify`/`fly`/`railway` | **Blocked** — binary absent | That service's REST API via `web_post` |
+| `subprocess` spawning `xcodebuild`/`xcrun`/`simctl` | **Blocked** — macOS only | Not available in browser |
+| `import pdf2image` | **Blocked** — needs poppler at runtime | `pypdf` |
+| `import pytesseract` | **Blocked** — needs tesseract | Hosted OCR API |
+| `import playwright` / `selenium` / `pyppeteer` | **Blocked** — needs Chromium | `web_fetch` + parsing |
+| `import torch` / `tensorflow` / `jax` | **Blocked** — compiled GPU extensions | Hosted model inference API |
+| `import cv2` (OpenCV) | **Blocked** — compiled C++ | `Pillow` for basic ops |
+| `import whisper` (openai-whisper) | **Blocked** — needs ffmpeg + GPU | Hosted transcription API |
+| `import rdkit` | **Blocked** — compiled C++ | Cheminformatics API or RDKit JS port |
+| `import psycopg2`/`pymysql`/`pymongo`/`redis` | **Blocked** — raw TCP sockets | Database REST/HTTP API |
+| raw `socket.socket(…)` | **Warn** — proxy may fail | `web_fetch`/`web_post` |
+
+## CLI tools → REST API redirects
+
+| CLI | REST alternative |
+|---|---|
+| `gh pr create` / `gh issue` | GitHub REST API `POST /repos/{owner}/{repo}/pulls` via `web_post` |
+| `vercel --prod` | `POST https://api.vercel.com/v13/deployments` via `web_post` |
+| `netlify deploy` | Netlify API `POST https://api.netlify.com/api/v1/sites/{id}/deploys` |
+| `fly deploy` | Fly GraphQL `https://api.fly.io/graphql` via `web_post` |
+| `railway up` | Railway GraphQL `https://backboard.railway.app/graphql/v2` via `web_post` |
+| `heroku releases` | Heroku Platform API `https://api.heroku.com/apps/{app}/releases` |
+| `stripe payments list` | Stripe API `GET https://api.stripe.com/v1/payment_intents` via `web_fetch` |
+| `firecrawl scrape` | `POST https://api.firecrawl.dev/v1/scrape` via `web_post` |
+| `git clone` | Upload zip → `extract_archive`, or use GitHub API to fetch files |
+
 ## Pitfalls
 
 - Treating POSIX tutorials as literal in Nodebox.
-- Running `python`, `pip install`, or `python3 tools/*.py` in Nodebox — port to `node scripts/*.js` first (**`script-porting`**).
+- Treating Pyodide as full host CPython — use `run_python` for compatible scripts; rewrite subprocess, system pip, native sockets, or unsupported wheel steps.
 - Using `run_shell` for skill installs — use HTTPS URL + `skill_manage` / `skill_bulk_save`.
+- Invoking deploy CLIs (`vercel`, `gh`, `netlify`) when the service has a documented REST API.
 
 ## Anti-patterns
 
 - Piping curl to bash when `web_fetch` exists.
 - Putting `crontab`/`at` in shell — use `cron_register`.
+- Calling `npm install -g <cli>` then using the CLI — use the REST API directly.

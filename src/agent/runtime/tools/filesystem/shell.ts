@@ -231,24 +231,34 @@ function nodeboxUnsupportedCommand(command) {
       suggested_next_step: "Use web_fetch for GET requests or web_post for POST/GraphQL.",
     };
   }
-  if (["git", "gh"].includes(lower)) {
+  if (lower === "git") {
     return {
       error_code: "nodebox_git_unsupported",
-      unsupported_reason: "Git/gh are not available in browser-only Nodebox.",
+      unsupported_reason: "`git` is not available in browser-only Nodebox.",
       suggested_tool: "web_fetch",
-      suggested_next_step: "Use HTTPS APIs, web_fetch, skill imports, or uploaded workspace files instead of git clone.",
+      suggested_next_step: "Use the GitHub REST API via web_fetch/web_post, skill imports, or upload workspace files instead of git clone.",
     };
   }
-  if (["npx", "npm", "pnpm", "yarn"].includes(lower)) {
+  if (["npx", "npm", "pnpm", "yarn", "bun"].includes(lower)) {
     return {
       error_code: "nodebox_package_manager_unsupported",
-      unsupported_reason: "Package manager commands are not available to the agent in browser-only Nodebox.",
+      unsupported_reason: "Package managers are not available to the agent in browser-only Nodebox.",
       suggested_tool: "write_file",
       suggested_next_step: "Use built-in tools or write a dependency-free ESM script runnable with `node ...`.",
     };
   }
-  // Office/PDF/OCR/codec native binaries — same set blocked at run_python preflight.
-  // Surfaces the identical fallback hint whether the caller reaches for run_shell or run_python.
+  // Deploy / infra / external CLIs — redirect to their REST APIs.
+  if (["vercel", "netlify", "flyctl", "fly", "railway", "heroku", "stripe", "gh", "firecrawl"].includes(lower)) {
+    const hint = UNSUPPORTED_BINARIES[lower] || `\`${lower}\` CLI is not available. Use that service's REST API via web_fetch/web_post.`;
+    return {
+      error_code: "nodebox_cli_unsupported",
+      unsupported_reason: `\`${lower}\` CLI is not available in browser-only Nodebox.`,
+      suggested_tool: lower === "gh" ? "web_fetch" : "web_post",
+      suggested_next_step: hint,
+    };
+  }
+  // Native binary / platform tool — pull hint from shared registry.
+  // Surfaces the same actionable message whether the caller reaches for run_shell or run_python.
   if (UNSUPPORTED_BINARIES[lower]) {
     return {
       error_code: "nodebox_native_binary_unsupported",

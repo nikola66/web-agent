@@ -14,6 +14,8 @@ export type SkillCompatAnalysis = {
   uses_agent_browser: boolean;
   uses_mcp: boolean;
   uses_npx: boolean;
+  uses_deploy_cli: boolean;
+  uses_native_media: boolean;
   python_libraries: string[];
   flags: string[];
 };
@@ -97,6 +99,12 @@ export function analyzeSkillCompat(
     /\bCallMcpTool\b|\bMCP\b|\bmcp_[a-z]|\bazure__[a-z]/i.test(hay) ||
     toolNames.some((t) => t.includes("mcp"));
   const uses_npx = /\bnpx\s+(?!skills\b)/i.test(hay);
+  // Deploy / infra CLIs that can't run in Nodebox — agent must use REST API instead.
+  // Match only CLI invocation patterns (backtick, shell-prompt, `run X`, `npx X`, or CLI-flagged usage),
+  // not mere brand-name mentions in prose (e.g. "Vercel web guidelines").
+  const uses_deploy_cli = /(?:^|`|\$\s*|run\s+|npx\s+|invoke\s+|execute\s+)(?:vercel|netlify|flyctl|fly\s+deploy|railway\s+(?:up|deploy|run)|heroku\s+\w|gh\s+(?:pr|issue|release|repo)|stripe\s+\w|firecrawl\s+\w)(?:\s|`|$)/im.test(hay);
+  // Native media/codec binaries (ffmpeg, whisper, tesseract) detected in prose or code blocks.
+  const uses_native_media = /\b(?:ffmpeg|ffprobe|whisper|tesseract|pdftoppm|pdftotext|ghostscript|imagemagick|convert\s+-\w)\b/i.test(hay);
 
   const flags: string[] = [];
   if (uses_web_fetch) flags.push("web_fetch_mapping");
@@ -106,10 +114,12 @@ export function analyzeSkillCompat(
   if (uses_agent_browser) flags.push("agent_browser_unavailable");
   if (uses_mcp) flags.push("mcp_unavailable");
   if (uses_npx) flags.push("npx_unavailable");
+  if (uses_deploy_cli) flags.push("deploy_cli_unavailable");
+  if (uses_native_media) flags.push("native_media_unavailable");
 
   let tier: CompatTier = "native";
   if (uses_agent_browser || uses_playwright) tier = "unsupported";
-  else if (uses_python || uses_mcp || uses_bash || uses_npx) tier = "limited";
+  else if (uses_python || uses_mcp || uses_bash || uses_npx || uses_deploy_cli || uses_native_media) tier = "limited";
   else if (uses_web_fetch || flags.length > 0) tier = "mapped";
 
   return {
@@ -121,6 +131,8 @@ export function analyzeSkillCompat(
     uses_agent_browser,
     uses_mcp,
     uses_npx,
+    uses_deploy_cli,
+    uses_native_media,
     python_libraries,
     flags,
   };
@@ -145,11 +157,17 @@ export function buildWebAgentExecutionAppendix(analysis: SkillCompatAnalysis): s
 
   if (analysis.uses_agent_browser || analysis.uses_playwright) {
     lines.push(
-      "| agent-browser / Playwright | **Not available** — use `web_fetch` + file tools; QA via source inspection |"
+      "| agent-browser / Playwright / Selenium | **Not available** — Chromium cannot run inside browser sandbox; use `web_fetch` + source inspection |"
     );
   }
   if (analysis.uses_mcp) {
-    lines.push("| MCP / CallMcpTool | **Not built-in** — add a capability or use `web_fetch`/`web_post` for REST |");
+    lines.push("| MCP / CallMcpTool | **Not built-in** — add a capability or use `web_fetch`/`web_post` for that service's REST API |");
+  }
+  if (analysis.uses_deploy_cli) {
+    lines.push("| vercel / netlify / gh / fly / railway / heroku CLI | **Not available** — use that service's REST API via `web_fetch`/`web_post` |");
+  }
+  if (analysis.uses_native_media) {
+    lines.push("| ffmpeg / whisper / tesseract / pdftoppm / ghostscript | **Not available** — call a hosted transcoding/OCR API, or use pure-Python alternatives (`pypdf`, `Pillow`, `imageio`) |");
   }
 
   lines.push(
@@ -203,10 +221,16 @@ export function compatScanWarnings(analysis: SkillCompatAnalysis): string[] {
     warnings.push(`contains Python/pip references${libs} — use run_python for Pyodide-compatible scripts; no system pip/native deps`);
   }
   if (analysis.uses_mcp) {
-    warnings.push("references MCP tools — not built-in unless added as a capability");
+    warnings.push("references MCP tools — not built-in unless added as a capability; use web_fetch/web_post for that service's REST API");
   }
   if (analysis.uses_npx) {
     warnings.push("references npx — use skill_manage import_url / skill_bulk_save instead of CLI install");
+  }
+  if (analysis.uses_deploy_cli) {
+    warnings.push("references deploy/infra CLI (vercel/netlify/gh/fly/railway/heroku) — use that service's REST API via web_fetch/web_post instead");
+  }
+  if (analysis.uses_native_media) {
+    warnings.push("references native media/codec binaries (ffmpeg/whisper/tesseract/ghostscript) — call a hosted API or use pure-Python alternatives (pypdf, Pillow, imageio)");
   }
   return warnings;
 }

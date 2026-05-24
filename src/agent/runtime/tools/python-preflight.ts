@@ -39,11 +39,15 @@ export const PYODIDE_PACKAGE_MAP: Record<string, string> = {
   pillow: "Pillow",
   numpy: "numpy",
   pandas: "pandas",
+  scipy: "scipy",
+  sklearn: "scikit-learn",
+  imageio: "imageio",
   // Office formats
   docx: "python-docx",
   pptx: "python-pptx",
   openpyxl: "openpyxl",
   xlsxwriter: "xlsxwriter",
+  xlrd: "xlrd",
   pypdf: "pypdf",
   pypdf2: "PyPDF2",
   reportlab: "reportlab",
@@ -51,15 +55,37 @@ export const PYODIDE_PACKAGE_MAP: Record<string, string> = {
   pdfminer: "pdfminer.six",
   defusedxml: "defusedxml",
   lxml: "lxml",
+  markitdown: "markitdown",
   // Networking / parsing
   bs4: "beautifulsoup4",
   yaml: "pyyaml",
+  toml: "toml",
   requests: "requests",
-  // Plotting
+  httpx: "httpx",
+  aiohttp: "aiohttp",
+  // Data / ML (wheels available in Pyodide)
   matplotlib: "matplotlib",
-  // Other
+  seaborn: "seaborn",
+  statsmodels: "statsmodels",
+  sklearn: "scikit-learn",
+  joblib: "joblib",
+  // Bio / science (some in Pyodide)
+  biopython: "biopython",
+  // Utilities
   sympy: "sympy",
   cryptography: "cryptography",
+  pydantic: "pydantic",
+  attrs: "attrs",
+  dateutil: "python-dateutil",
+  arrow: "arrow",
+  click: "click",
+  rich: "rich",
+  tqdm: "tqdm",
+  jinja2: "Jinja2",
+  markdown: "markdown",
+  pygments: "Pygments",
+  chardet: "chardet",
+  charset_normalizer: "charset-normalizer",
 };
 
 /**
@@ -68,29 +94,89 @@ export const PYODIDE_PACKAGE_MAP: Record<string, string> = {
  * Maps import name → reason + suggested fallback.
  */
 const KNOWN_BROKEN_IMPORTS: Record<string, string> = {
+  // PDF / OCR native deps
   pdf2image:
     "pdf2image shells out to poppler's `pdftoppm` at runtime; poppler is not available in Pyodide. Use `pypdf` for text extraction, or rasterize PDFs server-side.",
   pytesseract:
     "pytesseract calls the `tesseract` binary; no OCR runtime in Pyodide. Use a hosted OCR API via `web_post`.",
+  ocrmypdf:
+    "ocrmypdf requires `tesseract` + `ghostscript` binaries — not available in Pyodide. Use a hosted OCR API.",
+  // Browser automation
   playwright:
     "Playwright drives a real browser process — not available in Pyodide. Use `web_fetch` + parsing instead.",
+  pyppeteer:
+    "pyppeteer drives Chromium — not available in Pyodide. Use `web_fetch` + parsing instead.",
   selenium:
     "Selenium needs a real browser driver — not available in Pyodide. Use `web_fetch`.",
+  helium:
+    "helium wraps Selenium — not available in Pyodide. Use `web_fetch`.",
+  // Raw DB sockets
   psycopg2:
     "psycopg2 needs libpq + raw sockets — Pyodide has neither. Use the database's HTTP/REST endpoint via `web_fetch`/`web_post`.",
+  psycopg:
+    "psycopg3 needs libpq + raw sockets. Use the database HTTP/REST endpoint.",
   mysqlclient:
     "mysqlclient needs libmysql + raw sockets. Use an HTTP database proxy via `web_fetch`/`web_post`.",
+  pymysql:
+    "PyMySQL opens raw TCP to MySQL — unavailable in Pyodide. Use a database HTTP proxy.",
   pymongo:
     "pymongo opens raw TCP sockets — unavailable in Pyodide. Use MongoDB Data API via `web_post`.",
+  motor:
+    "motor is async pymongo — same TCP socket limitation. Use MongoDB Data API via `web_post`.",
   redis:
-    "redis-py opens raw TCP — unavailable in Pyodide. Use Upstash/REST endpoint via `web_post`.",
+    "redis-py opens raw TCP — unavailable in Pyodide. Use Upstash/Redis REST endpoint via `web_post`.",
+  aioredis:
+    "aioredis opens raw TCP — unavailable in Pyodide. Use Upstash/Redis REST endpoint via `web_post`.",
+  // SSH / shell
   paramiko: "paramiko requires raw sockets — unavailable in Pyodide.",
   fabric: "fabric requires SSH/raw sockets — unavailable in Pyodide.",
-  // Common hallucinated SDKs that we want to fail fast on.
+  invoke: "invoke spawns subprocess shells — unavailable in Pyodide.",
+  // ML / AI — compiled C extensions not in Pyodide wheels
+  torch:
+    "PyTorch is not available in Pyodide (compiled CUDA/C++ extensions). For inference, call an API endpoint via `web_post`.",
+  tensorflow:
+    "TensorFlow is not available in Pyodide. For inference, call a hosted model API via `web_post`.",
+  tf: "TensorFlow alias `tf` is not available in Pyodide.",
+  keras:
+    "Keras (TF-based) is not available in Pyodide. Use a hosted model API.",
+  jax:
+    "JAX requires compiled XLA extensions — not available in Pyodide.",
+  transformers:
+    "Hugging Face `transformers` requires PyTorch/TF and is not in Pyodide. Call the Inference API via `web_post`.",
+  diffusers:
+    "`diffusers` requires PyTorch — not in Pyodide. Use a hosted image-generation API.",
+  xgboost:
+    "XGBoost has no Pyodide wheel. Use scikit-learn alternatives (GradientBoostingClassifier) or a hosted API.",
+  lightgbm:
+    "LightGBM has no Pyodide wheel. Use scikit-learn or a hosted API.",
+  catboost:
+    "CatBoost has no Pyodide wheel. Use scikit-learn or a hosted API.",
+  // Bioinformatics compiled deps
+  rdkit:
+    "RDKit requires compiled C++ extensions — not in Pyodide. Use a cheminformatics API or the RDKit JS port.",
+  // Media/video processing
+  cv2:
+    "OpenCV (`cv2`) is not in Pyodide. Use `Pillow` for basic image ops, or process images server-side.",
+  moviepy:
+    "MoviePy requires ffmpeg binary at runtime — not available in Pyodide. Process video server-side.",
+  whisper:
+    "openai-whisper calls `ffmpeg` and loads large CUDA models — not available in Pyodide. Use a hosted transcription API (e.g. OpenAI Whisper API) via `web_post`.",
+  // Audio
+  librosa:
+    "librosa requires compiled audio codecs (soundfile, audioread) that are not in Pyodide. Use a hosted audio API.",
+  soundfile:
+    "soundfile requires libsndfile native library — not in Pyodide.",
+  pyaudio:
+    "PyAudio requires PortAudio native library — not in Pyodide.",
+  // Hallucinated / non-existent SDKs
   directus:
     "There is no PyPI `directus` package. Use the Directus REST API directly via `web_fetch`/`web_post`.",
   directus_sdk:
     "There is no Pyodide-compatible Directus SDK. Use the REST API directly via `web_fetch`/`web_post`.",
+  firecrawl:
+    "Use the Firecrawl REST API directly via `web_post` instead of the Python SDK.",
+  vercel:
+    "There is no `vercel` Python package. Use the Vercel REST API via `web_fetch`/`web_post`.",
 };
 
 /**
@@ -98,21 +184,60 @@ const KNOWN_BROKEN_IMPORTS: Record<string, string> = {
  * none of which exist in Pyodide. Map binary → suggestion.
  */
 export const UNSUPPORTED_BINARIES: Record<string, string> = {
-  soffice: "LibreOffice (`soffice`) is not available. Use `python-docx`/`python-pptx`/`openpyxl` to edit office files in-place, or hand the file to a server-side converter.",
+  // Office / document
+  soffice: "LibreOffice (`soffice`) is not available. Use `python-docx`/`python-pptx`/`openpyxl` to edit office files in-place, or send the file to a server-side converter.",
   libreoffice: "LibreOffice is not available. Use pure-Python office libs (python-docx, python-pptx, openpyxl).",
+  // PDF / image
   pdftoppm: "Poppler (`pdftoppm`) is not available. Rasterize PDFs server-side or extract text with `pypdf`.",
   pdftotext: "Poppler (`pdftotext`) is not available. Use `pypdf`'s `extract_text()` instead.",
   pdfimages: "Poppler (`pdfimages`) is not available. Use `pypdf` to walk image XObjects.",
+  pdfinfo: "Poppler (`pdfinfo`) is not available. Use `pypdf.PdfReader` metadata instead.",
+  gs: "Ghostscript is not available in Pyodide. Use `pypdf` for merge/split or a hosted PDF service.",
+  ghostscript: "Ghostscript is not available. Use `pypdf` or a hosted PDF service.",
   qpdf: "`qpdf` is not available. Use `pypdf` for re-encryption/merge/split.",
   pdftk: "`pdftk` is not available. Use `pypdf` for merge/split/form fill.",
-  pandoc: "`pandoc` is not available. Use `markitdown` or per-format Python libs.",
-  tesseract: "`tesseract` is not available. Use a hosted OCR API.",
-  ffmpeg: "`ffmpeg` is not available in Pyodide. For GIFs use `imageio` (no ffmpeg backend); for video, hand off to a server.",
+  convert: "ImageMagick `convert` is not available. Use `Pillow` (PIL) for image operations.",
+  magick: "ImageMagick is not available. Use `Pillow` (PIL) for image operations.",
+  // Document conversion
+  pandoc: "`pandoc` is not available. Use `markitdown` or per-format Python libs (python-docx, pdfplumber, etc.).",
+  wkhtmltopdf: "`wkhtmltopdf` is not available. Use `reportlab` or a hosted HTML-to-PDF API.",
+  // OCR / audio / video
+  tesseract: "`tesseract` is not available. Use a hosted OCR API via `web_post`.",
+  ffmpeg: "`ffmpeg` is not available. For GIFs use `imageio` (no ffmpeg backend); for audio/video, call a hosted transcoding API.",
+  ffprobe: "`ffprobe` is not available. Use a hosted media-analysis API.",
+  whisper: "openai-whisper requires `ffmpeg` + large GPU models — not available. Use the OpenAI Whisper API or AssemblyAI via `web_post`.",
+  // Compilers / build
   gcc: "`gcc` is not available — Pyodide cannot compile C at runtime.",
   cc: "C compilers are not available in Pyodide.",
+  make: "`make` is not available in Pyodide.",
+  cmake: "`cmake` is not available in Pyodide.",
+  // HTTP / deployment CLI tools
   curl: "`curl` is not a Pyodide binary. Use `web_fetch`/`web_post`.",
   wget: "`wget` is not a Pyodide binary. Use `web_fetch`.",
-  git: "`git` is not available in Pyodide.",
+  // VCS
+  git: "`git` is not available in Pyodide. Use GitHub REST API via `web_fetch`/`web_post`.",
+  gh: "`gh` CLI is not available. Use GitHub REST API via `web_fetch`/`web_post` (e.g. `https://api.github.com/repos/…`).",
+  // Deploy / infra CLI
+  vercel: "Vercel CLI is not available. Use the Vercel REST API (`https://api.vercel.com`) via `web_fetch`/`web_post`.",
+  netlify: "Netlify CLI is not available. Use Netlify REST API via `web_fetch`/`web_post`.",
+  flyctl: "Fly.io CLI is not available. Use Fly's GraphQL/REST API via `web_fetch`/`web_post`.",
+  fly: "Fly.io CLI is not available. Use Fly's GraphQL/REST API via `web_fetch`/`web_post`.",
+  railway: "Railway CLI is not available. Use Railway GraphQL API via `web_post`.",
+  // macOS-specific
+  xcodebuild: "`xcodebuild` requires Xcode on macOS — not available in Pyodide.",
+  xcrun: "`xcrun` requires Xcode on macOS — not available in Pyodide.",
+  simctl: "`simctl` requires Xcode on macOS — not available.",
+  // Platform tools / shell utilities
+  jq: "`jq` is not available. Parse JSON with Python's `json` stdlib module instead.",
+  bc: "`bc` is not available. Use Python arithmetic directly.",
+  awk: "`awk` is not available. Use Python `re`/`csv`/`io` stdlib instead.",
+  sed: "`sed` is not available. Use Python `str.replace` / `re.sub` instead.",
+  grep: "`grep` is not available as a binary. Use Python `re` or the `grep` tool.",
+  find: "`find` is not available as a binary. Use Python `pathlib.Path.glob` or the `find_files` tool.",
+  // External API CLIs
+  firecrawl: "Firecrawl CLI is not available. Use the Firecrawl REST API (`https://api.firecrawl.dev`) via `web_post`.",
+  stripe: "Stripe CLI is not available. Use the Stripe REST API via `web_fetch`/`web_post`.",
+  heroku: "Heroku CLI is not available. Use the Heroku Platform API via `web_fetch`/`web_post`.",
 };
 
 const STDLIB_TOP_LEVEL = new Set([
