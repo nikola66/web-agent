@@ -34,6 +34,12 @@ import { gateToolExecution, summarizeToolApproval } from "./tool-policy.js";
 import { expandSkillBulkSaveArgs } from "./skill-bulk-args.js";
 import { classifyToolError } from "./error-classifier.js";
 import { invalidateSanitizedSchemaCache, sanitizeToolSchemas } from "../llm/tool-schema-sanitizer.js";
+import {
+  clearMcpToolsCache,
+  discoverAndRegisterMcpTools,
+  getMcpCatalogCache,
+  getMcpToolsCache,
+} from "../mcp-registry.js";
 
 type ToolExecutionContext = ReturnType<typeof createToolContext>;
 
@@ -270,14 +276,41 @@ export async function loadTools(): Promise<Record<string, ToolImplementFn>> {
     ])
   );
 
-  toolsCache = { ...builtinFunctions, ...capabilityTools };
+  const mcpEntries = Object.entries(getMcpToolsCache()).flatMap(([name, entry]) => {
+    if (BUILTIN_TOOLS[name] || capabilityTools[name]) {
+      console.warn(`[tools] MCP tool "${name}" shadows built-in/capability; skipped`);
+      return [];
+    }
+    if (!isValidToolName(name)) {
+      console.warn(`[tools] MCP tool "${name}" has invalid name; skipped`);
+      return [];
+    }
+    return [[name, entry.fn] as const];
+  });
+
+  toolsCache = {
+    ...builtinFunctions,
+    ...capabilityTools,
+    ...Object.fromEntries(mcpEntries),
+  };
   return toolsCache;
+}
+
+export function bustToolsCacheForMcp() {
+  toolsCache = null;
+}
+
+export async function reloadMcpTools() {
+  invalidateSanitizedSchemaCache();
+  await discoverAndRegisterMcpTools();
+  void import("../turn.js").then((m) => m.invalidateToolNamesCache?.());
 }
 
 export function reloadToolCapabilitiesForTest() {
   capabilityToolsCache = null;
   capabilityToolCatalogCache = null;
   toolsCache = null;
+  clearMcpToolsCache();
   invalidateSanitizedSchemaCache();
 }
 
@@ -302,7 +335,17 @@ export async function loadToolCatalog() {
       ]];
     })
   );
-  return { ...builtinCatalog, ...capabilityCatalog };
+  const mcpCatalog = Object.fromEntries(
+    Object.entries(getMcpCatalogCache()).flatMap(([name, entry]) => {
+      if (BUILTIN_TOOLS[name] || capabilityCatalog[name] || !isValidToolName(name)) return [];
+      return [[name, { emoji: entry.emoji, description: entry.description, inputSchema: entry.inputSchema }]];
+    })
+  );
+  return {
+    ...builtinCatalog,
+    ...capabilityCatalog,
+    ...mcpCatalog,
+  };
 }
 
 export async function buildOpenAiToolDefinitions(toolCatalog) {

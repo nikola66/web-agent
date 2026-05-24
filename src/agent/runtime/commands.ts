@@ -17,6 +17,8 @@ export const SLASH_COMMANDS = [
     description:
       "Find-skills mode: search online skill registries (skills.sh, SkillsMP, Cursor Marketplace, etc.) and return the top 5 by installs, stars, or votes.",
   },
+  { name: "/mcp [list|add|remove|test]", description: "Manage MCP server connections (Hermes-style connector)." },
+  { name: "/reload-mcp", description: "Reload MCP servers from .webagent/mcp-servers.json and refresh tools." },
   { name: "/checkpoint [name]", description: "Save a named snapshot of current history for rollback (handled by the embedded agent runtime)." },
   { name: "/rollback [name]", description: "List checkpoints or restore a named checkpoint (handled by the embedded agent runtime)." },
   { name: "/skills [search]", description: "List installed skills, or search skills by query." },

@@ -112,7 +112,7 @@ export function analyzeSkillCompat(
   if (uses_python) flags.push("python_runtime");
   if (uses_playwright) flags.push("playwright_unavailable");
   if (uses_agent_browser) flags.push("agent_browser_unavailable");
-  if (uses_mcp) flags.push("mcp_unavailable");
+  if (uses_mcp) flags.push("mcp_requires_config");
   if (uses_npx) flags.push("npx_unavailable");
   if (uses_deploy_cli) flags.push("deploy_cli_unavailable");
   if (uses_native_media) flags.push("native_media_unavailable");
@@ -161,7 +161,7 @@ export function buildWebAgentExecutionAppendix(analysis: SkillCompatAnalysis): s
     );
   }
   if (analysis.uses_mcp) {
-    lines.push("| MCP / CallMcpTool | **Not built-in** — add a capability or use `web_fetch`/`web_post` for that service's REST API |");
+    lines.push("| MCP / CallMcpTool | Configure via `/mcp add` or `.webagent/mcp-servers.json`, then `/reload-mcp` |");
   }
   if (analysis.uses_deploy_cli) {
     lines.push("| vercel / netlify / gh / fly / railway / heroku CLI | **Not available** — use that service's REST API via `web_fetch`/`web_post` |");
@@ -221,7 +221,7 @@ export function compatScanWarnings(analysis: SkillCompatAnalysis): string[] {
     warnings.push(`contains Python/pip references${libs} — use run_python for Pyodide-compatible scripts; no system pip/native deps`);
   }
   if (analysis.uses_mcp) {
-    warnings.push("references MCP tools — not built-in unless added as a capability; use web_fetch/web_post for that service's REST API");
+    warnings.push("references MCP tools — configure servers with /mcp add or .webagent/mcp-servers.json, then /reload-mcp");
   }
   if (analysis.uses_npx) {
     warnings.push("references npx — use skill_manage import_url / skill_bulk_save instead of CLI install");

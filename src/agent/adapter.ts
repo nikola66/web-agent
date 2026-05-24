@@ -33,6 +33,10 @@ import { CHANNEL_CATALOG_JSON, CHANNELS } from "@/core/channels";
 import { DEFAULT_PROVIDER_ID, PROVIDER_CATALOG_JSON, PROVIDERS } from "@/core/providers";
 import { isSubscriptionLlmUrl } from "@/core/subscription-auth-client";
 import { toolGuardrailsEnvForRuntime } from "./tool-guardrails-config.js";
+import { getMcpHost, shutdownMcpHost } from "@/core/mcp/host";
+import { probeMcpServer } from "@/core/mcp/server-task";
+import type { McpServerConfig, McpServersConfig } from "@/core/mcp/types";
+import { parseMcpServersConfig, resolveServerConfig } from "@/core/mcp/config";
 import heartbeatSource from "./runtime/HEARTBEAT.md?raw";
 import soulSource from "./runtime/SOUL.md?raw";
 import { TOOL_CATALOG_JSON } from "./tool-catalog";
@@ -59,6 +63,9 @@ import runtimeClarifySlashSource from "../../dist/agent-runtime/clarify-slash.js
 import runtimeFindSkillsSlashSource from "../../dist/agent-runtime/find-skills-slash.js?raw";
 import runtimeWikiSlashSource from "../../dist/agent-runtime/wiki-slash.js?raw";
 import runtimeSlashRoutingSource from "../../dist/agent-runtime/slash-routing.js?raw";
+import runtimeMcpSlashSource from "../../dist/agent-runtime/mcp-slash.js?raw";
+import runtimeMcpConfigSource from "../../dist/agent-runtime/mcp-config.js?raw";
+import runtimeMcpRegistrySource from "../../dist/agent-runtime/mcp-registry.js?raw";
 import runtimeTerminalFormatSource from "../../dist/agent-runtime/terminal-format.js?raw";
 import runtimeToolResultPreviewSource from "../../dist/agent-runtime/tool-result-preview.js?raw";
 import runtimeTranscriptSource from "../../dist/agent-runtime/transcript.js?raw";
@@ -221,6 +228,10 @@ const STT_REQ_PREFIX = "<<<WEBAGENT_STT_REQ:";
 const STT_REQ_END = "<<<END_WEBAGENT_STT_REQ>>>";
 const STT_RESP_PREFIX = "<<<WEBAGENT_STT_RESP:";
 const STT_RESP_END = "<<<END_WEBAGENT_STT_RESP>>>";
+const MCP_REQ_PREFIX = "<<<WEBAGENT_MCP_REQ:";
+const MCP_REQ_END = "<<<END_WEBAGENT_MCP_REQ>>>";
+const MCP_RESP_PREFIX = "<<<WEBAGENT_MCP_RESP:";
+const MCP_RESP_END = "<<<END_WEBAGENT_MCP_RESP>>>";
 /** Emitted by agent runtime before exit(1); parsed so the terminal can show the message. */
 const FATAL_ERROR_START = "<<<WEBAGENT_FATAL_ERROR>>>";
 const FATAL_ERROR_END = "<<<END_WEBAGENT_FATAL_ERROR>>>";
@@ -494,6 +505,9 @@ async function writeRuntimeSources(profileId: string): Promise<void> {
   await emulator.fs.writeFile(`${webagentDir}/find-skills-slash.js`, runtimeFindSkillsSlashSource);
   await emulator.fs.writeFile(`${webagentDir}/wiki-slash.js`, runtimeWikiSlashSource);
   await emulator.fs.writeFile(`${webagentDir}/slash-routing.js`, runtimeSlashRoutingSource);
+  await emulator.fs.writeFile(`${webagentDir}/mcp-slash.js`, runtimeMcpSlashSource);
+  await emulator.fs.writeFile(`${webagentDir}/mcp-config.js`, runtimeMcpConfigSource);
+  await emulator.fs.writeFile(`${webagentDir}/mcp-registry.js`, runtimeMcpRegistrySource);
   await emulator.fs.writeFile(`${webagentDir}/terminal-format.js`, runtimeTerminalFormatSource);
   await emulator.fs.writeFile(`${webagentDir}/tool-result-preview.js`, runtimeToolResultPreviewSource);
   await emulator.fs.writeFile(`${webagentDir}/transcript.js`, runtimeTranscriptSource);
@@ -688,6 +702,76 @@ function buildEnv(profileId: string, profile: Profile, apiKeys: Record<string, s
   }
 
   return env;
+}
+
+async function handleMcpIpcRequest(
+  profileId: string,
+  profileWorkspaceDir: string,
+  body: Record<string, unknown>
+): Promise<Record<string, unknown>> {
+  const action = String(body.action || "").trim();
+  const env =
+    body.env && typeof body.env === "object"
+      ? Object.fromEntries(
+          Object.entries(body.env as Record<string, unknown>)
+            .filter(([, v]) => v != null)
+            .map(([k, v]) => [String(k), String(v)])
+        )
+      : {};
+  const config = parseMcpServersConfig(body.config) as McpServersConfig;
+  const host = getMcpHost(profileId, {
+    spawn: spawnProcess,
+    workspaceCwd: profileWorkspaceDir,
+  });
+
+  try {
+    if (action === "discover") {
+      const tools = await host.discover(config, env);
+      return { ok: true, tools, status: host.getStatus() };
+    }
+    if (action === "reload") {
+      const diff = await host.reload(config, env);
+      return { ok: true, tools: host.listDiscoveredTools(), diff, status: host.getStatus() };
+    }
+    if (action === "call") {
+      const server = String(body.server || "").trim();
+      const tool = String(body.tool || "").trim();
+      const args =
+        body.args && typeof body.args === "object" && !Array.isArray(body.args)
+          ? (body.args as Record<string, unknown>)
+          : {};
+      const timeoutMs =
+        typeof body.timeout_ms === "number" && Number.isFinite(body.timeout_ms)
+          ? body.timeout_ms
+          : undefined;
+      const result = await host.callTool(server, tool, args, timeoutMs);
+      return { ok: true, result };
+    }
+    if (action === "probe") {
+      const name = String(body.name || "").trim();
+      const inline = body.server_config;
+      if (inline && typeof inline === "object" && !Array.isArray(inline)) {
+        const resolved = resolveServerConfig(inline as McpServerConfig, env);
+        const tools = await probeMcpServer(name, resolved, {
+          spawn: spawnProcess,
+          workspaceCwd: profileWorkspaceDir,
+        });
+        return { ok: true, tools };
+      }
+      const tools = await host.probe(name, config, env);
+      return { ok: true, tools };
+    }
+    if (action === "status") {
+      return { ok: true, status: host.getStatus(), tools: host.listDiscoveredTools() };
+    }
+    if (action === "shutdown") {
+      await shutdownMcpHost(profileId);
+      return { ok: true };
+    }
+    return { ok: false, error: `unknown_mcp_action:${action || "?"}` };
+  } catch (err) {
+    return { ok: false, error: String((err as Error)?.message ?? err) };
+  }
 }
 
 export async function startWebAgent(options: AgentStartOptions): Promise<void> {
@@ -1475,6 +1559,32 @@ export async function startWebAgent(options: AgentStartOptions): Promise<void> {
         continue;
       }
 
+      if (agentOutputBuffer.startsWith(MCP_REQ_PREFIX)) {
+        const idEnd = agentOutputBuffer.indexOf(">>>", MCP_REQ_PREFIX.length);
+        if (idEnd < 0) break;
+        const reqId = agentOutputBuffer.slice(MCP_REQ_PREFIX.length, idEnd);
+        const bodyStart = idEnd + 3;
+        const bodyEnd = agentOutputBuffer.indexOf(MCP_REQ_END, bodyStart);
+        if (bodyEnd < 0) break;
+        const reqBody = agentOutputBuffer.slice(bodyStart, bodyEnd);
+        agentOutputBuffer = agentOutputBuffer.slice(bodyEnd + MCP_REQ_END.length);
+        void (async () => {
+          let respPayload: string;
+          try {
+            const req = JSON.parse(reqBody) as Record<string, unknown>;
+            const result = await handleMcpIpcRequest(profile.id, profileWorkspaceDir, req);
+            respPayload = JSON.stringify(result);
+          } catch (e) {
+            respPayload = JSON.stringify({
+              ok: false,
+              error: String((e as Error)?.message ?? e),
+            });
+          }
+          await agentProcess.write(`${MCP_RESP_PREFIX}${reqId}>>>${respPayload}${MCP_RESP_END}`);
+        })();
+        continue;
+      }
+
       if (agentOutputBuffer.startsWith(STT_REQ_PREFIX)) {
         const idEnd = agentOutputBuffer.indexOf(">>>", STT_REQ_PREFIX.length);
         if (idEnd < 0) break;
@@ -1551,6 +1661,7 @@ export async function startWebAgent(options: AgentStartOptions): Promise<void> {
 
 export async function stopWebAgent(profileId: string | null): Promise<void> {
   if (!profileId) return;
+  await shutdownMcpHost(profileId).catch(() => {});
   const agentProcess = agentProcesses.get(profileId);
   if (!agentProcess) {
     lastResizes.delete(profileId);

@@ -23,6 +23,8 @@ export const RESERVED_SLASH_TOKENS = new Set([
   "wiki_setup",
   "wiki_sync",
   "wiki_search",
+  "reload_mcp",
+  "mcp",
 ]);
 
 export function commandSlug(value: unknown): string {
@@ -133,7 +135,9 @@ export type LocalSlashKind =
   | "skills"
   | "compact"
   | "stop"
-  | "voice";
+  | "voice"
+  | "reload_mcp"
+  | "mcp";
 
 export type LocalSlashCommand =
   | { kind: "none" }
@@ -145,7 +149,9 @@ export type LocalSlashCommand =
   | { kind: "skills"; input: string }
   | { kind: "compact" }
   | { kind: "stop" }
-  | { kind: "voice"; arg: string };
+  | { kind: "voice"; arg: string }
+  | { kind: "reload_mcp" }
+  | { kind: "mcp"; input: string };
 
 export function parseLocalSlashCommand(trimmed: string): LocalSlashCommand {
   const input = String(trimmed ?? "").trim();
@@ -168,6 +174,10 @@ export function parseLocalSlashCommand(trimmed: string): LocalSlashCommand {
   }
   if (input.startsWith("/rollback")) {
     return { kind: "rollback", name: input.slice("/rollback".length).trim() };
+  }
+  if (input === "/reload-mcp" || input === "/reload_mcp") return { kind: "reload_mcp" };
+  if (input === "/mcp" || input.startsWith("/mcp ")) {
+    return { kind: "mcp", input };
   }
   return { kind: "none" };
 }

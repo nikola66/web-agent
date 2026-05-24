@@ -19,7 +19,7 @@ triggers: [imported skill, skills.sh install, skill compat, WebFetch, agent-brow
 | Python / `.py` | `run_python` for Pyodide-compatible scripts |
 | pip / native deps | No system pip; use Pyodide packages if available or replace the native dependency step |
 | agent-browser / Playwright | **Not available** — `web_fetch` + file tools |
-| MCP / CallMcpTool | **Not built-in** — add capability or use HTTP tools |
+| MCP / CallMcpTool | Configure via `/mcp add` or `.webagent/mcp-servers.json`, then `/reload-mcp` |
 
 **Non-negotiable:** After any remote install (`skill_manage import_url`, `skill_bulk_save`, `/skills install`), call `skill_view` on the installed slug and follow its **Web Agent execution (auto-appended)** section before tool fan-out.
 

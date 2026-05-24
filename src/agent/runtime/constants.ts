@@ -67,6 +67,8 @@ export const SESSION_MEMORY_PATH = `${WS}/.webagent/session-memory.jsonl`;
 export const TELEGRAM_AUTH_REL = ".webagent/telegram-auth.json";
 /** Append-only Composio external-action audit log. Must match `WORKSPACE_COMPOSIO_AUDIT_REL` in `src/core/workspace-layout.ts`. */
 export const COMPOSIO_AUDIT_REL = ".webagent/composio-actions.jsonl";
+/** MCP server definitions. Must match `WORKSPACE_MCP_SERVERS_REL` in `src/core/workspace-layout.ts`. */
+export const MCP_SERVERS_REL = ".webagent/mcp-servers.json";
 /** Skill documents — reusable procedure markdown files injected into system prompt. */
 export const SKILLS_DIR = `${WS}/.webagent/skills`;
 /** Conversation history checkpoints for rollback. */

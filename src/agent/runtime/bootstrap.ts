@@ -64,6 +64,7 @@ import { buildToolRowsFromCatalog } from "./slash-command-views.js";
 import { formatHelpForSurface, runSkillsSlashCommand } from "./channel-outbound.js";
 import { SLASH_COMMANDS } from "./commands.js";
 import { resolveSlashUserMessage } from "./slash-routing.js";
+import { discoverMcpOnStartup, runMcpSlashCommand, shutdownMcpOnExit } from "./mcp-slash.js";
 import {
   compactHistory,
   formatCompactionNotice,
@@ -93,6 +94,7 @@ const STARTUP_AWAITING_MARKER = "<<<WEBAGENT_AWAITING_RESPONSE>>>";
 
 export async function main() {
   let cfg = await resolveLlm();
+  await discoverMcpOnStartup();
   const toolCatalog = await loadToolCatalog();
   const toolRows = buildToolRowsFromCatalog(toolCatalog);
   let _rlLineBuffer = "";
@@ -447,6 +449,7 @@ export async function main() {
       channelAbort.abort();
       channelSidecar.stop();
       clearInterval(heartbeatHandle);
+      await shutdownMcpOnExit();
       break;
     }
     if (input === "/clear") {
@@ -473,6 +476,10 @@ export async function main() {
     }
     if (input === "/skills" || input.startsWith("/skills ")) {
       await handleSkillsCommand(input);
+      continue;
+    }
+    if (input === "/reload-mcp" || input === "/reload_mcp" || input === "/mcp" || input.startsWith("/mcp ")) {
+      await runMcpSlashCommand(input);
       continue;
     }
     if (input === "/stop") {

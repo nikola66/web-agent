@@ -20,6 +20,7 @@ import {
 import { buildToolRowsFromCatalog } from "../slash-command-views.js";
 import { loadToolCatalog } from "../tools/registry.js";
 import { parseLocalSlashCommand, resolveSlashUserMessage } from "../slash-routing.js";
+import { runMcpSlashCommand } from "../mcp-slash.js";
 import { archiveCurrentHistoryForSessionSearch } from "../startup-context.js";
 import {
   listCheckpoints,
@@ -316,6 +317,16 @@ export function createChannelInboundHandler(deps) {
 
       if (localSlash.kind === "skills") {
         await runSkillsSlashCommand(localSlash.input, surface, (msg) => sendReply(chatId, msg));
+        return;
+      }
+
+      if (localSlash.kind === "reload_mcp") {
+        await runMcpSlashCommand("/reload-mcp", (msg) => sendReply(chatId, msg));
+        return;
+      }
+
+      if (localSlash.kind === "mcp") {
+        await runMcpSlashCommand(localSlash.input, (msg) => sendReply(chatId, msg));
         return;
       }
 

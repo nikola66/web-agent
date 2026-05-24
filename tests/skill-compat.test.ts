@@ -149,6 +149,7 @@ test("analyzeSkillCompat flags MCP and Azure CLI workflow requirements", () => {
   assert.equal(analysis.uses_mcp, true);
   assert.equal(analysis.uses_bash, true);
   assert.equal(analysis.tier, "limited");
+  assert.ok(analysis.flags.includes("mcp_requires_config"));
 });
 
 test("skills-sh-top10 fixture: every mapped tier declares a mapping", async () => {

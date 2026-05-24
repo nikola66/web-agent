@@ -40,6 +40,11 @@ export const IPC_STT_REQ_END = "<<<END_WEBAGENT_STT_REQ>>>";
 export const IPC_STT_RESP_PREFIX = "<<<WEBAGENT_STT_RESP:";
 export const IPC_STT_RESP_END = "<<<END_WEBAGENT_STT_RESP>>>";
 
+export const IPC_MCP_REQ_PREFIX = "<<<WEBAGENT_MCP_REQ:";
+export const IPC_MCP_REQ_END = "<<<END_WEBAGENT_MCP_REQ>>>";
+export const IPC_MCP_RESP_PREFIX = "<<<WEBAGENT_MCP_RESP:";
+export const IPC_MCP_RESP_END = "<<<END_WEBAGENT_MCP_RESP>>>";
+
 let _nextId = 0;
 const _pending = new Map(); // id → { resolve, reject, timer }
 let _streamNextId = 0;
@@ -53,6 +58,9 @@ const _pythonPending = new Map(); // id → { resolve, reject, timer }
 
 let _sttNextId = 0;
 const _sttPending = new Map(); // id → { resolve, reject, timer }
+
+let _mcpNextId = 0;
+const _mcpPending = new Map(); // id → { resolve, reject, timer }
 
 function encodePayload(payload) {
   return Buffer.from(JSON.stringify(payload), "utf8").toString("base64");
@@ -116,6 +124,26 @@ function stripPythonResponses(text) {
         entry.resolve(JSON.parse(payload));
       } catch (e) {
         entry.reject(new Error(`IPC Python response parse error: ${e?.message || e}`));
+      }
+    }
+    return "";
+  });
+}
+
+function stripMcpResponses(text) {
+  const re = new RegExp(
+    IPC_MCP_RESP_PREFIX.replace(/</g, "<") + "([^>]+)>>>" + "([\\s\\S]*?)" + IPC_MCP_RESP_END,
+    "g"
+  );
+  return text.replace(re, (_, id, payload) => {
+    const entry = _mcpPending.get(id);
+    if (entry) {
+      clearTimeout(entry.timer);
+      _mcpPending.delete(id);
+      try {
+        entry.resolve(JSON.parse(payload));
+      } catch (e) {
+        entry.reject(new Error(`IPC MCP response parse error: ${e?.message || e}`));
       }
     }
     return "";
@@ -187,6 +215,7 @@ function stripStreamResponses(text) {
  */
 export function processStdinChunk(text) {
   let out = stripSttResponses(text);
+  out = stripMcpResponses(out);
   out = stripSpawnResponses(out);
   out = stripPythonResponses(out);
   out = stripStreamResponses(out);
@@ -332,6 +361,23 @@ export function ipcPythonRequest(payload) {
     _pythonPending.set(id, { resolve, reject, timer });
     process.stdout.write(
       `${IPC_PYTHON_REQ_PREFIX}${id}>>>${JSON.stringify(payload)}${IPC_PYTHON_REQ_END}`
+    );
+  });
+}
+
+export function ipcMcpRequest(payload, timeoutMs = 180_000) {
+  const wait = Math.min(Math.max(Number(timeoutMs) || 180_000, 5_000), 900_000);
+  return new Promise((resolve, reject) => {
+    const id = String(++_mcpNextId);
+    const timer = setTimeout(() => {
+      if (_mcpPending.has(id)) {
+        _mcpPending.delete(id);
+        reject(new Error(`IPC MCP request timed out after ${wait}ms.`));
+      }
+    }, wait);
+    _mcpPending.set(id, { resolve, reject, timer });
+    process.stdout.write(
+      `${IPC_MCP_REQ_PREFIX}${id}>>>${JSON.stringify(payload)}${IPC_MCP_REQ_END}`
     );
   });
 }
