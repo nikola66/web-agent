@@ -601,7 +601,8 @@ export type ContinuationNudgeKind =
   | "api_discovery_stall"
   | "pre_tool_promise"
   | "cron_verify"
-  | "incomplete_todos";
+  | "incomplete_todos"
+  | "all_tools_rejected";
 
 export type TodoCompletionStats = {
   total: number;
@@ -696,6 +697,7 @@ export function buildContinuationNudge(
     falseManualCron?: boolean;
     openTodos?: number;
     totalTodos?: number;
+    rejectedToolNames?: string[];
   }
 ): string {
   if (kind === "empty_after_tools") {
@@ -759,6 +761,19 @@ export function buildContinuationNudge(
       "Continue the next checklist item now with the required tool call(s). " +
       "Update todo_write as you finish items. Do not stop until all items are completed or cancelled, " +
       "then send the user's requested final line."
+    );
+  }
+  if (kind === "all_tools_rejected") {
+    const names = extra?.rejectedToolNames;
+    const nameList = Array.isArray(names) && names.length
+      ? ` (${names.slice(0, 6).join(", ")})`
+      : "";
+    return (
+      `The tool call(s)${nameList} you just attempted are not available in this environment. ` +
+      "These are likely tool names from a different agent host (Claude Code, Cursor, Composio, etc.) that do not exist here. " +
+      "Use only the tools available in this Web Agent: write_file, read_file, edit_file, run_python, run_shell, " +
+      "web_fetch, web_post, web_search, grep, find_files, list_dir, skill_view, skill_manage, artifact_present, and similar built-ins. " +
+      "Continue the task now using the correct tools."
     );
   }
   return (

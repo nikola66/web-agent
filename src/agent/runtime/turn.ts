@@ -458,6 +458,7 @@ export async function agentTurn(
   let preToolPromiseContinuations = 0;
   let cronVerifyContinuations = 0;
   let incompleteTodoContinuations = 0;
+  let allToolsRejectedContinuations = 0;
   const pendingCronRegisterIds = new Set<string>();
   let continuationRecoveriesFired = 0;
   let skillInstallPivotNudgeFired = false;
@@ -645,6 +646,34 @@ export async function agentTurn(
           }),
           { round }
         );
+
+        // All calls were rejected (unknown tool names from imported skills on other
+        // platforms — e.g. str_replace_editor, computer, ReadFile). Inject a recovery
+        // nudge so the model retries with the correct built-in tool names instead of
+        // stopping with post_tool_no_continue.
+        const allUnknown = tools.length === 0 && rejected.every((r) => r.reason === "unknown_tool");
+        if (allUnknown && allToolsRejectedContinuations < 2) {
+          allToolsRejectedContinuations++;
+          continuationRecoveriesFired++;
+          const rejectedNames = rejected.map((r) => {
+            const c = r.call as { name?: string } | undefined;
+            return String(c?.name || "unknown").trim();
+          });
+          if (conv.length && (conv[conv.length - 1] as ChatTurnMsg).role === "assistant") {
+            conv.pop();
+          }
+          conv.push(buildSyntheticEmptyAssistantMessage());
+          conv.push({
+            role: "user",
+            content: buildContinuationNudge("all_tools_rejected", { rejectedToolNames: rejectedNames }),
+          });
+          await logDebugEvent("turn_all_tools_rejected_continuation", {
+            round,
+            count: allToolsRejectedContinuations,
+            rejectedNames,
+          });
+          continue;
+        }
       }
 
       if (!tools.length) {
