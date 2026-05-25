@@ -200,6 +200,7 @@ test("buildComposioSaasContextPrefix nudges composio_status before claiming no a
   assert.match(prefix!, /composio_status/);
   assert.match(prefix!, /no access/i);
   assert.match(prefix!, /Offer `composio_connect` only when status shows the app is missing/i);
+  assert.match(prefix!, /do not web_search or web_fetch GitHub/i);
 });
 
 test("skillBulkSaveAllUrlItemsFailed detects total URL failure batch", () => {

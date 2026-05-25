@@ -153,6 +153,8 @@ test("composio_status reports missing configuration without network", async () =
   const result = out?.result as { configured?: boolean; missing?: string; allowed_actions?: unknown[] };
   assert.equal(result.configured, false);
   assert.equal(result.missing, "WEBAGENT_COMPOSIO_API_KEY");
+  assert.ok(result.setup?.steps?.length);
+  assert.match(String(result.message), /Settings/i);
   assert.ok((result.allowed_actions?.length ?? 0) >= 5);
 });
 

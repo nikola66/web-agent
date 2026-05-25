@@ -56,4 +56,5 @@ test("buildMemoryLayerGuidanceBlock includes composio guidance when skill_view e
   assert.match(block, /composio-oauth/);
   assert.match(block, /composio_status/);
   assert.match(block, /no access/);
+  assert.match(block, /do not web_search or web_fetch repo/i);
 });

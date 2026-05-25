@@ -96,7 +96,8 @@ export function buildComposioSaasContextPrefix(input) {
   return (
     "[OAuth SaaS] User query may target a Composio-connected app. Call `skill_view` **`composio-oauth`**, then `composio_status` " +
     "(optionally `{ app: \"linkedin\" }` etc.) before answering about access. If `connected_accounts` includes the app, use `composio_action` — " +
-    "do not tell the user to connect OAuth or claim 'no access' without checking status. Offer `composio_connect` only when status shows the app is missing."
+    "do not tell the user to connect OAuth or claim 'no access' without checking status. Offer `composio_connect` only when status shows the app is missing. " +
+    "If `configured: false`, tell the user to add `composio_api_key` in Settings — do not web_search or web_fetch GitHub/repo setup docs."
   );
 }
 

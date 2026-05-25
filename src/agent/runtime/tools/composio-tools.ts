@@ -566,6 +566,16 @@ export async function composioStatusTool(args: ToolArgs = {}, ctx) {
       ok: true,
       configured: false,
       missing: "WEBAGENT_COMPOSIO_API_KEY",
+      setup: {
+        where: "Settings → Composio → API key (`composio_api_key`)",
+        steps: [
+          "User adds a Composio API key in Settings (cmp_… from https://dashboard.composio.dev).",
+          "Call composio_connect for the target app (e.g. gmail) and share redirect_url for OAuth.",
+          "After OAuth completes, use composio_action with ids from allowed_actions or composio-oauth skill.",
+        ],
+      },
+      message:
+        "Composio is not configured. Tell the user to add composio_api_key in Settings — do not web_search or web_fetch repo docs for setup.",
       allowed_actions: allowedActions(),
     };
   }

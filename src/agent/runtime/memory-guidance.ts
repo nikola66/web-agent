@@ -64,7 +64,8 @@ export const HTTP_API_GUIDANCE =
 export const COMPOSIO_SAAS_GUIDANCE =
   "For the user's connected OAuth apps (Gmail, LinkedIn, Slack, HubSpot, …): call `skill_view` **`composio-oauth`**, then `composio_status` before answering about access. " +
   "If `connected_accounts` includes the app, use `composio_action` — do not tell the user to connect OAuth or claim 'no access' without checking status. " +
-  "Offer `composio_connect` only when status shows the app is missing from `connected_accounts`.";
+  "Offer `composio_connect` only when status shows the app is missing from `connected_accounts`. " +
+  "When `configured: false`, setup is Settings → Composio → `composio_api_key` — do not web_search or web_fetch repo/GitHub docs for setup.";
 
 export const MEMORY_SPILL_RECOVERY_GUIDANCE =
   "**Internal memory paths (do not scavenge):** `memory/snapshots/` = oversized tool-result spill only; " +

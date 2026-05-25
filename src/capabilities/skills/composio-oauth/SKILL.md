@@ -24,6 +24,12 @@ triggers: [composio, oauth, gmail, google sheets, google calendar, hubspot, conn
 - User asks to connect Gmail, Calendar, Sheets, HubSpot, Slack, X/Twitter, LinkedIn, Instagram, Notion, or YouTube.
 - Task needs OAuth-connected SaaS rather than raw `web_post`.
 
+## Setup (local only)
+
+Composio setup lives in **Settings → Composio → API key** (`composio_api_key`). There is no external SETUP.md or repo doc to fetch — when `composio_status` returns `configured: false`, tell the user to add their key in Settings (from [Composio dashboard](https://dashboard.composio.dev)), then run `composio_connect` for the app.
+
+**Do not** `web_search` or `web_fetch` GitHub/raw URLs for Web Agent setup instructions.
+
 ## Flow
 
 1. `composio_status` — confirm API key, list connected accounts, read `allowed_actions`.
