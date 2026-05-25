@@ -18,18 +18,12 @@ export const italic = (s: string) => `\x1b[3m${s}${R}`;
 const underline = (s: string) => `\x1b[4m${s}\x1b[24m`;
 
 function terminalHyperlink(url: string, label: string) {
-  return `\x1b]8;;${url}\x07${underline(blue(label))}\x1b]8;;\x07`;
+  return `\x1b]8;;${url}\x07${underline(label)}\x1b]8;;\x07`;
 }
 
-function linkifyInlineMarkdown(text: string, hyperlink = terminalHyperlink) {
+function linkifyHttpsUrls(text: string, hyperlink = terminalHyperlink) {
   const linkTokens: string[] = [];
   let out = text;
-  out = out.replace(/\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g, (_m, label, rawUrl) => {
-    const url = trimTrailingUrlPunctuation(String(rawUrl));
-    const token = `@@TMLINK${linkTokens.length}@@`;
-    linkTokens.push(hyperlink(url, String(label)));
-    return token;
-  });
   out = out.replace(INLINE_URL_RE, (match) => {
     const url = trimTrailingUrlPunctuation(match);
     const suffix = match.slice(url.length);
@@ -156,7 +150,7 @@ export function styleInlineMarkdown(input: unknown) {
   out = out.replace(/(^|[^\w])__([^_\n]+)__([^\w]|$)/g, (_m, pre, text, post) => `${pre}${bold(text)}${post}`);
   out = out.replace(/(^|[^\*])\*([^*\n]+)\*/g, (_m, pre, text) => `${pre}${italic(text)}`);
   out = out.replace(/(^|[^\w])_([^_\n]+)_([^\w]|$)/g, (_m, pre, text, post) => `${pre}${italic(text)}${post}`);
-  out = linkifyInlineMarkdown(out);
+  out = linkifyHttpsUrls(out);
   for (let i = 0; i < codeTokens.length; i++) {
     out = out.split(`@@TMCODE${i}@@`).join(codeTokens[i]);
   }
@@ -599,7 +593,7 @@ export function renderUserBlock(
   for (let i = 0; i < lines.length; i++) {
     const prefix = i === 0 ? " └ " : BLOCK_CONTINUATION_PREFIX;
     const hyperlink = (url: string, label: string) => `\x1b]8;;${url}\x07${underline(label)}\x1b]8;;\x07`;
-    process.stdout.write(`${grey(prefix + linkifyInlineMarkdown(lines[i], hyperlink))}\n`);
+    process.stdout.write(`${grey(prefix + linkifyHttpsUrls(lines[i], hyperlink))}\n`);
   }
   process.stdout.write("\n");
 }

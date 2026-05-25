@@ -9,6 +9,42 @@ import {
   repairLooseToolCallObject,
 } from "../tools/argument-normalization.js";
 
+type LlmRequestOptions = {
+  signal?: AbortSignal;
+  max_tokens?: number;
+  maxTokens?: number;
+};
+
+type ToolCallPayload = {
+  name: string;
+  arguments: Record<string, unknown>;
+};
+
+type JsonValueSpan = {
+  start: number;
+  end: number;
+  text: string;
+};
+
+type HiddenStreamMarker = {
+  start: string;
+  end: string;
+};
+
+type IpcProxyResponse = {
+  error?: string;
+  status?: number;
+  body?: string;
+};
+
+type LlmProviderConfig = {
+  provider?: string;
+  baseUrl?: string;
+  model?: string;
+  apiKey?: string;
+  extraHeaders?: Record<string, string>;
+};
+
 function levenshtein(a: string, b: string): number {
   const m = a.length;
   const n = b.length;
@@ -180,7 +216,12 @@ export function estimateToolSchemaTokens(tools) {
   }
 }
 
-export async function fetchWithTimeout(url, options = {}, timeoutMs = LLM_REQUEST_TIMEOUT_MS, label = "LLM request") {
+export async function fetchWithTimeout(
+  url: string,
+  options: RequestInit = {},
+  timeoutMs = LLM_REQUEST_TIMEOUT_MS,
+  label = "LLM request"
+) {
   const toAlternateLoopbackUrl = (inputUrl) => {
     try {
       const parsed = new URL(String(inputUrl || ""));
@@ -238,7 +279,7 @@ export async function fetchWithTimeout(url, options = {}, timeoutMs = LLM_REQUES
   });
 
   let lastError = "";
-  let lastErr = null;
+  let lastErr: unknown = null;
   for (let attempt = 0; attempt < HTTP_RETRY_MAX_ATTEMPTS; attempt++) {
     if (externalSignal?.aborted) {
       throw new Error(`${label} aborted`);
@@ -301,7 +342,9 @@ export async function fetchWithTimeout(url, options = {}, timeoutMs = LLM_REQUES
       }).catch(() => {});
     }
   }
-  throw new Error(`${label} failed (${url}): ${lastError || String(lastErr?.message || lastErr)}`);
+  throw new Error(
+    `${label} failed (${url}): ${lastError || (lastErr instanceof Error ? lastErr.message : String(lastErr || ""))}`
+  );
 }
 
 function formatProviderError(provider, status, bodyText) {
@@ -358,10 +401,16 @@ function parseOpenAiStreamPayload(payload, toolAcc, onContent) {
   return { sawReasoning, finishReason };
 }
 
-export async function streamOpenAI(messages, cfg, onDelta, tools, options = {}) {
+export async function streamOpenAI(
+  messages: unknown,
+  cfg: LlmProviderConfig,
+  onDelta: (chunk: string) => void,
+  tools: unknown,
+  options: LlmRequestOptions = {}
+) {
   const headers = sanitizeHeadersForFetch({
     "Content-Type": "application/json",
-    ...cfg.extraHeaders,
+    ...(cfg.extraHeaders || {}),
   });
   if (cfg.apiKey) headers.Authorization = `Bearer ${cfg.apiKey}`;
   const toolList = Array.isArray(tools) ? tools : [];
@@ -391,7 +440,7 @@ export async function streamOpenAI(messages, cfg, onDelta, tools, options = {}) 
     kind: "openai-compatible",
     model: cfg.model,
     endpoint,
-    messageCount: messages.length,
+    messageCount: Array.isArray(messages) ? messages.length : 0,
     toolCount: toolList.length,
   });
   const STREAM_HTTP_MAX_ATTEMPTS = getLlmInitialHttpMaxAttempts();
@@ -671,7 +720,11 @@ function parseIpcProxyCompletionPayload(raw, provider) {
   }
 }
 
-export async function completeOpenAiChat(messages, cfg, options = {}) {
+export async function completeOpenAiChat(
+  messages: unknown,
+  cfg: LlmProviderConfig,
+  options: LlmRequestOptions = {}
+) {
   if (options.signal?.aborted) {
     throw new Error(`${cfg.provider || "LLM"} chat completion aborted`);
   }
@@ -680,7 +733,7 @@ export async function completeOpenAiChat(messages, cfg, options = {}) {
   }
   const headers = sanitizeHeadersForFetch({
     "Content-Type": "application/json",
-    ...cfg.extraHeaders,
+    ...(cfg.extraHeaders || {}),
   });
   if (cfg.apiKey) headers.Authorization = `Bearer ${cfg.apiKey}`;
   const maxTokens = Math.max(16, Number(options?.max_tokens ?? options?.maxTokens) || 384);
@@ -695,7 +748,7 @@ export async function completeOpenAiChat(messages, cfg, options = {}) {
   const label = `${cfg.provider || "LLM"} chat completion`;
   const maxAttempts = getLlmInitialHttpMaxAttempts();
 
-  let lastErr = null;
+  let lastErr: unknown = null;
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
     if (options.signal?.aborted) {
       throw new Error(`${cfg.provider || "LLM"} chat completion aborted`);
@@ -711,12 +764,12 @@ export async function completeOpenAiChat(messages, cfg, options = {}) {
     }
     try {
       if (shouldUseNodeboxLlmProxy(endpoint)) {
-        const raw = await ipcProxyRequest({
+        const raw = (await ipcProxyRequest({
           method: "POST",
           url: endpoint,
           headers,
           body,
-        });
+        })) as IpcProxyResponse;
         if (raw?.error) {
           throw new Error(String(raw.error));
         }
@@ -838,8 +891,8 @@ function lineLooksLikePseudoToolCall(line, exactNameRe) {
  * Whole-line shell-like tool hints (`list_dir .`, `web_search foo`).
  * Multi-arg tools such as cron_register are not supported here — use provider tool_calls or <<<TOOL>>> JSON.
  */
-function parsePlainToolCommandLine(line, toolNames) {
-  const names = Array.isArray(toolNames) ? new Set(toolNames) : new Set();
+function parsePlainToolCommandLine(line: string, toolNames?: string[]): ToolCallPayload | null {
+  const names = new Set(Array.isArray(toolNames) ? toolNames : []);
   const match = String(line || "").match(/^\s*([a-z][a-z0-9_]{1,48})\s+(.+?)\s*$/i);
   if (!match) return null;
   const name = match[1];
@@ -862,10 +915,10 @@ function parsePlainToolCommandLine(line, toolNames) {
   return null;
 }
 
-function findJsonValueSpans(text) {
+function findJsonValueSpans(text: string): JsonValueSpan[] {
   const input = String(text || "");
-  const spans = [];
-  const stack = [];
+  const spans: JsonValueSpan[] = [];
+  const stack: string[] = [];
   let inString = false;
   let escaped = false;
   let start = -1;
@@ -927,10 +980,14 @@ function normalizeJsonToolName(value) {
   return String(value?.name || value?.tool || value?.function?.name || "").trim();
 }
 
-function collectToolCallsFromJsonValue(value, toolNames, out = []) {
+function collectToolCallsFromJsonValue(
+  value: unknown,
+  toolNames: string[] | undefined,
+  out: ToolCallPayload[] = []
+): boolean {
   const knownTools = toolNames?.length ? new Set(toolNames) : null;
-  const addCall = (call, allowNameOnly = false) => {
-    const fn = call?.function || {};
+  const addCall = (call: Record<string, unknown>, allowNameOnly = false): boolean => {
+    const fn = (call?.function as Record<string, unknown> | undefined) || {};
     const explicitToolShape =
       allowNameOnly ||
       knownTools ||
@@ -940,7 +997,7 @@ function collectToolCallsFromJsonValue(value, toolNames, out = []) {
     if (!explicitToolShape || !name || (knownTools && !knownTools.has(name))) return false;
     out.push({
       name,
-      arguments: fn?.arguments ?? call?.arguments ?? call?.args ?? {},
+      arguments: (fn?.arguments ?? call?.arguments ?? call?.args ?? {}) as Record<string, unknown>,
     });
     return true;
   };
@@ -953,19 +1010,23 @@ function collectToolCallsFromJsonValue(value, toolNames, out = []) {
   if (!value || typeof value !== "object") return false;
 
   let added = false;
-  const calls = value.tool_calls || value.toolCalls;
+  const calls = (value as Record<string, unknown>).tool_calls || (value as Record<string, unknown>).toolCalls;
   if (Array.isArray(calls)) {
-    for (const call of calls) added = addCall(call, true) || added;
+    for (const call of calls) added = addCall(call as Record<string, unknown>, true) || added;
   }
-  if (value.tool_call) added = collectToolCallsFromJsonValue(value.tool_call, toolNames, out) || added;
-  if (value.toolCall) added = collectToolCallsFromJsonValue(value.toolCall, toolNames, out) || added;
-  if (normalizeJsonToolName(value)) added = addCall(value) || added;
+  if ((value as Record<string, unknown>).tool_call) {
+    added = collectToolCallsFromJsonValue((value as Record<string, unknown>).tool_call, toolNames, out) || added;
+  }
+  if ((value as Record<string, unknown>).toolCall) {
+    added = collectToolCallsFromJsonValue((value as Record<string, unknown>).toolCall, toolNames, out) || added;
+  }
+  if (normalizeJsonToolName(value)) added = addCall(value as Record<string, unknown>) || added;
   return added;
 }
 
-export function extractJsonToolCallPayloads(text, toolNames) {
-  const tools = [];
-  const removableSpans = [];
+export function extractJsonToolCallPayloads(text: string, toolNames?: string[]) {
+  const tools: ToolCallPayload[] = [];
+  const removableSpans: JsonValueSpan[] = [];
   for (const span of findJsonValueSpans(text)) {
     const parsed = parseJsonValueLoose(span.text);
     const beforeCount = tools.length;
@@ -1000,9 +1061,9 @@ export function stripJsonToolCallPayloads(text, toolNames) {
   return extractJsonToolCallPayloads(text, toolNames).visible;
 }
 
-export function extractPlainToolCommandLines(text, toolNames) {
-  const tools = [];
-  const visibleLines = [];
+export function extractPlainToolCommandLines(text: string, toolNames?: string[]) {
+  const tools: ToolCallPayload[] = [];
+  const visibleLines: string[] = [];
   for (const line of String(text || "").split("\n")) {
     const parsed = parsePlainToolCommandLine(line, toolNames);
     if (parsed) tools.push(parsed);
@@ -1012,7 +1073,7 @@ export function extractPlainToolCommandLines(text, toolNames) {
 }
 
 /** Lines like `call:tool{"name="find_find_files"arguments={...}`. */
-export function extractLooseCallToolLines(text, toolNames) {
+export function extractLooseCallToolLines(text: string, toolNames?: string[]) {
   const known = toolNames?.length ? new Set(toolNames) : null;
   const tools: Array<{ name: string; arguments: Record<string, unknown> }> = [];
   const visibleLines: string[] = [];
@@ -1054,9 +1115,9 @@ export function stripReasoningPlaceholderLines(text) {
 }
 
 /** Pull `<<<CLARIFY>>>` host markers out of model text; emit blocks on stdout separately from visible chat. */
-export function extractClarifyMarkers(text) {
+export function extractClarifyMarkers(text: string) {
   const re = /<<<\s*CLARIFY\s*>>>[\s\S]*?<<<\s*END\s*>>>/gi;
-  const blocks = [];
+  const blocks: string[] = [];
   const raw = String(text || "");
   let m;
   while ((m = re.exec(raw))) {
@@ -1066,8 +1127,8 @@ export function extractClarifyMarkers(text) {
   return { blocks, visible };
 }
 
-/** @param {string[]} [knownToolNames] — adds exact-name matches; generic `name{"k":…}` lines strip even when [] */
-export function sanitizeAssistantVisibleText(text, knownToolNames) {
+/** @param knownToolNames — adds exact-name matches; generic `name{"k":…}` lines strip even when [] */
+export function sanitizeAssistantVisibleText(text: string, knownToolNames?: string[]) {
   const withoutMarkers = String(text || "")
     .replace(/<<<\s*TOOL\s*>>>[\s\S]*?<<<\s*END\s*>>>/gi, "")
     .replace(/<<<\s*CLARIFY\s*>>>[\s\S]*?<<<\s*END\s*>>>/gi, "")
@@ -1083,9 +1144,9 @@ export function sanitizeAssistantVisibleText(text, knownToolNames) {
   return out;
 }
 
-export function extractMarkerTools(text) {
+export function extractMarkerTools(text: string) {
   const re = /<<<\s*TOOL\s*>>>\s*([\s\S]*?)\s*<<<\s*END\s*>>>/gi;
-  const tools = [];
+  const tools: Array<Record<string, unknown>> = [];
   let m;
   while ((m = re.exec(text))) {
     const payload = m[1].trim();
@@ -1152,9 +1213,9 @@ function parseLongcatToolCallPayload(payload) {
   return [{ name, arguments: args }];
 }
 
-export function extractLongcatToolCallPayloads(text) {
+export function extractLongcatToolCallPayloads(text: string) {
   const re = /<longcat_tool_call>\s*([\s\S]*?)\s*<\/longcat_tool_call>/gi;
-  const tools = [];
+  const tools: ToolCallPayload[] = [];
   let m;
   while ((m = re.exec(String(text || "")))) {
     const parsed = parseLongcatToolCallPayload(m[1]);
@@ -1165,9 +1226,9 @@ export function extractLongcatToolCallPayloads(text) {
   return { tools, visible };
 }
 
-export function extractToolCallTagPayloads(text) {
+export function extractToolCallTagPayloads(text: string) {
   const re = /<TOOLCALL>\s*([\s\S]*?)\s*<\/TOOLCALL>/gi;
-  const tools = [];
+  const tools: ToolCallPayload[] = [];
   let m;
   while ((m = re.exec(String(text || "")))) {
     const payload = String(m[1] || "").trim();
@@ -1186,23 +1247,23 @@ export function extractToolCallTagPayloads(text) {
   return { tools, visible };
 }
 
-export function extractJsonToolCallsFromText(text) {
-  return extractJsonToolCallPayloads(text).tools;
+export function extractJsonToolCallsFromText(text: string, toolNames?: string[]) {
+  return extractJsonToolCallPayloads(text, toolNames).tools;
 }
 
 export function normalizeToolCalls(
   rawCalls: unknown,
   toolNames: unknown
 ): {
-  normalized: Array<{ name: string; arguments: Record<string, unknown> }>;
+  normalized: ToolCallPayload[];
   rejected: Array<{ reason: string; call: unknown }>;
 } {
-  const knownTools = new Set(toolNames || []);
-  const normalized: Array<{ name: string; arguments: Record<string, unknown> }> = [];
+  const knownTools = new Set(Array.isArray(toolNames) ? (toolNames as string[]) : []);
+  const normalized: ToolCallPayload[] = [];
   const rejected: Array<{ reason: string; call: unknown }> = [];
   const seenCallKeys = new Set<string>();
   const MAX_TOOL_CALLS_PER_TURN = 16;
-  for (const raw of rawCalls || []) {
+  for (const raw of (Array.isArray(rawCalls) ? rawCalls : []) as Array<Record<string, unknown>>) {
     if (normalized.length >= MAX_TOOL_CALLS_PER_TURN) {
       rejected.push({ reason: "too_many_calls", call: raw });
       continue;
@@ -1217,17 +1278,16 @@ export function normalizeToolCalls(
       rejected.push({ reason: "unknown_tool", call: raw });
       continue;
     }
-    let args = raw?.arguments;
-    if (typeof args === "string") {
-      const trimmed = args.trim();
-      if (!trimmed) args = {};
-      else {
-        args = parseToolArguments(trimmed, name);
-      }
+    let args: Record<string, unknown> = {};
+    const rawArgs = raw?.arguments;
+    if (typeof rawArgs === "string") {
+      const trimmed = rawArgs.trim();
+      args = trimmed ? parseToolArguments(trimmed, name) : {};
+    } else if (rawArgs && typeof rawArgs === "object" && !Array.isArray(rawArgs)) {
+      args = rawArgs as Record<string, unknown>;
     }
-    if (!args || typeof args !== "object" || Array.isArray(args)) args = {};
     if (name === "skill_manage") {
-      args = inferSkillManageAction(rawName, args as Record<string, unknown>);
+      args = inferSkillManageAction(rawName, args);
       if (!args.file_path && typeof args.path === "string") args.file_path = args.path;
     }
     // Common alias normalization (inspired by opencrabs param aliases).
@@ -1275,9 +1335,9 @@ function longestToolPrefixSuffix(input) {
   return longest;
 }
 
-export function createToolAwareStreamWriter(writeChunk) {
+export function createToolAwareStreamWriter(writeChunk: (chunk: string) => void) {
   let buffer = "";
-  let insideToolBlock = null;
+  let insideToolBlock: HiddenStreamMarker | null = null;
   /** Prefix of hidden tool-block bytes dropped while waiting for END (stream may end mid-block). */
   let insideHiddenAccum = "";
 
@@ -1303,7 +1363,7 @@ export function createToolAwareStreamWriter(writeChunk) {
         }
 
         let nextToolStart = -1;
-        let nextMarker = null;
+        let nextMarker: HiddenStreamMarker | null = null;
         for (const marker of HIDDEN_STREAM_MARKERS) {
           const idx = buffer.indexOf(marker.start);
           if (idx < 0) continue;

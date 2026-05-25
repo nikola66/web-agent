@@ -125,7 +125,7 @@ const MARKETING_ACTIONS: Record<string, MarketingAction> = {
   },
   googlesheets_upsert_rows: {
     app: "googlesheets",
-    actionId: "GOOGLESHEETS_UPSERT_SPREADSHEET_ROW",
+    actionId: "GOOGLESHEETS_UPSERT_ROWS",
     kind: "write",
     targetFields: ["spreadsheet_id", "sheet_name"],
   },
@@ -286,6 +286,30 @@ function jsonObject(value: unknown): Record<string, unknown> {
 
 function envNameForApp(app: string): string {
   return `WEBAGENT_COMPOSIO_AUTH_CONFIG_${app.toUpperCase().replace(/[^A-Z0-9]+/g, "_")}`;
+}
+
+function envNameForToolkitVersion(app: string): string {
+  return `WEBAGENT_COMPOSIO_TOOLKIT_VERSION_${app.toUpperCase().replace(/[^A-Z0-9]+/g, "_")}`;
+}
+
+const DEFAULT_TOOLKIT_VERSION = "latest";
+const LINKEDIN_CREATE_POST_ACTION_ID = "LINKEDIN_CREATE_LINKED_IN_POST";
+const LINKEDIN_GET_MY_INFO_ACTION_ID = "LINKEDIN_GET_MY_INFO";
+
+export function resolveToolkitVersion(app: string, ctx): string {
+  const env = ctxEnv(ctx);
+  const perApp = str(env[envNameForToolkitVersion(app)]);
+  if (perApp) return perApp;
+  return str(env.WEBAGENT_COMPOSIO_TOOLKIT_VERSION) || DEFAULT_TOOLKIT_VERSION;
+}
+
+export function groupMarketingActionsByApp(): Record<string, Array<{ action: string; actionId: string }>> {
+  const grouped: Record<string, Array<{ action: string; actionId: string }>> = {};
+  for (const [action, meta] of Object.entries(MARKETING_ACTIONS)) {
+    if (!grouped[meta.app]) grouped[meta.app] = [];
+    grouped[meta.app].push({ action, actionId: meta.actionId });
+  }
+  return grouped;
 }
 
 function toolkitMatchesApp(toolkit: unknown, app: string) {
@@ -499,11 +523,17 @@ async function listAuthConfigs(ctx, app: string) {
 
 async function listToolkitSlugs(ctx, app: string): Promise<string[]> {
   const cfg = requireApiKey(ctx);
+  const version = resolveToolkitVersion(app, ctx);
   try {
+    const params = new URLSearchParams({
+      toolkit_slug: app,
+      limit: "200",
+      toolkit_versions: version,
+    });
     const body = await composioFetch(
       ctx,
       cfg.baseUrl,
-      `tools?toolkit_slug=${encodeURIComponent(app)}&limit=200`,
+      `tools?${params.toString()}`,
       { method: "GET" }
     );
     const rec = jsonObject(body);
@@ -547,6 +577,134 @@ function resolveConnectedAccountFromList(
   return match || null;
 }
 
+async function missingCatalogActionIds(ctx, app: string): Promise<string[]> {
+  const slugs = new Set((await listToolkitSlugs(ctx, app)).map((s) => s.toUpperCase()));
+  if (!slugs.size) return [];
+  return groupMarketingActionsByApp()[app]
+    ?.filter(({ actionId }) => !slugs.has(actionId.toUpperCase()))
+    .map(({ actionId }) => actionId) || [];
+}
+
+function linkedInCommentary(input: Record<string, unknown>): string {
+  return str(input.commentary || input.text || input.caption || input.message);
+}
+
+function linkedInUrl(input: Record<string, unknown>): string {
+  return str(input.url || input.link || input.contentLandingPage);
+}
+
+function linkedInAuthorFromInfo(body: unknown): string {
+  const rec = jsonObject(body);
+  const data = jsonObject(rec.data);
+  const nested = jsonObject(data.data);
+  const id = str(
+    data.id ||
+      nested.id ||
+      data.sub ||
+      nested.sub ||
+      jsonObject(data.profile).id ||
+      jsonObject(nested.profile).id
+  );
+  if (!id) return "";
+  if (id.startsWith("urn:li:")) return id;
+  return `urn:li:person:${id}`;
+}
+
+async function executeComposioTool(
+  ctx,
+  actionId: string,
+  app: string,
+  requestBody: Record<string, unknown>
+): Promise<unknown> {
+  const cfg = requireApiKey(ctx);
+  const version = resolveToolkitVersion(app, ctx);
+  return composioFetch(ctx, cfg.baseUrl, `tools/execute/${encodeURIComponent(actionId)}`, {
+    method: "POST",
+    body: JSON.stringify({ ...requestBody, version }),
+  });
+}
+
+async function resolveLinkedInAuthor(
+  ctx,
+  connectedAccountId: string,
+  userId: string
+): Promise<string> {
+  const body = await executeComposioTool(ctx, LINKEDIN_GET_MY_INFO_ACTION_ID, "linkedin", {
+    arguments: {},
+    connected_account_id: connectedAccountId,
+    user_id: userId,
+  });
+  const author = linkedInAuthorFromInfo(body);
+  if (!author) {
+    throw new Error(
+      "Could not resolve LinkedIn author URN from GET_MY_INFO. Pass `author` explicitly (e.g. urn:li:person:…)."
+    );
+  }
+  return author;
+}
+
+function linkedInUrlShareSpecificContent(url: string, commentary: string): Record<string, unknown> {
+  return {
+    "com.linkedin.ugc.ShareContent": {
+      shareCommentary: { text: commentary },
+      shareMediaCategory: "ARTICLE",
+      media: [{ status: "READY", originalUrl: url }],
+    },
+  };
+}
+
+async function prepareComposioArguments(
+  action: string,
+  input: Record<string, unknown>,
+  ctx,
+  account: { connectedAccountId: string; userId: string }
+): Promise<{ arguments: Record<string, unknown>; actionIdOverride?: string }> {
+  if (!action.startsWith("linkedin_")) {
+    return { arguments: input };
+  }
+
+  const out = { ...input };
+  const draft = out.draft === true || str(out.lifecycleState).toUpperCase() === "DRAFT";
+  delete out.draft;
+
+  const commentary = linkedInCommentary(out);
+  const url = linkedInUrl(out);
+  if (commentary && !str(out.commentary)) out.commentary = commentary;
+  delete out.text;
+  delete out.caption;
+  delete out.message;
+
+  if (action === "linkedin_create_post") {
+    if (url && !str(out.contentLandingPage)) out.contentLandingPage = url;
+    delete out.url;
+    delete out.link;
+    if (!str(out.visibility)) out.visibility = "PUBLIC";
+    if (!str(out.lifecycleState)) out.lifecycleState = draft ? "DRAFT" : "PUBLISHED";
+    if (!str(out.author)) {
+      out.author = await resolveLinkedInAuthor(ctx, account.connectedAccountId, account.userId);
+    }
+    return { arguments: out };
+  }
+
+  if (action === "linkedin_create_article_or_url_share") {
+    if (!str(out.author)) {
+      out.author = await resolveLinkedInAuthor(ctx, account.connectedAccountId, account.userId);
+    }
+    if (!out.visibility || typeof out.visibility !== "object") {
+      out.visibility = { "com.linkedin.ugc.MemberNetworkVisibility": "PUBLIC" };
+    }
+    if (!out.lifecycleState) out.lifecycleState = draft ? "DRAFT" : "PUBLISHED";
+    if (url && !out.specificContent) {
+      out.specificContent = linkedInUrlShareSpecificContent(url, commentary || url);
+    }
+    delete out.url;
+    delete out.link;
+    return { arguments: out };
+  }
+
+  return { arguments: out };
+}
+
 async function appendExternalActionLog(entry: Record<string, unknown>) {
   try {
     const path = workspaceStatePath(ACTION_LOG_REL);
@@ -581,9 +739,11 @@ export async function composioStatusTool(args: ToolArgs = {}, ctx) {
   }
 
   const userId = str(args.user_id || args.userId);
-  const [authConfigs, accounts] = await Promise.all([
+  const catalogCheck = args.catalog_check === true || args.catalogCheck === true;
+  const [authConfigs, accounts, missingActionIds] = await Promise.all([
     listAuthConfigs(ctx, app),
     listConnectedAccounts(ctx, app, userId),
+    catalogCheck && app ? missingCatalogActionIds(ctx, app) : Promise.resolve([] as string[]),
   ]);
   return {
     ok: true,
@@ -592,6 +752,7 @@ export async function composioStatusTool(args: ToolArgs = {}, ctx) {
     connected_accounts: accounts,
     auth_configs: authConfigs,
     missing_apps: app && accounts.length === 0 ? [app] : [],
+    ...(catalogCheck && app ? { missing_action_ids: missingActionIds } : {}),
     allowed_actions: allowedActions(),
   };
 }
@@ -726,19 +887,44 @@ export async function composioActionTool(args: ToolArgs = {}, ctx) {
     });
     if (!ok) throw new Error("user_denied");
   }
+  const version = resolveToolkitVersion(meta.app, ctx);
+  const prepared = await prepareComposioArguments(action, input, ctx, {
+    connectedAccountId: resolvedConnectedAccountId,
+    userId,
+  });
+  let actionId = prepared.actionIdOverride || meta.actionId;
   const requestBody = {
-    arguments: input,
+    arguments: prepared.arguments,
     connected_account_id: resolvedConnectedAccountId,
     user_id: userId,
+    version,
   };
   let body: unknown;
   try {
-    body = await composioFetch(ctx, cfg.baseUrl, `tools/execute/${encodeURIComponent(meta.actionId)}`, {
+    body = await composioFetch(ctx, cfg.baseUrl, `tools/execute/${encodeURIComponent(actionId)}`, {
       method: "POST",
       body: JSON.stringify(requestBody),
     });
   } catch (err) {
-    if (/failed \(404\)/.test(String(err))) {
+    const is404 = /failed \(404\)/.test(String(err));
+    const canFallback =
+      is404 &&
+      action === "linkedin_create_article_or_url_share" &&
+      actionId !== LINKEDIN_CREATE_POST_ACTION_ID;
+    if (canFallback) {
+      const fallbackArgs = { ...prepared.arguments };
+      const commentary = linkedInCommentary(prepared.arguments);
+      const url = linkedInUrl(input);
+      if (commentary) fallbackArgs.commentary = commentary;
+      if (url) fallbackArgs.contentLandingPage = url;
+      delete fallbackArgs.specificContent;
+      if (!str(fallbackArgs.visibility)) fallbackArgs.visibility = "PUBLIC";
+      actionId = LINKEDIN_CREATE_POST_ACTION_ID;
+      body = await composioFetch(ctx, cfg.baseUrl, `tools/execute/${encodeURIComponent(actionId)}`, {
+        method: "POST",
+        body: JSON.stringify({ ...requestBody, arguments: fallbackArgs }),
+      });
+    } else if (is404) {
       const slugs = await listToolkitSlugs(ctx, meta.app);
       const matches = slugs.filter((s) => {
         const u = s.toUpperCase();
@@ -757,8 +943,9 @@ export async function composioActionTool(args: ToolArgs = {}, ctx) {
         `Composio action "${meta.actionId}" not found in v3 catalog for toolkit "${meta.app}".${hint} ` +
           `Update MARKETING_ACTIONS["${action}"].actionId in src/agent/runtime/tools/composio-tools.ts.`
       );
+    } else {
+      throw err;
     }
-    throw err;
   }
   const rec = jsonObject(body);
   const success =
@@ -772,7 +959,7 @@ export async function composioActionTool(args: ToolArgs = {}, ctx) {
     timestamp: new Date().toISOString(),
     app: meta.app,
     action,
-    composio_action_id: meta.actionId,
+    composio_action_id: actionId,
     kind: meta.kind,
     target: targetFrom(meta, input),
     success,
@@ -784,9 +971,10 @@ export async function composioActionTool(args: ToolArgs = {}, ctx) {
     app: meta.app,
     kind: meta.kind,
     approval_required: approvalRequired,
-    composio_action_id: meta.actionId,
+    composio_action_id: actionId,
     connected_account_id: resolvedConnectedAccountId,
     user_id: userId,
+    toolkit_version: version,
     result: body,
   };
 }

@@ -530,6 +530,134 @@ test("composio_action covers calendar read and write slugs", async () => {
   }
 });
 
+const LINKEDIN_ACCOUNT_LIST_RESPONSE = JSON.stringify({
+  data: [
+    {
+      id: "ca_li_1",
+      toolkit: { slug: "LINKEDIN" },
+      status: "ACTIVE",
+      name: "Primary LinkedIn",
+      user_id: "user_1",
+    },
+  ],
+});
+
+const LINKEDIN_MY_INFO_RESPONSE = JSON.stringify({
+  successful: true,
+  data: { id: "abc123", localizedFirstName: "Test" },
+});
+
+test("composio_action linkedin url share normalizes args and sends toolkit version", async () => {
+  const catalog = await loadToolCatalog();
+  const originalFetch = globalThis.fetch;
+  const seenBodies: Record<string, unknown>[] = [];
+  let call = 0;
+  globalThis.fetch = async (url, init) => {
+    call += 1;
+    const sUrl = String(url);
+    if (sUrl.includes("/connected_accounts")) {
+      return new Response(LINKEDIN_ACCOUNT_LIST_RESPONSE, { status: 200 });
+    }
+    seenBodies.push(JSON.parse(String(init?.body || "{}")));
+    if (sUrl.includes("/tools/execute/LINKEDIN_GET_MY_INFO")) {
+      return new Response(LINKEDIN_MY_INFO_RESPONSE, { status: 200 });
+    }
+    return new Response(JSON.stringify({ successful: true, data: { ok: true } }), { status: 200 });
+  };
+  try {
+    const ctx = createToolContext({
+      runId: "tool_coverage_composio_linkedin",
+      autoApprove: true,
+      env: { WEBAGENT_COMPOSIO_API_KEY: "cmp_test" },
+    });
+    const [out] = await runTools(
+      [
+        {
+          name: "composio_action",
+          arguments: {
+            action: "linkedin_create_article_or_url_share",
+            args: {
+              text: "Security incident recap",
+              url: "https://composio.dev/blog/composio-may-2026-security-incident",
+            },
+            user_id: "user_1",
+          },
+        },
+      ],
+      ctx,
+      catalog
+    );
+    assert.ok(!out?.error, out?.error);
+    assert.equal(seenBodies.length, 2);
+    assert.equal(seenBodies[0].version, "latest");
+    assert.equal(seenBodies[1].version, "latest");
+    const executeBody = seenBodies[1];
+    const args = executeBody.arguments as Record<string, unknown>;
+    assert.equal(args.author, "urn:li:person:abc123");
+    assert.ok(args.specificContent);
+    assert.equal((executeBody.connected_account_id as string) || "", "ca_li_1");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("composio_action linkedin url share falls back to create post on 404", async () => {
+  const catalog = await loadToolCatalog();
+  const originalFetch = globalThis.fetch;
+  const executeUrls: string[] = [];
+  let call = 0;
+  globalThis.fetch = async (url, init) => {
+    call += 1;
+    const sUrl = String(url);
+    if (sUrl.includes("/connected_accounts")) {
+      return new Response(LINKEDIN_ACCOUNT_LIST_RESPONSE, { status: 200 });
+    }
+    if (sUrl.includes("/tools/execute/")) {
+      executeUrls.push(sUrl);
+      if (sUrl.includes("LINKEDIN_CREATE_ARTICLE_OR_URL_SHARE")) {
+        return new Response(JSON.stringify({ error: "not found" }), { status: 404 });
+      }
+      return new Response(JSON.stringify({ successful: true, data: { ok: true } }), { status: 200 });
+    }
+    if (sUrl.includes("/tools?")) {
+      return new Response(JSON.stringify({ items: [{ slug: "LINKEDIN_CREATE_LINKED_IN_POST" }] }), { status: 200 });
+    }
+    return new Response(JSON.stringify({ successful: true, data: { id: "abc123" } }), { status: 200 });
+  };
+  try {
+    const ctx = createToolContext({
+      runId: "tool_coverage_composio_linkedin_fallback",
+      autoApprove: true,
+      env: { WEBAGENT_COMPOSIO_API_KEY: "cmp_test" },
+    });
+    const [out] = await runTools(
+      [
+        {
+          name: "composio_action",
+          arguments: {
+            action: "linkedin_create_article_or_url_share",
+            args: {
+              author: "urn:li:person:abc123",
+              text: "Fallback post",
+              url: "https://example.com/article",
+            },
+            user_id: "user_1",
+          },
+        },
+      ],
+      ctx,
+      catalog
+    );
+    assert.ok(!out?.error, out?.error);
+    assert.ok(executeUrls.some((u) => u.includes("LINKEDIN_CREATE_ARTICLE_OR_URL_SHARE")));
+    assert.ok(executeUrls.some((u) => u.includes("LINKEDIN_CREATE_LINKED_IN_POST")));
+    const result = out?.result as { composio_action_id?: string };
+    assert.equal(result.composio_action_id, "LINKEDIN_CREATE_LINKED_IN_POST");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test("wiki_setup and wiki_search run on isolated workspace", async () => {
   await withIsolatedWorkspace(async () => {
     const catalog = await loadToolCatalog();

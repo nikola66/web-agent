@@ -1,7 +1,7 @@
 {
   "name": "web-agent",
   "private": true,
-  "version": "0.0.59",
+  "version": "0.0.60",
   "type": "module",
   "scripts": {
     "build:embed-runtime": "node scripts/build-embed-runtime.mjs",
@@ -16,6 +16,7 @@
     "test:quality-benchmark": "npm run build:embed-runtime && tsx --test tests/tool-guardrails-benchmark.test.ts tests/tool-argument-repair-benchmark.test.ts tests/loop-recovery-benchmark.test.ts tests/tool-registry-preparation.test.ts tests/turn-continuation.test.ts tests/tool-argument-normalization.test.ts",
     "test:tools": "node scripts/run-tool-smoke.mjs",
     "test:tools:network": "node scripts/run-tool-smoke.mjs --network",
+    "test:composio-catalog": "npm run build:embed-runtime && tsx --test tests/composio-catalog-live.test.ts tests/composio-marketing-actions.test.ts",
     "test:browser": "PLAYWRIGHT_BROWSERS_PATH=0 playwright test",
     "test:browser:headed": "PLAYWRIGHT_BROWSERS_PATH=0 playwright test --headed",
     "download:whisper": "node scripts/download-whisper-model.mjs",

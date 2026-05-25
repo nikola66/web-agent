@@ -31,6 +31,7 @@ run("npx", [
   "--test",
   "tests/tool-smoke-matrix.test.ts",
   "tests/tool-coverage-execution.test.ts",
+  "tests/composio-marketing-actions.test.ts",
   "tests/bundled-skills-coverage.test.ts",
   "tests/skills-system.test.ts",
   "tests/tool-result-preview.test.ts",

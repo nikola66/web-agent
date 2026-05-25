@@ -229,15 +229,16 @@ body,
   display: none !important;
 }
 
-/* Keep terminal hyperlinks clickable but without underline. */
+/* Terminal hyperlinks: clickable with underline (OSC 8). */
 .xterm .xterm-link,
 .xterm a {
-  text-decoration: none !important;
+  text-decoration: underline;
+  text-underline-offset: 2px;
 }
 
-/* xterm applies underline via utility classes on spans; keep color, remove underline. */
 .xterm [class*="xterm-underline-"] {
-  text-decoration: none !important;
+  text-decoration: underline;
+  text-underline-offset: 2px;
 }
 
 /* Shared aratech scroll thumb (magenta / violet) */

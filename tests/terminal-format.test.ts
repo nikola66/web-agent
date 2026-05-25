@@ -208,13 +208,20 @@ test("renderMarkdownToAnsi linkifies bare https URLs with OSC 8 hyperlink", () =
   const rendered = renderMarkdownToAnsi(`Authorize Gmail: ${url}`);
   assert.match(rendered, /\x1b\]8;;https:\/\/connect\.composio\.dev\/link\/lk_5oiVSeNBNB6P\x07/);
   assert.match(rendered, /\x1b\[4m/);
+  assert.doesNotMatch(rendered, /\x1b\[38;2;96;165;250m/);
   assert.equal(stripAnsi(rendered), `Authorize Gmail: ${url}`);
 });
 
-test("renderMarkdownToAnsi linkifies markdown links with label text", () => {
-  const rendered = renderMarkdownToAnsi("[Click here](https://example.com/oauth)");
-  assert.match(rendered, /\x1b\]8;;https:\/\/example\.com\/oauth\x07/);
-  assert.equal(stripAnsi(rendered), "Click here");
+test("renderMarkdownToAnsi leaves markdown link syntax visible and does not restyle labels", () => {
+  const raw = "[Click here](https://example.com/oauth)";
+  const rendered = renderMarkdownToAnsi(raw);
+  assert.equal(stripAnsi(rendered), raw);
+});
+
+test("renderMarkdownToAnsi does not linkify http URLs", () => {
+  const rendered = renderMarkdownToAnsi("Visit http://example.com for details");
+  assert.doesNotMatch(rendered, /\x1b\]8;;/);
+  assert.equal(stripAnsi(rendered), "Visit http://example.com for details");
 });
 
 test("renderMarkdownToAnsi does not linkify URLs inside inline code", () => {

@@ -9,7 +9,7 @@ export function stripAnsi(text: unknown) {
     .replace(/\x1b\]8;;[^\x07]*\x07/g, "");
 }
 
-export const INLINE_URL_RE = /https?:\/\/[^\s<>"'\[\]()]+/g;
+export const INLINE_URL_RE = /https:\/\/[^\s<>"'\[\]()]+/g;
 
 export function trimTrailingUrlPunctuation(url: string): string {
   let out = url;

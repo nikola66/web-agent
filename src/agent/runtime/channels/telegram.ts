@@ -135,22 +135,13 @@ function formatInlineMarkdownForTelegram(text) {
     return token;
   });
   const linkTokens = [];
-  out = out.replace(/\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g, (_m, label, rawUrl) => {
-    const url = trimTrailingUrlPunctuation(String(rawUrl));
-    const token = `@@TGLINK${linkTokens.length}@@`;
-    linkTokens.push({
-      href: url,
-      html: `<a href="${escapeTelegramHtmlAttr(url)}">${applyTelegramEmphasis(escapeTelegramHtml(String(label)))}</a>`,
-    });
-    return token;
-  });
   out = out.replace(INLINE_URL_RE, (match) => {
     const url = trimTrailingUrlPunctuation(match);
     const suffix = match.slice(url.length);
     const token = `@@TGLINK${linkTokens.length}@@`;
     linkTokens.push({
       href: url,
-      html: `<a href="${escapeTelegramHtmlAttr(url)}">${escapeTelegramHtml(url)}</a>`,
+      html: `<a href="${escapeTelegramHtmlAttr(url)}"><u>${escapeTelegramHtml(url)}</u></a>`,
     });
     return token + suffix;
   });

@@ -21,6 +21,7 @@ export default defineTool({
     properties: {
       app: { type: "string", description: "Optional app filter such as gmail, google_sheets, hubspot, notion, slack, linkedin, twitter, youtube." },
       user_id: { type: "string", description: "Optional Composio user/entity id to check." },
+      catalog_check: { type: "boolean", description: "When true with app, diff curated action ids against the live Composio catalog." },
     },
     required: [],
     additionalProperties: false,

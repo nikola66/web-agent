@@ -48,9 +48,24 @@ Composio setup lives in **Settings → Composio → API key** (`composio_api_key
 
 **LinkedIn:** `linkedin_create_post`, `linkedin_create_article_or_url_share`, `linkedin_get_my_info`
 
+LinkedIn publish args use Web Agent-friendly fields (Composio schemas are normalized automatically):
+
+- `linkedin_create_post` — `{ text, url?, draft?, images? }`
+- `linkedin_create_article_or_url_share` — `{ text, url, draft? }`
+- `author` is auto-filled from `linkedin_get_my_info` when omitted
+- Before publishing, optionally run `composio_status` with `{ app: "linkedin", catalog_check: true }` to detect stale action ids
+
 **Instagram:** `instagram_get_user_info`, `instagram_get_user_media`, `instagram_post_media`, `instagram_publish_media`, `instagram_send_text_message`, `instagram_send_image`
 
-**Also supported:** HubSpot, Notion, Slack, and YouTube reads — see `composio_status.allowed_actions`.
+**HubSpot:** `hubspot_search_contacts`, `hubspot_create_contact`, `hubspot_update_contact`
+
+**Notion:** `notion_search`, `notion_create_page`
+
+**Slack:** `slack_send_message`
+
+**YouTube:** `youtube_search`
+
+**Also supported:** see `composio_status.allowed_actions` for the full allowlist.
 
 ## Relation to other skills
 
@@ -61,6 +76,7 @@ Composio setup lives in **Settings → Composio → API key** (`composio_api_key
 
 - Missing `WEBAGENT_COMPOSIO_API_KEY` → `composio_status` returns setup guidance; do not loop failed actions.
 - Wrong action slug → 404 with hints; read `allowed_actions` instead of guessing.
+- LinkedIn toolkit versioning — Composio defaults to a base catalog without `version`; Web Agent sends `latest` automatically. Override with `WEBAGENT_COMPOSIO_TOOLKIT_VERSION` or per-app env vars if needed.
 
 ## Anti-patterns
 

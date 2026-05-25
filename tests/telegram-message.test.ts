@@ -116,26 +116,28 @@ test("sendTelegramMessage linkifies bare https URLs", async () => {
   assert.equal(calls.length, 1);
   assert.match(
     calls[0].text,
-    new RegExp(`<a href="${url.replace(/\//g, "\\/")}">${url.replace(/\//g, "\\/")}<\\/a>`)
+    new RegExp(`<a href="${url.replace(/\//g, "\\/")}"><u>${url.replace(/\//g, "\\/")}<\\/u><\\/a>`)
   );
 });
 
-test("sendTelegramMessage linkifies markdown links with label text", async () => {
+test("sendTelegramMessage keeps markdown link syntax visible", async () => {
   const originalFetch = globalThis.fetch;
   const calls = [];
   globalThis.fetch = async (_url, opts) => {
     calls.push(JSON.parse(opts.body));
     return okResponse();
   };
+  const raw = "[Authorize Gmail](https://connect.composio.dev/link/lk_test)";
 
   try {
-    await sendTelegramMessage("token", "chat-md-link", "[Authorize Gmail](https://connect.composio.dev/link/lk_test)");
+    await sendTelegramMessage("token", "chat-md-link", raw);
   } finally {
     globalThis.fetch = originalFetch;
   }
 
   assert.equal(calls.length, 1);
-  assert.match(calls[0].text, /<a href="https:\/\/connect\.composio\.dev\/link\/lk_test">Authorize Gmail<\/a>/);
+  assert.match(calls[0].text, /\[Authorize Gmail\]\(/);
+  assert.doesNotMatch(calls[0].text, /<a href="https:\/\/connect\.composio\.dev\/link\/lk_test">Authorize Gmail<\/a>/);
 });
 
 test("sendTelegramMessage ignores empty messages", async () => {
