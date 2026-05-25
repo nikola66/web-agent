@@ -38,6 +38,22 @@ function isMobileSidebarViewport(): boolean {
   return window.matchMedia(MOBILE_SIDEBAR_MQ).matches;
 }
 
+function isMacPlatform(): boolean {
+  return typeof navigator !== "undefined" && /Mac|iPhone|iPad|iPod/.test(navigator.platform);
+}
+
+function sidebarToggleShortcutLabel(): string {
+  return isMacPlatform() ? "⌘B" : "Ctrl+B";
+}
+
+function isTypingTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) return false;
+  return (
+    target.isContentEditable ||
+    target.closest('input, textarea, select, [contenteditable="true"]') !== null
+  );
+}
+
 export function App() {
   useBrowserMetadata();
 
@@ -89,6 +105,18 @@ export function App() {
       cancelAnimationFrame(id2);
     };
   }, [runtimeStatus, sidebarOpen]);
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (!(event.ctrlKey || event.metaKey) || event.altKey || event.shiftKey) return;
+      if (event.key.toLowerCase() !== "b") return;
+      if (isTypingTarget(event.target)) return;
+      event.preventDefault();
+      toggleSidebar();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [toggleSidebar]);
 
   useEffect(() => {
     let timer: number | null = null;
@@ -220,17 +248,26 @@ export function App() {
         <button
           type="button"
           onClick={toggleSidebar}
-          className="z-20 flex items-center justify-center rounded-sm border p-1 touch-manipulation backdrop-blur-sm transition-colors max-md:fixed max-md:top-2 max-md:z-30 max-md:left-[max(0px,calc(var(--sidebar-edge,0px)+8px))] max-md:border-white max-md:bg-black/55 max-md:text-white md:absolute md:top-2 md:left-2 md:border-white/10 md:bg-black/40 md:text-text-muted md:hover:text-text-primary"
+          className="group relative z-20 flex items-center justify-center rounded-sm border p-1 touch-manipulation backdrop-blur-sm transition-colors max-md:fixed max-md:top-2 max-md:z-30 max-md:left-[max(0px,calc(var(--sidebar-edge,0px)+8px))] max-md:border-white max-md:bg-black/55 max-md:text-white md:absolute md:top-2 md:left-2 md:border-white/10 md:bg-black/40 md:text-text-muted md:hover:text-text-primary"
           style={{ transitionDuration: "var(--duration-fast)" }}
           aria-expanded={sidebarOpen}
           aria-controls="app-sidebar"
-          aria-label={sidebarOpen ? "Close sidebar" : "Open sidebar"}
+          aria-label={`${sidebarOpen ? "Close sidebar" : "Open sidebar"} (${sidebarToggleShortcutLabel()})`}
         >
           {sidebarOpen ? (
             <ChevronLeft size={16} strokeWidth={1.5} />
           ) : (
             <ChevronRight size={16} strokeWidth={1.5} />
           )}
+          <span
+            role="tooltip"
+            className="pointer-events-none absolute top-full left-1/2 z-30 mt-1.5 hidden -translate-x-1/2 items-center gap-1.5 whitespace-nowrap rounded-sm border border-white/10 bg-black/80 px-2 py-1 text-[10px] text-text-primary opacity-0 backdrop-blur-sm transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100 md:inline-flex"
+          >
+            {sidebarOpen ? "Close sidebar" : "Open sidebar"}
+            <kbd className="rounded border border-white/15 bg-white/5 px-1 py-px font-mono text-[9px] text-text-muted">
+              {sidebarToggleShortcutLabel()}
+            </kbd>
+          </span>
         </button>
       </div>
     </div>

@@ -175,5 +175,5 @@ export function formatClassifiedLlmError(
   if (classified.shouldCompress) parts.push(classified.recoveryHint);
   else if (classified.recoveryHint) parts.push(classified.recoveryHint);
   if (extraHint) parts.push(extraHint);
-  return parts.filter(Boolean).join(" ");
+  return `${parts.filter(Boolean).join("\n")}\n`;
 }

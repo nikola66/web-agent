@@ -202,3 +202,23 @@ test("prefixBlock leaves full-width divider lines flush", () => {
   assert.equal(lines[1], "────────────────────");
   assert.equal(lines[2], "Next line");
 });
+
+test("renderMarkdownToAnsi linkifies bare https URLs with OSC 8 hyperlink", () => {
+  const url = "https://connect.composio.dev/link/lk_5oiVSeNBNB6P";
+  const rendered = renderMarkdownToAnsi(`Authorize Gmail: ${url}`);
+  assert.match(rendered, /\x1b\]8;;https:\/\/connect\.composio\.dev\/link\/lk_5oiVSeNBNB6P\x07/);
+  assert.match(rendered, /\x1b\[4m/);
+  assert.equal(stripAnsi(rendered), `Authorize Gmail: ${url}`);
+});
+
+test("renderMarkdownToAnsi linkifies markdown links with label text", () => {
+  const rendered = renderMarkdownToAnsi("[Click here](https://example.com/oauth)");
+  assert.match(rendered, /\x1b\]8;;https:\/\/example\.com\/oauth\x07/);
+  assert.equal(stripAnsi(rendered), "Click here");
+});
+
+test("renderMarkdownToAnsi does not linkify URLs inside inline code", () => {
+  const rendered = renderMarkdownToAnsi("Run `curl https://example.com`");
+  assert.doesNotMatch(rendered, /\x1b\]8;;/);
+  assert.equal(stripAnsi(rendered), "Run curl https://example.com");
+});

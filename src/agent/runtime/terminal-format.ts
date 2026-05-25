@@ -1,6 +1,6 @@
 import { ROOT } from "./constants.js";
 import { SLASH_COMMANDS } from "./commands.js";
-import { stripAnsi } from "./utils.js";
+import { INLINE_URL_RE, stripAnsi, trimTrailingUrlPunctuation } from "./utils.js";
 
 export const R = "\x1b[0m";
 
@@ -15,6 +15,33 @@ export const amber = (s: string) => `\x1b[38;2;251;191;36m${s}${R}`;
 export const blue = (s: string) => `\x1b[38;2;96;165;250m${s}${R}`;
 export const bold = (s: string) => `\x1b[1m${s}${R}`;
 export const italic = (s: string) => `\x1b[3m${s}${R}`;
+const underline = (s: string) => `\x1b[4m${s}\x1b[24m`;
+
+function terminalHyperlink(url: string, label: string) {
+  return `\x1b]8;;${url}\x07${underline(blue(label))}\x1b]8;;\x07`;
+}
+
+function linkifyInlineMarkdown(text: string, hyperlink = terminalHyperlink) {
+  const linkTokens: string[] = [];
+  let out = text;
+  out = out.replace(/\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g, (_m, label, rawUrl) => {
+    const url = trimTrailingUrlPunctuation(String(rawUrl));
+    const token = `@@TMLINK${linkTokens.length}@@`;
+    linkTokens.push(hyperlink(url, String(label)));
+    return token;
+  });
+  out = out.replace(INLINE_URL_RE, (match) => {
+    const url = trimTrailingUrlPunctuation(match);
+    const suffix = match.slice(url.length);
+    const token = `@@TMLINK${linkTokens.length}@@`;
+    linkTokens.push(hyperlink(url, url));
+    return token + suffix;
+  });
+  for (let i = 0; i < linkTokens.length; i++) {
+    out = out.split(`@@TMLINK${i}@@`).join(linkTokens[i]);
+  }
+  return out;
+}
 
 export type TerminalTableColumn = {
   label: string;
@@ -119,11 +146,20 @@ export function normalizeEmojiSpacing(input: unknown) {
 export function styleInlineMarkdown(input: unknown) {
   if (!input) return "";
   let out = normalizeLatexInlineSymbols(normalizeEmojiSpacing(input));
-  out = out.replace(/`([^`\n]+)`/g, (_m, code) => amber(code));
+  const codeTokens: string[] = [];
+  out = out.replace(/`([^`\n]+)`/g, (_m, code) => {
+    const token = `@@TMCODE${codeTokens.length}@@`;
+    codeTokens.push(amber(String(code)));
+    return token;
+  });
   out = out.replace(/\*\*([^*\n]+)\*\*/g, (_m, text) => bold(text));
   out = out.replace(/(^|[^\w])__([^_\n]+)__([^\w]|$)/g, (_m, pre, text, post) => `${pre}${bold(text)}${post}`);
   out = out.replace(/(^|[^\*])\*([^*\n]+)\*/g, (_m, pre, text) => `${pre}${italic(text)}`);
   out = out.replace(/(^|[^\w])_([^_\n]+)_([^\w]|$)/g, (_m, pre, text, post) => `${pre}${italic(text)}${post}`);
+  out = linkifyInlineMarkdown(out);
+  for (let i = 0; i < codeTokens.length; i++) {
+    out = out.split(`@@TMCODE${i}@@`).join(codeTokens[i]);
+  }
   return out;
 }
 
@@ -562,7 +598,8 @@ export function renderUserBlock(
   const lines = String(input || "").split("\n");
   for (let i = 0; i < lines.length; i++) {
     const prefix = i === 0 ? " └ " : BLOCK_CONTINUATION_PREFIX;
-    process.stdout.write(`${grey(prefix + lines[i])}\n`);
+    const hyperlink = (url: string, label: string) => `\x1b]8;;${url}\x07${underline(label)}\x1b]8;;\x07`;
+    process.stdout.write(`${grey(prefix + linkifyInlineMarkdown(lines[i], hyperlink))}\n`);
   }
   process.stdout.write("\n");
 }

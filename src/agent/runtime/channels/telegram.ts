@@ -5,6 +5,7 @@ import { ensureParentDir } from "../workspace-paths.js";
 import { buildTelegramBotCommands } from "../commands.js";
 import { listSkills } from "../memory/index.js";
 import { normalizeLatexInlineSymbols } from "../terminal-format.js";
+import { INLINE_URL_RE, trimTrailingUrlPunctuation } from "../utils.js";
 
 async function readStateFile() {
   const channelStatePath = workspaceStatePath(".webagent/channel-state.json");
@@ -112,18 +113,52 @@ function escapeTelegramHtml(text) {
     .replace(/>/g, "&gt;");
 }
 
-function formatInlineMarkdownForTelegram(text) {
-  let out = escapeTelegramHtml(normalizeLatexInlineSymbols(text));
-  const codeTokens = [];
-  out = out.replace(/`([^`\n]+)`/g, (_m, code) => {
-    const token = `@@TGCODE${codeTokens.length}@@`;
-    codeTokens.push(`<code>${code}</code>`);
-    return token;
-  });
+function escapeTelegramHtmlAttr(text) {
+  return escapeTelegramHtml(String(text ?? "")).replace(/"/g, "&quot;");
+}
+
+function applyTelegramEmphasis(text) {
+  let out = text;
   out = out.replace(/\*\*([^*\n]+)\*\*/g, "<b>$1</b>");
   out = out.replace(/(^|[^\w])__([^_\n]+)__([^\w]|$)/g, "$1<b>$2</b>$3");
   out = out.replace(/(^|[^\*])\*([^*\n]+)\*/g, "$1<i>$2</i>");
   out = out.replace(/(^|[^\w])_([^_\n]+)_([^\w]|$)/g, "$1<i>$2</i>$3");
+  return out;
+}
+
+function formatInlineMarkdownForTelegram(text) {
+  let out = normalizeLatexInlineSymbols(text);
+  const codeTokens = [];
+  out = out.replace(/`([^`\n]+)`/g, (_m, code) => {
+    const token = `@@TGCODE${codeTokens.length}@@`;
+    codeTokens.push(`<code>${escapeTelegramHtml(code)}</code>`);
+    return token;
+  });
+  const linkTokens = [];
+  out = out.replace(/\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g, (_m, label, rawUrl) => {
+    const url = trimTrailingUrlPunctuation(String(rawUrl));
+    const token = `@@TGLINK${linkTokens.length}@@`;
+    linkTokens.push({
+      href: url,
+      html: `<a href="${escapeTelegramHtmlAttr(url)}">${applyTelegramEmphasis(escapeTelegramHtml(String(label)))}</a>`,
+    });
+    return token;
+  });
+  out = out.replace(INLINE_URL_RE, (match) => {
+    const url = trimTrailingUrlPunctuation(match);
+    const suffix = match.slice(url.length);
+    const token = `@@TGLINK${linkTokens.length}@@`;
+    linkTokens.push({
+      href: url,
+      html: `<a href="${escapeTelegramHtmlAttr(url)}">${escapeTelegramHtml(url)}</a>`,
+    });
+    return token + suffix;
+  });
+  out = escapeTelegramHtml(out);
+  out = applyTelegramEmphasis(out);
+  for (let i = 0; i < linkTokens.length; i++) {
+    out = out.split(`@@TGLINK${i}@@`).join(linkTokens[i].html);
+  }
   for (let i = 0; i < codeTokens.length; i++) {
     out = out.split(`@@TGCODE${i}@@`).join(codeTokens[i]);
   }
