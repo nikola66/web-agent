@@ -110,6 +110,7 @@ async function sendPromptAndCapture(
 
 function expectNoRawToolArtifacts(text: string) {
   expect(text).not.toMatch(/<tool_call>|<\/tool_call>|<TOOLCALL>|<\/TOOLCALL>/i);
+  expect(text).not.toMatch(/<longcat_tool_call>|<\/longcat_tool_call>|<longcat_arg_key>|<longcat_arg_value>/i);
   expect(text).not.toMatch(/<<<\s*TOOL\s*>>>|<<<\s*END\s*>>>/i);
   expect(text).not.toMatch(/"tool"\s*:\s*"(make_dir|write_file|list_dir|read_file|run_shell)"/i);
 }

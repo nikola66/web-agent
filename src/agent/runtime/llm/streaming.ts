@@ -806,6 +806,7 @@ export function stripXmlToolArtifacts(text) {
     /<tool_code>[\s\S]*?<\/tool_code>/gi,
     /<StartToolCall>[\s\S]*?<\/StartToolCall>/gi,
     /<minimax:tool_call>[\s\S]*?<\/minimax:tool_call>/gi,
+    /<longcat_tool_call>[\s\S]*?<\/longcat_tool_call>/gi,
     /<invoke\b[\s\S]*?<\/invoke>/gi,
   ];
   let out = String(text);
@@ -1114,6 +1115,53 @@ export function extractMarkerTools(text) {
     }
   }
   const visible = text.replace(re, "").trimEnd();
+  return { tools, visible };
+}
+
+function parseLongcatToolCallPayload(payload) {
+  const raw = String(payload || "").trim();
+  if (!raw) return null;
+  if (raw.startsWith("{")) {
+    try {
+      const parsed = JSON.parse(raw);
+      const calls = Array.isArray(parsed) ? parsed : [parsed];
+      return calls.map((call) => ({
+        name: String(call?.name || "").trim(),
+        arguments: call?.arguments ?? {},
+      })).filter((call) => call.name);
+    } catch {
+      /* fall through to name/arg-key format */
+    }
+  }
+  const keys = [...raw.matchAll(/<longcat_arg_key>\s*([\s\S]*?)\s*<\/longcat_arg_key>/gi)].map(
+    (m) => String(m[1] || "").trim()
+  );
+  const vals = [...raw.matchAll(/<longcat_arg_value>\s*([\s\S]*?)\s*<\/longcat_arg_value>/gi)].map(
+    (m) => String(m[1] || "").trim()
+  );
+  const args = {};
+  for (let i = 0; i < keys.length; i++) {
+    if (keys[i]) args[keys[i]] = vals[i] ?? "";
+  }
+  const namePart = raw
+    .replace(/<longcat_arg_key>[\s\S]*?<\/longcat_arg_key>/gi, "")
+    .replace(/<longcat_arg_value>[\s\S]*?<\/longcat_arg_value>/gi, "")
+    .trim();
+  const name = namePart.split(/\s+/)[0]?.trim() || "";
+  if (!name) return null;
+  return [{ name, arguments: args }];
+}
+
+export function extractLongcatToolCallPayloads(text) {
+  const re = /<longcat_tool_call>\s*([\s\S]*?)\s*<\/longcat_tool_call>/gi;
+  const tools = [];
+  let m;
+  while ((m = re.exec(String(text || "")))) {
+    const parsed = parseLongcatToolCallPayload(m[1]);
+    if (!parsed) continue;
+    for (const call of parsed) tools.push(call);
+  }
+  const visible = String(text || "").replace(re, "").trimEnd();
   return { tools, visible };
 }
 

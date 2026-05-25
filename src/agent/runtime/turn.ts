@@ -45,6 +45,7 @@ import {
   extractMarkerTools,
   extractLooseCallToolLines,
   extractPlainToolCommandLines,
+  extractLongcatToolCallPayloads,
   extractToolCallTagPayloads,
   normalizeToolCalls,
   sanitizeAssistantVisibleText,
@@ -619,9 +620,13 @@ export async function agentTurn(
       const clarifyEmitted = clarifyParsed.blocks.length > 0;
       const bodyForTools = clarifyParsed.visible;
       const markerParsed = extractMarkerTools(bodyForTools);
-      const toolCallTagParsed = extractToolCallTagPayloads(markerParsed.visible);
+      const longcatParsed = extractLongcatToolCallPayloads(markerParsed.visible);
+      const toolCallTagParsed = extractToolCallTagPayloads(longcatParsed.visible);
       const nativeOrMarkerCount =
-        (streamResult?.toolCalls?.length || 0) + markerParsed.tools.length + toolCallTagParsed.tools.length;
+        (streamResult?.toolCalls?.length || 0) +
+        markerParsed.tools.length +
+        longcatParsed.tools.length +
+        toolCallTagParsed.tools.length;
       const jsonFallbackParsed = nativeOrMarkerCount === 0
         ? extractJsonToolCallPayloads(toolCallTagParsed.visible, activeToolNames)
         : { tools: [], visible: toolCallTagParsed.visible };
@@ -639,6 +644,7 @@ export async function agentTurn(
       const rawToolCalls = [
         ...(streamResult?.toolCalls || []),
         ...markerParsed.tools,
+        ...longcatParsed.tools,
         ...toolCallTagParsed.tools,
         ...jsonFallbackCalls,
         ...looseCallParsed.tools,

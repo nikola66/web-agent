@@ -7,6 +7,7 @@ import {
   extractLooseCallToolLines,
   extractPlainToolCommandLines,
   extractJsonToolCallPayloads,
+  extractLongcatToolCallPayloads,
   normalizeToolCalls,
   resolveKnownToolName,
   sanitizeAssistantVisibleText,
@@ -237,4 +238,74 @@ test("normalizeToolCalls rejects duplicate same-turn tool calls with identical a
   assert.equal(normalized.length, 2);
   assert.equal(rejected.length, 1);
   assert.equal(rejected[0].reason, "duplicate_call");
+});
+
+test("extractLongcatToolCallPayloads parses plain tool names and arg key/value pairs", () => {
+  const raw = `Intro<longcat_tool_call>composio_status
+</longcat_tool_call>
+<longcat_tool_call>skill_view
+<longcat_arg_key>name</longcat_arg_key>
+<longcat_arg_value>composio-oauth</longcat_arg_value>
+</longcat_tool_call>
+Outro.`;
+  const parsed = extractLongcatToolCallPayloads(raw);
+  assert.deepEqual(parsed.tools, [
+    { name: "composio_status", arguments: {} },
+    { name: "skill_view", arguments: { name: "composio-oauth" } },
+  ]);
+  assert.equal(parsed.visible, "Intro\n\nOutro.");
+});
+
+test("extractLongcatToolCallPayloads parses JSON payloads", () => {
+  const raw = `<longcat_tool_call>
+{"name":"read_file","arguments":{"path":"README.md"}}
+</longcat_tool_call>`;
+  const parsed = extractLongcatToolCallPayloads(raw);
+  assert.deepEqual(parsed.tools, [
+    { name: "read_file", arguments: { path: "README.md" } },
+  ]);
+  assert.equal(parsed.visible, "");
+});
+
+test("sanitizeAssistantVisibleText strips longcat tool call markup", () => {
+  const raw = `Checking status.<longcat_tool_call>composio_status
+</longcat_tool_call>`;
+  assert.equal(sanitizeAssistantVisibleText(raw), "Checking status.");
+});
+
+test("createToolAwareStreamWriter hides complete longcat blocks during stream", () => {
+  const chunks = [];
+  const w = createToolAwareStreamWriter((c) => chunks.push(c));
+  w.push("Checking status.");
+  w.push("<longcat_tool_call>composio_status</longcat_tool_call>");
+  w.push(" Done.");
+  w.flush();
+  assert.equal(chunks.join(""), "Checking status. Done.");
+});
+
+test("createToolAwareStreamWriter hides longcat blocks split across chunks", () => {
+  const chunks = [];
+  const w = createToolAwareStreamWriter((c) => chunks.push(c));
+  w.push("Intro ");
+  w.push("<longcat_tool_call>read_file");
+  w.push("\n<longcat_arg_key>path</longcat_arg_key>");
+  w.push("\n<longcat_arg_value>README.md</longcat_arg_value>");
+  w.push("\n</longcat_tool_call>");
+  w.push(" Outro.");
+  w.flush();
+  assert.equal(chunks.join(""), "Intro  Outro.");
+});
+
+test("extractLongcatToolCallPayloads ignores empty payloads but still strips markup", () => {
+  const raw = `Before<longcat_tool_call></longcat_tool_call>After`;
+  const parsed = extractLongcatToolCallPayloads(raw);
+  assert.deepEqual(parsed.tools, []);
+  assert.equal(parsed.visible, "BeforeAfter");
+});
+
+test("extractLongcatToolCallPayloads handles inline tags without newlines", () => {
+  const raw = `Go.<longcat_tool_call>list_dir</longcat_tool_call>Done.`;
+  const parsed = extractLongcatToolCallPayloads(raw);
+  assert.deepEqual(parsed.tools, [{ name: "list_dir", arguments: {} }]);
+  assert.equal(parsed.visible, "Go.Done.");
 });

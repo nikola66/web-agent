@@ -108,8 +108,11 @@ export const TOOL_END_MARKER = "<<<END>>>";
 export const CLARIFY_PROMPT_START = "<<<CLARIFY>>>";
 export const TOOLCALL_XML_START_MARKER = "<TOOLCALL>";
 export const TOOLCALL_XML_END_MARKER = "</TOOLCALL>";
+export const LONGCAT_TOOLCALL_START_MARKER = "<longcat_tool_call>";
+export const LONGCAT_TOOLCALL_END_MARKER = "</longcat_tool_call>";
 export const HIDDEN_STREAM_MARKERS = [
   { start: TOOL_START_MARKER, end: TOOL_END_MARKER },
   { start: CLARIFY_PROMPT_START, end: TOOL_END_MARKER },
   { start: TOOLCALL_XML_START_MARKER, end: TOOLCALL_XML_END_MARKER },
+  { start: LONGCAT_TOOLCALL_START_MARKER, end: LONGCAT_TOOLCALL_END_MARKER },
 ];
