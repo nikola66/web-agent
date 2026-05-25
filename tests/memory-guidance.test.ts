@@ -38,12 +38,22 @@ test("buildMemoryLayerGuidanceBlock includes spill recovery when read_file enabl
   assert.match(block, /memory\/runs/);
 });
 
-test("buildMemoryLayerGuidanceBlock returns empty when only web_fetch enabled", () => {
-  assert.equal(buildMemoryLayerGuidanceBlock(["web_fetch"]), "");
+test("buildMemoryLayerGuidanceBlock includes HTTP upload guidance when web tools enabled", () => {
+  const block = buildMemoryLayerGuidanceBlock(["web_fetch"]);
+  assert.match(block, /web_upload/);
+  assert.match(block, /never base64/i);
 });
 
-test("buildMemoryLayerGuidanceBlock omits http and script porting guidance (capability router owns those)", () => {
+test("buildMemoryLayerGuidanceBlock includes HTTP guidance with web_post and spill recovery with read_file", () => {
   const block = buildMemoryLayerGuidanceBlock(["web_fetch", "web_post", "run_shell", "read_file"]);
-  assert.doesNotMatch(block, /Do not invent GraphQL root fields/);
+  assert.match(block, /web_upload/);
+  assert.match(block, /memory\/snapshots/);
   assert.doesNotMatch(block, /Nodebox has no POSIX shell or system pip/);
+});
+
+test("buildMemoryLayerGuidanceBlock includes composio guidance when skill_view enabled", () => {
+  const block = buildMemoryLayerGuidanceBlock(["skill_view", "read_file"]);
+  assert.match(block, /composio-oauth/);
+  assert.match(block, /composio_status/);
+  assert.match(block, /no access/);
 });

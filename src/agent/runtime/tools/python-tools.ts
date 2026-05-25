@@ -53,6 +53,7 @@ export async function runPythonTool(args: Record<string, unknown>, ctx: any) {
   if (pre.block) {
     throw new Error(pre.block);
   }
+  const usesWebagentHttp = /\b(?:import\s+webagent|from\s+webagent\b)/.test(code);
   const packages = [...declaredPackages];
   for (const pkg of pre.autoPackages) {
     if (!packages.some((p) => p.toLowerCase() === pkg.toLowerCase())) packages.push(pkg);
@@ -95,5 +96,6 @@ export async function runPythonTool(args: Record<string, unknown>, ctx: any) {
     ...(pre.autoPackages.length ? { auto_packages: pre.autoPackages } : {}),
     ...(pre.micropipPackages.length ? { micropip_packages: pre.micropipPackages } : {}),
     ...(pre.warnings.length ? { preflight_warnings: pre.warnings } : {}),
+    ...(usesWebagentHttp ? { webagent_http: "available (import webagent.http as http; upload_file/post_multipart for files)" } : {}),
   };
 }

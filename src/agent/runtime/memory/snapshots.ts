@@ -12,7 +12,7 @@ import {
   memoryPath,
   safeWriteJson,
 } from "./sql.js";
-import { extractToolResultBodyText } from "../tool-result-preview.js";
+import { extractToolResultBodyText, looksLikeBinaryPayload } from "../tool-result-preview.js";
 import { isMemorySnapshotSpillPath } from "./internal-paths.js";
 
 /** Same prefix as agent/context-compaction tool-result injection (must match exactly). */
@@ -349,6 +349,9 @@ export function decideToolResultCompression(
 ): { inline: boolean; serializedLength: number; spilledForTurnBudget?: true } {
   const itemBudget = spillInlineCharBudgetForToolResultItem(item, inlineCharBudget);
   const serialized = JSON.stringify(item?.result ?? item?.error ?? null, null, 2);
+  if (looksLikeBinaryPayload(item?.result)) {
+    return { inline: false, serializedLength: serialized.length };
+  }
   const fitsItemCap = serialized.length <= itemBudget;
   const isUnwrappedSnapshotRead =
     item?.tool === "read_file" &&

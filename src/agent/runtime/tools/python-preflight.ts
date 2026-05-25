@@ -288,6 +288,9 @@ const STDLIB_TOP_LEVEL = new Set([
   "zlib","zoneinfo","__future__","_typeshed","_thread",
 ]);
 
+/** Injected at Pyodide init — not a PyPI package. */
+const RUNTIME_INJECTED_IMPORTS = new Set(["webagent"]);
+
 export function extractTopLevelImports(source: string): string[] {
   const out = new Set<string>();
   const text = String(source || "");
@@ -377,6 +380,7 @@ export function preflightPython(
   for (const imp of imports) {
     if (STDLIB_TOP_LEVEL.has(imp)) continue;
     const lower = imp.toLowerCase();
+    if (RUNTIME_INJECTED_IMPORTS.has(imp) || RUNTIME_INJECTED_IMPORTS.has(lower)) continue;
 
     if (KNOWN_BROKEN_IMPORTS[lower]) {
       return {
@@ -459,6 +463,11 @@ export function preflightPython(
   if (/\bhttp\.client\.(?:HTTPConnection|HTTPSConnection)\s*\(/.test(text)) {
     warnings.push(
       "Script uses http.client raw sockets — unavailable in Pyodide. Use `webagent.http` or agent `web_fetch`/`web_post`."
+    );
+  }
+  if (/body_encoding|multipart\/form-data|[A-Za-z0-9+/]{500,}={0,2}/.test(text)) {
+    warnings.push(
+      "Script may embed large binary/base64 HTTP payloads — prefer agent `web_upload` (source_url/file_path) or `webagent.http.upload_file` so bytes stay out of chat context."
     );
   }
 

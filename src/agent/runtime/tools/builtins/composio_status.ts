@@ -12,7 +12,7 @@ export default defineTool({
   emoji: "🔌",
   toolGroup: "composio",
   description:
-    "Check Composio configuration, connected accounts, missing app auth, and the curated marketing action allowlist. Use before external app work. Returns setup guidance when `WEBAGENT_COMPOSIO_API_KEY` is missing. Examples: " +
+    "Check Composio setup and connected OAuth apps before any Gmail/LinkedIn/Slack/etc. work. Decision: (1) call this first when the user asks about their account or a connected SaaS — never claim 'no access' without checking; (2) if `connected_accounts` includes the app → use `composio_action`; (3) if app missing → `composio_connect`; (4) if `configured: false` → Settings need `composio_api_key`. Returns `allowed_actions`. Examples: " +
     JSON.stringify(EXAMPLES[0]) +
     " | " +
     JSON.stringify(EXAMPLES[1]),

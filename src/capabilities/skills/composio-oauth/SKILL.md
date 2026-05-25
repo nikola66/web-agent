@@ -5,21 +5,22 @@ version: 1.0.0
 category: bundled
 primary-tools: [composio_connect, composio_status, composio_action]
 tags: [composio, oauth, gmail, sheets, calendar, hubspot, slack, saas]
-triggers: [composio, oauth, gmail, google sheets, google calendar, hubspot, connect app, composio_action, composio_connect, composio_status]
+triggers: [composio, oauth, gmail, google sheets, google calendar, hubspot, connect app, composio_action, composio_connect, composio_status, linkedin, my linkedin, my gmail, my inbox, my calendar, my slack, my account, connected app, what's happening on my, whats happening on my, social media account]
 ---
 
 ## Tool contract (read first)
 
 | Need | Tool |
 |------|------|
-| Check key + accounts + allowlist | `composio_status` |
-| Start OAuth link | `composio_connect` `{ app }` |
-| Run curated action | `composio_action` `{ action, args }` |
+| Check key + accounts + allowlist | `composio_status` — **always first** for "my LinkedIn/Gmail/…" |
+| Start OAuth link | `composio_connect` `{ app }` — **only when status shows app missing** |
+| Run curated action | `composio_action` `{ action, args }` — when status shows connected |
 
-**Non-negotiable:** Use stable Web Agent action ids from this skill or `composio_status.allowed_actions` — not arbitrary Composio catalog slugs.
+**Non-negotiable:** Never tell the user an OAuth app is unavailable without calling `composio_status` first. Use stable Web Agent action ids from this skill or `composio_status.allowed_actions` — not arbitrary Composio catalog slugs.
 
 ## When to Use
 
+- User asks about **their** Gmail, Calendar, Sheets, HubSpot, Slack, X/Twitter, LinkedIn, Instagram, Notion, or YouTube ("what's on my LinkedIn today?", "check my inbox").
 - User asks to connect Gmail, Calendar, Sheets, HubSpot, Slack, X/Twitter, LinkedIn, Instagram, Notion, or YouTube.
 - Task needs OAuth-connected SaaS rather than raw `web_post`.
 
@@ -57,5 +58,7 @@ triggers: [composio, oauth, gmail, google sheets, google calendar, hubspot, conn
 
 ## Anti-patterns
 
-- Raw `web_post` to Google/Slack APIs without OAuth setup.
+- Telling the user you have "no LinkedIn/Gmail access" without calling `composio_status` first.
+- Offering `composio_connect` when `composio_status.connected_accounts` already includes the app.
+- Raw `web_post` to Google/Slack/LinkedIn APIs without OAuth setup.
 - Inventing Composio catalog slugs not in the allowlist.

@@ -54,9 +54,17 @@ export const SCRIPT_PORTING_GUIDANCE =
   "Nodebox has no POSIX shell or system pip. For Python skills, use `run_python` for stdlib/Pyodide-compatible scripts and `python3 ...` only as a run_shell alias. Map REST/CMS HTTP to `web_fetch`/`web_post`; inside reusable Python use `webagent.http` (proxy-backed) or Pyodide-safe parsing only. Do not use axios/fetch shell one-liners or native pip/subprocess assumptions.";
 
 export const HTTP_API_GUIDANCE =
-  "REST GET → `web_fetch` with `url` + optional `headers` (Bearer). POST / GraphQL → `web_post` with `url`, `body`, `headers`. " +
-  "Do not invent GraphQL root fields — read the API schema or `skill_view` **`http-api`**. " +
-  "On `ok: false` or GraphQL `errors`, read the error message and fix the call once; never loop axios/shell retries for HTTP.";
+  "Bytes move runtime→proxy→upstream; you see metadata (`bytes`, `path`, `file_id`) — never base64 in tool args or chat. " +
+  "REST GET → `web_fetch`; binary download → `web_fetch` + `save_to`. JSON/GraphQL/PATCH → `web_post`. " +
+  "CMS `/files` or single file upload → `web_upload` with `source_url` or `file_path`. Mixed form + file(s) → `web_post.multipart`. " +
+  "Python script uploads → `webagent.http.upload_file` in `run_python`. Read `skill_view` **`http-api`** before first API call. " +
+  "OAuth-connected SaaS (Gmail, LinkedIn, Slack, …) → `skill_view` **`composio-oauth`**, then `composio_status` — not raw `web_post`. " +
+  "On `ok: false` or GraphQL `errors`, fix once — do not loop shell/axios or read_file snapshot recovery for uploads.";
+
+export const COMPOSIO_SAAS_GUIDANCE =
+  "For the user's connected OAuth apps (Gmail, LinkedIn, Slack, HubSpot, …): call `skill_view` **`composio-oauth`**, then `composio_status` before answering about access. " +
+  "If `connected_accounts` includes the app, use `composio_action` — do not tell the user to connect OAuth or claim 'no access' without checking status. " +
+  "Offer `composio_connect` only when status shows the app is missing from `connected_accounts`.";
 
 export const MEMORY_SPILL_RECOVERY_GUIDANCE =
   "**Internal memory paths (do not scavenge):** `memory/snapshots/` = oversized tool-result spill only; " +
@@ -97,6 +105,12 @@ export function buildMemoryLayerGuidanceBlock(toolNames: string[] = []): string 
   }
   if (tools.has("skill_manage") || tools.has("skill_bulk_save")) {
     parts.push(SKILLS_GUIDANCE);
+  }
+  if (tools.has("web_fetch") || tools.has("web_post") || tools.has("web_upload")) {
+    parts.push(HTTP_API_GUIDANCE);
+  }
+  if (tools.has("skill_view")) {
+    parts.push(COMPOSIO_SAAS_GUIDANCE);
   }
   if (tools.has("read_file") || tools.has("grep") || tools.has("browse_workspace") || tools.has("find_files") || tools.has("list_dir")) {
     parts.push(MEMORY_SPILL_RECOVERY_GUIDANCE);

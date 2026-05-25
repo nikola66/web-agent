@@ -5,6 +5,8 @@ export type CapabilityRoute = {
   skill?: string;
   tools: string[];
   avoid?: string;
+  /** Show even when deferred tools are not yet active (skill_view unlocks them). */
+  alwaysShow?: boolean;
 };
 
 export const CAPABILITY_ROUTES: CapabilityRoute[] = [
@@ -29,7 +31,13 @@ export const CAPABILITY_ROUTES: CapabilityRoute[] = [
     need: "REST/GraphQL HTTP",
     skill: "http-api",
     tools: ["web_fetch", "web_post"],
-    avoid: "run_shell curl/axios",
+    avoid: "run_shell curl/axios; web_post for file bytes",
+  },
+  {
+    need: "CMS/file upload",
+    skill: "http-api",
+    tools: ["web_upload"],
+    avoid: "web_post body/base64; read_file snapshot loops",
   },
   {
     need: "Python scripts",
@@ -44,10 +52,11 @@ export const CAPABILITY_ROUTES: CapabilityRoute[] = [
     avoid: "POSIX pipes, git, npx, curl",
   },
   {
-    need: "OAuth SaaS apps",
+    need: "User's OAuth SaaS (Gmail, LinkedIn, Slack, …)",
     skill: "composio-oauth",
-    tools: ["composio_connect", "composio_status", "composio_action"],
-    avoid: "raw web_post without OAuth setup",
+    tools: ["composio_status", "composio_action", "composio_connect"],
+    avoid: "claiming no access before composio_status; raw web_post",
+    alwaysShow: true,
   },
   {
     need: "DOM click/type automation",
@@ -126,13 +135,15 @@ export const CAPABILITY_ROUTES: CapabilityRoute[] = [
 
 export const CAPABILITY_ENV_FOOTER =
   "Environment: Nodebox browser — no POSIX shell, Pyodide Python, proxy-backed HTTP. " +
-  "In Python scripts use webagent.http for HTTP; agent one-offs use web_fetch/web_post. " +
+  "Bytes move runtime→proxy→upstream; model sees metadata only (never base64 in tool args). " +
+  "CMS /files → web_upload; JSON/GraphQL → web_post; binary download → web_fetch save_to. " +
   "Full matrix: skill_view **`browser-runtime-map`**. " +
   "Installed capability folders: `capability_list` (extensions only, not built-in routing).";
 
 const ROUTER_CHAR_BUDGET = 1800;
 
 function routeHasAvailableTools(route: CapabilityRoute, available: Set<string>): boolean {
+  if (route.alwaysShow) return true;
   if (!route.tools.length) return true;
   return route.tools.some((tool) => available.has(tool));
 }

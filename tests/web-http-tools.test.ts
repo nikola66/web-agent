@@ -8,6 +8,7 @@ import {
   normalizeWebPostMethod,
   resolveWebPostBody,
   summarizeHttpErrorBody,
+  buildMultipartBody,
   webFetchTool,
   webPostTool,
 } from "../dist/agent-runtime/tools/remote-tools.js";
@@ -97,6 +98,28 @@ test("webPostTool rejects non-http URL", async () => {
     () => webPostTool({ url: "file:///tmp/x", body: "{}" }, {}),
     /http\(s\) URLs/
   );
+});
+
+test("resolveWebPostBody rejects multipart array (async path)", () => {
+  assert.throws(() => resolveWebPostBody({ multipart: [{ name: "f", text: "x" }] }, "POST"), /multipart/);
+});
+
+test("buildMultipartBody supports text-only fields", () => {
+  const built = buildMultipartBody([{ name: "grant_type", text: "client_credentials" }]);
+  const body = Buffer.from(built.body, "base64").toString("utf8");
+  assert.match(body, /grant_type/);
+  assert.match(body, /client_credentials/);
+});
+
+test("webPostTool schema includes multipart", () => {
+  const schema = BUILTIN_TOOLS.web_post.inputSchema;
+  assert.ok(schema.properties.multipart);
+});
+
+test("webFetchTool schema includes save_to and response_encoding", () => {
+  const schema = BUILTIN_TOOLS.web_fetch.inputSchema;
+  assert.ok(schema.properties.save_to);
+  assert.ok(schema.properties.response_encoding);
 });
 
 test("webPostTool schema includes extended methods and optional body", () => {

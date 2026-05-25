@@ -443,6 +443,7 @@ export function createChannelInboundHandler(deps) {
             : "";
           const hints = [
             "Use `read_file({ path })` for text/markdown/JSON/CSV. Use `vision_analyze({ workspace_relative_image_path })` for images. Use `extract_archive({ archive_path })` for .zip/.tar/.tar.gz (also accepts `path`, `file`, `zip`). Use `pdf_extract({ path })` for PDFs. Use `docx_extract({ path })` for .docx.",
+            "To publish files to a CMS/API: pass saved paths to `web_upload({ file_path })` or `web_post.multipart` — never inline binary or base64 in tool args (Telegram message size limits apply).",
             exampleArg,
           ].filter(Boolean);
           const sections = [header, ...lines];

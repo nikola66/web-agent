@@ -12,8 +12,8 @@ export default defineTool({
   emoji: "🧩",
   toolGroup: "composio",
   description:
-    "Execute one curated Composio OAuth action by stable action id. Reads run normally; send/post/delete/publish may require approval. " +
-    "Call `skill_view` **`composio-oauth`** for the full action catalog and connect flow; `composio_status` returns `allowed_actions`. " +
+    "Execute one curated Composio OAuth action after `composio_status` confirms a connected account. Reads run normally; send/post/delete/publish may require approval. " +
+    "Never tell the user an app is unavailable without calling `composio_status` first. Call `skill_view` **`composio-oauth`** for action ids (e.g. LinkedIn → `linkedin_get_my_info`); `composio_status.allowed_actions` is authoritative. " +
     "Example: " +
     JSON.stringify(EXAMPLES[0]),
   inputSchema: {

@@ -104,3 +104,18 @@ test("classifyToolError tags unknown create_archive with zipfile recipe", () => 
   assert.match(c.recovery_hint, /zipfile/i);
   assert.match(c.recovery_hint, /create_archive/i);
 });
+
+test("classifyToolError tags upload_misroute on IPC timeout during upload", () => {
+  const c = classifyToolError(
+    "IPC proxy stream timed out after 240000ms while reading snapshot base64 image upload",
+    "read_file"
+  );
+  assert.equal(c.error_code, "upload_misroute");
+  assert.match(c.recovery_hint, /web_upload/);
+});
+
+test("classifyToolError tags pyodide_webagent_http for missing webagent module", () => {
+  const c = classifyToolError("ModuleNotFoundError: No module named 'webagent.http'", "run_python");
+  assert.equal(c.error_code, "pyodide_webagent_http");
+  assert.match(c.recovery_hint, /webagent\.http/);
+});

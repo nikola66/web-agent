@@ -31,6 +31,15 @@ test("detectHttpIntentInShellCommand flags GraphQL as web_post", () => {
   assert.equal(d.suggested_tool, "web_post");
 });
 
+test("detectHttpIntentInShellCommand flags multipart upload as web_upload", () => {
+  const d = detectHttpIntentInShellCommand(
+    'curl -F "file=@hero.jpg" -H "Authorization: Bearer tok" https://cms.example.com/files'
+  );
+  assert.equal(d.detected, true);
+  assert.equal(d.suggested_tool, "web_upload");
+  assert.match(d.recovery_hint, /web_upload/);
+});
+
 test("formatShellHttpMisrouteError names suggested tool", () => {
   const d = detectHttpIntentInShellCommand("node -e \"require('axios')\"");
   const msg = formatShellHttpMisrouteError(d);

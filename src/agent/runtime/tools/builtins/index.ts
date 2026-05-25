@@ -45,11 +45,12 @@ import tool43 from "./vision_analyze.js";
 import tool44 from "./web_fetch.js";
 import tool45 from "./web_post.js";
 import tool46 from "./web_search.js";
-import tool47 from "./wiki_search.js";
-import tool48 from "./wiki_setup.js";
-import tool49 from "./wiki_sync.js";
-import tool50 from "./write_file.js";
-import tool51 from "./youtube_transcribe.js";
+import tool47 from "./web_upload.js";
+import tool48 from "./wiki_search.js";
+import tool49 from "./wiki_setup.js";
+import tool50 from "./wiki_sync.js";
+import tool51 from "./write_file.js";
+import tool52 from "./youtube_transcribe.js";
 
 export const BUILTIN_TOOL_DEFINITIONS = [
   tool0,
@@ -104,4 +105,5 @@ export const BUILTIN_TOOL_DEFINITIONS = [
   tool49,
   tool50,
   tool51,
+  tool52,
 ] as const;

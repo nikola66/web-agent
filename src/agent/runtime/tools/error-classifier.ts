@@ -128,6 +128,23 @@ function classifyFromMessage(message: string, statusHint: number | null): Omit<C
   }
 
   // Python imports a package that isn't stdlib and isn't bundled in Pyodide.
+  const webagentModuleMatch = message.match(/ModuleNotFoundError:\s*No module named ['"]webagent(?:\.http)?['"]/i);
+  if (webagentModuleMatch) {
+    reason = "format_error";
+    retryable = false;
+    shouldFallback = true;
+    error_code = "pyodide_webagent_http";
+    return {
+      reason,
+      retryable,
+      shouldCompress,
+      shouldFallback,
+      error_code,
+      hintBase:
+        "webagent.http is injected at Pyodide init — use `import webagent.http as http` inside run_python (not pip). For one-off CMS uploads use agent web_upload instead.",
+    };
+  }
+
   // Common when a skill or the model invents an SDK (e.g. `from directus import DirectusClient`).
   const noModuleMatch = message.match(/ModuleNotFoundError:\s*No module named ['"]([\w.]+)['"]/i);
   if (noModuleMatch) {
@@ -177,6 +194,26 @@ function classifyFromMessage(message: string, statusHint: number | null): Omit<C
       error_code,
       hintBase:
         "Pyodide HTTP failed with a JsProxy/urllib error. Decision tree: agent one-off REST → web_fetch/web_post; reusable Python script → `import webagent.http as http` inside run_python; avoid requests/httpx in Pyodide.",
+    };
+  }
+
+  if (
+    /web_upload never accepts raw bytes|never pass base64|multipart\/form-data.*base64/i.test(message) ||
+    (/IPC proxy stream timed out/i.test(message) && /upload|multipart|image|base64|snapshot/i.test(message)) ||
+    (/read_file|snapshot/i.test(message) && /base64|upload|multipart|image/i.test(message) && TIMEOUT_RE.test(message))
+  ) {
+    reason = "format_error";
+    retryable = false;
+    shouldFallback = true;
+    error_code = "upload_misroute";
+    return {
+      reason,
+      retryable,
+      shouldCompress,
+      shouldFallback,
+      error_code,
+      hintBase:
+        "Upload misroute — never pass binary/base64 in tool args or chat. Decision: CMS /files → web_upload (source_url or file_path); mixed form+file → web_post.multipart; JSON/GraphQL → web_post; download first → web_fetch save_to then web_upload.file_path; Python script → webagent.http.upload_file.",
     };
   }
 

@@ -35,7 +35,7 @@ export default defineTool({
   run: webPostTool,
   emoji: "📮",
   description:
-    "Primary HTTP client for writes (POST/PATCH/PUT/DELETE/HEAD/OPTIONS). Procedure: skill_view **`http-api`**. Not for OAuth SaaS — use `composio_*`. Pair with `web_fetch` for GET. Pass Bearer/API keys in `headers`. Examples: " +
+    "Primary HTTP client for JSON/GraphQL REST writes (POST/PATCH/PUT/DELETE/HEAD/OPTIONS). Not for CMS file uploads — use `web_upload`; mixed form fields + file(s) → `multipart` array (runtime reads `file_path`/`source_url`). Never pass base64 in args. Procedure: skill_view **`http-api`**. Not for OAuth SaaS — use `composio_*`. Pair with `web_fetch` for GET. Examples: " +
     JSON.stringify(WEB_POST_EXAMPLES[0]) +
     " | " +
     JSON.stringify(WEB_POST_EXAMPLES[2]) +
@@ -81,7 +81,24 @@ export default defineTool({
       body_encoding: {
         type: "string",
         enum: ["base64"],
-        description: "Send `body` as base64-decoded bytes (binary uploads).",
+        description: "Last resort only: decode `body` from base64. Prefer `web_upload` (CMS /files) or `multipart` with file_path/source_url.",
+      },
+      multipart: {
+        type: "array",
+        description:
+          "Multipart form fields. Each item: name + text, or name + file_path/source_url (+ optional filename, content_type). Runtime reads/fetches bytes — never pass base64.",
+        items: {
+          type: "object",
+          properties: {
+            name: { type: "string" },
+            text: { type: "string" },
+            filename: { type: "string" },
+            content_type: { type: "string" },
+            file_path: { type: "string" },
+            source_url: { type: "string" },
+          },
+          required: ["name"],
+        },
       },
       timeout_ms: {
         type: "number",

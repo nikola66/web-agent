@@ -1,7 +1,9 @@
 import fs from "node:fs/promises";
 import type { Dirent } from "node:fs";
 import nodePath from "node:path";
+import crypto from "node:crypto";
 import { ipcProxyRequest } from "../ipc.js";
+import { resolveWorkspacePath, normalizeWorkspaceRelativePath } from "../workspace-paths.js";
 import {
   BROWSER_AGENT_CATALOG_PATH,
   HEARTBEAT_INTERVAL_MS,
@@ -61,7 +63,22 @@ type HttpProxyFailure = {
   truncated_at_chars?: number;
 };
 
-export type HttpProxyResult = HttpProxySuccessJson | HttpProxySuccessText | HttpProxyFailure;
+type HttpProxySuccessBinary = {
+  ok: true;
+  status: number;
+  url: string;
+  contentType: string;
+  bytes: number;
+  body_encoding: "base64";
+  base64: string;
+  sha256_prefix: string;
+};
+
+export type HttpProxyResult =
+  | HttpProxySuccessJson
+  | HttpProxySuccessText
+  | HttpProxySuccessBinary
+  | HttpProxyFailure;
 
 type BrowserCatalogProvider = {
   id: string;
@@ -72,15 +89,179 @@ type BrowserCatalogProvider = {
   fetch?: { endpoint?: string; timeoutMs?: number };
 };
 
-function readProxyResponse(value: unknown): { status: number; body: string; contentType: string } {
+function readProxyResponse(value: unknown): {
+  status: number;
+  body: string;
+  contentType: string;
+  bodyEncoding?: string;
+} {
   if (value && typeof value === "object") {
     const rec = value as Record<string, unknown>;
     const status = Number(rec.status);
     const body = typeof rec.body === "string" ? rec.body : "";
     const contentType = typeof rec.contentType === "string" ? rec.contentType : "";
-    return { status: Number.isFinite(status) ? status : 0, body, contentType };
+    const bodyEncoding = typeof rec.bodyEncoding === "string" ? rec.bodyEncoding : undefined;
+    return { status: Number.isFinite(status) ? status : 0, body, contentType, bodyEncoding };
   }
   return { status: 0, body: "", contentType: "" };
+}
+
+/** Max upload size for web_upload / web_post multipart file parts (default 10 MB). */
+export const WEB_UPLOAD_MAX_BYTES = Math.max(
+  1024,
+  Number(process.env.WEBAGENT_UPLOAD_MAX_BYTES) || 10 * 1024 * 1024
+);
+
+/** Inline base64 cap for web_fetch response_encoding without save_to. */
+export const WEB_FETCH_BINARY_INLINE_CAP = 32_000;
+
+export type MultipartFieldSpec = {
+  name: string;
+  text?: string;
+  filename?: string;
+  content_type?: string;
+  file_path?: string;
+  source_url?: string;
+};
+
+type ResolvedMultipartPart = {
+  name: string;
+  text?: string;
+  bytes?: Buffer;
+  filename?: string;
+  content_type?: string;
+};
+
+export function buildMultipartBody(parts: ResolvedMultipartPart[]): {
+  body: string;
+  bodyEncoding: "base64";
+  contentType: string;
+  boundary: string;
+} {
+  if (!parts.length) throw new Error("multipart requires at least one field.");
+  const boundary = `----WebAgent${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
+  const chunks: Buffer[] = [];
+  for (const part of parts) {
+    const name = String(part.name || "").trim();
+    if (!name) throw new Error("Each multipart field requires `name`.");
+    if (part.bytes) {
+      const filename = String(part.filename || "file").replace(/[\r\n"]/g, "_");
+      const ct = String(part.content_type || "application/octet-stream");
+      chunks.push(
+        Buffer.from(
+          `--${boundary}\r\nContent-Disposition: form-data; name="${name}"; filename="${filename}"\r\nContent-Type: ${ct}\r\n\r\n`
+        )
+      );
+      chunks.push(part.bytes);
+      chunks.push(Buffer.from("\r\n"));
+    } else {
+      chunks.push(
+        Buffer.from(`--${boundary}\r\nContent-Disposition: form-data; name="${name}"\r\n\r\n${String(part.text ?? "")}\r\n`)
+      );
+    }
+  }
+  chunks.push(Buffer.from(`--${boundary}--\r\n`));
+  const bodyBuf = Buffer.concat(chunks);
+  return {
+    body: bodyBuf.toString("base64"),
+    bodyEncoding: "base64",
+    contentType: `multipart/form-data; boundary=${boundary}`,
+    boundary,
+  };
+}
+
+function assertUploadSize(bytes: Buffer, label: string): void {
+  if (bytes.length > WEB_UPLOAD_MAX_BYTES) {
+    throw new Error(
+      `${label} is ${bytes.length} bytes (max ${WEB_UPLOAD_MAX_BYTES}). Use a smaller file or raise WEBAGENT_UPLOAD_MAX_BYTES.`
+    );
+  }
+}
+
+async function fetchBinaryViaProxy(
+  url: string,
+  ctx: unknown,
+  headers: Record<string, string> = {},
+  timeoutMs?: number
+): Promise<{ bytes: Buffer; contentType: string; status: number }> {
+  const ipcTimeout = pickRemoteTimeoutMs(ctx, timeoutMs, 120_000);
+  const raw = await proxyRequest(
+    { method: "GET", url, headers, binaryResponse: true },
+    ctx,
+    ipcTimeout
+  );
+  const { status, body, contentType, bodyEncoding } = readProxyResponse(raw);
+  if (status < 200 || status >= 300) {
+    throw new Error(`Binary fetch failed (${status}) for ${url.slice(0, 240)}`);
+  }
+  const bytes =
+    bodyEncoding === "base64" && body
+      ? Buffer.from(body, "base64")
+      : Buffer.from(body, "utf8");
+  assertUploadSize(bytes, `Download from ${url.slice(0, 120)}`);
+  return { bytes, contentType: contentType || "application/octet-stream", status };
+}
+
+async function readWorkspaceBinary(relPath: string, ctx: unknown, label: string): Promise<Buffer> {
+  const normalized = normalizeWorkspaceRelativePath(relPath).replace(/\\/g, "/");
+  const abs = resolveWorkspacePath(ctx, normalized);
+  const bytes = await fs.readFile(abs);
+  assertUploadSize(bytes, label || normalized);
+  return bytes;
+}
+
+export async function resolveMultipartFieldSpecs(
+  specs: MultipartFieldSpec[],
+  ctx: unknown
+): Promise<ResolvedMultipartPart[]> {
+  if (!Array.isArray(specs) || !specs.length) {
+    throw new Error("`multipart` must be a non-empty array of field objects.");
+  }
+  const out: ResolvedMultipartPart[] = [];
+  for (const spec of specs) {
+    const name = String(spec?.name || "").trim();
+    if (!name) throw new Error("Each multipart field requires `name`.");
+    const filePath = typeof spec.file_path === "string" ? spec.file_path.trim() : "";
+    const sourceUrl = typeof spec.source_url === "string" ? spec.source_url.trim() : "";
+    const textVal = spec.text != null ? String(spec.text) : "";
+    const hasFile = !!(filePath || sourceUrl);
+    const hasText = textVal.length > 0;
+    if (hasFile && hasText) {
+      throw new Error(`Multipart field "${name}": use either text or file_path/source_url, not both.`);
+    }
+    if (!hasFile && !hasText) {
+      throw new Error(`Multipart field "${name}": provide text, file_path, or source_url.`);
+    }
+    if (filePath && sourceUrl) {
+      throw new Error(`Multipart field "${name}": provide only one of file_path or source_url.`);
+    }
+    if (hasFile) {
+      const bytes = filePath
+        ? await readWorkspaceBinary(filePath, ctx, `File ${filePath}`)
+        : (await fetchBinaryViaProxy(sourceUrl, ctx)).bytes;
+      out.push({
+        name,
+        bytes,
+        filename:
+          typeof spec.filename === "string" && spec.filename.trim()
+            ? spec.filename.trim()
+            : filePath
+              ? nodePath.basename(filePath)
+              : "file",
+        content_type:
+          typeof spec.content_type === "string" && spec.content_type.trim()
+            ? spec.content_type.trim()
+            : undefined,
+      });
+    } else {
+      out.push({ name, text: textVal });
+    }
+  }
+  return out;
+}
+
+function sha256Prefix(bytes: Buffer): string {
+  return crypto.createHash("sha256").update(bytes).digest("hex").slice(0, 12);
 }
 
 let browserAgentCatalogCache: BrowserCatalogProvider[] | null = null;
@@ -270,9 +451,9 @@ async function browserAgentFetch(
 }
 
 export async function proxyRequest(request, _ctx, timeoutMs?) {
-  const { method = "GET", url, headers = {}, body = null, bodyEncoding } = request;
+  const { method = "GET", url, headers = {}, body = null, bodyEncoding, binaryResponse } = request;
   const ipcTimeout = Number.isFinite(Number(timeoutMs)) && Number(timeoutMs) > 0 ? Number(timeoutMs) : undefined;
-  return ipcProxyRequest({ method, url, headers, body, bodyEncoding }, ipcTimeout);
+  return ipcProxyRequest({ method, url, headers, body, bodyEncoding, binaryResponse }, ipcTimeout);
 }
 
 export const WEB_POST_METHODS = ["POST", "PATCH", "PUT", "DELETE", "HEAD", "OPTIONS"] as const;
@@ -304,6 +485,11 @@ export function resolveWebPostBody(
   method: string
 ): { body: string | null; bodyEncoding?: "base64"; contentTypeHint?: string } {
   const m = method.toUpperCase();
+  if (Array.isArray(args.multipart) && args.multipart.length) {
+    throw new Error(
+      "`multipart` is resolved asynchronously — use webPostTool (not resolveWebPostBody) for multipart payloads."
+    );
+  }
   if (args.form && typeof args.form === "object" && !Array.isArray(args.form)) {
     const params = new URLSearchParams();
     for (const [k, v] of Object.entries(args.form as Record<string, unknown>)) {
@@ -473,12 +659,14 @@ export async function httpProxyCall(
     headers = {},
     body = null,
     bodyEncoding,
+    binaryResponse,
   }: {
     method?: string;
     url: string;
     headers?: Record<string, string>;
     body?: string | null;
     bodyEncoding?: "base64";
+    binaryResponse?: boolean;
   },
   ctx,
   options?: { timeoutMs?: number }
@@ -490,11 +678,34 @@ export async function httpProxyCall(
     method: m,
     url: String(url).slice(0, 800),
     headers: redactHttpHeadersForLog(normHeaders),
+    binaryResponse: !!binaryResponse,
   });
-  const { status, body: respBody, contentType } = readProxyResponse(
-    await proxyRequest({ method: m, url, headers: normHeaders, body, bodyEncoding }, ctx, ipcTimeout)
+  const { status, body: respBody, contentType, bodyEncoding: respBodyEncoding } = readProxyResponse(
+    await proxyRequest(
+      { method: m, url, headers: normHeaders, body, bodyEncoding, binaryResponse },
+      ctx,
+      ipcTimeout
+    )
   );
   const ok = status >= 200 && status < 300;
+
+  if (binaryResponse) {
+    const bytes =
+      respBodyEncoding === "base64" && respBody
+        ? Buffer.from(respBody, "base64")
+        : Buffer.from(respBody, "utf8");
+    const base = { ok: ok as true, status, url, contentType, bytes: bytes.length, body_encoding: "base64" as const };
+    if (!ok) {
+      const detail = bytes.toString("utf8", 0, Math.min(bytes.length, 240));
+      throw Object.assign(new Error(`HTTP request failed (${status}): ${detail || "unknown error"}`), { status });
+    }
+    return {
+      ...base,
+      base64: respBodyEncoding === "base64" ? respBody : bytes.toString("base64"),
+      sha256_prefix: sha256Prefix(bytes),
+    };
+  }
+
   const sliced = sliceProxyFetchBody(respBody);
   const trimmed = sliced.text.trim();
   const looksJson =
@@ -662,11 +873,71 @@ async function webFetchReadableFromProxy(url, ctx, headers: Record<string, strin
 
 const WEB_FETCH_BATCH_MAX = 5;
 
-async function webFetchOne(url: string, ctx, headers: Record<string, string> = {}) {
+async function webFetchOne(url: string, ctx, headers: Record<string, string> = {}, fetchOpts: { saveTo?: string; responseEncoding?: string } = {}) {
   const u = new URL(url);
   if (!["http:", "https:"].includes(u.protocol)) {
     throw new Error(`web_fetch only supports http(s) URLs, got: ${u.protocol}`);
   }
+
+  const saveTo = typeof fetchOpts.saveTo === "string" ? fetchOpts.saveTo.trim() : "";
+  const responseEncoding = String(fetchOpts.responseEncoding || "").trim().toLowerCase();
+  const wantBinary = saveTo.length > 0 || responseEncoding === "base64";
+
+  if (wantBinary) {
+    const binary = await httpProxyCall(
+      { method: "GET", url, headers, binaryResponse: true },
+      ctx
+    );
+    if (!binary.ok) throw new Error("binary" in binary ? "fetch failed" : String((binary as HttpProxyFailure).error));
+    const bin = binary as HttpProxySuccessBinary;
+    const bytes = Buffer.from(bin.base64, "base64");
+    if (saveTo) {
+      const rel = normalizeWorkspaceRelativePath(saveTo).replace(/\\/g, "/");
+      const abs = resolveWorkspacePath(ctx, rel);
+      await fs.mkdir(nodePath.dirname(abs), { recursive: true });
+      await fs.writeFile(abs, bytes);
+      return {
+        ok: true as const,
+        url,
+        provider: "proxy-binary",
+        status: bin.status,
+        content_type: bin.contentType,
+        bytes: bytes.length,
+        path: rel,
+        sha256_prefix: bin.sha256_prefix,
+      };
+    }
+    if (bin.base64.length <= WEB_FETCH_BINARY_INLINE_CAP) {
+      return {
+        ok: true as const,
+        url,
+        provider: "proxy-binary",
+        status: bin.status,
+        content_type: bin.contentType,
+        bytes: bytes.length,
+        body_encoding: "base64" as const,
+        base64: bin.base64,
+        sha256_prefix: bin.sha256_prefix,
+      };
+    }
+    const spillRel = `memory/tmp/fetch_${Date.now().toString(36)}_${sha256Prefix(bytes)}.bin`;
+    const spillAbs = resolveWorkspacePath(ctx, spillRel);
+    await fs.mkdir(nodePath.dirname(spillAbs), { recursive: true });
+    await fs.writeFile(spillAbs, bytes);
+    return {
+      ok: true as const,
+      url,
+      provider: "proxy-binary",
+      status: bin.status,
+      content_type: bin.contentType,
+      bytes: bytes.length,
+      path: spillRel,
+      sha256_prefix: bin.sha256_prefix,
+      spilled: true,
+      note: "Binary too large to inline — use path with web_upload (file_path) or web_post.multipart.",
+    };
+  }
+
   if (Object.keys(headers).length > 0) {
     return webFetchReadableFromProxy(url, ctx, headers);
   }
@@ -704,6 +975,9 @@ export async function webFetchTool(args: ToolArgs = {}, ctx) {
     args.params && typeof args.params === "object" && !Array.isArray(args.params)
       ? (args.params as Record<string, unknown>)
       : undefined;
+  const saveTo = typeof args.save_to === "string" ? args.save_to.trim() : "";
+  const responseEncoding = typeof args.response_encoding === "string" ? args.response_encoding.trim() : "";
+  const fetchOpts = { saveTo, responseEncoding };
 
   const rawUrls = Array.isArray(args.urls) ? args.urls : [];
   const single = typeof args.url === "string" ? args.url.trim() : "";
@@ -715,8 +989,11 @@ export async function webFetchTool(args: ToolArgs = {}, ctx) {
   if (targets.length > WEB_FETCH_BATCH_MAX) {
     throw new Error(`web_fetch accepts at most ${WEB_FETCH_BATCH_MAX} URLs per call.`);
   }
+  if ((saveTo || responseEncoding) && targets.length > 1) {
+    throw new Error("save_to and response_encoding apply to a single url only (not batch urls).");
+  }
 
-  if (targets.length === 1) return webFetchOne(targets[0], ctx, headers);
+  if (targets.length === 1) return webFetchOne(targets[0], ctx, headers, fetchOpts);
 
   const documents = await Promise.all(
     targets.map(async (url) => {
@@ -741,8 +1018,32 @@ export async function webPostTool(args: ToolArgs = {}, ctx) {
     throw new Error(`web_post only supports http(s) URLs, got: ${u.protocol}`);
   }
   const method = normalizeWebPostMethod(args.method);
-  const { body, bodyEncoding, contentTypeHint } = resolveWebPostBody(args, method);
   const headers = normalizeHttpHeaders(args.headers);
+  const timeoutMs = Number(args.timeout_ms);
+  const proxyCtx =
+    Number.isFinite(timeoutMs) && timeoutMs > 0 ? { ...ctx, timeoutMs } : ctx;
+  const timeoutOpt = Number.isFinite(timeoutMs) && timeoutMs > 0 ? { timeoutMs } : undefined;
+
+  let body: string | null;
+  let bodyEncoding: "base64" | undefined;
+  let contentTypeHint = "";
+
+  if (Array.isArray(args.multipart) && args.multipart.length) {
+    if (args.body != null || args.json != null || args.form != null || args.data != null) {
+      throw new Error("Use either `multipart` or body/json/form — not both.");
+    }
+    const parts = await resolveMultipartFieldSpecs(args.multipart as MultipartFieldSpec[], ctx);
+    const built = buildMultipartBody(parts);
+    body = built.body;
+    bodyEncoding = built.bodyEncoding;
+    contentTypeHint = built.contentType;
+  } else {
+    const resolved = resolveWebPostBody(args, method);
+    body = resolved.body;
+    bodyEncoding = resolved.bodyEncoding;
+    contentTypeHint = resolved.contentTypeHint || "";
+  }
+
   const contentType =
     typeof args.content_type === "string" ? args.content_type.trim() : contentTypeHint || "";
   if (contentType) headers["Content-Type"] = contentType;
@@ -752,14 +1053,81 @@ export async function webPostTool(args: ToolArgs = {}, ctx) {
       headers["Content-Type"] = "application/json";
     }
   }
+  return httpProxyCall({ method, url, headers, body, bodyEncoding }, proxyCtx, timeoutOpt);
+}
+
+export async function webUploadTool(args: ToolArgs = {}, ctx) {
+  const uploadUrl = typeof args.upload_url === "string" ? args.upload_url.trim() : "";
+  if (!uploadUrl) throw new Error("`upload_url` is required for web_upload.");
+  const u = new URL(uploadUrl);
+  if (!["http:", "https:"].includes(u.protocol)) {
+    throw new Error(`web_upload only supports http(s) URLs, got: ${u.protocol}`);
+  }
+  if (args.body != null || args.content != null || args.base64 != null) {
+    throw new Error(
+      "web_upload never accepts raw bytes in tool args. Use source_url or file_path — runtime fetches/reads bytes server-side."
+    );
+  }
+
+  const filePath = typeof args.file_path === "string" ? args.file_path.trim() : "";
+  const sourceUrl = typeof args.source_url === "string" ? args.source_url.trim() : "";
+  if (!filePath && !sourceUrl) {
+    throw new Error("web_upload requires exactly one of `source_url` or `file_path`.");
+  }
+  if (filePath && sourceUrl) {
+    throw new Error("web_upload accepts only one of `source_url` or `file_path`, not both.");
+  }
+
+  const fieldName = typeof args.field_name === "string" && args.field_name.trim() ? args.field_name.trim() : "file";
+  const filename =
+    typeof args.filename === "string" && args.filename.trim()
+      ? args.filename.trim()
+      : filePath
+        ? nodePath.basename(filePath)
+        : "upload.bin";
+  const contentType =
+    typeof args.content_type === "string" && args.content_type.trim()
+      ? args.content_type.trim()
+      : "application/octet-stream";
+
+  let bytes: Buffer;
+  if (filePath) {
+    bytes = await readWorkspaceBinary(filePath, ctx, `File ${filePath}`);
+  } else {
+    const fetched = await fetchBinaryViaProxy(sourceUrl, ctx, normalizeHttpHeaders(args.source_headers));
+    bytes = fetched.bytes;
+  }
+
+  const built = buildMultipartBody([
+    { name: fieldName, bytes, filename, content_type: contentType },
+  ]);
+  const headers = normalizeHttpHeaders(args.headers);
+  headers["Content-Type"] = built.contentType;
   const timeoutMs = Number(args.timeout_ms);
   const proxyCtx =
     Number.isFinite(timeoutMs) && timeoutMs > 0 ? { ...ctx, timeoutMs } : ctx;
-  return httpProxyCall(
-    { method, url, headers, body, bodyEncoding },
+  const result = await httpProxyCall(
+    { method: "POST", url: uploadUrl, headers, body: built.body, bodyEncoding: built.bodyEncoding },
     proxyCtx,
     Number.isFinite(timeoutMs) && timeoutMs > 0 ? { timeoutMs } : undefined
   );
+  if (!result.ok) return result;
+  const payload =
+    "data" in result
+      ? result
+      : {
+          ok: true as const,
+          status: result.status,
+          url: uploadUrl,
+          contentType: result.contentType,
+          data: "text" in result ? result.text : null,
+        };
+  return {
+    ...payload,
+    bytes_uploaded: bytes.length,
+    filename,
+    field_name: fieldName,
+  };
 }
 
 export async function memorySaveTool(args: ToolArgs = {}, ctx) {

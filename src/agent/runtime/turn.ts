@@ -75,6 +75,7 @@ import {
   focusToolNamesForIntent,
   buildSkillInstallContextPrefix,
   buildApiCallContextPrefix,
+  buildComposioSaasContextPrefix,
   SKILL_INSTALL_PIVOT_NUDGE,
   skillBulkSaveAllUrlItemsFailed,
   webFetchTargetsRegistryUrl,
@@ -378,6 +379,10 @@ export async function agentTurn(
     !turnMeta?.textOnly && originalUserInput
       ? buildApiCallContextPrefix(originalUserInput)
       : null;
+  const composioSaasPrefix =
+    !turnMeta?.textOnly && originalUserInput
+      ? buildComposioSaasContextPrefix(originalUserInput)
+      : null;
   const volatileToolHint =
     buildCapabilityRouterBlock(activeToolNames) +
     buildExecutionGuidanceBlock(typeof cfg.model === "string" ? cfg.model : null) +
@@ -527,6 +532,14 @@ export async function agentTurn(
   }
   if (apiCallPrefix && apiCallPrefix !== skillInstallPrefix && apiCallPrefix !== continuationPrefix) {
     conv.push({ role: "user", content: apiCallPrefix });
+  }
+  if (
+    composioSaasPrefix &&
+    composioSaasPrefix !== apiCallPrefix &&
+    composioSaasPrefix !== skillInstallPrefix &&
+    composioSaasPrefix !== continuationPrefix
+  ) {
+    conv.push({ role: "user", content: composioSaasPrefix });
   }
 
   let usedTodoWriteInTurn = false;

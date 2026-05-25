@@ -26,9 +26,12 @@ Canonical built-in tool picker. Other skills defer here for filesystem vs HTTP v
 | Patch or multi-edit (summary) | `apply_patch`, `edit_file`, `multi_edit` |
 | Move / delete | `move_file`, `delete_file` |
 | Compare files | `file_diff` |
-| HTTP(S) GET (public or Bearer) | `web_fetch` (+ optional `headers`, `params`) — see **`http-api`** |
-| HTTP(S) POST/PATCH/PUT/DELETE/GraphQL | `web_post` (+ `json`, `form`, `params`, `timeout_ms`) — see **`http-api`** |
-| OAuth-connected SaaS (Gmail, Sheets, …) | `composio_connect`, `composio_status`, `composio_action` |
+| HTTP(S) GET (public or Bearer) | `web_fetch` (+ optional `headers`, `params`, `save_to`) — see **`http-api`** |
+| CMS / single file upload (`/files`) | `web_upload` with `source_url` or `file_path` — never base64 in tool args |
+| Binary download to workspace | `web_fetch` with `save_to` (metadata-only; then `web_upload.file_path`) |
+| Mixed multipart (fields + file) | `web_post` with `multipart` array — see **`http-api`** |
+| HTTP(S) POST/PATCH/PUT/DELETE/GraphQL | `web_post` (+ `json`, `form`, `params`, `timeout_ms`) — not for CMS file bytes |
+| OAuth-connected SaaS (Gmail, LinkedIn, Slack, …) | `skill_view` **`composio-oauth`**, then `composio_status` → `composio_action`; never claim no access without status |
 | DOM click/type automation | MCP browser tools (if configured via `/mcp add`) — see **`imported-skill-compat`** |
 | JS-heavy page as markdown text | `web_fetch` (optional rendered-fetch provider when unauthenticated) |
 | Web search | `web_search` |
@@ -70,7 +73,7 @@ Three layers:
 ## Procedure
 
 1. Match the need to the table above before calling `run_shell`.
-2. **HTTP decision:** GET → `web_fetch` + `headers`; POST/GraphQL → `web_post`. Call `skill_view` **`http-api`** before first API call on an unfamiliar service. Never `run_shell` + axios for one-off HTTP.
+2. **HTTP decision:** GET/binary download → `web_fetch` (+ `save_to` for files); JSON/GraphQL writes → `web_post`; CMS `/files` → `web_upload`; mixed form+file → `web_post.multipart`. Call `skill_view` **`http-api`** before first API call. Never `run_shell` + axios for one-off HTTP. Never base64 bytes in tool args.
 3. On Nodebox, use `web_fetch`/`web_post` instead of curl; dedicated file tools instead of shell file ops.
 3. For cron, use `cron_register` — not host crontab or shell wrappers.
 
@@ -79,7 +82,7 @@ Three layers:
 | Python pattern | Status | Alternative |
 |---|---|---|
 | stdlib (`json`, `re`, `pathlib`, `csv`, …) | **Works** | — |
-| `urllib.request` / `webagent.http` | **Works** (proxy-backed via `/api/proxy`) | Prefer `web_fetch`/`web_post` for REST/CMS/GraphQL at agent level |
+| `urllib.request` / `webagent.http` | **Works** (proxy-backed via `/api/proxy`) | Prefer `web_fetch`/`web_post`/`web_upload` for REST/CMS at agent level; `http.upload_file` in scripts |
 | `zipfile` (create `.zip` bundles) | **Works** | No `create_archive` tool — use `run_python` + `zipfile`, output under `work/` or `projects/` |
 | `Pillow`, `numpy`, `pandas`, `scipy`, `scikit-learn` | **Works** (auto-loaded) | — |
 | `python-docx`, `python-pptx`, `openpyxl`, `pypdf`, `pdfplumber`, `reportlab` | **Works** (auto-loaded) | — |

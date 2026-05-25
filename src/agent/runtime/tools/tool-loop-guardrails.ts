@@ -15,6 +15,7 @@ export const IDEMPOTENT_TOOL_NAMES = new Set([
   "web_search",
   "web_fetch",
   "web_post",
+  "web_upload",
   "youtube_transcribe",
   "session_search",
   "memory_search",

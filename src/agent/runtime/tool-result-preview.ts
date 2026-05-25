@@ -4,6 +4,57 @@
  * generic `object{…}` hides payloads and causes read_file / snapshot loops.
  */
 
+export function looksLikeBinaryPayload(value: unknown): boolean {
+  const isBase64Like = (stripped: string): boolean => {
+    if (stripped.length < 2000) return false;
+    const sample = stripped.slice(0, 512);
+    if (!/^[A-Za-z0-9+/=\s]+$/.test(sample)) return false;
+    const compact = sample.replace(/\s/g, "");
+    if (compact.length < 2000 && stripped.length < 2000) return false;
+    const unique = new Set(compact).size;
+    if (unique < 8) return false;
+    if (/[+/=]/.test(compact)) return true;
+    return /[A-Z]/.test(compact) && /[a-z]/.test(compact) && /[0-9]/.test(compact) && unique >= 16;
+  };
+  const checkString = (s: string): boolean => {
+    const t = s.trim();
+    if (t.length < 2000) return false;
+    if (/^data:[^;]+;base64,/i.test(t.slice(0, 64))) return true;
+    return isBase64Like(t.replace(/\s/g, ""));
+  };
+  if (typeof value === "string") return checkString(value);
+  if (!value || typeof value !== "object") return false;
+  const obj = value as Record<string, unknown>;
+  if (typeof obj.base64 === "string" && checkString(obj.base64)) return true;
+  for (const key of ["text", "content", "body"]) {
+    const raw = obj[key];
+    if (typeof raw === "string" && checkString(raw)) return true;
+  }
+  return false;
+}
+
+export function binaryPayloadPreviewLabel(value: unknown): string | null {
+  if (!looksLikeBinaryPayload(value)) return null;
+  if (typeof value === "string") {
+    return `[binary ~${value.length} chars — use web_upload with source_url/file_path; do not inline base64]`;
+  }
+  if (value && typeof value === "object") {
+    const obj = value as Record<string, unknown>;
+    const path = typeof obj.path === "string" ? obj.path : null;
+    if (path) return `[binary payload — use web_upload or path ${path}]`;
+    const n =
+      typeof obj.bytes === "number"
+        ? obj.bytes
+        : typeof obj.base64 === "string"
+          ? obj.base64.length
+          : typeof obj.text === "string"
+            ? obj.text.length
+            : 0;
+    return `[binary ~${n} chars — use web_upload with source_url/file_path; do not inline base64]`;
+  }
+  return "[binary payload — use web_upload]";
+}
+
 function formatDirEntryLines(entries: unknown[]): string[] {
   const lines: string[] = [];
   for (const e of entries) {
@@ -136,6 +187,8 @@ export function extractHttpListDigest(result: unknown): { slugs: string[]; total
 }
 
 export function summarizeToolResultPreview(value: unknown) {
+  const binaryLabel = binaryPayloadPreviewLabel(value);
+  if (binaryLabel) return binaryLabel;
   if (value === null || value === undefined) return "null";
   if (typeof value === "string") {
     const compact = value.replace(/\s+/g, " ").trim();
@@ -145,6 +198,8 @@ export function summarizeToolResultPreview(value: unknown) {
   if (Array.isArray(value)) return `array(${value.length})`;
   if (typeof value === "object") {
     const obj = value as Record<string, unknown>;
+    const binaryField = binaryPayloadPreviewLabel(obj);
+    if (binaryField) return binaryField;
     for (const key of ["content", "text", "markdown", "transcript", "error"]) {
       const raw = obj[key];
       if (typeof raw === "string" && raw.trim()) {

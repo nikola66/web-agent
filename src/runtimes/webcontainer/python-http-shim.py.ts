@@ -1,8 +1,8 @@
 /** Python source injected once at Pyodide init — kept in TS for test visibility. */
 export const PYTHON_HTTP_SHIM = `
-import urllib.request as _ur, ssl as _ssl, sys, json, types
+import urllib.request as _ur, ssl as _ssl, sys, json, types, os, base64
 from urllib.parse import urlencode, urlparse, urlunparse, parse_qsl
-from webagent_http_bridge import request as _bridge_request
+from webagent_http_bridge import request as _bridge_request, uploadMultipart as _bridge_upload_multipart
 
 class _FakeSSLCtx:
     check_hostname = False
@@ -38,8 +38,22 @@ def _merge_params(url, params):
         query.update(dict(params))
     return urlunparse(parsed._replace(query=urlencode(query, doseq=True)))
 
-def _bridge_call(method, url, headers=None, body=None):
-    result = _bridge_request(method, str(url), dict(headers or {}), body)
+def _bridge_call(method, url, headers=None, body=None, body_encoding=None):
+    result = _bridge_request(method, str(url), dict(headers or {}), body, body_encoding)
+    if getattr(result, "error", None):
+        raise OSError(str(result.error))
+    status = int(getattr(result, "status", 0) or 0)
+    body_bytes = _to_bytes(getattr(result, "bodyBytes", None))
+    body_text = getattr(result, "bodyText", None)
+    if not body_bytes and body_text:
+        body_bytes = str(body_text).encode("utf-8", errors="replace")
+    if body_text is None:
+        body_text = body_bytes.decode("utf-8", errors="replace")
+    hdrs = dict(getattr(result, "headers", None) or {})
+    return status, hdrs, body_bytes, str(body_text)
+
+def _bridge_multipart(url, headers, parts):
+    result = _bridge_upload_multipart(str(url), dict(headers or {}), parts)
     if getattr(result, "error", None):
         raise OSError(str(result.error))
     status = int(getattr(result, "status", 0) or 0)
@@ -176,10 +190,49 @@ def _http_get(url, headers=None, params=None, timeout_ms=30000):
 def _http_post(url, json=None, data=None, headers=None, params=None, timeout_ms=30000):
     return _http_request("POST", url, headers=headers, params=params, json_body=json, data=data, timeout_ms=timeout_ms)
 
+def _http_upload_file(url, path, field_name="file", filename=None, content_type=None, headers=None):
+    p = str(path)
+    if not os.path.isfile(p):
+        raise OSError(f"upload_file: path not found: {p}")
+    with open(p, "rb") as fh:
+        raw = fh.read()
+    fn = str(filename or os.path.basename(p))
+    ct = str(content_type or "application/octet-stream")
+    parts = [{"name": str(field_name), "filename": fn, "contentType": ct, "contentBase64": base64.b64encode(raw).decode("ascii")}]
+    status, resp_headers, content, text = _bridge_multipart(url, headers, parts)
+    return _HttpResponse(status, text, content, resp_headers, url)
+
+def _http_post_multipart(url, fields=None, files=None, headers=None):
+    parts = []
+    for key, val in dict(fields or {}).items():
+        parts.append({"name": str(key), "text": str(val)})
+    for spec in list(files or []):
+        if not isinstance(spec, dict):
+            continue
+        name = str(spec.get("name") or spec.get("field") or "file")
+        fpath = spec.get("path") or spec.get("file_path")
+        if not fpath:
+            raise OSError("post_multipart file entry requires path")
+        fpath = str(fpath)
+        if not os.path.isfile(fpath):
+            raise OSError(f"post_multipart: path not found: {fpath}")
+        with open(fpath, "rb") as fh:
+            raw = fh.read()
+        parts.append({
+            "name": name,
+            "filename": str(spec.get("filename") or os.path.basename(fpath)),
+            "contentType": str(spec.get("content_type") or spec.get("contentType") or "application/octet-stream"),
+            "contentBase64": base64.b64encode(raw).decode("ascii"),
+        })
+    status, resp_headers, content, text = _bridge_multipart(url, headers, parts)
+    return _HttpResponse(status, text, content, resp_headers, url)
+
 _http_mod = types.ModuleType("webagent.http")
 _http_mod.get = _http_get
 _http_mod.post = _http_post
 _http_mod.request = _http_request
+_http_mod.upload_file = _http_upload_file
+_http_mod.post_multipart = _http_post_multipart
 sys.modules["webagent.http"] = _http_mod
 if "webagent" not in sys.modules:
     sys.modules["webagent"] = types.ModuleType("webagent")

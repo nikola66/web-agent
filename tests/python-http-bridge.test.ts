@@ -3,6 +3,8 @@ import assert from "node:assert/strict";
 import {
   proxyHttpRequest,
   setSyncHttpTransport,
+  buildMultipartBodyBase64,
+  proxyHttpUploadMultipart,
   CORS_PROXY_PATH,
 } from "../src/runtimes/webcontainer/python-http-bridge.ts";
 
@@ -53,6 +55,67 @@ test("proxyHttpRequest surfaces proxy-side errors", () => {
     const resp = proxyHttpRequest({ url: "https://api.example.com/x" });
     assert.equal(resp.error, "upstream blocked");
     assert.equal(resp.status, 502);
+  } finally {
+    setSyncHttpTransport(null);
+  }
+});
+
+test("proxyHttpRequest posts upstream payload with bodyEncoding base64", () => {
+  let captured: Record<string, unknown> | null = null;
+  setSyncHttpTransport((payload) => {
+    captured = payload;
+    return {
+      status: 200,
+      responseText: JSON.stringify({ status: 200, contentType: "text/plain", body: "ok" }),
+    };
+  });
+  try {
+    proxyHttpRequest({
+      method: "POST",
+      url: "https://api.example.com/upload",
+      body: "Ym9keQ==",
+      bodyEncoding: "base64",
+    });
+    assert.equal(captured?.bodyEncoding, "base64");
+    assert.equal(captured?.body, "Ym9keQ==");
+  } finally {
+    setSyncHttpTransport(null);
+  }
+});
+
+test("buildMultipartBodyBase64 builds file part", () => {
+  const built = buildMultipartBodyBase64([
+    { name: "file", filename: "a.bin", contentType: "application/octet-stream", contentBase64: "aGVsbG8=" },
+  ]);
+  assert.match(built.contentType, /multipart\/form-data/);
+  const decoded = Buffer.from(built.body, "base64").toString("latin1");
+  assert.match(decoded, /filename="a\.bin"/);
+  assert.match(decoded, /hello/);
+});
+
+test("proxyHttpUploadMultipart sends multipart via proxy", () => {
+  let captured: Record<string, unknown> | null = null;
+  setSyncHttpTransport((payload) => {
+    captured = payload;
+    return {
+      status: 200,
+      responseText: JSON.stringify({
+        status: 201,
+        contentType: "application/json",
+        body: '{"data":{"id":1}}',
+      }),
+    };
+  });
+  try {
+    const resp = proxyHttpUploadMultipart(
+      "https://cms.example.com/files",
+      { Authorization: "Bearer tok" },
+      [{ name: "file", filename: "x.jpg", contentBase64: "aGVsbG8=", contentType: "image/jpeg" }]
+    );
+    assert.equal(captured?.method, "POST");
+    assert.equal(captured?.bodyEncoding, "base64");
+    assert.match(String(captured?.headers && (captured.headers as Record<string, string>)["Content-Type"]), /multipart/);
+    assert.equal(resp.status, 201);
   } finally {
     setSyncHttpTransport(null);
   }

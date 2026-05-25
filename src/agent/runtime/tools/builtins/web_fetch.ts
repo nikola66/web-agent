@@ -14,7 +14,7 @@ export default defineTool({
   run: webFetchTool,
   emoji: "🌐",
   description:
-    "GET http(s) URL(s) — public pages or authenticated REST reads. Pass optional `headers` (e.g. Authorization Bearer). Procedure: skill_view **`http-api`**. Not for OAuth SaaS — use `composio_*`. Prefer over run_shell for HTTP GET. Batch up to 5 URLs via `urls`. Examples: " +
+    "GET http(s) URL(s) — public pages or authenticated REST reads. Binary download → `save_to` workspace path (metadata only; no inline bytes). Pass optional `headers` (e.g. Authorization Bearer). Procedure: skill_view **`http-api`**. Not for OAuth SaaS — use `composio_*`. Prefer over run_shell for HTTP GET. Batch up to 5 URLs via `urls`. Examples: " +
     JSON.stringify(WEB_FETCH_EXAMPLES[0]) +
     " | " +
     JSON.stringify(WEB_FETCH_EXAMPLES[1]),
@@ -36,6 +36,15 @@ export default defineTool({
         type: "object",
         additionalProperties: true,
         description: "Query params merged into url (Axios-style).",
+      },
+      save_to: {
+        type: "string",
+        description: "Save binary response to workspace path; returns bytes/path metadata only. Then pass path to web_upload.file_path — never read base64 into tool args.",
+      },
+      response_encoding: {
+        type: "string",
+        enum: ["base64"],
+        description: "Last resort for tiny binaries only. Prefer save_to + web_upload.file_path for CMS uploads.",
       },
     },
     additionalProperties: true,

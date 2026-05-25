@@ -12,6 +12,8 @@ import {
   focusToolNamesForIntent,
   buildSkillInstallContextPrefix,
   buildApiCallContextPrefix,
+  buildComposioSaasContextPrefix,
+  isComposioSaasIntent,
   skillBulkSaveAllUrlItemsFailed,
   webFetchTargetsRegistryUrl,
 } from "../dist/agent-runtime/turn-sequencing.js";
@@ -184,6 +186,20 @@ test("buildApiCallContextPrefix orders discovery before guessing resources", () 
   assert.match(prefix!, /discovery/i);
   assert.match(prefix!, /Do not retry/i);
   assert.doesNotMatch(prefix!, /\/collections/);
+});
+
+test("isComposioSaasIntent matches linkedin account queries", () => {
+  assert.equal(isComposioSaasIntent("What's happening on my LinkedIn today?"), true);
+  assert.equal(isComposioSaasIntent("list files in workspace"), false);
+});
+
+test("buildComposioSaasContextPrefix nudges composio_status before claiming no access", () => {
+  const prefix = buildComposioSaasContextPrefix("What's happening on my LinkedIn today?");
+  assert.ok(prefix);
+  assert.match(prefix!, /composio-oauth/);
+  assert.match(prefix!, /composio_status/);
+  assert.match(prefix!, /no access/i);
+  assert.match(prefix!, /Offer `composio_connect` only when status shows the app is missing/i);
 });
 
 test("skillBulkSaveAllUrlItemsFailed detects total URL failure batch", () => {

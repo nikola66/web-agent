@@ -75,6 +75,31 @@ export function isApiCallIntent(input) {
   return API_CALL_INTENT_RE.test(String(input || ""));
 }
 
+const COMPOSIO_SAAS_INTENT_RE = new RegExp(
+  [
+    "\\b(linkedin|gmail|google calendar|google sheets|hubspot|notion|slack|twitter|instagram|youtube)\\b",
+    "\\bmy\\s+(?:linkedin|gmail|inbox|calendar|slack|twitter|x|instagram|hubspot|notion)\\b",
+    "\\b(?:what'?s|whats)\\s+happening\\s+(?:on|in)\\s+my\\b",
+    "\\bconnected\\s+(?:app|account|integration)s?\\b",
+    "\\bcomposio\\b",
+  ].join("|"),
+  "i"
+);
+
+export function isComposioSaasIntent(input) {
+  return COMPOSIO_SAAS_INTENT_RE.test(String(input || ""));
+}
+
+/** One-shot prefix before OAuth SaaS / connected-app work. */
+export function buildComposioSaasContextPrefix(input) {
+  if (!isComposioSaasIntent(input)) return null;
+  return (
+    "[OAuth SaaS] User query may target a Composio-connected app. Call `skill_view` **`composio-oauth`**, then `composio_status` " +
+    "(optionally `{ app: \"linkedin\" }` etc.) before answering about access. If `connected_accounts` includes the app, use `composio_action` — " +
+    "do not tell the user to connect OAuth or claim 'no access' without checking status. Offer `composio_connect` only when status shows the app is missing."
+  );
+}
+
 /** One-shot prefix before REST/GraphQL work. */
 export function buildApiCallContextPrefix(input) {
   if (!isApiCallIntent(input)) return null;

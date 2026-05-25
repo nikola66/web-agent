@@ -83,6 +83,13 @@ print("hi")
   assert.deepEqual(pre.autoPackages, []);
 });
 
+test("does not warn on webagent import (runtime-injected)", () => {
+  const src = `import webagent.http as http\nprint(http.get("https://example.com").status_code)`;
+  const pre = preflightPython(src);
+  assert.equal(pre.block, undefined);
+  assert.ok(!pre.warnings.some((w) => /Unknown imports.*webagent/i.test(w)));
+});
+
 test("warns but does not block raw socket usage", () => {
   const src = `import socket\ns = socket.socket(socket.AF_INET, socket.SOCK_STREAM)`;
   const pre = preflightPython(src);

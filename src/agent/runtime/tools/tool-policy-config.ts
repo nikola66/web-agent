@@ -22,6 +22,7 @@ export const TOOL_GROUPS: Record<string, readonly string[]> = {
     "run_shell",
     "web_fetch",
     "web_post",
+    "web_upload",
     "web_search",
     "skill_list",
     "skill_view",

@@ -1,5 +1,5 @@
 import { PYODIDE_CDN } from "./pyodide-config.js";
-import { proxyHttpRequest } from "./python-http-bridge.js";
+import { proxyHttpRequest, proxyHttpUploadMultipart } from "./python-http-bridge.js";
 import { PYTHON_HTTP_SHIM } from "./python-http-shim.py.js";
 
 type PythonFilePayload = {
@@ -65,13 +65,46 @@ async function loadRuntime(): Promise<PyodideRuntime> {
       });
       const runtime = pyodide as PyodideRuntime;
       runtime.registerJsModule("webagent_http_bridge", {
-        request(method: string, url: string, headers: Record<string, string>, body: string | null) {
+        request(
+          method: string,
+          url: string,
+          headers: Record<string, string>,
+          body: string | null,
+          bodyEncoding?: "base64"
+        ) {
           const resp = proxyHttpRequest({
             method: String(method || "GET"),
             url: String(url || ""),
             headers: headers && typeof headers === "object" ? headers : {},
             body: body ?? null,
+            bodyEncoding,
           });
+          return {
+            status: resp.status,
+            statusText: resp.statusText,
+            contentType: resp.contentType,
+            headers: resp.headers,
+            bodyText: resp.bodyText,
+            bodyBytes: resp.bodyBytes,
+            error: resp.error ?? null,
+          };
+        },
+        uploadMultipart(
+          url: string,
+          headers: Record<string, string>,
+          parts: Array<{
+            name: string;
+            text?: string;
+            filename?: string;
+            contentType?: string;
+            contentBase64?: string;
+          }>
+        ) {
+          const resp = proxyHttpUploadMultipart(
+            String(url || ""),
+            headers && typeof headers === "object" ? headers : {},
+            parts
+          );
           return {
             status: resp.status,
             statusText: resp.statusText,

@@ -3,12 +3,32 @@ name: HTTP API
 description: Use when calling REST or GraphQL APIs with web_fetch/web_post — auth headers, query params, GraphQL shape, discovery order, and reading error bodies.
 version: 1.0.0
 category: bundled
-primary-tools: [web_fetch, web_post]
-tags: [rest, graphql, api, web_fetch, web_post, bearer, cms, headers, discovery]
+primary-tools: [web_fetch, web_post, web_upload]
+tags: [rest, graphql, api, web_fetch, web_post, web_upload, bearer, cms, headers, discovery, multipart, file upload]
 triggers: [graphql, REST API, bearer token, web_post, authenticated fetch, api call, authorization header, CMS, list collections, resource count, metadata endpoint]
 ---
 
-## Tool contract (read first)
+## When web_post vs web_upload (read first)
+
+**Invariant:** bytes move runtime → proxy → upstream. You see metadata (`bytes`, `path`, `file_id`) — never base64 blobs in tool arguments or chat.
+
+| Situation | Tool |
+|-----------|------|
+| JSON/GraphQL REST write | `web_post` (`body`/`json`/`form`) |
+| CMS `/files` or single file upload | `web_upload` (`source_url` **or** `file_path`) |
+| Mixed form fields + file(s) | `web_post` with `multipart` array |
+| Download binary to workspace | `web_fetch` with `save_to` |
+| Python script file upload | `webagent.http.upload_file` inside `run_python` |
+
+**Anti-pattern (causes 240s timeouts):** `web_fetch` binary → base64 in `web_post` body → `read_file` snapshot loop. Stop and use `web_upload.file_path` or `source_url` instead.
+
+### Directus-style publish (3 steps)
+
+1. **Upload file** — `web_upload` to `/files` with `source_url` or `file_path` (Telegram inbox paths work as `file_path`).
+2. **Link record** — `web_post` PATCH the item with returned file id (`data.id`).
+3. **Publish** (if needed) — `web_post` PATCH status field per imported skill.
+
+## Tool contract
 
 Canonical procedure for **REST GET** (`web_fetch`) and **HTTP writes** (`web_post`: POST/PATCH/PUT/DELETE). Do not use `run_shell` + axios for one-off API calls.
 
@@ -19,6 +39,9 @@ Canonical procedure for **REST GET** (`web_fetch`) and **HTTP writes** (`web_pos
 | **PATCH/PUT** REST update | `web_post` | `url`, `body`/`json`, `method` (`"PATCH"` or `"PUT"`); optional `headers`, `params` |
 | **DELETE** REST resource | `web_post` | `url`, `method`: `"DELETE"`; optional `headers`, `params` (body optional) |
 | **Form POST** (OAuth, urlencoded) | `web_post` | `url`, `form` object; optional `headers` |
+| **CMS / file upload** (multipart) | `web_upload` | `upload_url`, `source_url` **or** `file_path`; optional `headers`, `field_name`, `filename` |
+| **Mixed multipart** (fields + file) | `web_post` | `url`, `multipart` array with `text` / `file_path` / `source_url` per field |
+| **Binary download to workspace** | `web_fetch` | `url`, `save_to` workspace path (metadata-only result) |
 | Batch public GET (≤5 URLs) | `web_fetch` | `urls` array; shared `headers`, `params` |
 | Secrets | `headers.Authorization` (or API-key header docs specify) | Never in URL query; prefer Settings/vault over `memory_save` |
 
@@ -29,9 +52,10 @@ Canonical procedure for **REST GET** (`web_fetch`) and **HTTP writes** (`web_pos
 | Context | Use |
 |---------|-----|
 | Agent one-off REST/GraphQL call | `web_fetch` (GET) or `web_post` (writes/GraphQL) |
-| Reusable Python skill script | `import webagent.http as http` inside `run_python` |
+| CMS / featured image / file to `/files` | `web_upload` with `source_url` or `file_path` — **never base64 in tool args** |
+| Reusable Python skill script | `import webagent.http as http` inside `run_python`; files → `http.upload_file` |
 | Legacy `urllib.request` in imported `.py` | Works (proxy-patched); prefer `webagent.http` for new code |
-| OAuth SaaS with Composio connector | `composio_action` — not raw `web_post` without setup |
+| OAuth SaaS with Composio connector | `skill_view` **`composio-oauth`**, then `composio_status` — use `composio_action` when connected; not raw `web_post` |
 | `requests` / `httpx` in Pyodide | Avoid — may JsProxy-fail; use agent tools or `webagent.http` |
 
 ## When to Use
@@ -96,13 +120,54 @@ To update an existing resource (CMS item, record by id):
 | Delete | `method`: `"DELETE"` — body optional |
 | Form / OAuth token | `form`: `{ "grant_type": "...", ... }` — auto urlencoded |
 | Large CMS payload | `timeout_ms`: 180000 (up to 600000) |
-| Binary upload | `body_encoding`: `"base64"` with base64 `body` |
+| Binary upload (avoid) | Do **not** pass base64 in `body` — use `web_upload` or `web_post.multipart` with `file_path`/`source_url` |
 
 Do not POST to `/resources/{slug}/{id}` to update — use PATCH/PUT on that path.
 
-## GraphQL patterns (`web_post`)
+## File uploads (`web_upload`)
 
-Body via **`body`** (string), **`json`** (object), or **`form`** (urlencoded fields):
+**Never put image/binary bytes or base64 in tool arguments** — runtime fetches or reads files server-side.
+
+Directus / generic CMS `/files`:
+
+```json
+{
+  "upload_url": "https://cms.example.com/files",
+  "headers": { "Authorization": "Bearer <token>" },
+  "field_name": "file",
+  "filename": "hero.jpg",
+  "content_type": "image/jpeg",
+  "source_url": "https://images.example.com/hero.jpg"
+}
+```
+
+From workspace (after `web_fetch` with `save_to`, or a generated asset):
+
+```json
+{
+  "upload_url": "https://cms.example.com/files",
+  "headers": { "Authorization": "Bearer <token>" },
+  "file_path": "projects/images/hero.jpg",
+  "filename": "hero.jpg"
+}
+```
+
+Then PATCH the record with the returned file id (`data.id` on Directus).
+
+Mixed multipart (custom API) via `web_post`:
+
+```json
+{
+  "url": "https://api.example.com/upload",
+  "multipart": [
+    { "name": "title", "text": "Hero" },
+    { "name": "file", "file_path": "projects/images/hero.jpg", "filename": "hero.jpg", "content_type": "image/jpeg" }
+  ],
+  "headers": { "Authorization": "Bearer <token>" }
+}
+```
+
+## GraphQL patterns (`web_post`)
 
 ```json
 {

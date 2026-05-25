@@ -12,7 +12,7 @@ export default defineTool({
   emoji: "🔐",
   toolGroup: "composio",
   description:
-    "Create a Composio hosted auth link for one app. Requires `WEBAGENT_COMPOSIO_API_KEY` and an `auth_config_id` (or env `WEBAGENT_COMPOSIO_AUTH_CONFIG_<APP>`). Return the `redirect_url` for the user to approve OAuth/API auth. Examples: " +
+    "Start OAuth for an app only when `composio_status` shows it is not in `connected_accounts`. Reuses existing connections when present. Requires `WEBAGENT_COMPOSIO_API_KEY` and an `auth_config_id` (or env `WEBAGENT_COMPOSIO_AUTH_CONFIG_<APP>`). Return the `redirect_url` for the user to approve OAuth/API auth. Examples: " +
     JSON.stringify(EXAMPLES[0]) +
     " | " +
     JSON.stringify(EXAMPLES[1]),

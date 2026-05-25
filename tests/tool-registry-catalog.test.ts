@@ -50,6 +50,7 @@ const EXPECTED_TOOLS = [
   "vision_analyze",
   "web_fetch",
   "web_post",
+  "web_upload",
   "web_search",
   "wiki_search",
   "wiki_setup",
