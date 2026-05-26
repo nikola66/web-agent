@@ -123,6 +123,9 @@ export function resolvePolicyToolNames(
   const denied = expandPolicyEntries(policy?.deny);
   for (const name of denied) allowed.delete(name);
   allowed = applyAutoRules(allowed, policy || {}, env);
+  for (const name of allNames) {
+    if (String(name).startsWith("mcp_")) allowed.add(name);
+  }
   return [...allowed].sort();
 }
 

@@ -56,6 +56,13 @@ test("canUnlockTool permits mcp deferred tools", () => {
   assert.equal(canUnlockTool("mcp_github_create_issue", all, DEFAULT_TOOL_POLICY, {}), true);
 });
 
+test("default policy always includes registered mcp_* tools", () => {
+  const all = [...Object.values(TOOL_GROUPS).flat(), "mcp_hub_items_list"];
+  const policyNames = resolvePolicyToolNames(all, DEFAULT_TOOL_POLICY, {});
+  assert.ok(policyNames.includes("mcp_hub_items_list"));
+  assert.ok(!policyNames.includes("wiki_search"));
+});
+
 test("resetToolPolicyCacheForTest clears cached policy", () => {
   resetToolPolicyCacheForTest();
   assert.doesNotThrow(() => resetToolPolicyCacheForTest());

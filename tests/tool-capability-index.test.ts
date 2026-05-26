@@ -41,6 +41,8 @@ test("briefToolDescription uses first sentence within max chars", () => {
 });
 
 test("every builtin appears in index when policy allows all", () => {
+  const prevBudget = process.env.WEBAGENT_TOOL_INDEX_CHAR_BUDGET;
+  process.env.WEBAGENT_TOOL_INDEX_CHAR_BUDGET = "50000";
   const catalog = mockCatalog(ALL_BUILTIN_NAMES);
   const block = buildToolCapabilityIndexBlock({
     catalog,
@@ -53,11 +55,16 @@ test("every builtin appears in index when policy allows all", () => {
       []
     ),
   });
-  for (const name of ALL_BUILTIN_NAMES) {
-    assert.match(
-      block,
-      new RegExp(`\\[(?:active|deferred)\\] ${name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`)
-    );
+  try {
+    for (const name of ALL_BUILTIN_NAMES) {
+      assert.match(
+        block,
+        new RegExp(`\\[(?:active|deferred)\\] ${name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`)
+      );
+    }
+  } finally {
+    if (prevBudget === undefined) delete process.env.WEBAGENT_TOOL_INDEX_CHAR_BUDGET;
+    else process.env.WEBAGENT_TOOL_INDEX_CHAR_BUDGET = prevBudget;
   }
 });
 
@@ -95,6 +102,25 @@ test("policy filter omits denied-by-default tools", () => {
   });
   assert.doesNotMatch(block, /wiki_search/);
   assert.doesNotMatch(block, /composio_action/);
+});
+
+test("MCP tools appear in index under default policy without explicit allow group", () => {
+  const mcpName = "mcp_demo_server_items_list";
+  const catalog = mockCatalog(["read_file"], {
+    [mcpName]: { description: "[MCP:demo-server] List items." },
+  });
+  const policyNames = resolvePolicyToolNames(
+    ["read_file", mcpName],
+    DEFAULT_TOOL_POLICY,
+    {}
+  );
+  const block = buildToolCapabilityIndexBlock({
+    catalog,
+    policyToolNames: policyNames,
+    activeToolNames: ["read_file"],
+  });
+  assert.match(block, /## MCP \(demo-server\)/);
+  assert.match(block, new RegExp(`\\[deferred\\] ${mcpName}`));
 });
 
 test("MCP tools grouped under server header", () => {

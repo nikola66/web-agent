@@ -144,13 +144,20 @@ export function buildToolCapabilityIndexBlock(opts: BuildToolCapabilityIndexOpts
   const policySet = new Set(
     (opts.policyToolNames || []).map((n) => String(n || "").trim()).filter(Boolean)
   );
+  for (const name of Object.keys(catalog)) {
+    if (name.startsWith("mcp_")) policySet.add(name);
+  }
   const active = new Set(
     (opts.activeToolNames || []).map((n) => String(n || "").trim()).filter(Boolean)
   );
 
+  const mcpCount = Object.keys(catalog).filter((n) => n.startsWith("mcp_") && catalog[n]).length;
   const lines: string[] = [
     "# Tool capability index",
     "All tools below exist in this agent. **Active** = callable now. **Deferred** = use `tool_search` then `tool_activate` before calling.",
+    mcpCount
+      ? `**MCP:** ${mcpCount} registered tool(s) under ## MCP below (\`mcp_*\` integrations). \`list_dir\`/\`find_files\`/\`tree\` are built-in browse aliases — not MCP.`
+      : "**MCP:** none registered yet — `/mcp use <url>` then `/reload-mcp` (browser tab open).",
   ];
   const budget = { remaining: toolIndexCharBudget() - lines.join("\n").length - 2 };
 
