@@ -16,7 +16,7 @@ import { logDebugEvent } from "../logging/debug-log.js";
 import * as memoryModule from "../memory/index.js";
 import { memoryPath } from "../memory/sql.js";
 import { createTimeoutController } from "./context.js";
-import { parseTinyFishFetchPayload } from "./tinyfish-fetch.js";
+import { parseTinyFishFetchPayload, spaShellPageRecoveryHint } from "./tinyfish-fetch.js";
 import { expandSkillBulkSaveArgs } from "./skill-bulk-args.js";
 import {
   buildCronListSchedulingMeta,
@@ -895,12 +895,14 @@ async function webFetchReadableFromProxy(url, ctx, headers: Record<string, strin
   } else {
     readable = text;
   }
+  const recovery_hint = spaShellPageRecoveryHint(readable, url);
   return {
     ok: true,
     url,
     provider: "proxy-fallback",
     content_type: contentType,
     text: readable,
+    ...(recovery_hint ? { recovery_hint } : {}),
     ...(truncated ? { truncated, truncated_at_chars } : {}),
   };
 }
@@ -979,7 +981,14 @@ async function webFetchOne(url: string, ctx, headers: Record<string, string> = {
   if (provider && hasProviderApiKey(provider, ctx)) {
     try {
       const text = await browserAgentFetch(provider, url, ctx);
-      return { ok: true, url, provider: provider.id, text };
+      const recovery_hint = spaShellPageRecoveryHint(text, url);
+      return {
+        ok: true,
+        url,
+        provider: provider.id,
+        text,
+        ...(recovery_hint ? { recovery_hint } : {}),
+      };
     } catch (err) {
       await logDebugEvent("web_fetch_provider_fallback_proxy", {
         providerId: provider.id,

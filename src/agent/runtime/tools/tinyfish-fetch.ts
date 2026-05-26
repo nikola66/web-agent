@@ -3,6 +3,35 @@
  * @see https://docs.tinyfish.ai/fetch-api
  */
 
+const SPA_JS_SHELL_RE =
+  /doesn'?t work without javascript|please enable\b.*javascript|requires javascript enabled|javascript is required/i;
+
+/** HTTP 200 + "enable JavaScript" HTML (Directus admin, SPAs) — not outage; APIs may still work. */
+export function spaShellPageRecoveryHint(text: unknown, url?: string): string | undefined {
+  const t = String(text || "").trim();
+  if (!t || t.length > 12_000 || !SPA_JS_SHELL_RE.test(t)) return undefined;
+
+  let hostNote =
+    "HTTP 200 returned a JS-only app shell (TinyFish markdown cannot execute JS) — the host is usually reachable, not down. ";
+  try {
+    const u = new URL(String(url || ""));
+    if (/directus/i.test(t) || /\/admin\b/i.test(u.pathname)) {
+      hostNote =
+        "Directus (and similar CMS admin UIs) return this HTML at HTTP 200 when fetched as a page — the service is usually up. ";
+    }
+    if (/\/items\/|\/collections\/|\/graphql|\/mcp\b|\/server\/|\/auth\//i.test(u.pathname)) {
+      return (
+        `${hostNote}This URL looks like an API path but returned HTML — add Authorization (Bearer) on web_fetch/web_post, or /mcp for Directus MCP. Do not treat HTTP 200 here as unreachable or retry without auth.`
+      );
+    }
+  } catch {
+    /* ignore bad url */
+  }
+  return (
+    `${hostNote}Use documented REST/API paths with Authorization headers (web_fetch/web_post), not the admin or marketing page URL.`
+  );
+}
+
 export function normalizeTinyFishUrlKey(u) {
   try {
     const x = new URL(String(u || ""));

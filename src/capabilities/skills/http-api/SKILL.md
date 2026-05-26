@@ -100,6 +100,16 @@ Canonical procedure for **REST GET** (`web_fetch`) and **HTTP writes** (`web_pos
 
 JSON responses return `data` + `status`. HTML returns readable `text`.
 
+### TinyFish markdown vs API (Directus and other SPAs)
+
+When `web_fetch` uses TinyFish (default when no `headers`) and markdown returns a **"JavaScript required"** page (Directus admin often shows: *"Directus doesn't work without JavaScript enabled"*):
+
+- **HTTP 200 means the host responded** — not outage, not "unreachable", and not proof the REST API is broken.
+- That body is the **non-API UI shell** (no JS in TinyFish). Do **not** loop on the same admin/root URL or declare the site down.
+- **Do instead:** call documented REST paths (`/items/…`, `/collections/…`, `/server/info`, …) with `headers.Authorization: Bearer <token>`, `web_post` for writes, or `/mcp use <url>/mcp` for Directus MCP.
+
+Authenticated GET always passes `headers` → routes via `/api/proxy` (JSON), not TinyFish markdown.
+
 ## REST updates (`web_post` + method)
 
 To update an existing resource (CMS item, record by id):

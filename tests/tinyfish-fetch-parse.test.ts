@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import {
   normalizeTinyFishUrlKey,
   parseTinyFishFetchPayload,
+  spaShellPageRecoveryHint,
 } from "../dist/agent-runtime/tools/tinyfish-fetch.js";
 
 test("normalizeTinyFishUrlKey strips hash and trailing slash on path", () => {
@@ -66,6 +67,30 @@ test("parseTinyFishFetchPayload resolves errors by URL", () => {
   assert.match(r.error, /fetch_error/);
   assert.match(r.error, /target\.example/);
   assert.equal(r.errorCode, "fetch_error");
+});
+
+test("spaShellPageRecoveryHint flags Directus JS shell at HTTP 200", () => {
+  const text =
+    "We're sorry but Directus doesn't work without JavaScript enabled. Please enable it to continue.";
+  const hint = spaShellPageRecoveryHint(text, "https://hub.aratech.ae/admin");
+  assert.ok(hint);
+  assert.match(hint, /HTTP 200/);
+  assert.match(hint, /not down|usually up/i);
+  assert.match(hint, /Authorization|Bearer|web_fetch/i);
+});
+
+test("spaShellPageRecoveryHint nudges auth when API path returns HTML shell", () => {
+  const hint = spaShellPageRecoveryHint(
+    "Please enable JavaScript to continue.",
+    "https://hub.aratech.ae/items/blog_posts"
+  );
+  assert.ok(hint);
+  assert.match(hint, /API path/i);
+  assert.match(hint, /not treat HTTP 200 here as unreachable/i);
+});
+
+test("spaShellPageRecoveryHint ignores normal markdown", () => {
+  assert.equal(spaShellPageRecoveryHint("# Hello\n\nReal article body.", "https://blog.example/post"), undefined);
 });
 
 test("parseTinyFishFetchPayload uses single-error fallback", () => {

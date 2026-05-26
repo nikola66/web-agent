@@ -14,7 +14,7 @@ export default defineTool({
   run: webFetchTool,
   emoji: "🌐",
   description:
-    "GET http(s) URL(s) — public pages or authenticated REST reads. Binary download → `save_to` workspace path (metadata only; no inline bytes). Pass optional `headers` (e.g. Authorization Bearer). Procedure: skill_view **`http-api`**. Not for OAuth SaaS — use `composio_*`. Prefer over run_shell for HTTP GET. Batch up to 5 URLs via `urls`. Examples: " +
+    "GET http(s) URL(s) — public pages or authenticated REST reads. Binary download → `save_to` workspace path (metadata only; no inline bytes). Pass optional `headers` (e.g. Authorization Bearer) for API JSON; without headers TinyFish markdown may return JS-only SPA shells at HTTP 200 (e.g. Directus admin) — that is not outage; use API paths + auth (skill_view **`http-api`**). Not for OAuth SaaS — use `composio_*`. Prefer over run_shell for HTTP GET. Batch up to 5 URLs via `urls`. Examples: " +
     JSON.stringify(WEB_FETCH_EXAMPLES[0]) +
     " | " +
     JSON.stringify(WEB_FETCH_EXAMPLES[1]),
