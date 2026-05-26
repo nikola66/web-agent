@@ -117,8 +117,16 @@ const STREAM_CHUNK_TIMEOUT_MS = 45_000;
 const STREAM_STALL_FLOOR_MS = 1_000;
 const STREAM_TOTAL_TIMEOUT_MS = Math.max(
   LLM_REQUEST_TIMEOUT_MS,
-  Number(process.env.WEBAGENT_STREAM_TOTAL_TIMEOUT_MS) || 240_000
+  Number(process.env.WEBAGENT_STREAM_TOTAL_TIMEOUT_MS) ||
+    Number(process.env.WEBAGENT_IPC_STREAM_TIMEOUT_MS) ||
+    240_000
 );
+
+export function getIpcLlmBodyMaxBytes() {
+  const n = Number(process.env.WEBAGENT_IPC_LLM_BODY_MAX_BYTES);
+  if (Number.isFinite(n) && n >= 100_000) return Math.floor(n);
+  return 3_000_000;
+}
 
 const HTTP_RETRY_MAX_ATTEMPTS = Math.max(1, Math.min(8, Number(process.env.WEBAGENT_HTTP_MAX_ATTEMPTS) || 3));
 const HTTP_RETRY_BASE_MS = Math.max(50, Number(process.env.WEBAGENT_HTTP_RETRY_BASE_MS) || 500);
@@ -477,6 +485,13 @@ export async function streamOpenAI(
   let res;
   let firstError = "";
   const serializedBody = JSON.stringify(withToolsBody);
+  const ipcBodyMaxBytes = getIpcLlmBodyMaxBytes();
+  if (useIpcStream && Buffer.byteLength(serializedBody, "utf8") > ipcBodyMaxBytes) {
+    throw new Error(
+      `LLM request body too large for IPC (${Buffer.byteLength(serializedBody, "utf8")} bytes, cap ${ipcBodyMaxBytes}). ` +
+        "Context grew too large mid-turn — use list_digest/result_ref from tool output, run /compact, or narrow the task; do not refetch full API collections."
+    );
+  }
   for (let httpAttempt = 0; httpAttempt < STREAM_HTTP_MAX_ATTEMPTS; httpAttempt++) {
     if (httpAttempt > 0) {
       const d = computeRetryDelay(httpAttempt - 1);

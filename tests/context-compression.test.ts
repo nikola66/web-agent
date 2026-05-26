@@ -8,6 +8,7 @@ import {
   compactHistory,
   extractNonStreamAssistantText,
   maybeCompactHistory,
+  pruneConversationForMidTurn,
   pruneMessagesForCompactionInput,
 } from "../dist/agent-runtime/context-compression.js";
 import {
@@ -295,6 +296,25 @@ test("adapter mirrors turn.js static runtime imports into .webagent", async () =
       `adapter must write ${runtimeImport} into .webagent`
     );
   }
+});
+
+test("pruneConversationForMidTurn collapses old tool JSON when above 80% window", () => {
+  const bigTool = "Tool results (compact JSON):\n" + JSON.stringify([{ tool: "web_fetch", result: { data: "x".repeat(4000) } }]);
+  const messages = [
+    { role: "system", content: "sys" },
+    { role: "user", content: "inspect blog" },
+    { role: "assistant", content: "fetching" },
+    { role: "user", content: bigTool },
+    { role: "assistant", content: "more work" },
+    { role: "user", content: bigTool.replace(/web_fetch/g, "web_fetch_2") },
+    { role: "assistant", content: "still going" },
+    { role: "user", content: "latest ask" },
+  ];
+  const pruned = pruneConversationForMidTurn(messages, { contextWindowTokens: 800 });
+  assert.equal(pruned.changed, true);
+  assert.ok(pruned.afterTokens < pruned.beforeTokens);
+  const middle = pruned.messages[3];
+  assert.match(String(middle?.content || ""), /\[web_fetch\]|pruned|Tool results/i);
 });
 
 test("adapter mirrors every tools/*.js and llm/*.js relative dependency into .webagent", async () => {

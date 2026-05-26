@@ -5,6 +5,7 @@ import {
   unwrapMemorySnapshotReadContent,
   unwrapSnapshotReadFileExecutions,
   spillInlineCharBudgetForToolResultItem,
+  decideToolResultCompression,
 } from "../dist/agent-runtime/memory/index.js";
 
 test("unwrapMemorySnapshotReadContent inlines nested web_fetch body", () => {
@@ -186,7 +187,7 @@ test("unwrapSnapshotReadFileExecutions inlines find_files paths from spilled sna
   assert.match(out[0].result.content, /src\/b\.ts/);
 });
 
-test("from_snapshot read_file gets spill budget large enough for unwrapped JSON", () => {
+test("from_snapshot read_file uses bounded inline budget not 224k boost", () => {
   const text = '"'.repeat(56_000);
   const item = {
     tool: "read_file",
@@ -200,10 +201,13 @@ test("from_snapshot read_file gets spill budget large enough for unwrapped JSON"
   };
   const budget = spillInlineCharBudgetForToolResultItem(item, 1200);
   const serialized = JSON.stringify(item.result, null, 2);
+  assert.ok(budget <= 48_000 + 1200);
   assert.ok(
-    serialized.length <= budget,
-    `expected serialized.length ${serialized.length} <= budget ${budget}`
+    serialized.length > budget,
+    `large unwrapped snapshot should exceed inline budget (${serialized.length} > ${budget})`
   );
+  const decision = decideToolResultCompression(item, 1200, 256_000);
+  assert.equal(decision.inline, false);
 });
 
 test("non-snapshot read_file keeps default small spill budget", () => {

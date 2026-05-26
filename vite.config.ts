@@ -234,9 +234,15 @@ function corsProxyGate() {
             headers,
             ...(upstreamBody != null ? { body: upstreamBody } : {}),
           });
-          const responseBody = binaryResponse
+          const PROXY_BODY_CAP = 100_000;
+          let responseBody = binaryResponse
             ? Buffer.from(await upstream.arrayBuffer()).toString("base64")
             : await upstream.text();
+          let truncated = false;
+          if (!binaryResponse && responseBody.length > PROXY_BODY_CAP) {
+            responseBody = responseBody.slice(0, PROXY_BODY_CAP);
+            truncated = true;
+          }
           res.statusCode = upstream.status;
           res.setHeader("content-type", upstream.headers.get("content-type") ?? "application/octet-stream");
           res.end(JSON.stringify({
@@ -245,6 +251,7 @@ function corsProxyGate() {
             body: responseBody,
             contentType: upstream.headers.get("content-type") ?? "",
             bodyEncoding: binaryResponse ? "base64" : undefined,
+            ...(truncated ? { truncated: true, truncated_at_chars: PROXY_BODY_CAP } : {}),
           }));
           logProxyDebug(req, CORS_PROXY_PATH, upstream.status);
         } catch (e) {

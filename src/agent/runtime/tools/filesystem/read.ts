@@ -9,7 +9,10 @@ import {
   normalizeWorkspaceRelativePath,
 } from "../../workspace-paths.js";
 import { errorMessage } from "../../utils.js";
-import { unwrapMemorySnapshotReadContent } from "../../memory/snapshots.js";
+import {
+  SNAPSHOT_READ_UNWRAP_MAX_CHARS,
+  unwrapMemorySnapshotReadContent,
+} from "../../memory/snapshots.js";
 import {
   isMemoryRunArchivePath,
   isMemorySnapshotSpillPath,
@@ -32,6 +35,12 @@ async function snapshotJsonPeers(absFilePath, limit = 44) {
     .slice(0, limit);
 }
 
+export function getReadFileMaxChars() {
+  const n = Number(process.env.WEBAGENT_READ_FILE_MAX_CHARS);
+  if (Number.isFinite(n) && n >= 1000) return Math.floor(n);
+  return SNAPSHOT_READ_UNWRAP_MAX_CHARS;
+}
+
 function formatReadFileSuccess(rel: string, content: string) {
   const unwrapped = isMemorySnapshotSpillPath(rel)
     ? unwrapMemorySnapshotReadContent(rel, content)
@@ -44,10 +53,22 @@ function formatReadFileSuccess(rel: string, content: string) {
       ...unwrapped,
     };
   }
+  const maxChars = getReadFileMaxChars();
+  const totalBytes = Buffer.byteLength(content, "utf8");
+  if (content.length > maxChars) {
+    return {
+      ok: true,
+      path: rel,
+      bytes: maxChars,
+      total_bytes: totalBytes,
+      content: `${content.slice(0, maxChars)}\n...[truncated at ${maxChars} chars; use grep or a narrower path]`,
+      content_truncated: true,
+    };
+  }
   return {
     ok: true,
     path: rel,
-    bytes: Buffer.byteLength(content, "utf8"),
+    bytes: totalBytes,
     content,
   };
 }

@@ -506,12 +506,21 @@ export function createChannelInboundHandler(deps) {
         }, RESEARCH_PROGRESS_MS);
       }
 
+      const channelMaxRounds =
+        channel === "telegram"
+          ? Math.max(
+              1,
+              Number(process.env.WEBAGENT_MAX_AGENT_ROUNDS_TELEGRAM) || 30
+            )
+          : undefined;
+
       try {
         const tail = await agentTurn(history, cfg, {
           runId,
           input: trimmed,
           ask: null,
           autoApprove: true,
+          ...(channelMaxRounds != null ? { maxAgentRounds: channelMaxRounds } : {}),
           services: typeof sendDocument === "function"
             ? { sendDocument: (doc) => sendDocument(chatId, doc) }
             : {},

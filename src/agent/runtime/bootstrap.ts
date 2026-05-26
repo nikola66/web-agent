@@ -79,7 +79,7 @@ import {
 } from "./startup-context.js";
 import {
   agentTurn,
-  createTurnMutex,
+  getSharedTurnMutex,
   abortCurrentTurn,
   subscribeActiveTurnAbort,
 } from "./turn.js";
@@ -168,7 +168,7 @@ export async function main() {
     });
   }
 
-  const turnMutex = createTurnMutex();
+  const turnMutex = getSharedTurnMutex();
   const heartbeatSkipOpts = { shouldSkipTick: () => turnMutex.isBusy(), cfg };
 
   const heartbeatRunTool = async (toolName, args) => {

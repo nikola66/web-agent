@@ -18,14 +18,18 @@ import { isMemorySnapshotSpillPath } from "./internal-paths.js";
 /** Same prefix as agent/context-compaction tool-result injection (must match exactly). */
 export const TOOL_RESULTS_COMPACT_PREFIX = "Tool results (compact JSON):\n";
 
-/** Max chars to inline when unwrapping read_file(memory/snapshots/*.json) to avoid spill ping-pong. */
+/** Max chars loaded from a spill file when unwrapping (file read cap). */
 export const SNAPSHOT_READ_UNWRAP_MAX_CHARS = 100_000;
+
+/** Max chars to inline an unwrapped snapshot read_file result into chat (env: WEBAGENT_SNAPSHOT_READ_INLINE_MAX_CHARS). */
+export function getSnapshotReadInlineMaxChars() {
+  const n = Number(process.env.WEBAGENT_SNAPSHOT_READ_INLINE_MAX_CHARS);
+  if (Number.isFinite(n) && n >= 2000) return Math.floor(n);
+  return 48_000;
+}
 
 /** Per-item inline budget for web_fetch/web_post JSON `data` (matches proxy body cap). */
 export const HTTP_TOOL_DATA_INLINE_BUDGET = 100_000;
-
-/** Extra room for JSON.stringify keys/quotes/escapes around unwrapped snapshot `content`. */
-export const SNAPSHOT_FROM_SNAPSHOT_INLINE_SLACK = 24_576;
 
 /**
  * Strip `result_ref` from compact tool-result lines when the spill file is gone (e.g. wiped disk,
@@ -314,13 +318,13 @@ export type TurnInlineBudgetState = {
 
 /**
  * Per-execution spill threshold for saveCompressedToolResults.
- * Unwrapped snapshot reads carry long `content`; the default inline cap would re-spill every round without a boosted budget below.
+ * Unwrapped snapshot reads use a bounded inline cap (`getSnapshotReadInlineMaxChars`); large bodies stay spilled.
  * @param {{ tool?: string; result?: Record<string, unknown> } | null | undefined} item
  */
 export function spillInlineCharBudgetForToolResultItem(item, inlineCharBudget = 48_000) {
   const capped = Math.max(200, Number(inlineCharBudget || 48_000));
   if (item?.tool === "read_file" && item?.result?.from_snapshot === true) {
-    return Math.max(capped, SNAPSHOT_READ_UNWRAP_MAX_CHARS * 2 + SNAPSHOT_FROM_SNAPSHOT_INLINE_SLACK);
+    return Math.max(capped, getSnapshotReadInlineMaxChars());
   }
   const tool = String(item?.tool || "");
   const res = item?.result;

@@ -217,6 +217,22 @@ function classifyFromMessage(message: string, statusHint: number | null): Omit<C
     };
   }
 
+  if (/LLM request body too large for IPC/i.test(message)) {
+    reason = "context_overflow";
+    retryable = false;
+    shouldCompress = true;
+    error_code = "ipc_body_too_large";
+    return {
+      reason,
+      retryable,
+      shouldCompress,
+      shouldFallback,
+      error_code,
+      hintBase:
+        "Conversation context is too large to send through the browser IPC bridge. Use compact tool summaries (list_digest, result_ref), run /compact or /clear, and avoid refetching full API payloads in one turn.",
+    };
+  }
+
   if (
     TIMEOUT_RE.test(message) ||
     statusHint === 408

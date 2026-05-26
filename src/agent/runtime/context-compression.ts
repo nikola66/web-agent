@@ -8,6 +8,9 @@ import { errorMessage } from "./utils.js";
 
 export const CONTEXT_COMPACTION_PREFIX = "[CONTEXT COMPACTION]";
 export const CONTEXT_COMPACTION_THRESHOLD_RATIO = 0.5;
+/** In-turn prune triggers when estimated prompt tokens exceed this fraction of the context window. */
+export const MID_TURN_PRUNE_THRESHOLD_RATIO = 0.8;
+const MID_TURN_MIN_TAIL_MESSAGES = 8;
 const MIN_TAIL_MESSAGES = 20;
 const TOOL_RESULT_PREFIX = "Tool results (compact JSON):";
 const LARGE_TOOL_RESULT_CHAR_LIMIT = 1500;
@@ -21,7 +24,7 @@ function contextWindowTokens(cfg) {
     : OPENROUTER_FREE_DEFAULT_CONTEXT_WINDOW;
 }
 
-function compactionThresholdTokens(cfg) {
+export function getCompactionThresholdTokens(cfg) {
   return Math.floor(contextWindowTokens(cfg) * CONTEXT_COMPACTION_THRESHOLD_RATIO);
 }
 
@@ -306,7 +309,7 @@ function unchanged(messages, beforeTokens, reason, extra = {}) {
 async function compactMessages(messages, cfg, options = {}) {
   const input = Array.isArray(messages) ? messages : [];
   const force = Boolean(options.force);
-  const thresholdTokens = compactionThresholdTokens(cfg);
+  const thresholdTokens = getCompactionThresholdTokens(cfg);
   const beforeTokens = estimateMessagesTokens(input);
   if (!force && beforeTokens < thresholdTokens) {
     return unchanged(input, beforeTokens, "below_threshold");
@@ -405,4 +408,62 @@ export async function maybeCompactHistory(messages, cfg, options = {}) {
 
 export async function compactHistory(messages, cfg, options = {}) {
   return compactMessages(messages, cfg, { ...options, force: true });
+}
+
+export function midTurnPruneThresholdTokens(cfg) {
+  return Math.floor(contextWindowTokens(cfg) * MID_TURN_PRUNE_THRESHOLD_RATIO);
+}
+
+/**
+ * Synchronous in-turn prune: collapse older tool-result JSON without an LLM summary pass.
+ * Preserves system, head exchanges, and the latest tail (including the most recent tool round).
+ */
+export function pruneConversationForMidTurn(messages, cfg) {
+  const input = Array.isArray(messages) ? messages : [];
+  const beforeTokens = estimateMessagesTokens(input);
+  const threshold = midTurnPruneThresholdTokens(cfg);
+  if (beforeTokens < threshold) {
+    return {
+      messages: input,
+      changed: false,
+      beforeTokens,
+      afterTokens: beforeTokens,
+      reason: "below_threshold",
+    };
+  }
+
+  const systemMessage = input.find((message) => message?.role === "system") || null;
+  const nonSystem = input.filter((message) => message?.role !== "system");
+  const headCount = firstExchangeCount(nonSystem);
+  const tailStart = Math.max(headCount, nonSystem.length - MID_TURN_MIN_TAIL_MESSAGES);
+  if (tailStart <= headCount) {
+    const pruned = pruneMessagesForCompactionInput(input);
+    const afterTokens = estimateMessagesTokens(pruned);
+    return {
+      messages: pruned,
+      changed: afterTokens < beforeTokens,
+      beforeTokens,
+      afterTokens,
+      reason: "tool_result_prune_only",
+    };
+  }
+
+  const head = nonSystem.slice(0, headCount);
+  const middle = nonSystem.slice(headCount, tailStart);
+  const tail = nonSystem.slice(tailStart);
+  const prunedMiddle = pruneMessagesForCompactionInput(middle);
+  const nextMessages = [
+    ...(systemMessage ? [systemMessage] : []),
+    ...head,
+    ...prunedMiddle,
+    ...tail,
+  ];
+  const afterTokens = estimateMessagesTokens(nextMessages);
+  return {
+    messages: nextMessages,
+    changed: true,
+    beforeTokens,
+    afterTokens,
+    reason: "head_tail_prune",
+  };
 }

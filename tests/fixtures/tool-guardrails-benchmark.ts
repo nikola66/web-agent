@@ -243,7 +243,7 @@ export function buildToolGuardrailsBenchmarkCases(): BenchmarkCase[] {
 
   for (let i = 0; i < CATEGORY_COUNTS.exact_failure_warn; i++) {
     const reps = 2 + (i % 7);
-    const config = mergeConfig();
+    const config = mergeConfig({ hardStopEnabled: false });
     const tool = ["web_search", "run_shell", "web_fetch", "grep", "memory_search"][i % 5]!;
     const args =
       tool === "run_shell"
@@ -270,7 +270,7 @@ export function buildToolGuardrailsBenchmarkCases(): BenchmarkCase[] {
         expectAfter: expectExactAfter(r, config),
       });
     }
-    push({ category: "exact_failure_warn", steps, expectHalt: false });
+    push({ category: "exact_failure_warn", config: { hardStopEnabled: false }, steps, expectHalt: false });
   }
 
   for (let i = 0; i < CATEGORY_COUNTS.exact_failure_block; i++) {
@@ -301,7 +301,7 @@ export function buildToolGuardrailsBenchmarkCases(): BenchmarkCase[] {
 
   for (let i = 0; i < CATEGORY_COUNTS.same_tool_warn; i++) {
     const warnAfter = 2 + (i % 3);
-    const config = mergeConfig({ sameToolFailureWarnAfter: warnAfter });
+    const config = mergeConfig({ sameToolFailureWarnAfter: warnAfter, hardStopEnabled: false });
     const reps = warnAfter + 1;
     const tool = ["run_shell", "write_file", "apply_patch"][i % 3]!;
     const steps: BenchmarkStep[] = [];
@@ -321,7 +321,7 @@ export function buildToolGuardrailsBenchmarkCases(): BenchmarkCase[] {
     }
     push({
       category: "same_tool_warn",
-      config: { sameToolFailureWarnAfter: warnAfter },
+      config: { sameToolFailureWarnAfter: warnAfter, hardStopEnabled: false },
       steps,
     });
   }
@@ -344,7 +344,7 @@ export function buildToolGuardrailsBenchmarkCases(): BenchmarkCase[] {
   }
 
   for (let i = 0; i < CATEGORY_COUNTS.idempotent_no_progress_warn; i++) {
-    const config = mergeConfig();
+    const config = mergeConfig({ hardStopEnabled: false });
     const tool = [
       "read_file",
       "grep",
@@ -384,7 +384,7 @@ export function buildToolGuardrailsBenchmarkCases(): BenchmarkCase[] {
         expectAfter: expectNoProgressAfter(r, config),
       });
     }
-    push({ category: "idempotent_no_progress_warn", steps });
+    push({ category: "idempotent_no_progress_warn", config: { hardStopEnabled: false }, steps });
   }
 
   for (let i = 0; i < CATEGORY_COUNTS.idempotent_no_progress_block; i++) {
@@ -508,7 +508,11 @@ export function buildToolGuardrailsBenchmarkCases(): BenchmarkCase[] {
   }
 
   for (let i = 0; i < CATEGORY_COUNTS.mixed_workflow; i++) {
-    const config = mergeConfig({ sameToolFailureWarnAfter: 2, noProgressWarnAfter: 2 });
+    const config = mergeConfig({
+      sameToolFailureWarnAfter: 2,
+      noProgressWarnAfter: 2,
+      hardStopEnabled: false,
+    });
     const steps: BenchmarkStep[] = [
       {
         tool: "read_file",

@@ -223,11 +223,9 @@ export function processStdinChunk(text) {
   return out;
 }
 
-/**
- * Send a proxy request via IPC and wait for the adapter to fulfill it.
- * The adapter makes the actual fetch from the browser page context.
- */
-export function ipcProxyRequest(request, timeoutMs = 120_000) {
+const IPC_PROXY_TEXT_BODY_CAP = 100_000;
+
+function ipcProxyRequestBuffered(request, timeoutMs = 120_000) {
   const wait = Math.min(Math.max(Number(timeoutMs) || 120_000, 5_000), 600_000);
   return new Promise((resolve, reject) => {
     const id = String(++_nextId);
@@ -241,6 +239,39 @@ export function ipcProxyRequest(request, timeoutMs = 120_000) {
     process.stdout.write(
       `${IPC_PROXY_REQ_PREFIX}${id}>>>${JSON.stringify(request)}${IPC_PROXY_REQ_END}`
     );
+  });
+}
+
+/**
+ * Send a proxy request via IPC and wait for the adapter to fulfill it.
+ * Text responses stream through the adapter to avoid buffering multi-MB bodies in one JSON frame.
+ */
+export function ipcProxyRequest(request, timeoutMs = 120_000) {
+  const wait = Math.min(Math.max(Number(timeoutMs) || 120_000, 5_000), 600_000);
+  if (request?.binaryResponse) {
+    return ipcProxyRequestBuffered(request, wait);
+  }
+  let body = "";
+  let meta: { status?: number; statusText?: string; contentType?: string } = {};
+  return ipcProxyStreamRequest({ ...request, textBodyCap: IPC_PROXY_TEXT_BODY_CAP }, {
+    timeoutMs: wait,
+    onStart: (payload) => {
+      meta = payload as typeof meta;
+    },
+    onChunk: (chunk) => {
+      if (body.length >= IPC_PROXY_TEXT_BODY_CAP) return;
+      const room = IPC_PROXY_TEXT_BODY_CAP - body.length;
+      body += String(chunk || "").slice(0, room);
+    },
+  }).then(() => {
+    const truncated = body.length >= IPC_PROXY_TEXT_BODY_CAP;
+    return {
+      status: Number(meta.status ?? 0),
+      statusText: String(meta.statusText ?? ""),
+      contentType: String(meta.contentType ?? ""),
+      body,
+      ...(truncated ? { truncated: true, truncated_at_chars: IPC_PROXY_TEXT_BODY_CAP } : {}),
+    };
   });
 }
 

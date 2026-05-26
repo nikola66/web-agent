@@ -79,10 +79,6 @@ export const CHECKPOINTS_DIR = `${WS}/.webagent/checkpoints`;
 export const PLANS_DIR_REL = "plans";
 export const PLANS_DIR = `${WS}/${PLANS_DIR_REL}`;
 /** Auto-trim history when message count exceeds this threshold. */
-export const HISTORY_TRIM_THRESHOLD = 60;
-/** Keep this many recent non-system messages after trimming. */
-export const HISTORY_TRIM_KEEP = 40;
-
 export const CONTEXT_UPDATE_START = "<<<WEBAGENT_CONTEXT_UPDATE>>>";
 export const CONTEXT_UPDATE_END = "<<<END_WEBAGENT_CONTEXT_UPDATE>>>";
 export const USER_UPDATE_START = "<<<WEBAGENT_USER_UPDATE>>>";

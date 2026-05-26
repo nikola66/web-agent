@@ -1402,12 +1402,25 @@ export async function startWebAgent(options: AgentStartOptions): Promise<void> {
               }),
             });
             const data = await res.json();
+            const PROXY_BODY_CAP = 100_000;
+            let body = String(data?.body ?? "");
+            let truncated = Boolean(data?.truncated);
+            if (!data?.bodyEncoding && body.length > PROXY_BODY_CAP) {
+              body = body.slice(0, PROXY_BODY_CAP);
+              truncated = true;
+            }
             respPayload = JSON.stringify({
               status: Number(data?.status ?? res.status),
               statusText: String(data?.statusText ?? ""),
-              body: String(data?.body ?? ""),
+              body,
               contentType: String(data?.contentType ?? ""),
               bodyEncoding: data?.bodyEncoding,
+              ...(truncated
+                ? {
+                    truncated: true,
+                    truncated_at_chars: Number(data?.truncated_at_chars) || PROXY_BODY_CAP,
+                  }
+                : {}),
             });
           } catch (e) {
             respPayload = JSON.stringify({ error: String((e as Error)?.message ?? e) });
@@ -1438,6 +1451,7 @@ export async function startWebAgent(options: AgentStartOptions): Promise<void> {
               url: string;
               headers?: Record<string, string>;
               body?: string | null;
+              textBodyCap?: number;
             }>(reqBody);
             const proxyHeaders = withSubscriptionProfileHeader(profile.id, req.url, req.headers);
             const response = await fetch(req.url, {
@@ -1454,11 +1468,25 @@ export async function startWebAgent(options: AgentStartOptions): Promise<void> {
               },
               PROXY_STREAM_START_END
             );
+            const textBodyCap = Number(req.textBodyCap);
+            const streamCap =
+              Number.isFinite(textBodyCap) && textBodyCap > 0 ? Math.floor(textBodyCap) : 0;
+            let streamed = 0;
+            const writeCappedChunk = async (chunk: string) => {
+              if (!chunk) return;
+              if (!streamCap) {
+                await writeStreamEvent(PROXY_STREAM_CHUNK_PREFIX, { chunk }, PROXY_STREAM_CHUNK_END);
+                return;
+              }
+              const room = streamCap - streamed;
+              if (room <= 0) return;
+              const slice = chunk.slice(0, room);
+              streamed += slice.length;
+              await writeStreamEvent(PROXY_STREAM_CHUNK_PREFIX, { chunk: slice }, PROXY_STREAM_CHUNK_END);
+            };
             if (!response.body) {
               const text = await response.text().catch(() => "");
-              if (text) {
-                await writeStreamEvent(PROXY_STREAM_CHUNK_PREFIX, { chunk: text }, PROXY_STREAM_CHUNK_END);
-              }
+              await writeCappedChunk(text);
               await writeStreamEvent(PROXY_STREAM_END_PREFIX, { ok: true }, PROXY_STREAM_END_END);
               return;
             }
@@ -1467,14 +1495,13 @@ export async function startWebAgent(options: AgentStartOptions): Promise<void> {
             while (true) {
               const { done, value } = await reader.read();
               if (done) break;
+              if (streamCap && streamed >= streamCap) break;
               const chunk = decoder.decode(value, { stream: true });
-              if (chunk) {
-                await writeStreamEvent(PROXY_STREAM_CHUNK_PREFIX, { chunk }, PROXY_STREAM_CHUNK_END);
-              }
+              await writeCappedChunk(chunk);
             }
-            const tail = decoder.decode();
-            if (tail) {
-              await writeStreamEvent(PROXY_STREAM_CHUNK_PREFIX, { chunk: tail }, PROXY_STREAM_CHUNK_END);
+            if (!streamCap || streamed < streamCap) {
+              const tail = decoder.decode();
+              await writeCappedChunk(tail);
             }
             await writeStreamEvent(PROXY_STREAM_END_PREFIX, { ok: true }, PROXY_STREAM_END_END);
           } catch (e) {

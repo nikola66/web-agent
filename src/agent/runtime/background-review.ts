@@ -451,20 +451,22 @@ export async function runBackgroundReview({
   const capturedResults: Array<{ tool?: string; status?: string; error?: string; result?: unknown }> =
     [];
 
-  await runWithSkillWriteOrigin(writeOrigin, async () => {
-    const { agentTurn } = await import("./turn.js");
-    await agentTurn(reviewMessages, cfg, {
-      runId: `${runId}-review`,
-      input: prompt,
-      autoApprove: true,
-      quiet: true,
-      backgroundReview: true,
-      skipBackgroundReview: true,
-      allowedToolNames,
-      maxAgentRounds: BACKGROUND_REVIEW_MAX_ROUNDS,
-      onToolResults: (results) => {
-        capturedResults.push(...results);
-      },
+  const { agentTurn, getSharedTurnMutex } = await import("./turn.js");
+  await getSharedTurnMutex().run(async () => {
+    await runWithSkillWriteOrigin(writeOrigin, async () => {
+      await agentTurn(reviewMessages, cfg, {
+        runId: `${runId}-review`,
+        input: prompt,
+        autoApprove: true,
+        quiet: true,
+        backgroundReview: true,
+        skipBackgroundReview: true,
+        allowedToolNames,
+        maxAgentRounds: BACKGROUND_REVIEW_MAX_ROUNDS,
+        onToolResults: (results) => {
+          capturedResults.push(...results);
+        },
+      });
     });
   });
 

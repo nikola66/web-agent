@@ -62,9 +62,10 @@ test("hard stop blocks repeated exact failure before next execution", () => {
   assert.equal(blocked.code, "repeated_exact_failure_block");
 });
 
-test("same tool varying args warns without halting by default", () => {
+test("same tool varying args warns without halting when hard stop off", () => {
   const controller = new ToolCallGuardrailController({
     ...TOOL_LOOP_GUARDRAIL_DEFAULTS,
+    hardStopEnabled: false,
     sameToolFailureWarnAfter: 2,
     sameToolFailureHaltAfter: 3,
   });
@@ -120,9 +121,10 @@ test("hard stop halts same tool varying args failure streak", () => {
   assert.equal(halt.code, "same_tool_failure_halt");
 });
 
-test("idempotent no progress warns without blocking by default", () => {
+test("idempotent no progress warns without blocking when hard stop off", () => {
   const controller = new ToolCallGuardrailController({
     ...TOOL_LOOP_GUARDRAIL_DEFAULTS,
+    hardStopEnabled: false,
     noProgressWarnAfter: 2,
     noProgressBlockAfter: 2,
   });
@@ -172,10 +174,9 @@ test("toolGuardrailSyntheticResult encodes guardrail metadata", () => {
   assert.equal(payload.guardrail.code, "repeated_exact_failure_block");
 });
 
-test("snapshot read_file chain blocks on third memory/snapshots read", () => {
+test("snapshot read_file chain blocks on second memory/snapshots read", () => {
   const controller = new ToolCallGuardrailController();
   const args = { path: "memory/snapshots/run_x_r1_0.json" };
-  assert.equal(controller.beforeCall("read_file", args).action, "allow");
   assert.equal(controller.beforeCall("read_file", args).action, "allow");
   const blocked = controller.beforeCall("read_file", args);
   assert.equal(blocked.action, "block");
@@ -183,14 +184,25 @@ test("snapshot read_file chain blocks on third memory/snapshots read", () => {
   assert.match(blocked.message, /list_digest/i);
 });
 
-test("second snapshot read_file warns when enabled", () => {
+test("first snapshot read_file warns after success when enabled", () => {
   const controller = new ToolCallGuardrailController();
   const args = { path: "memory/snapshots/run_x_r1_0.json" };
-  controller.beforeCall("read_file", args);
   controller.beforeCall("read_file", args);
   const warned = controller.afterCall("read_file", args, '{"ok":true,"content":"x"}', false);
   assert.equal(warned.action, "warn");
   assert.equal(warned.code, "snapshot_read_chain_warning");
+});
+
+test("web_fetch blocks fourth identical URL after three successes in one turn", () => {
+  const controller = new ToolCallGuardrailController();
+  const args = { url: "https://hub.example/items" };
+  const ok = '{"ok":true,"text":"data"}';
+  controller.afterCall("web_fetch", args, ok, false);
+  controller.afterCall("web_fetch", args, ok, false);
+  controller.afterCall("web_fetch", args, ok, false);
+  const blocked = controller.beforeCall("web_fetch", args);
+  assert.equal(blocked.action, "block");
+  assert.equal(blocked.code, "web_fetch_repeat_block");
 });
 
 test("success resets exact signature failure streak", () => {

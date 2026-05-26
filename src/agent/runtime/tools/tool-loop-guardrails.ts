@@ -217,8 +217,9 @@ function resultHash(result: string | null | undefined): string {
   return sha256(result ?? "");
 }
 
-export const SNAPSHOT_READ_WARN_AFTER = 2;
-export const SNAPSHOT_READ_BLOCK_AFTER = 3;
+export const SNAPSHOT_READ_WARN_AFTER = 1;
+export const SNAPSHOT_READ_BLOCK_AFTER = 2;
+export const WEB_FETCH_REPEAT_BLOCK_AFTER = 3;
 
 function isSnapshotSpillReadPath(args: Record<string, unknown> | null | undefined): boolean {
   const pathArg = String(args?.path ?? args?.filename ?? args?.file ?? "").trim().replace(/\\/g, "/");
@@ -321,6 +322,7 @@ export class ToolCallGuardrailController {
   private sameToolFailureCounts = new Map<string, number>();
   private noProgress = new Map<string, [string, number]>();
   private snapshotReadCount = 0;
+  private webFetchUrlCounts = new Map<string, number>();
   private _haltDecision: ToolGuardrailDecision | null = null;
 
   constructor(config: ToolLoopGuardrailConfig = TOOL_LOOP_GUARDRAIL_DEFAULTS) {
@@ -333,6 +335,7 @@ export class ToolCallGuardrailController {
     this.sameToolFailureCounts.clear();
     this.noProgress.clear();
     this.snapshotReadCount = 0;
+    this.webFetchUrlCounts.clear();
     this._haltDecision = null;
   }
 
@@ -354,6 +357,32 @@ export class ToolCallGuardrailController {
     args: Record<string, unknown> | null | undefined
   ): ToolGuardrailDecision {
     const signature = toolCallSignatureFromCall(toolName, args);
+
+    if (toolName === "web_fetch") {
+      const url = String(args?.url ?? "").trim();
+      if (url) {
+        const priorSuccesses = this.webFetchUrlCounts.get(url) ?? 0;
+        const noProgEntry = this.noProgress.get(this.signatureKey(signature));
+        const identicalRepeats = noProgEntry?.[1] ?? 0;
+        const deferForNoProgress =
+          this.config.hardStopEnabled &&
+          identicalRepeats >= this.config.noProgressBlockAfter;
+        if (priorSuccesses >= WEB_FETCH_REPEAT_BLOCK_AFTER && !deferForNoProgress) {
+          const blocked = decision({
+            action: "block",
+            code: "web_fetch_repeat_block",
+            message:
+              `web_fetch on the same URL (${priorSuccesses} successful fetch(es) already this turn). Use list_digest/result_ref ` +
+              "from the latest tool batch or web_post with minimal fields — do not refetch the full collection.",
+            toolName,
+            count: priorSuccesses,
+            signature,
+          });
+          this._haltDecision = blocked;
+          return blocked;
+        }
+      }
+    }
 
     if (toolName === "read_file" && isSnapshotSpillReadPath(args)) {
       this.snapshotReadCount += 1;
@@ -494,6 +523,13 @@ export class ToolCallGuardrailController {
 
     this.exactFailureCounts.delete(this.signatureKey(signature));
     this.sameToolFailureCounts.delete(toolName);
+
+    if (toolName === "web_fetch") {
+      const url = String(args?.url ?? "").trim();
+      if (url) {
+        this.webFetchUrlCounts.set(url, (this.webFetchUrlCounts.get(url) ?? 0) + 1);
+      }
+    }
 
     if (!this.isIdempotent(toolName)) {
       this.noProgress.delete(this.signatureKey(signature));

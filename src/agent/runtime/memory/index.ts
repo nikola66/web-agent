@@ -46,7 +46,7 @@ export {
   getMaxTurnInlineChars,
   TOOL_RESULTS_COMPACT_PREFIX,
   SNAPSHOT_READ_UNWRAP_MAX_CHARS,
-  SNAPSHOT_FROM_SNAPSHOT_INLINE_SLACK,
+  getSnapshotReadInlineMaxChars,
   HTTP_TOOL_DATA_INLINE_BUDGET,
 } from "./snapshots.js";
 

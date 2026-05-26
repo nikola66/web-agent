@@ -105,6 +105,15 @@ test("classifyToolError tags unknown create_archive with zipfile recipe", () => 
   assert.match(c.recovery_hint, /create_archive/i);
 });
 
+test("classifyToolError tags ipc_body_too_large on oversized LLM IPC payload", () => {
+  const c = classifyToolError(
+    "LLM request body too large for IPC (4500000 bytes, cap 3000000). Context grew too large mid-turn"
+  );
+  assert.equal(c.error_code, "ipc_body_too_large");
+  assert.equal(c.shouldCompress, true);
+  assert.match(c.recovery_hint, /compact|result_ref|list_digest/i);
+});
+
 test("classifyToolError tags upload_misroute on IPC timeout during upload", () => {
   const c = classifyToolError(
     "IPC proxy stream timed out after 240000ms while reading snapshot base64 image upload",

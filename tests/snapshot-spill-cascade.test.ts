@@ -8,7 +8,7 @@ import {
 import { extractHttpListDigest } from "../dist/agent-runtime/tool-result-preview.js";
 import { summarizeToolExecutions } from "../dist/agent-runtime/stream-output.js";
 
-test("decideToolResultCompression inlines unwrapped snapshot read despite low turn budget", () => {
+test("decideToolResultCompression spills large unwrapped snapshot read", () => {
   const content = "x".repeat(80_000);
   const item = {
     tool: "read_file",
@@ -19,8 +19,8 @@ test("decideToolResultCompression inlines unwrapped snapshot read despite low tu
       content,
     },
   };
-  const decision = decideToolResultCompression(item, 48_000, 60_000);
-  assert.equal(decision.inline, true);
+  const decision = decideToolResultCompression(item, 48_000, 256_000);
+  assert.equal(decision.inline, false);
 });
 
 test("decideToolResultCompression spills first-hop web_fetch when turn budget exhausted", () => {

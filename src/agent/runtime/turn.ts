@@ -118,6 +118,11 @@ import {
   shouldContinueTruncation,
 } from "./turn-continuation.js";
 import { dropTrailingEmptyResponseScaffolding, sanitizeMessagesForLlm } from "./message-sanitizer.js";
+import {
+  getCompactionThresholdTokens,
+  maybeCompactHistory,
+  pruneConversationForMidTurn,
+} from "./context-compression.js";
 import { errorMessage } from "./utils.js";
 import { WS } from "./constants.js";
 import {
@@ -227,6 +232,14 @@ export function createTurnMutex() {
       return busy;
     },
   };
+}
+
+let sharedTurnMutex: ReturnType<typeof createTurnMutex> | null = null;
+
+/** Process-wide mutex for agent turns (terminal, channels, background review). */
+export function getSharedTurnMutex() {
+  if (!sharedTurnMutex) sharedTurnMutex = createTurnMutex();
+  return sharedTurnMutex;
 }
 
 async function persistCompletedRun(run) {
@@ -566,6 +579,8 @@ export async function agentTurn(
   let turnHeaderPrinted = false;
   const toolGuardrails = new ToolCallGuardrailController(readToolLoopGuardrailConfig());
   let lastToolExecutions: Array<Record<string, unknown>> = [];
+  let midTurnPruneWarned = false;
+  let midTurnCompacted = false;
   try {
     while (round < maxAgentRounds) {
       if (turnController.signal.aborted) {
@@ -575,6 +590,43 @@ export async function agentTurn(
       }
       round++;
       const roundStartedAt = Date.now();
+      const convCharsBefore = conv.reduce((n, m) => n + String(m?.content || "").length, 0);
+      const estTokensBefore = estimateMessagesTokens(conv);
+      const midPrune = pruneConversationForMidTurn(conv, cfg);
+      if (midPrune.changed) {
+        conv = midPrune.messages;
+        await logDebugEvent("turn_mid_context_prune", {
+          round,
+          reason: midPrune.reason,
+          beforeTokens: midPrune.beforeTokens,
+          afterTokens: midPrune.afterTokens,
+          convCharLen: conv.reduce((n, m) => n + String(m?.content || "").length, 0),
+        });
+      } else if (!midTurnPruneWarned && estTokensBefore > Math.floor((cfg.contextWindowTokens ?? 128_000) * 0.7)) {
+        midTurnPruneWarned = true;
+        await logDebugEvent("turn_context_pressure", {
+          round,
+          estimatedPromptTokens: estTokensBefore + estimateToolSchemaTokens(streamTools),
+          convCharLen: convCharsBefore,
+        });
+      }
+      if (
+        !midTurnCompacted &&
+        !turnMeta?.textOnly &&
+        estimateMessagesTokens(conv) >= getCompactionThresholdTokens(cfg)
+      ) {
+        const compacted = await maybeCompactHistory(conv, cfg);
+        if (compacted.changed) {
+          conv = compacted.messages;
+          midTurnCompacted = true;
+          await logDebugEvent("turn_mid_context_compaction", {
+            round,
+            beforeTokens: compacted.beforeTokens,
+            afterTokens: compacted.afterTokens,
+            reason: compacted.reason,
+          });
+        }
+      }
       emitContextUpdate({
         modelId: cfg.model || null,
         contextWindowTokens: cfg.contextWindowTokens ?? null,
@@ -1115,20 +1167,6 @@ export async function agentTurn(
           arguments: tool.arguments,
         }))
       );
-      const mappedResults = exec.map((item) => ({
-        tool: String(item.tool ?? ""),
-        status: item.error ? "error" : "ok",
-        error: item.error != null ? String(item.error) : undefined,
-        result: item.result,
-      }));
-      run.tool_results.push(...mappedResults);
-      if (typeof turnMeta?.onToolResults === "function") {
-        try {
-          turnMeta.onToolResults(mappedResults);
-        } catch {
-          /* ignore review callback errors */
-        }
-      }
       const execForCompress = unwrapSnapshotReadFileExecutions(exec);
       const turnInlineBudget = createTurnInlineBudgetState();
       const snapshotRefs = await saveCompressedToolResults({
@@ -1139,6 +1177,31 @@ export async function agentTurn(
         turnInlineBudget,
       });
       const summarized = summarizeToolExecutions(execForCompress, snapshotRefs);
+      const mappedResults = summarized.map((row, index) => {
+        const item = execForCompress[index];
+        const base = {
+          tool: String(row.tool ?? item?.tool ?? ""),
+          status: row.status === "error" ? "error" : "ok",
+          error: row.error != null ? String(row.error) : undefined,
+        };
+        if (row.result_ref) {
+          return {
+            ...base,
+            result_ref: row.result_ref,
+            summary: row.summary,
+            ...(row.list_digest ? { list_digest: row.list_digest } : {}),
+          };
+        }
+        return { ...base, result: item?.result };
+      });
+      run.tool_results.push(...mappedResults);
+      if (typeof turnMeta?.onToolResults === "function") {
+        try {
+          turnMeta.onToolResults(mappedResults);
+        } catch {
+          /* ignore review callback errors */
+        }
+      }
       await logDebugEvent("turn_tool_results", {
         round,
         toolCount: tools.length,
@@ -1210,6 +1273,48 @@ export async function agentTurn(
         rounds: round,
         maxRounds: maxAgentRounds,
       });
+      if (!quietTurn && !turnMeta?.textOnly) {
+        try {
+          conv.push({
+            role: "user",
+            content:
+              "[Round limit reached] Summarize progress, blockers, and the next concrete step briefly. Do not call tools.",
+          });
+          const graceStream = await streamOpenAI(
+            sanitizeMessagesForLlm(conv),
+            cfg,
+            () => {},
+            [],
+            { signal: turnController.signal }
+          );
+          const graceVisible = sanitizeAssistantVisibleText(
+            graceStream?.text || "",
+            activeToolNames
+          );
+          if (graceVisible.trim()) {
+            run.final_visible_assistant_text = graceVisible;
+            conv.push({ role: "assistant", content: graceVisible });
+            const rendered = renderMarkdownToAnsi(graceVisible);
+            if (rendered) {
+              await writeStdoutSmoothed(`${prefixBlock(rendered, false)}\n\n`);
+            }
+            await emitTranscriptEvent(
+              turnMeta,
+              createAssistantTranscriptEvent({
+                round,
+                agentName,
+                text: graceVisible,
+                branchBelowName: false,
+              }),
+              { round, visiblePreview: graceVisible.slice(0, 200) }
+            );
+          }
+        } catch (graceError) {
+          await logDebugEvent("turn_max_rounds_grace_failed", {
+            error: errorMessage(graceError),
+          });
+        }
+      }
     }
     run.status = turnController.signal.aborted ? "aborted" : "completed";
     run.rounds = round;
