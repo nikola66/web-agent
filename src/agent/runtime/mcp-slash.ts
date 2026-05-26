@@ -13,6 +13,63 @@ function printLine(msg: string, emit?: (msg: string) => void | Promise<void>) {
   else console.log(msg);
 }
 
+export function parseMcpUseInput(input: string): {
+  name: string;
+  url: string;
+  headers: Record<string, string>;
+} | null {
+  const trimmed = String(input || "").trim();
+  if (!trimmed.startsWith("/mcp use")) return null;
+  const afterUse = trimmed.slice("/mcp use".length).trim();
+  const urlMatch = afterUse.match(/https?:\/\/[^\s"'<>]+/i);
+  if (!urlMatch) return null;
+  const url = urlMatch[0].replace(/[.,;:!?)]+$/, "");
+  const headers: Record<string, string> = {};
+  let name = "";
+  const tokens = afterUse.split(/\s+/);
+  for (let i = 0; i < tokens.length; i++) {
+    const token = tokens[i];
+    if (token === "--name" && tokens[i + 1]) {
+      name = tokens[++i];
+      continue;
+    }
+    if (token === "--header" && tokens[i + 1]) {
+      let raw = tokens[++i];
+      while (i + 1 < tokens.length && !tokens[i + 1].startsWith("--")) {
+        raw += ` ${tokens[++i]}`;
+      }
+      const eq = raw.indexOf("=");
+      if (eq > 0) {
+        const k = raw.slice(0, eq).trim();
+        if (k) headers[k] = raw.slice(eq + 1);
+      }
+    }
+  }
+  if (!name) {
+    try {
+      const u = new URL(url);
+      const host = u.hostname.replace(/\./g, "-");
+      const path = u.pathname.replace(/^\/+|\/+$/g, "").replace(/\//g, "-");
+      name = (path ? `${host}-${path}` : host).replace(/[^a-zA-Z0-9_-]/g, "") || "mcp-remote";
+    } catch {
+      name = "mcp-remote";
+    }
+  }
+  return { name, url, headers };
+}
+
+function mcpAuthHeadersFromEnv(): Record<string, string> {
+  if (typeof process === "undefined" || !process.env) return {};
+  const token = String(
+    process.env.DIRECTUS_TOKEN ||
+      process.env.DIRECTUS_API_TOKEN ||
+      process.env.DIRECTUS_ACCESS_TOKEN ||
+      ""
+  ).trim();
+  if (!token) return {};
+  return { Authorization: `Bearer ${token}` };
+}
+
 function parseMcpAddArgs(input: string): {
   name: string;
   url?: string;
@@ -136,6 +193,7 @@ export async function runMcpSlashCommand(
     if (!sub || sub === "help") {
       printLine(dim("MCP commands:"), emit);
       printLine(dim("  /mcp list"), emit);
+      printLine(dim("  /mcp use <url> [--name <id>] [--header Key=Val]  (quick-add Streamable HTTP)"), emit);
       printLine(dim("  /mcp add <name> --url <endpoint> [--transport sse] [--include a,b]"), emit);
       printLine(dim("  /mcp add <name> --command <cmd> --args ... [--env KEY=VAL]"), emit);
       printLine(dim("  /mcp remove <name>"), emit);
@@ -205,6 +263,60 @@ export async function runMcpSlashCommand(
         }
       } catch (err) {
         printLine(red(`Test failed: ${err instanceof Error ? err.message : String(err)}\n`), emit);
+      }
+      return true;
+    }
+
+    if (sub.startsWith("use ")) {
+      const parsed = parseMcpUseInput(trimmed);
+      if (!parsed) {
+        printLine(red("Usage: /mcp use <url> [--name <id>] [--header Authorization=Bearer …]\n"), emit);
+        return true;
+      }
+      const headers = { ...mcpAuthHeadersFromEnv(), ...parsed.headers };
+      const serverConfig: McpServerConfig = {
+        enabled: true,
+        url: parsed.url,
+        transport: "streamable-http",
+        ...(Object.keys(headers).length ? { headers } : {}),
+      };
+      try {
+        const probeResp = (await mcpProbeServer(parsed.name, serverConfig)) as {
+          ok?: boolean;
+          tools?: Array<{ name: string; description?: string }>;
+          error?: string;
+        };
+        if (probeResp?.ok === false) throw new Error(String(probeResp.error || "probe failed"));
+        await upsertMcpServer(parsed.name, serverConfig);
+        const count = probeResp.tools?.length ?? 0;
+        printLine(green(`Saved '${parsed.name}' → ${parsed.url} (${count} tool(s)).\n`), emit);
+        try {
+          const resp = (await mcpReload()) as {
+            ok?: boolean;
+            status?: { toolCount?: number; failed?: number };
+            error?: string;
+          };
+          if (resp?.ok === false) throw new Error(String(resp.error || "reload failed"));
+          await reloadMcpTools();
+          const toolCount = resp.status?.toolCount ?? count;
+          printLine(dim(`MCP tools registered: ${toolCount}.\n`), emit);
+        } catch (reloadErr) {
+          printLine(
+            amber(
+              `Saved but reload failed: ${reloadErr instanceof Error ? reloadErr.message : String(reloadErr)}. Run /reload-mcp.\n`
+            ),
+            emit
+          );
+        }
+      } catch (err) {
+        serverConfig.enabled = false;
+        await upsertMcpServer(parsed.name, serverConfig);
+        printLine(
+          red(
+            `Probe failed — saved '${parsed.name}' as disabled: ${err instanceof Error ? err.message : String(err)}\n`
+          ),
+          emit
+        );
       }
       return true;
     }

@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 import {
+  formatProxyTransportError,
   graphqlSchemaRecoveryHint,
   guessedResourceRecoveryHint,
   mergeUrlQueryParams,
@@ -91,6 +92,13 @@ test("guessedResourceRecoveryHint nudges discovery after deep-path 403", () => {
 
 test("guessedResourceRecoveryHint ignores shallow paths", () => {
   assert.equal(guessedResourceRecoveryHint("https://api.example.com/health", 404), undefined);
+});
+
+test("formatProxyTransportError adds MCP hint for Failed to fetch", () => {
+  const msg = formatProxyTransportError("Failed to fetch", "https://hub.aratech.ae/items/posts");
+  assert.match(msg, /\/api\/proxy/);
+  assert.match(msg, /\/mcp use/);
+  assert.match(msg, /hub\.aratech\.ae/);
 });
 
 test("webPostTool rejects non-http URL", async () => {

@@ -17,7 +17,10 @@ export const SLASH_COMMANDS = [
     description:
       "Find-skills mode: search skills.sh, SkillsMP, and Cursor Marketplace only; return the top 5 by installs, stars, or votes.",
   },
-  { name: "/mcp [list|add|remove|test]", description: "Manage MCP server connections (Hermes-style connector)." },
+  {
+    name: "/mcp [list|use|add|remove|test]",
+    description: "Manage MCP servers; /mcp use <url> quick-adds Streamable HTTP (e.g. Directus /mcp).",
+  },
   { name: "/reload-mcp", description: "Reload MCP servers from .webagent/mcp-servers.json and refresh tools." },
   { name: "/checkpoint [name]", description: "Save a named snapshot of current history for rollback (handled by the embedded agent runtime)." },
   { name: "/rollback [name]", description: "List checkpoints or restore a named checkpoint (handled by the embedded agent runtime)." },

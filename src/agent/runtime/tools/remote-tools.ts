@@ -94,16 +94,41 @@ function readProxyResponse(value: unknown): {
   body: string;
   contentType: string;
   bodyEncoding?: string;
+  proxyError?: string;
 } {
   if (value && typeof value === "object") {
     const rec = value as Record<string, unknown>;
+    const proxyError =
+      typeof rec.error === "string" && rec.error.trim() ? rec.error.trim() : undefined;
     const status = Number(rec.status);
     const body = typeof rec.body === "string" ? rec.body : "";
     const contentType = typeof rec.contentType === "string" ? rec.contentType : "";
     const bodyEncoding = typeof rec.bodyEncoding === "string" ? rec.bodyEncoding : undefined;
-    return { status: Number.isFinite(status) ? status : 0, body, contentType, bodyEncoding };
+    return {
+      status: Number.isFinite(status) ? status : 0,
+      body,
+      contentType,
+      bodyEncoding,
+      proxyError,
+    };
   }
   return { status: 0, body: "", contentType: "" };
+}
+
+export function formatProxyTransportError(message: string, url?: string): string {
+  const base = String(message || "unknown error").trim() || "unknown error";
+  if (!/failed to fetch/i.test(base)) return base;
+  const host = (() => {
+    try {
+      return new URL(String(url || "")).hostname;
+    } catch {
+      return "";
+    }
+  })();
+  const mcpHint = host
+    ? ` If REST is blocked, configure MCP: /mcp use https://${host}/mcp then /reload-mcp.`
+    : " If REST is blocked, configure MCP with /mcp use <mcp-url> then /reload-mcp.";
+  return `${base} (browser sandbox could not reach upstream — requests are routed via /api/proxy).${mcpHint}`;
 }
 
 /** Max upload size for web_upload / web_post multipart file parts (default 10 MB). */
@@ -680,13 +705,22 @@ export async function httpProxyCall(
     headers: redactHttpHeadersForLog(normHeaders),
     binaryResponse: !!binaryResponse,
   });
-  const { status, body: respBody, contentType, bodyEncoding: respBodyEncoding } = readProxyResponse(
+  const {
+    status,
+    body: respBody,
+    contentType,
+    bodyEncoding: respBodyEncoding,
+    proxyError,
+  } = readProxyResponse(
     await proxyRequest(
       { method: m, url, headers: normHeaders, body, bodyEncoding, binaryResponse },
       ctx,
       ipcTimeout
     )
   );
+  if (proxyError) {
+    throw new Error(formatProxyTransportError(proxyError, url));
+  }
   const ok = status >= 200 && status < 300;
 
   if (binaryResponse) {

@@ -1402,6 +1402,13 @@ export async function startWebAgent(options: AgentStartOptions): Promise<void> {
               }),
             });
             const data = await res.json();
+            if (data?.error) {
+              respPayload = JSON.stringify({ error: String(data.error) });
+              await agentProcess.write(
+                `${PROXY_RESP_PREFIX}${reqId}>>>${respPayload}${PROXY_RESP_END}`
+              );
+              return;
+            }
             const PROXY_BODY_CAP = 100_000;
             let body = String(data?.body ?? "");
             let truncated = Boolean(data?.truncated);
@@ -1454,17 +1461,39 @@ export async function startWebAgent(options: AgentStartOptions): Promise<void> {
               textBodyCap?: number;
             }>(reqBody);
             const proxyHeaders = withSubscriptionProfileHeader(profile.id, req.url, req.headers);
-            const response = await fetch(req.url, {
-              method: req.method ?? "GET",
-              headers: proxyHeaders,
-              ...(req.body != null ? { body: req.body } : {}),
+            const res = await fetch("/api/proxy", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                method: req.method ?? "GET",
+                url: req.url,
+                headers: proxyHeaders,
+                body: req.body ?? null,
+              }),
             });
+            const data = (await res.json()) as {
+              error?: string;
+              status?: number;
+              statusText?: string;
+              contentType?: string;
+              body?: string;
+              truncated?: boolean;
+              truncated_at_chars?: number;
+            };
+            if (data?.error) {
+              await writeStreamEvent(
+                PROXY_STREAM_END_PREFIX,
+                { error: String(data.error) },
+                PROXY_STREAM_END_END
+              );
+              return;
+            }
             await writeStreamEvent(
               PROXY_STREAM_START_PREFIX,
               {
-                status: response.status,
-                statusText: response.statusText,
-                contentType: response.headers.get("content-type") ?? "",
+                status: Number(data?.status ?? res.status),
+                statusText: String(data?.statusText ?? ""),
+                contentType: String(data?.contentType ?? ""),
               },
               PROXY_STREAM_START_END
             );
@@ -1484,24 +1513,11 @@ export async function startWebAgent(options: AgentStartOptions): Promise<void> {
               streamed += slice.length;
               await writeStreamEvent(PROXY_STREAM_CHUNK_PREFIX, { chunk: slice }, PROXY_STREAM_CHUNK_END);
             };
-            if (!response.body) {
-              const text = await response.text().catch(() => "");
-              await writeCappedChunk(text);
-              await writeStreamEvent(PROXY_STREAM_END_PREFIX, { ok: true }, PROXY_STREAM_END_END);
-              return;
-            }
-            const reader = response.body.getReader();
-            const decoder = new TextDecoder();
-            while (true) {
-              const { done, value } = await reader.read();
-              if (done) break;
+            const text = String(data?.body ?? "");
+            const CHUNK = 16_384;
+            for (let i = 0; i < text.length; i += CHUNK) {
               if (streamCap && streamed >= streamCap) break;
-              const chunk = decoder.decode(value, { stream: true });
-              await writeCappedChunk(chunk);
-            }
-            if (!streamCap || streamed < streamCap) {
-              const tail = decoder.decode();
-              await writeCappedChunk(tail);
+              await writeCappedChunk(text.slice(i, i + CHUNK));
             }
             await writeStreamEvent(PROXY_STREAM_END_PREFIX, { ok: true }, PROXY_STREAM_END_END);
           } catch (e) {
