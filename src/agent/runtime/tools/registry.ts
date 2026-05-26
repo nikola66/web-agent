@@ -301,6 +301,7 @@ export async function loadTools(): Promise<Record<string, ToolImplementFn>> {
 
 export function bustToolsCacheForMcp() {
   toolsCache = null;
+  void import("../tool-capability-index.js").then((m) => m.invalidateToolCapabilityIndexCache?.());
 }
 
 export async function reloadMcpTools() {

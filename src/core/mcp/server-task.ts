@@ -5,6 +5,7 @@ import { mcpToolRegistryName } from "./naming.js";
 import { normalizeMcpInputSchema } from "./schema-normalize.js";
 import { buildSafeStdioEnv, NodeboxStdioTransport } from "./stdio-transport.js";
 import type { McpDiscoveredTool, McpServerConfig } from "./types.js";
+import { createMcpCorsProxyFetch } from "./cors-proxy-fetch.js";
 
 const DEFAULT_CONNECT_TIMEOUT = 60_000;
 const MAX_FAILURES = 3;
@@ -203,12 +204,17 @@ export class McpServerTask {
     if (this.config.url) {
       const url = new URL(this.config.url);
       const init: RequestInit = { headers: this.config.headers || {} };
+      const proxyFetch = createMcpCorsProxyFetch();
+      const transportOpts = {
+        requestInit: init,
+        ...(proxyFetch ? { fetch: proxyFetch } : {}),
+      };
       if (this.config.transport === "sse") {
         const { SSEClientTransport } = await getSseMod();
-        return new SSEClientTransport(url, { requestInit: init });
+        return new SSEClientTransport(url, transportOpts);
       }
       const { StreamableHTTPClientTransport } = await getHttpMod();
-      return new StreamableHTTPClientTransport(url, { requestInit: init });
+      return new StreamableHTTPClientTransport(url, transportOpts);
     }
     const command = String(this.config.command || "").trim();
     const args = Array.isArray(this.config.args) ? this.config.args.map(String) : [];

@@ -63,7 +63,7 @@ import { notifyMigrationsApplied, runPendingMigrations } from "./migrations/inde
 import { buildToolRowsFromCatalog } from "./slash-command-views.js";
 import { formatHelpForSurface, runSkillsSlashCommand } from "./channel-outbound.js";
 import { SLASH_COMMANDS } from "./commands.js";
-import { resolveSlashUserMessage } from "./slash-routing.js";
+import { parseLocalSlashCommand, resolveSlashUserMessage } from "./slash-routing.js";
 import { discoverMcpOnStartup, runMcpSlashCommand, shutdownMcpOnExit } from "./mcp-slash.js";
 import {
   compactHistory,
@@ -478,8 +478,13 @@ export async function main() {
       await handleSkillsCommand(input);
       continue;
     }
-    if (input === "/reload-mcp" || input === "/reload_mcp" || input === "/mcp" || input.startsWith("/mcp ")) {
-      await runMcpSlashCommand(input);
+    const localSlash = parseLocalSlashCommand(input);
+    if (localSlash.kind === "reload_mcp") {
+      await runMcpSlashCommand("/reload-mcp");
+      continue;
+    }
+    if (localSlash.kind === "mcp") {
+      await runMcpSlashCommand(localSlash.input);
       continue;
     }
     if (input === "/stop") {

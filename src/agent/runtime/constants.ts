@@ -71,6 +71,8 @@ export const COMPOSIO_AUDIT_REL = ".webagent/composio-actions.jsonl";
 export const MCP_SERVERS_REL = ".webagent/mcp-servers.json";
 /** Tool allow/deny policy. Must match `WORKSPACE_TOOL_POLICY_REL` in `src/core/workspace-layout.ts`. */
 export const TOOL_POLICY_REL = ".webagent/tool-policy.json";
+/** Auto-generated brief index of all policy-allowed tools (system prompt + human reference). */
+export const TOOLS_CAPABILITY_INDEX_REL = ".webagent/tools-capability-index.md";
 /** Skill documents — reusable procedure markdown files injected into system prompt. */
 export const SKILLS_DIR = `${WS}/.webagent/skills`;
 /** Conversation history checkpoints for rollback. */

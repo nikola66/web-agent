@@ -7,6 +7,7 @@ import {
 import { deleteSkill, saveSkill } from "../dist/agent-runtime/memory/index.js";
 import {
   findSkillBySlashToken,
+  normalizeSlashCommandInput,
   parseLocalSlashCommand,
   resolveSlashUserMessage,
   skillSlashCommandForSurface,
@@ -30,6 +31,22 @@ test("findSkillBySlashToken matches hyphen and underscore forms", () => {
   assert.ok(findSkillBySlashToken("memory-layers", skills));
   assert.ok(findSkillBySlashToken("memory_layers", skills));
   assert.equal(findSkillBySlashToken("find_skills", skills), null);
+});
+
+test("normalizeSlashCommandInput strips Telegram bot suffix", () => {
+  assert.equal(
+    normalizeSlashCommandInput("/mcp@webagent_bot use https://x/mcp"),
+    "/mcp use https://x/mcp"
+  );
+  assert.equal(normalizeSlashCommandInput("/reload_mcp@my_bot"), "/reload_mcp");
+});
+
+test("parseLocalSlashCommand recognizes /mcp@bot as mcp", () => {
+  assert.deepEqual(parseLocalSlashCommand("/mcp@my_bot use https://hub.example/mcp"), {
+    kind: "mcp",
+    input: "/mcp use https://hub.example/mcp",
+  });
+  assert.deepEqual(parseLocalSlashCommand("/reload_mcp@bot"), { kind: "reload_mcp" });
 });
 
 test("parseLocalSlashCommand recognizes shared local commands", () => {

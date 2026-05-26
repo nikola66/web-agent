@@ -245,11 +245,16 @@ function corsProxyGate() {
           }
           res.statusCode = upstream.status;
           res.setHeader("content-type", upstream.headers.get("content-type") ?? "application/octet-stream");
+          const responseHeaders: Record<string, string> = {};
+          upstream.headers.forEach((value, key) => {
+            responseHeaders[key] = value;
+          });
           res.end(JSON.stringify({
             status: upstream.status,
             statusText: upstream.statusText,
             body: responseBody,
             contentType: upstream.headers.get("content-type") ?? "",
+            responseHeaders,
             bodyEncoding: binaryResponse ? "base64" : undefined,
             ...(truncated ? { truncated: true, truncated_at_chars: PROXY_BODY_CAP } : {}),
           }));

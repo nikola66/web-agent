@@ -76,12 +76,17 @@ const server = http.createServer((req, res) => {
           "content-type",
           upstream.headers.get("content-type") ?? "application/octet-stream",
         );
+        const responseHeaders = {};
+        upstream.headers.forEach((value, key) => {
+          responseHeaders[key] = value;
+        });
         res.end(
           JSON.stringify({
             status: upstream.status,
             statusText: upstream.statusText,
             body: responseBody,
             contentType: upstream.headers.get("content-type") ?? "",
+            responseHeaders,
             bodyEncoding: binaryResponse ? "base64" : undefined,
           }),
         );

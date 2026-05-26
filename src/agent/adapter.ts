@@ -48,6 +48,7 @@ import runtimeTurnContinuationSource from "../../dist/agent-runtime/turn-continu
 import runtimeStartupContextSource from "../../dist/agent-runtime/startup-context.js?raw";
 import runtimeMemoryGuidanceSource from "../../dist/agent-runtime/memory-guidance.js?raw";
 import runtimeCapabilityRouterSource from "../../dist/agent-runtime/capability-router.js?raw";
+import runtimeToolCapabilityIndexSource from "../../dist/agent-runtime/tool-capability-index.js?raw";
 import runtimeExecutionGuidanceSource from "../../dist/agent-runtime/execution-guidance.js?raw";
 import runtimeUtilsSource from "../../dist/agent-runtime/utils.js?raw";
 import runtimeBootstrapSource from "../../dist/agent-runtime/bootstrap.js?raw";
@@ -516,6 +517,7 @@ async function writeRuntimeSources(profileId: string): Promise<void> {
   await emulator.fs.writeFile(`${webagentDir}/startup-context.js`, runtimeStartupContextSource);
   await emulator.fs.writeFile(`${webagentDir}/memory-guidance.js`, runtimeMemoryGuidanceSource);
   await emulator.fs.writeFile(`${webagentDir}/capability-router.js`, runtimeCapabilityRouterSource);
+  await emulator.fs.writeFile(`${webagentDir}/tool-capability-index.js`, runtimeToolCapabilityIndexSource);
   await emulator.fs.writeFile(`${webagentDir}/execution-guidance.js`, runtimeExecutionGuidanceSource);
   await emulator.fs.writeFile(`${webagentDir}/utils.js`, runtimeUtilsSource);
   await emulator.fs.writeFile(`${webagentDir}/bootstrap.js`, runtimeBootstrapSource);

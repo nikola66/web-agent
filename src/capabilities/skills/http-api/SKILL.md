@@ -67,7 +67,8 @@ Canonical procedure for **REST GET** (`web_fetch`) and **HTTP writes** (`web_pos
 
 ## Relation to other skills
 
-- Tool picker (shell vs HTTP): **`browser-runtime-map`**. Python scripts: **`run_python`** when Pyodide-compatible. Secrets: **`memory-layers`**.
+- Tool picker (shell vs HTTP): **`browser-runtime-map`**. MCP integrations: configure via `/mcp`; names appear in the system **Tool capability index** — activate with `tool_search` / `tool_activate` before use.
+- Python scripts: **`run_python`** when Pyodide-compatible. Secrets: **`memory-layers`**.
 - **Imported skills own endpoints** — call `skill_view` on the imported skill first; use this skill for generic REST/GraphQL mechanics.
 
 ## Procedure
@@ -109,6 +110,16 @@ When `web_fetch` uses TinyFish (default when no `headers`) and markdown returns 
 - **Do instead:** call documented REST paths (`/items/…`, `/collections/…`, `/server/info`, …) with `headers.Authorization: Bearer <token>`, `web_post` for writes, or `/mcp use <url>/mcp` for Directus MCP.
 
 Authenticated GET always passes `headers` → routes via `/api/proxy` (JSON), not TinyFish markdown.
+
+### Directus / CMS via MCP (optional)
+
+Configure a Directus Streamable HTTP MCP endpoint (browser tab must stay open):
+
+1. `/mcp use https://<host>/mcp` — Telegram may send `/mcp@YourBot use …`; that is normalized automatically.
+2. `/reload-mcp` if tools do not appear after save.
+3. Agent workflow: `tool_search` (query `mcp` or server name) → `tool_activate` with exact tool name → call `mcp_<server>_<tool>`. MCP tools are **not** in the default LLM tool list.
+
+Prefer MCP for CMS mutations when REST from the sandbox is blocked; prefer REST (`/items/…` + Bearer) when `headers` work.
 
 ## REST updates (`web_post` + method)
 

@@ -5,7 +5,16 @@ import {
   upsertMcpServer,
   type McpServerConfig,
 } from "./mcp-config.js";
-import { mcpProbeServer, mcpReload, mcpShutdown, discoverAndRegisterMcpTools, formatMcpStartupBanner } from "./mcp-registry.js";
+import {
+  mcpProbeServer,
+  mcpReload,
+  mcpShutdown,
+  discoverAndRegisterMcpTools,
+  formatMcpStartupBanner,
+  formatMcpIpcError,
+  getMcpCatalogCache,
+} from "./mcp-registry.js";
+import { normalizeSlashCommandInput } from "./slash-routing.js";
 import { reloadMcpTools } from "./tools/registry.js";
 
 function printLine(msg: string, emit?: (msg: string) => void | Promise<void>) {
@@ -18,7 +27,7 @@ export function parseMcpUseInput(input: string): {
   url: string;
   headers: Record<string, string>;
 } | null {
-  const trimmed = String(input || "").trim();
+  const trimmed = normalizeSlashCommandInput(input);
   if (!trimmed.startsWith("/mcp use")) return null;
   const afterUse = trimmed.slice("/mcp use".length).trim();
   const urlMatch = afterUse.match(/https?:\/\/[^\s"'<>]+/i);
@@ -80,7 +89,7 @@ function parseMcpAddArgs(input: string): {
   transport?: "sse";
   headers?: Record<string, string>;
 } | null {
-  const parts = input.trim().split(/\s+/);
+  const parts = normalizeSlashCommandInput(input).split(/\s+/);
   if (parts.length < 3 || parts[0] !== "/mcp" || parts[1] !== "add") return null;
   const name = parts[2];
   let url: string | undefined;
@@ -152,11 +161,44 @@ function toolsFilterLabel(cfg: McpServerConfig): string {
   return "all";
 }
 
+function formatMcpUseSuccessLines(
+  name: string,
+  url: string,
+  probeTools: Array<{ name: string }>,
+  registeredCount: number
+): string[] {
+  const lines = [green(`Saved '${name}' → ${url} (${probeTools.length} tool(s) discovered).`)];
+  const samples = probeTools.slice(0, 3).map((t) => t.name);
+  if (samples.length) {
+    lines.push(dim(`  Examples: ${samples.join(", ")}`));
+  }
+  lines.push(
+    dim(
+      `MCP tools registered: ${registeredCount}. Agent: tool_search (query "mcp" or "${name}") → tool_activate → call tool.`
+    )
+  );
+  return lines;
+}
+
+async function warnIfMcpCatalogEmpty(emit?: (msg: string) => void | Promise<void>) {
+  const config = await loadMcpServersConfig();
+  const enabled = Object.entries(config).filter(([, c]) => c.enabled !== false);
+  if (!enabled.length) return;
+  const catalog = getMcpCatalogCache();
+  if (Object.keys(catalog).length > 0) return;
+  printLine(
+    amber(
+      "Config has enabled MCP server(s) but 0 tools are registered — probe/reload may have failed (browser tab, auth, or CORS). Run /mcp test <name> or /reload-mcp.\n"
+    ),
+    emit
+  );
+}
+
 export async function runMcpSlashCommand(
   input: string,
   emit?: (msg: string) => void | Promise<void>
 ): Promise<boolean> {
-  const trimmed = String(input || "").trim();
+  const trimmed = normalizeSlashCommandInput(input);
   if (trimmed === "/reload-mcp" || trimmed === "/reload_mcp") {
     try {
       const resp = (await mcpReload()) as {
@@ -183,13 +225,14 @@ export async function runMcpSlashCommand(
         emit
       );
     } catch (err) {
-      printLine(red(`MCP reload failed: ${err instanceof Error ? err.message : String(err)}\n`), emit);
+      printLine(red(`MCP reload failed: ${formatMcpIpcError(err)}\n`), emit);
     }
+    await warnIfMcpCatalogEmpty(emit);
     return true;
   }
 
-  if (trimmed === "/mcp" || trimmed.startsWith("/mcp ")) {
-    const sub = trimmed === "/mcp" ? "" : trimmed.slice("/mcp ".length).trim();
+  if (trimmed === "/mcp" || /^\/mcp(?:\s|$)/.test(trimmed)) {
+    const sub = trimmed === "/mcp" ? "" : trimmed.slice("/mcp".length).trim();
     if (!sub || sub === "help") {
       printLine(dim("MCP commands:"), emit);
       printLine(dim("  /mcp list"), emit);
@@ -262,7 +305,7 @@ export async function runMcpSlashCommand(
           printLine("", emit);
         }
       } catch (err) {
-        printLine(red(`Test failed: ${err instanceof Error ? err.message : String(err)}\n`), emit);
+        printLine(red(`Test failed: ${formatMcpIpcError(err)}\n`), emit);
       }
       return true;
     }
@@ -287,9 +330,9 @@ export async function runMcpSlashCommand(
           error?: string;
         };
         if (probeResp?.ok === false) throw new Error(String(probeResp.error || "probe failed"));
+        const probeTools = probeResp.tools || [];
         await upsertMcpServer(parsed.name, serverConfig);
-        const count = probeResp.tools?.length ?? 0;
-        printLine(green(`Saved '${parsed.name}' → ${parsed.url} (${count} tool(s)).\n`), emit);
+        let registeredCount = probeTools.length;
         try {
           const resp = (await mcpReload()) as {
             ok?: boolean;
@@ -298,23 +341,25 @@ export async function runMcpSlashCommand(
           };
           if (resp?.ok === false) throw new Error(String(resp.error || "reload failed"));
           await reloadMcpTools();
-          const toolCount = resp.status?.toolCount ?? count;
-          printLine(dim(`MCP tools registered: ${toolCount}.\n`), emit);
+          registeredCount = resp.status?.toolCount ?? registeredCount;
         } catch (reloadErr) {
           printLine(
             amber(
-              `Saved but reload failed: ${reloadErr instanceof Error ? reloadErr.message : String(reloadErr)}. Run /reload-mcp.\n`
+              `Saved but reload failed: ${formatMcpIpcError(reloadErr)}. Run /reload-mcp.\n`
             ),
             emit
           );
         }
+        for (const line of formatMcpUseSuccessLines(parsed.name, parsed.url, probeTools, registeredCount)) {
+          printLine(line, emit);
+        }
+        printLine("", emit);
+        await warnIfMcpCatalogEmpty(emit);
       } catch (err) {
         serverConfig.enabled = false;
         await upsertMcpServer(parsed.name, serverConfig);
         printLine(
-          red(
-            `Probe failed — saved '${parsed.name}' as disabled: ${err instanceof Error ? err.message : String(err)}\n`
-          ),
+          red(`Probe failed — saved '${parsed.name}' as disabled: ${formatMcpIpcError(err)}\n`),
           emit
         );
       }
@@ -358,7 +403,7 @@ export async function runMcpSlashCommand(
       } catch (err) {
         serverConfig.enabled = false;
         await upsertMcpServer(parsed.name, serverConfig);
-        printLine(red(`Probe failed — saved '${parsed.name}' as disabled: ${err instanceof Error ? err.message : String(err)}\n`), emit);
+        printLine(red(`Probe failed — saved '${parsed.name}' as disabled: ${formatMcpIpcError(err)}\n`), emit);
       }
       return true;
     }

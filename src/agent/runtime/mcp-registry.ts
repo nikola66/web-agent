@@ -28,13 +28,28 @@ type McpToolEntry = {
 
 let mcpToolsCache: Record<string, McpToolEntry> | null = null;
 
+export function formatMcpIpcError(err: unknown): string {
+  const msg = err instanceof Error ? err.message : String(err ?? "unknown error");
+  if (/IPC MCP request timed out/i.test(msg)) {
+    return `${msg} Keep the Web Agent browser tab open — MCP connections run in the page adapter.`;
+  }
+  if (/failed to fetch|network|CORS/i.test(msg)) {
+    return `${msg} Cross-origin MCP needs the browser tab open (requests route via /api/proxy).`;
+  }
+  return msg;
+}
+
 async function mcpIpc(
   payload: Record<string, unknown>,
   config?: McpServersConfig,
   timeoutMs = 180_000
 ) {
   const servers = config ?? (await loadMcpServersConfig());
-  return ipcMcpRequest({ ...payload, config: servers, env: mcpEnvForConfig(servers) }, timeoutMs);
+  try {
+    return await ipcMcpRequest({ ...payload, config: servers, env: mcpEnvForConfig(servers) }, timeoutMs);
+  } catch (err) {
+    throw new Error(formatMcpIpcError(err));
+  }
 }
 
 export async function mcpDiscover(): Promise<{ tools: McpDiscoveredTool[]; status?: McpHostStatus }> {

@@ -178,7 +178,7 @@ export function createChannelInboundHandler(deps) {
       // Placeholder — overwritten after attachments download in the queued task.
       text = `[Telegram attachment received: ${attachments.length} file(s)]`;
     }
-    const trimmed = text.trim();
+    const trimmed = text.trim(); // slash parsing normalizes @bot inside parseLocalSlashCommand
     if (!channel || !chatId || !trimmed) return Promise.resolve();
 
     if (trimmed === "/stop") {
@@ -326,7 +326,15 @@ export function createChannelInboundHandler(deps) {
       }
 
       if (localSlash.kind === "mcp") {
-        await runMcpSlashCommand(localSlash.input, (msg) => sendReply(chatId, msg));
+        let mcpReplied = false;
+        await runMcpSlashCommand(localSlash.input, (msg) => {
+          mcpReplied = true;
+          return sendReply(chatId, msg);
+        });
+        if (!mcpReplied) {
+          await sendReply(chatId, "MCP command produced no output. Retry with the browser tab open.");
+        }
+        await logDebugEvent("mcp_slash_command", { channel, chatId, preview: localSlash.input.slice(0, 120) });
         return;
       }
 

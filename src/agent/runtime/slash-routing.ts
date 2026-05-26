@@ -97,7 +97,7 @@ export function buildSkillInvocationUserMessage(skill: SkillListEntry, task: str
 
 /** Rewrite slash input into the synthetic user message the agent loop expects (or return null to keep raw text). */
 export async function resolveSlashUserMessage(input: string): Promise<string | null> {
-  const trimmed = String(input ?? "").trim();
+  const trimmed = normalizeSlashCommandInput(input);
   if (!trimmed.startsWith("/") || trimmed.startsWith("//")) return null;
 
   const wikiRewrite = rewriteWikiSlashUserMessage(trimmed);
@@ -153,8 +153,15 @@ export type LocalSlashCommand =
   | { kind: "reload_mcp" }
   | { kind: "mcp"; input: string };
 
+/** Strip Telegram `@botname` suffix so `/mcp@bot use …` routes like `/mcp use …`. */
+export function normalizeSlashCommandInput(text: string): string {
+  return String(text ?? "")
+    .trim()
+    .replace(/^\/([a-z0-9_-]+)@[\w]+/i, "/$1");
+}
+
 export function parseLocalSlashCommand(trimmed: string): LocalSlashCommand {
-  const input = String(trimmed ?? "").trim();
+  const input = normalizeSlashCommandInput(trimmed);
   if (!input.startsWith("/")) return { kind: "none" };
 
   if (input === "/exit") return { kind: "exit" };
@@ -176,7 +183,7 @@ export function parseLocalSlashCommand(trimmed: string): LocalSlashCommand {
     return { kind: "rollback", name: input.slice("/rollback".length).trim() };
   }
   if (input === "/reload-mcp" || input === "/reload_mcp") return { kind: "reload_mcp" };
-  if (input === "/mcp" || input.startsWith("/mcp ")) {
+  if (input === "/mcp" || /^\/mcp(?:\s|$)/.test(input)) {
     return { kind: "mcp", input };
   }
   return { kind: "none" };

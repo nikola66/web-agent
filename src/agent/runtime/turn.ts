@@ -90,6 +90,10 @@ import {
 import { buildMemoryLayerGuidanceBlock } from "./memory-guidance.js";
 import { buildCapabilityRouterBlock } from "./capability-router.js";
 import {
+  invalidateToolCapabilityIndexCache,
+  resolveToolCapabilityIndexBlock,
+} from "./tool-capability-index.js";
+import {
   ensureDefaultToolPolicy,
   loadToolPolicy,
   resolveInitialActiveToolNames,
@@ -193,7 +197,7 @@ const STATIC_TOOL_DISCIPLINE =
   "\n\nTools: prefer native tool calls and respect each tool's schema (especially `required` fields). For files/URLs/shell/external/memory data, use tools first, then answer. Never copy terminal status lines (e.g. lines starting with ✓ or parenthetical summaries) into tool arguments—use real paths, URLs, and queries only. When the user asks for a sequence (for example, testing tools one by one), continue step-by-step without waiting for another user nudge: after you announce a step, immediately emit the corresponding tool call. No fake <tool_call> markup. Text fallback: <<<TOOL>>>{\"name\":\"read_file\",\"arguments\":{\"path\":\"relative/path\"}}<<<END>>>. Memory example: <<<TOOL>>>{\"name\":\"memory_save\",\"arguments\":{\"key\":\"user_timezone\",\"value\":\"America/New_York\"}}<<<END>>> — never call memory_save without both `key` and `value`. Tool results (compact JSON batches): each entry may contain `result` (inlined payload — use this first) or `result_ref` (spill under `memory/snapshots/` — read_file that exact path once; auto-unwrapped). Never list/grep/find_files under `memory/snapshots/` or `memory/runs/` for API data — `memory/runs/` is agent logs only. If spill files are stale/nested/missing, rerun the originating tool (`web_fetch`, `web_post`, etc.) or `session_search` for chat context — not run_shell head/tail on memory paths." +
   "\n\nExact text discipline: when the user asks for an exact string, token, filename, identifier, code symbol, JSON key, or command output, copy it byte-for-byte. Preserve underscores, hyphens, slashes, capitalization, digits, punctuation, and spacing. Never normalize or prettify exact tokens such as FOO_BAR_TOKEN." +
   "\n\nTopic discipline: when the user's latest message changes the subject or starts a new request, treat that as the active task. Do not continue earlier plans, files, or tools from older turns unless the user explicitly asks you to resume them." +
-  "\n\nSkill discipline: skills are procedural knowledge, separate from memory facts. Follow the **Capability router** below before tool fan-out; call `skill_view` on the listed hub (or matching skill from the index) before detailed work. Memory layer boundaries are in **Memory layers**; saving or installing skills: `skill_view` **`web-agent-skill`**. Prefer GitHub-flavored Markdown pipe tables in assistant-visible text." +
+  "\n\nSkill discipline: skills are procedural knowledge, separate from memory facts. The **Tool capability index** lists every tool (active and deferred). Follow the **Capability router** below for task routing; call `skill_view` on the listed hub before detailed work. Deferred/MCP tools: `tool_search` then `tool_activate`. Memory layer boundaries are in **Memory layers**; saving or installing skills: `skill_view` **`web-agent-skill`**. Prefer GitHub-flavored Markdown pipe tables in assistant-visible text." +
   "\n\nCron discipline: heartbeat jobs in `.webagent/cronjobs.json` run only on heartbeat ticks while the tab is open (`everyMinutes` + `lastRunAt`); there is no manual cron run tool. `cron_register` refresh reschedules—it does not execute the job unless a heartbeat tick is due at that moment. If the user wants work now, run the job step tools in this chat (or invoke the relevant skill)—never claim to \"run the cron manually\". Before explaining cron timing or where output goes, call `cron_list` or `skill_view` **`heartbeat-cron`** and cite `outputDestination`, `nextEligibleAtMs`, and `schedulingNote` from tool output. Delivery: Silent (logs only), Web UI (`delivery: terminal`), Web UI + Telegram (`terminal` + `notifyChannel`), Email (`delivery: email` + `deliveryEmailTo`)." +
   "\n\nArchive discipline: `extract_archive` / `archive_list` are read-only. There is no `create_archive` tool. To bundle files into a `.zip`, use `run_python` with stdlib `zipfile`, write to `work/<slug>/` or `projects/<slug>/`, verify with `archive_list`, deliver with `artifact_present`. Do not invent `create_archive`, use shell `zip`, or substitute a `.txt` concat unless the user explicitly accepts non-zip delivery.";
 
@@ -210,6 +214,7 @@ export function invalidateToolNamesCache(): void {
   _cachedToolNames = null;
   _openAiToolsCacheKey = null;
   _openAiToolsCache = null;
+  invalidateToolCapabilityIndexCache();
   void import("./llm/tool-schema-sanitizer.js").then((m) => m.invalidateSanitizedSchemaCache?.());
 }
 
@@ -353,10 +358,8 @@ export async function agentTurn(
   await ensureDefaultToolPolicy();
   const toolPolicy: ToolPolicyConfig | null = await loadToolPolicy();
   const policyToolNames = resolvePolicyToolNames(allToolNames, toolPolicy, process.env);
-  const filteredPolicyNames = focusToolNamesForIntent(
-    filterToolNames(policyToolNames, turnMeta),
-    originalUserInput
-  );
+  const indexPolicyNames = filterToolNames(policyToolNames, turnMeta);
+  const filteredPolicyNames = focusToolNamesForIntent(indexPolicyNames, originalUserInput);
   const unlockedTools = new Set<string>();
   let activeToolNames = resolveInitialActiveToolNames(
     filteredPolicyNames,
@@ -369,6 +372,11 @@ export async function agentTurn(
   const memoryBlock = await buildMemoryContextBlock({ goal: originalUserInput });
   const skillsBlock = await buildSkillsContextBlock(activeToolNames);
   const toolCatalog = await loadToolCatalog();
+  let toolIndexBlock = await resolveToolCapabilityIndexBlock({
+    catalog: toolCatalog,
+    policyToolNames: indexPolicyNames,
+    activeToolNames,
+  });
   const buildActiveCatalog = (names: string[]) =>
     Object.fromEntries(Object.entries(toolCatalog).filter(([name]) => names.includes(name)));
   const rebuildStreamTools = async (names: string[]) => {
@@ -397,11 +405,6 @@ export async function agentTurn(
     !turnMeta?.textOnly && originalUserInput
       ? buildComposioSaasContextPrefix(originalUserInput)
       : null;
-  const volatileToolHint =
-    buildCapabilityRouterBlock(activeToolNames) +
-    buildExecutionGuidanceBlock(typeof cfg.model === "string" ? cfg.model : null) +
-    buildMemoryLayerGuidanceBlock(activeToolNames);
-
   const refreshActiveToolState = async () => {
     activeToolNames = resolveInitialActiveToolNames(
       filteredPolicyNames,
@@ -420,11 +423,17 @@ export async function agentTurn(
     const systemRow = conv[0] as ChatTurnMsg | undefined;
     if (systemRow?.role === "system") {
       const refreshedSkills = await buildSkillsContextBlock(activeToolNames);
+      toolIndexBlock = await resolveToolCapabilityIndexBlock({
+        catalog: toolCatalog,
+        policyToolNames: indexPolicyNames,
+        activeToolNames,
+      });
       systemRow.content =
         sys +
         memoryBlock +
-        refreshedSkills +
+        toolIndexBlock +
         buildCapabilityRouterBlock(activeToolNames) +
+        refreshedSkills +
         buildExecutionGuidanceBlock(typeof cfg.model === "string" ? cfg.model : null) +
         buildMemoryLayerGuidanceBlock(activeToolNames);
     }
@@ -464,7 +473,17 @@ export async function agentTurn(
   };
 
   const fullMessages = [
-    { role: "system", content: sys + memoryBlock + skillsBlock + volatileToolHint },
+    {
+      role: "system",
+      content:
+        sys +
+        memoryBlock +
+        toolIndexBlock +
+        buildCapabilityRouterBlock(activeToolNames) +
+        skillsBlock +
+        buildExecutionGuidanceBlock(typeof cfg.model === "string" ? cfg.model : null) +
+        buildMemoryLayerGuidanceBlock(activeToolNames),
+    },
     ...safeList.filter((m) => m.role !== "system"),
   ];
 

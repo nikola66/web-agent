@@ -56,6 +56,7 @@ Canonical built-in tool picker. Other skills defer here for filesystem vs HTTP v
 
 ## Relation to other skills
 
+- **Full tool inventory:** each turn’s system prompt includes the **Tool capability index** (all built-ins + MCP, one line each). Deferred/MCP tools still need `tool_search` → `tool_activate` before calling; the index only lists what exists.
 - Scheduled jobs: **`heartbeat-cron`**. Deliverables: **`artifact-delivery`**. Persistence: **`memory-layers`**.
 
 ## Surfaces
