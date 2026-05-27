@@ -73,5 +73,7 @@ test("summarizeToolExecutions adds list_digest when metadata payload spills", ()
   const rows = summarizeToolExecutions(exec, ["memory/snapshots/run_x_r0_0.json"]);
   assert.match(rows[0].summary, /List digest \(2\)/);
   assert.match(rows[0].summary, /job_postings/);
+  assert.match(rows[0].summary, /list_digest below/i);
+  assert.match(rows[0].summary, /do not read_file/i);
   assert.deepEqual(rows[0].list_digest?.slugs, ["job_postings", "Leads"]);
 });

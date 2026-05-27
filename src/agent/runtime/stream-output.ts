@@ -17,12 +17,15 @@ export function summarizeToolExecutions(exec, snapshotRefs = []) {
     } else if (resultRef) {
       const preview = summarizeToolResultPreview(item?.result);
       const digest = extractHttpListDigest(item?.result);
-      summary =
-        `payload_spilled_to_snapshot: full tool result is in "${resultRef}" — read_file that path once (auto-unwrapped). ` +
-        `Preview: ${preview}. Do not list/grep memory/snapshots or memory/runs; if stale or nested, rerun the originating tool (web_fetch, web_post, grep, etc.).`;
       if (digest) {
-        const sample = digest.slugs.slice(0, 48);
-        summary += ` List digest (${digest.total}): ${sample.join(", ")}${digest.total > sample.length ? ", …" : ""}.`;
+        const sample = (digest.preview ?? digest.slugs).slice(0, 12);
+        summary =
+          `payload_spilled_to_snapshot (${resultRef}). Use list_digest below — do not read_file unless you need fields beyond this list. ` +
+          `List digest (${digest.total}): ${sample.join(" | ")}${digest.total > sample.length ? " | …" : ""}.`;
+      } else {
+        summary =
+          `payload_spilled_to_snapshot: full tool result is in "${resultRef}" — read_file that path once (auto-unwrapped). ` +
+          `Preview: ${preview}. Do not list/grep memory/snapshots or memory/runs; if stale or nested, rerun the originating tool (web_fetch, web_post, grep, etc.).`;
       }
       const tr = item?.result;
       if (tr && typeof tr === "object" && tr.truncated === true) {

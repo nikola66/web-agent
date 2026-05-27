@@ -7,7 +7,6 @@ import {
   spillInlineCharBudgetForToolResultItem,
   decideToolResultCompression,
 } from "../dist/agent-runtime/memory/index.js";
-
 test("unwrapMemorySnapshotReadContent inlines nested web_fetch body", () => {
   const inner = { ok: true, text: "collections payload" };
   const raw = JSON.stringify({
@@ -16,6 +15,21 @@ test("unwrapMemorySnapshotReadContent inlines nested web_fetch body", () => {
   const out = unwrapMemorySnapshotReadContent("memory/snapshots/run_x_r1_0.json", raw);
   assert.equal(out?.from_snapshot, true);
   assert.match(out?.content ?? "", /collections payload/);
+});
+
+test("unwrapMemorySnapshotReadContent surfaces HTML API shell as recovery text", () => {
+  const html = "<!DOCTYPE html><html><body>Please enable JavaScript</body></html>";
+  const raw = JSON.stringify({
+    payload: {
+      tool: "web_fetch",
+      result: { ok: true, url: "https://hub.example.com/items/articles", text: html },
+    },
+  });
+  const out = unwrapMemorySnapshotReadContent("memory/snapshots/run_html_r1_0.json", raw);
+  assert.equal(out?.from_snapshot, true);
+  assert.equal(out?.html_shell, true);
+  assert.match(out?.content ?? "", /API returned HTML/i);
+  assert.match(out?.content ?? "", /Authorization/i);
 });
 
 test("unwrapMemorySnapshotReadContent inlines web_fetch JSON data field", () => {

@@ -750,6 +750,18 @@ export async function httpProxyCall(
       parsedJson = JSON.parse(sliced.text);
     } catch {
       parsedJson = undefined;
+      if (trimmed.startsWith("<")) {
+        const recovery_hint = spaShellPageRecoveryHint(sliced.text, url);
+        return {
+          ok: true as const,
+          status,
+          url,
+          contentType,
+          text: sliced.text,
+          ...(recovery_hint ? { recovery_hint } : {}),
+          ...(sliced.truncated ? { truncated: true, truncated_at_chars: sliced.truncated_at_chars } : {}),
+        };
+      }
     }
   }
   if (!ok) {

@@ -1,3 +1,11 @@
+import { spaShellPageRecoveryHint } from "./tools/tinyfish-fetch.js";
+
+/** True when body looks like an HTML document (SPA shell, login page, CDN error). */
+export function looksLikeHtmlDocument(text: unknown): boolean {
+  const t = String(text || "").trimStart().slice(0, 256).toLowerCase();
+  return t.startsWith("<!doctype") || t.startsWith("<html") || /^<\?xml[\s>]/.test(t);
+}
+
 /**
  * One-line summary of tool `result` for compact "Tool results (compact JSON)" messages.
  * Must surface real body fields (`content`, `text`, `markdown`, `transcript`, directory listings) —
@@ -155,8 +163,25 @@ function slugFromListRow(row: unknown): string | null {
   return null;
 }
 
-/** Slim slug/id list from large JSON list/metadata API responses (for spilled compact rows). */
-export function extractHttpListDigest(result: unknown): { slugs: string[]; total: number } | null {
+function formatHttpItemDigestLine(row: unknown): string | null {
+  if (typeof row === "string" && row.trim()) return row.trim();
+  if (!row || typeof row !== "object") return null;
+  const obj = row as Record<string, unknown>;
+  const title = [obj.title, obj.name, obj.headline, obj.slug]
+    .find((v) => typeof v === "string" && v.trim());
+  const date = [obj.date_created, obj.date_updated, obj.published_at, obj.created_at, obj.updated_at]
+    .find((v) => typeof v === "string" && v.trim());
+  if (typeof title === "string" && title.trim()) {
+    const d = typeof date === "string" ? date.trim().slice(0, 10) : "";
+    return d ? `${title.trim()} (${d})` : title.trim();
+  }
+  return slugFromListRow(row);
+}
+
+/** Slim list from large JSON list/metadata API responses (for spilled compact rows). */
+export function extractHttpListDigest(
+  result: unknown
+): { slugs: string[]; total: number; preview?: string[] } | null {
   if (!result || typeof result !== "object") return null;
   const obj = result as Record<string, unknown>;
   const url = typeof obj.url === "string" ? obj.url : "";
@@ -175,15 +200,35 @@ export function extractHttpListDigest(result: unknown): { slugs: string[]; total
   if (!items?.length) return null;
 
   const slugs: string[] = [];
+  const preview: string[] = [];
   const seen = new Set<string>();
   for (const row of items) {
+    const line = formatHttpItemDigestLine(row);
     const slug = slugFromListRow(row);
-    if (!slug || seen.has(slug)) continue;
-    seen.add(slug);
-    slugs.push(slug);
+    if (line && !seen.has(line)) {
+      seen.add(line);
+      preview.push(line);
+      if (slug && !slugs.includes(slug)) slugs.push(slug);
+    } else if (slug && !seen.has(slug)) {
+      seen.add(slug);
+      slugs.push(slug);
+      preview.push(slug);
+    }
   }
-  if (!slugs.length) return null;
-  return { slugs, total: slugs.length };
+  if (!preview.length && !slugs.length) return null;
+  return {
+    slugs: preview.length ? preview : slugs,
+    total: items.length,
+    preview: preview.length ? preview : undefined,
+  };
+}
+
+/** Human-readable note when an HTTP tool body is HTML instead of JSON. */
+export function htmlApiBodyRecoveryNote(text: unknown, url?: string): string {
+  const hint =
+    spaShellPageRecoveryHint(text, url) ||
+    "Response body is HTML, not JSON — add Authorization (Bearer) on web_fetch/web_post and rerun; do not read_file snapshot spill files that contain HTML.";
+  return `[API returned HTML, not JSON] ${hint}`;
 }
 
 export function summarizeToolResultPreview(value: unknown) {

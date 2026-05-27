@@ -14,6 +14,10 @@ import {
   unwrapMemorySnapshotReadContent,
 } from "../../memory/snapshots.js";
 import {
+  htmlApiBodyRecoveryNote,
+  looksLikeHtmlDocument,
+} from "../../tool-result-preview.js";
+import {
   isMemoryRunArchivePath,
   isMemorySnapshotSpillPath,
   memoryRunArchiveBlockedMessage,
@@ -41,7 +45,30 @@ export function getReadFileMaxChars() {
   return SNAPSHOT_READ_UNWRAP_MAX_CHARS;
 }
 
+function snapshotReadFailure(rel: string, content: string): Error | null {
+  if (!isMemorySnapshotSpillPath(rel)) return null;
+  const trimmed = content.trimStart();
+  if (looksLikeHtmlDocument(trimmed)) {
+    return new Error(
+      `${htmlApiBodyRecoveryNote(trimmed)} Do not JSON.parse this spill — rerun web_fetch/web_post with Authorization headers.`
+    );
+  }
+  if (trimmed.startsWith("{") || trimmed.startsWith("[")) {
+    try {
+      JSON.parse(content);
+    } catch (e) {
+      return new Error(
+        `Snapshot spill is not valid JSON (${errorMessage(e)}). Rerun web_fetch with limit/sort/fields — do not read_file this path again.`
+      );
+    }
+  }
+  return null;
+}
+
 function formatReadFileSuccess(rel: string, content: string) {
+  const spillErr = snapshotReadFailure(rel, content);
+  if (spillErr) throw spillErr;
+
   const unwrapped = isMemorySnapshotSpillPath(rel)
     ? unwrapMemorySnapshotReadContent(rel, content)
     : null;

@@ -1,7 +1,11 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { summarizeToolResultPreview } from "../dist/agent-runtime/tool-result-preview.js";
+import {
+  extractHttpListDigest,
+  looksLikeHtmlDocument,
+  summarizeToolResultPreview,
+} from "../dist/agent-runtime/tool-result-preview.js";
 
 test("summarizeToolResultPreview includes text excerpt for web_fetch-shaped result", () => {
   const s = summarizeToolResultPreview({
@@ -12,6 +16,24 @@ test("summarizeToolResultPreview includes text excerpt for web_fetch-shaped resu
   assert.match(s, /^text \(\d+ chars\):/);
   assert.match(s, /hello world/);
   assert.match(s, /…$/);
+});
+
+test("extractHttpListDigest prefers article title and date for /items/ responses", () => {
+  const digest = extractHttpListDigest({
+    ok: true,
+    url: "https://hub.example.com/items/articles",
+    data: [
+      { id: "a1", title: "Latest launch", date_created: "2026-05-20T12:00:00" },
+      { id: "a2", title: "Weekly recap", date_created: "2026-05-18T09:00:00" },
+    ],
+  });
+  assert.equal(digest?.total, 2);
+  assert.deepEqual(digest?.preview, ["Latest launch (2026-05-20)", "Weekly recap (2026-05-18)"]);
+});
+
+test("looksLikeHtmlDocument detects doctype pages", () => {
+  assert.equal(looksLikeHtmlDocument("<!DOCTYPE html><html>"), true);
+  assert.equal(looksLikeHtmlDocument('{"data":[]}'), false);
 });
 
 test("summarizeToolResultPreview includes JSON data excerpt for web_fetch", () => {

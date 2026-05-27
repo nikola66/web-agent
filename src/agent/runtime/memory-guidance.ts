@@ -72,7 +72,7 @@ export const COMPOSIO_SAAS_GUIDANCE =
 export const MEMORY_SPILL_RECOVERY_GUIDANCE =
   "**Internal memory paths (do not scavenge):** `memory/snapshots/` = oversized tool-result spill only; " +
   "`memory/runs/` = agent turn logs (tool names/errors), not API payloads. Never `list_dir`, `find_files`, or `grep` under those trees to recover HTTP data. " +
-  "When compact tool output shows `result_ref`, `read_file` that exact path once (content is auto-unwrapped). If missing/stale/nested, rerun `web_fetch`/`web_post`/`grep` on real project paths — not `run_shell head` on memory files. " +
+  "When compact tool output shows `list_digest`, use it — do not read_file the spill. When only `result_ref` is present, read_file that path once (auto-unwrapped). If the body is HTML or invalid JSON, rerun `web_fetch`/`web_post` with Authorization — never JSON.parse spill files. " +
   "For prior chat context use `session_search`, not raw run JSON.";
 
 export function buildMemoryLayerGuidanceBlock(toolNames: string[] = []): string {

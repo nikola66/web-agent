@@ -12,7 +12,12 @@ import {
   memoryPath,
   safeWriteJson,
 } from "./sql.js";
-import { extractToolResultBodyText, looksLikeBinaryPayload } from "../tool-result-preview.js";
+import {
+  extractToolResultBodyText,
+  htmlApiBodyRecoveryNote,
+  looksLikeBinaryPayload,
+  looksLikeHtmlDocument,
+} from "../tool-result-preview.js";
 import { isMemorySnapshotSpillPath } from "./internal-paths.js";
 
 /** Same prefix as agent/context-compaction tool-result injection (must match exactly). */
@@ -220,10 +225,22 @@ export function unwrapMemorySnapshotReadContent(
   try {
     parsed = JSON.parse(rawContent);
   } catch {
+    if (looksLikeHtmlDocument(rawContent)) {
+      return {
+        content: htmlApiBodyRecoveryNote(rawContent),
+        from_snapshot: true,
+        html_shell: true,
+      };
+    }
     return null;
   }
   const execPayload = parsed?.payload;
   if (!execPayload || typeof execPayload !== "object") return null;
+
+  const spillUrl =
+    execPayload.result && typeof execPayload.result === "object"
+      ? String((execPayload.result as Record<string, unknown>).url || "")
+      : "";
 
   let text = extractPayloadResultText(execPayload);
   if (text == null && execPayload.result && typeof execPayload.result === "object") {
@@ -234,6 +251,14 @@ export function unwrapMemorySnapshotReadContent(
     }
   }
   if (text == null) return null;
+
+  if (looksLikeHtmlDocument(text)) {
+    return {
+      content: htmlApiBodyRecoveryNote(text, spillUrl),
+      from_snapshot: true,
+      html_shell: true,
+    };
+  }
 
   const trimmed = text.trimStart();
   if (trimmed.startsWith("{") && trimmed.includes('"payload"')) {
