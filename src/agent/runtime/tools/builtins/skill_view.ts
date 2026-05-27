@@ -5,6 +5,7 @@ const SKILL_VIEW_EXAMPLES = [
   { name: "http-api" },
   { name: "memory-layers" },
   { name: "browser-runtime-map" },
+  { name: "pyodide-runtime" },
 ];
 
 export default defineTool({

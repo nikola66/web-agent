@@ -80,6 +80,8 @@ Three layers:
 
 ## Python in Pyodide — what works vs. what doesn't
 
+Full agent contract and checklist: **`skill_view` `pyodide-runtime`**. Capability manifest: `src/runtimes/webcontainer/pyodide-capabilities.json`.
+
 | Python pattern | Status | Alternative |
 |---|---|---|
 | stdlib (`json`, `re`, `pathlib`, `csv`, …) | **Works** | — |

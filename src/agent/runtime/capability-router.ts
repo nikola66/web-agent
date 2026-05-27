@@ -41,9 +41,9 @@ export const CAPABILITY_ROUTES: CapabilityRoute[] = [
   },
   {
     need: "Python scripts",
-    skill: "browser-runtime-map",
+    skill: "pyodide-runtime",
     tools: ["run_python"],
-    avoid: "run_shell python3 except alias",
+    avoid: "run_shell python3 except alias; host subprocess/pip/TCP",
   },
   {
     need: "Shell (last resort)",
@@ -137,7 +137,7 @@ export const CAPABILITY_ENV_FOOTER =
   "Environment: Nodebox browser — no POSIX shell, Pyodide Python, proxy-backed HTTP. " +
   "Bytes move runtime→proxy→upstream; model sees metadata only (never base64 in tool args). " +
   "CMS /files → web_upload; JSON/GraphQL → web_post; binary download → web_fetch save_to. " +
-  "Full matrix: skill_view **`browser-runtime-map`**. " +
+  "Python codegen: skill_view **`pyodide-runtime`**; tool picker: **`browser-runtime-map`**. " +
   "Installed capability folders: `capability_list` (extensions only, not built-in routing).";
 
 const ROUTER_CHAR_BUDGET = 1800;

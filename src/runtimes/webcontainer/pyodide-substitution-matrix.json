@@ -1,0 +1,103 @@
+{
+  "forbidden_imports": {
+    "requests": {
+      "prefer": ["webagent.http", "web_fetch", "web_post"],
+      "note": "May hit JsProxy in Pyodide; prefer webagent.http inside run_python"
+    },
+    "httpx": {
+      "prefer": ["webagent.http", "web_fetch", "web_post"],
+      "note": "Async HTTP fragile in Pyodide"
+    },
+    "aiohttp": {
+      "prefer": ["webagent.http", "web_fetch", "web_post"],
+      "note": "Async HTTP fragile in Pyodide"
+    },
+    "urllib3": {
+      "prefer": ["webagent.http", "urllib.request"],
+      "note": "Use proxy-backed urllib or webagent.http"
+    },
+    "pdf2image": {
+      "prefer": ["pypdf"],
+      "note": "Requires poppler pdftoppm at runtime"
+    },
+    "playwright": {
+      "prefer": ["web_fetch"],
+      "note": "No browser process in WASM"
+    },
+    "selenium": {
+      "prefer": ["web_fetch"],
+      "note": "No browser driver in WASM"
+    },
+    "torch": {
+      "prefer": ["web_post"],
+      "note": "Use hosted inference API"
+    },
+    "tensorflow": {
+      "prefer": ["web_post"],
+      "note": "Use hosted inference API"
+    },
+    "cv2": {
+      "prefer": ["PIL"],
+      "note": "OpenCV not in Pyodide; use Pillow for basic ops"
+    },
+    "psycopg2": {
+      "prefer": ["web_fetch", "web_post"],
+      "note": "No raw TCP; use database HTTP API"
+    },
+    "wikipedia": {
+      "prefer": ["web_fetch"],
+      "note": "Use Wikipedia REST API, not micropip package"
+    }
+  },
+  "forbidden_binaries": {
+    "soffice": "python-docx, python-pptx, openpyxl",
+    "git": "web_fetch + GitHub REST API",
+    "ffmpeg": "hosted transcoding API or imageio without ffmpeg backend",
+    "pdftoppm": "pypdf extract_text; server-side rasterize",
+    "tesseract": "hosted OCR via web_post",
+    "curl": "web_fetch",
+    "pandoc": "markitdown, python-docx, reportlab"
+  },
+  "patterns": [
+    {
+      "task": "HTTP GET JSON API",
+      "bad": "requests.get(url).json()",
+      "good": "import webagent.http as http\nhttp.get(url).json()"
+    },
+    {
+      "task": "HTTP POST JSON",
+      "bad": "requests.post(url, json=payload)",
+      "good": "web_post at agent level, or webagent.http.post inside run_python"
+    },
+    {
+      "task": "Create ZIP bundle",
+      "bad": "subprocess.run(['zip', ...])",
+      "good": "zipfile.ZipFile under work/<slug>/bundle.zip"
+    },
+    {
+      "task": "PDF text extract",
+      "bad": "subprocess.run(['pdftotext', ...])",
+      "good": "from pypdf import PdfReader"
+    },
+    {
+      "task": "Word doc edit",
+      "bad": "subprocess.run(['soffice', '--convert-to', ...])",
+      "good": "import docx"
+    },
+    {
+      "task": "Clone git repo",
+      "bad": "subprocess.run(['git', 'clone', ...])",
+      "good": "web_fetch GitHub API or upload zip + extract_archive"
+    },
+    {
+      "task": "Long CPU loop",
+      "bad": "while True: pass",
+      "good": "await asyncio.sleep(0) in async chunks; set timeout_ms"
+    },
+    {
+      "task": "Persist config",
+      "bad": "open('/home/user/.config/app.json')",
+      "good": "write under run_python cwd; host persists workspace via OPFS"
+    }
+  ]
+}
