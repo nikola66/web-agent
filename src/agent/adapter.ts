@@ -65,6 +65,7 @@ import runtimeClarifySlashSource from "../../dist/agent-runtime/clarify-slash.js
 import runtimeFindSkillsSlashSource from "../../dist/agent-runtime/find-skills-slash.js?raw";
 import runtimeWikiSlashSource from "../../dist/agent-runtime/wiki-slash.js?raw";
 import runtimeSlashRoutingSource from "../../dist/agent-runtime/slash-routing.js?raw";
+import runtimeMcpSlashSource from "../../dist/agent-runtime/mcp-slash.js?raw";
 import runtimeMcpConfigSource from "../../dist/agent-runtime/mcp-config.js?raw";
 import runtimeMcpRegistrySource from "../../dist/agent-runtime/mcp-registry.js?raw";
 import runtimeTerminalFormatSource from "../../dist/agent-runtime/terminal-format.js?raw";
@@ -529,10 +530,10 @@ async function writeRuntimeSources(profileId: string): Promise<void> {
   await emulator.fs.writeFile(`${webagentDir}/stream-output.js`, runtimeStreamOutputSource);
   await emulator.fs.writeFile(`${webagentDir}/context-compression.js`, runtimeContextCompressionSource);
   await emulator.fs.writeFile(`${webagentDir}/planning-slash.js`, runtimePlanningSlashSource);
-  await emulator.fs.writeFile(`${webagentDir}/clarify-slash.js`, runtimeClarifySlashSource);
   await emulator.fs.writeFile(`${webagentDir}/find-skills-slash.js`, runtimeFindSkillsSlashSource);
   await emulator.fs.writeFile(`${webagentDir}/wiki-slash.js`, runtimeWikiSlashSource);
   await emulator.fs.writeFile(`${webagentDir}/slash-routing.js`, runtimeSlashRoutingSource);
+  await emulator.fs.writeFile(`${webagentDir}/mcp-slash.js`, runtimeMcpSlashSource);
   await emulator.fs.writeFile(`${webagentDir}/mcp-config.js`, runtimeMcpConfigSource);
   await emulator.fs.writeFile(`${webagentDir}/mcp-registry.js`, runtimeMcpRegistrySource);
   await emulator.fs.writeFile(`${webagentDir}/terminal-format.js`, runtimeTerminalFormatSource);

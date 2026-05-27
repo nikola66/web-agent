@@ -8,11 +8,6 @@ export const SLASH_COMMANDS = [
       "Planning mode: research the workspace, write a detailed plan under plans/, present it, then stop—execute on a follow-up message.",
   },
   {
-    name: "/clarify [topic]",
-    description:
-      "Clarify mode: emit one <<<CLARIFY>>> option block—no tools; host shows choice buttons.",
-  },
-  {
     name: "/find_skills [query]",
     description:
       "Find-skills mode: search skills.sh, SkillsMP, and Cursor Marketplace only; return the top 5 by installs, stars, or votes.",
@@ -35,13 +30,7 @@ export const SLASH_COMMANDS = [
     description: "Search markdown in the wiki vault when memory tools are not enough.",
   },
   { name: "/<skill> [task]", description: "Invoke an installed skill for a task." },
-  {
-    name: "/voice [on|off]",
-    description:
-      "Voice mode: speak agent replies aloud (browser OS voices, fully local). Mic uses local Whisper STT. No arg shows status.",
-  },
   { name: "/stop", description: "Interrupt the current run." },
-  { name: "/exit", description: "Exit the active terminal agent session." },
 ];
 
 const TELEGRAM_COMMAND_RE = /^[a-z0-9_]{1,32}$/;

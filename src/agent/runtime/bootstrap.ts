@@ -64,7 +64,7 @@ import { buildToolRowsFromCatalog } from "./slash-command-views.js";
 import { formatHelpForSurface, runSkillsSlashCommand } from "./channel-outbound.js";
 import { SLASH_COMMANDS } from "./commands.js";
 import { parseLocalSlashCommand, resolveSlashUserMessage } from "./slash-routing.js";
-import { discoverMcpOnStartup, shutdownMcpOnExit } from "./mcp-registry.js";
+import { discoverMcpOnStartup, runMcpSlashCommand, shutdownMcpOnExit } from "./mcp-slash.js";
 import {
   compactHistory,
   formatCompactionNotice,
@@ -445,13 +445,6 @@ export async function main() {
       profile: process.env.WEBAGENT_PROFILE_NAME || null,
       user: process.env.WEBAGENT_USER_NAME || null,
     });
-    if (input === "/exit") {
-      channelAbort.abort();
-      channelSidecar.stop();
-      clearInterval(heartbeatHandle);
-      await shutdownMcpOnExit();
-      break;
-    }
     if (input === "/clear") {
       await archiveCurrentHistoryForSessionSearch(history).catch(() => {});
       history = await refreshHistoryWithLatestSystemPrompt([]);
@@ -479,6 +472,14 @@ export async function main() {
       continue;
     }
     const localSlash = parseLocalSlashCommand(input);
+    if (localSlash.kind === "reload_mcp") {
+      await runMcpSlashCommand("/reload-mcp");
+      continue;
+    }
+    if (localSlash.kind === "mcp") {
+      await runMcpSlashCommand(localSlash.input);
+      continue;
+    }
     if (input === "/stop") {
       if (abortCurrentTurn("user_stopped")) {
         console.log(dim("Stopping current run…"));

@@ -202,17 +202,6 @@ export function createChannelInboundHandler(deps) {
     }
 
     const localSlash = parseLocalSlashCommand(trimmed);
-    if (localSlash.kind === "exit") {
-      return enqueueByChat(chatId, async () => {
-        const surface = outboundSurfaceForChannel(channel);
-        const msg =
-          surface === "telegram"
-            ? "Telegram chats stay open — use `/clear` for a fresh thread. `/exit` only closes the web terminal session."
-            : "Exit is only available in the web terminal session.";
-        await sendReply(chatId, msg);
-      });
-    }
-
     return enqueueByChat(chatId, async () => {
       await logDebugEvent("channel_inbound", {
         channel,
@@ -318,6 +307,7 @@ export function createChannelInboundHandler(deps) {
         await runSkillsSlashCommand(localSlash.input, surface, (msg) => sendReply(chatId, msg));
         return;
       }
+
 
       if (localSlash.kind === "voice") {
         const arg = localSlash.arg;

@@ -273,37 +273,6 @@ export async function submitUserInput(raw: string): Promise<void> {
     return;
   }
 
-  if (trimmed === "/voice" || trimmed.startsWith("/voice ")) {
-    const arg = trimmed.slice("/voice".length).trim().toLowerCase();
-    const voice = useVoiceStore.getState();
-    if (arg === "on") {
-      voice.setEnabled(true);
-      resetVoicePlaybackBackendCache();
-      speakConfirmation("Voice mode on.");
-      write("\r\n\x1b[32m▸ Voice mode ON — agent replies will be spoken via Edge TTS (free cloud).\x1b[0m\r\n");
-    } else if (arg === "off") {
-      voice.setEnabled(false);
-      resetVoicePlaybackBackendCache();
-      cancelVoicePlayback();
-      write("\r\n\x1b[90m▸ Voice mode OFF.\x1b[0m\r\n");
-    } else if (arg === "" || arg === "status") {
-      const state = voice.enabled ? "ON" : "OFF";
-      void resolveVoicePlaybackBackend().then((backend) => {
-        const profile = useProfileStore.getState().profiles.find(
-          (p) => p.id === useProfileStore.getState().activeProfileId
-        );
-        const hint = getVoicePlaybackStatus(backend, resolveProfileTtsVoice(profile)).hint;
-        write(
-          `\r\n\x1b[36m▸ Voice mode: ${state}\x1b[0m\r\n` +
-            `\x1b[90m  ${hint}. Toggle with /voice on or /voice off, or the speaker control next to Files.\x1b[0m\r\n`
-        );
-      });
-    } else {
-      write(`\r\n\x1b[33mUnknown /voice argument "${arg}". Use /voice on | /voice off | /voice.\x1b[0m\r\n`);
-    }
-    return;
-  }
-
   if (trimmed === "/clear") {
     if (!state.agentReadyForInput) {
       write("\r\n\x1b[90mCannot clear while response is in progress. Use /stop first.\x1b[0m\r\n");

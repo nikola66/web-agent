@@ -227,11 +227,6 @@ test("/plan command appears in runtime and Telegram registries", async () => {
   assert.ok(buildTelegramBotCommands().some((command) => command.command === "plan"));
 });
 
-test("/clarify command appears in runtime and Telegram registries", async () => {
-  assert.ok(SLASH_COMMANDS.some((command) => String(command.name).startsWith("/clarify")));
-  assert.ok(buildTelegramBotCommands().some((command) => command.command === "clarify"));
-});
-
 test("/find_skills command appears in runtime and Telegram registries", async () => {
   assert.ok(SLASH_COMMANDS.some((command) => String(command.name).startsWith("/find_skills")));
   assert.ok(buildTelegramBotCommands().some((command) => command.command === "find_skills"));

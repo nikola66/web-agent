@@ -18,7 +18,7 @@ import {
 test("skillSlugToTelegramCommand uses underscores and skips built-in collisions", () => {
   assert.equal(skillSlugToTelegramCommand("memory-layers"), "memory_layers");
   assert.equal(skillSlugToTelegramCommand("find-skills"), null);
-  assert.equal(skillSlugToTelegramCommand("clarify"), null);
+  assert.equal(skillSlugToTelegramCommand("clarify"), "clarify");
 });
 
 test("slashTokenToSkillSlug maps underscore tokens to hyphen slugs", () => {

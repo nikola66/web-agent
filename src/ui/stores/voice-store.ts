@@ -4,7 +4,7 @@
  * State is global (not per-profile) and persisted in localStorage so the
  * preference survives reloads. Two surfaces drive this store:
  *   - the bottom-right toggle button in `StatusBar`
- *   - the `/voice [on|off]` slash command
+ *   - the speaker control in the web UI (StatusBar)
  *
  * When `enabled === true`, the orchestrator pipes finalised assistant text
  * to Edge TTS via `/api/edge-tts` for spoken playback. Mic input uses local

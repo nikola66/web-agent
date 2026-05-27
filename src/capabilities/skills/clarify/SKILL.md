@@ -14,7 +14,7 @@ triggers: [which should I, pick one, either/or, not sure, ambiguous, conflicting
 | **No tools** | Do not call any tool in the clarify turn — output plain assistant text only |
 | Output | Exactly one `<<<CLARIFY>>>` … `<<<END>>>` JSON block on its own (runtime forwards it to the host UI) |
 | After emit | Stop and wait for the user's choice as the next message |
-| Manual test | User can send `/clarify [topic]` to force this mode |
+| Manual test | Invoke via `/clarify` skill slash when installed, or trigger from ambiguous user messages |
 
 Hand off to workflow skills (`open-web-research`, `task-execution`, etc.) **after** the user picks — not before.
 

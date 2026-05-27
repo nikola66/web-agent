@@ -1,5 +1,4 @@
 import { listSkills } from "./memory/index.js";
-import { buildClarifyModeUserPrompt } from "./clarify-slash.js";
 import { resolveFindSkillsUserMessage } from "./find-skills-slash.js";
 import { buildPlanModeUserPrompt } from "./planning-slash.js";
 import { rewriteWikiSlashUserMessage } from "./wiki-slash.js";
@@ -12,14 +11,11 @@ export const RESERVED_SLASH_TOKENS = new Set([
   "clear",
   "compact",
   "plan",
-  "clarify",
   "find_skills",
   "checkpoint",
   "rollback",
   "skills",
   "stop",
-  "exit",
-  "voice",
   "wiki_setup",
   "wiki_sync",
   "wiki_search",
@@ -109,11 +105,6 @@ export async function resolveSlashUserMessage(input: string): Promise<string | n
     return buildPlanModeUserPrompt(goal);
   }
 
-  if (trimmed === "/clarify" || trimmed.startsWith("/clarify ")) {
-    const topic = trimmed === "/clarify" ? "" : trimmed.slice("/clarify ".length).trim();
-    return buildClarifyModeUserPrompt(topic);
-  }
-
   const token = trimmed.split(/\s+/)[0].slice(1);
   const skills = await listSkills();
   const skill = findSkillBySlashToken(token, skills);
@@ -125,27 +116,23 @@ export async function resolveSlashUserMessage(input: string): Promise<string | n
 
 export type LocalSlashKind =
   | "none"
-  | "exit"
   | "clear"
   | "checkpoint"
   | "rollback"
   | "help"
   | "skills"
   | "compact"
-  | "stop"
-  | "voice"
+  | "stop";
 
 export type LocalSlashCommand =
   | { kind: "none" }
-  | { kind: "exit" }
   | { kind: "clear" }
   | { kind: "checkpoint"; name: string }
   | { kind: "rollback"; name: string }
   | { kind: "help" }
   | { kind: "skills"; input: string }
   | { kind: "compact" }
-  | { kind: "stop" }
-  | { kind: "voice"; arg: string }
+  | { kind: "stop" };
 
 /** Strip Telegram `@botname` suffix (e.g. `/help@bot`). */
 export function normalizeSlashCommandInput(text: string): string {
@@ -158,15 +145,11 @@ export function parseLocalSlashCommand(trimmed: string): LocalSlashCommand {
   const input = normalizeSlashCommandInput(trimmed);
   if (!input.startsWith("/")) return { kind: "none" };
 
-  if (input === "/exit") return { kind: "exit" };
   if (input === "/clear") return { kind: "clear" };
   if (input === "/help") return { kind: "help" };
   if (input === "/compact") return { kind: "compact" };
   if (input === "/stop") return { kind: "stop" };
   if (input === "/skills" || input.startsWith("/skills ")) return { kind: "skills", input };
-  if (input === "/voice" || input.startsWith("/voice ")) {
-    return { kind: "voice", arg: input.slice("/voice".length).trim().toLowerCase() };
-  }
   if (input.startsWith("/checkpoint")) {
     return {
       kind: "checkpoint",

@@ -2,7 +2,7 @@
 
 ## Web app: playback and mic
 
-- **Playback:** `src/core/voice-playback.ts` — Edge TTS (free cloud, Hermes-style) via `/api/edge-tts` → MP3 playback. Toggle with `/voice on|off` or the speaker control.
+- **Playback:** `src/core/voice-playback.ts` — Edge TTS (free cloud, Hermes-style) via `/api/edge-tts` → MP3 playback. Toggle with the speaker control in the web UI.
 - **Mic:** `ChatInput` records via `MediaRecorder`; `src/core/voice/stt-client.ts` + `stt-worker.ts` run vendored **whisper-tiny.en** (~50 MB under `public/models/whisper-tiny-en/`).
 
 ## Telegram: inbound voice notes only
