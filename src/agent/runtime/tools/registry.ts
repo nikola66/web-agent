@@ -387,9 +387,11 @@ async function writeToolStartTranscript(
   toolCatalog?: Record<string, { emoji?: string } | undefined>
 ) {
   const event = createToolStartTranscriptEvent({ name, argsPreview, argsPreviewTruncated });
-  process.stdout.write(
-    dim(`${formatToolStartTranscript({ ...event, toolCatalog })}\n`)
-  );
+  if (!ctx?.skipTerminalOutput) {
+    process.stdout.write(
+      dim(`${formatToolStartTranscript({ ...event, toolCatalog })}\n`)
+    );
+  }
   await emitTranscriptEvent(ctx, event, {
     tool: name,
     runId: ctx?.runId || null,
@@ -404,7 +406,9 @@ async function writeToolResultTranscript(
   const event = createToolResultTranscriptEvent({ name, status, error });
   const line = formatToolResultTranscript({ ...event, toolCatalog });
   const color = status === "error" ? red : status === "denied" ? dim : green;
-  process.stdout.write(color(`${line}\n`));
+  if (!ctx?.skipTerminalOutput) {
+    process.stdout.write(color(`${line}\n`));
+  }
   await emitTranscriptEvent(ctx, event, {
     tool: name,
     runId: ctx?.runId || null,

@@ -499,6 +499,8 @@ export function createChannelInboundHandler(deps) {
           input: trimmed,
           ask: null,
           autoApprove: true,
+          skipTerminalOutput: true,
+          skipBackgroundReview: true,
           ...(channelMaxRounds != null ? { maxAgentRounds: channelMaxRounds } : {}),
           services: typeof sendDocument === "function"
             ? { sendDocument: (doc) => sendDocument(chatId, doc) }

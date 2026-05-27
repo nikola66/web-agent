@@ -37,6 +37,7 @@ export type CreateToolContextInput = {
   ask?: Function | null;
   autoApprove?: boolean;
   onTranscript?: Function | null;
+  skipTerminalOutput?: boolean;
 };
 
 /**
@@ -56,6 +57,7 @@ export function createToolContext({
   ask = null,
   autoApprove = true,
   onTranscript = null,
+  skipTerminalOutput = false,
 }: CreateToolContextInput = {}) {
   const safeTimeout = Number.isFinite(timeoutMs) && timeoutMs > 0 ? timeoutMs : DEFAULT_TIMEOUT_MS;
   return Object.freeze({
@@ -71,6 +73,7 @@ export function createToolContext({
     ask,
     autoApprove,
     onTranscript,
+    skipTerminalOutput: skipTerminalOutput === true,
   });
 }
 
