@@ -1,0 +1,58 @@
+[
+  {"id": "stdlib-json", "file": "stdlib-json.py", "expect": "pass"},
+  {"id": "stdlib-csv-pathlib", "file": "stdlib-csv-pathlib.py", "expect": "pass"},
+  {"id": "stdlib-zipfile", "file": "stdlib-zipfile.py", "expect": "pass"},
+  {"id": "stdlib-hashlib", "file": "stdlib-hashlib.py", "expect": "pass"},
+  {"id": "stdlib-re-html", "file": "stdlib-re-html.py", "expect": "pass"},
+  {"id": "stdlib-datetime", "file": "stdlib-datetime.py", "expect": "pass"},
+  {
+    "id": "webagent-http-import",
+    "file": "webagent-http-import.py",
+    "expect": "pass",
+    "must_not_warn": ["Unknown imports.*webagent"]
+  },
+  {"id": "import-docx", "file": "import-docx.py", "expect": "pass", "auto_packages": ["python-docx"]},
+  {"id": "import-openpyxl", "file": "import-openpyxl.py", "expect": "pass", "auto_packages": ["openpyxl"]},
+  {"id": "import-pypdf", "file": "import-pypdf.py", "expect": "pass", "auto_packages": ["pypdf"]},
+  {"id": "import-pillow", "file": "import-pillow.py", "expect": "pass", "auto_packages": ["Pillow"]},
+  {"id": "import-numpy", "file": "import-numpy.py", "expect": "pass", "auto_packages": ["numpy"]},
+  {"id": "import-bs4", "file": "import-bs4.py", "expect": "pass", "auto_packages": ["beautifulsoup4"]},
+  {"id": "import-yaml", "file": "import-yaml.py", "expect": "pass", "auto_packages": ["pyyaml"]},
+  {
+    "id": "import-feedparser",
+    "file": "import-feedparser.py",
+    "expect": "pass",
+    "micropip_packages": ["feedparser"]
+  },
+  {
+    "id": "office-multi-import",
+    "file": "office-multi-import.py",
+    "expect": "pass",
+    "auto_packages_includes": ["openpyxl", "Pillow", "numpy"]
+  },
+  {"id": "subprocess-python-ok", "file": "subprocess-python-ok.py", "expect": "pass"},
+  {"id": "urllib-urlopen", "file": "urllib-urlopen.py", "expect": "pass", "must_warn": ["urllib"]},
+  {"id": "import-requests", "file": "import-requests.py", "expect": "pass", "must_warn": ["requests"]},
+  {"id": "raw-socket", "file": "raw-socket.py", "expect": "pass", "must_warn": ["socket"]},
+  {
+    "id": "sys-stdout-reconfigure",
+    "file": "sys-stdout-reconfigure.py",
+    "expect": "pass",
+    "must_warn": ["reconfigure"]
+  },
+  {"id": "ld-preload-ctypes", "file": "ld-preload-ctypes.py", "expect": "pass", "must_warn": ["LD_PRELOAD"]},
+  {"id": "unknown-import", "file": "unknown-import.py", "expect": "pass", "must_warn": ["Unknown imports"]},
+  {"id": "subprocess-soffice", "file": "subprocess-soffice.py", "expect": "block", "block_match": ["soffice"]},
+  {"id": "subprocess-git", "file": "subprocess-git.py", "expect": "block", "block_match": ["git"]},
+  {"id": "os-system-tesseract", "file": "os-system-tesseract.py", "expect": "block", "block_match": ["tesseract"]},
+  {"id": "subprocess-pdftoppm", "file": "subprocess-pdftoppm.py", "expect": "block", "block_match": ["pdftoppm"]},
+  {"id": "shutil-which-gcc", "file": "shutil-which-gcc.py", "expect": "block", "block_match": ["gcc"]},
+  {"id": "import-pdf2image", "file": "import-pdf2image.py", "expect": "block", "block_match": ["pdf2image"]},
+  {"id": "import-playwright", "file": "import-playwright.py", "expect": "block", "block_match": ["playwright"]},
+  {"id": "import-torch", "file": "import-torch.py", "expect": "block", "block_match": ["torch"]},
+  {"id": "import-psycopg2", "file": "import-psycopg2.py", "expect": "block", "block_match": ["psycopg2"]},
+  {"id": "import-wikipedia", "file": "import-wikipedia.py", "expect": "block", "block_match": ["Wikipedia"]},
+  {"id": "import-directus", "file": "import-directus.py", "expect": "block", "block_match": ["directus"]},
+  {"id": "import-selenium", "file": "import-selenium.py", "expect": "block", "block_match": ["selenium"]},
+  {"id": "import-cv2", "file": "import-cv2.py", "expect": "block", "block_match": ["cv2"]}
+]

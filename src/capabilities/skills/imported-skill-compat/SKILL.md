@@ -55,7 +55,7 @@ Remote imports auto-append a **Web Agent execution (auto-appended)** section to 
 
 ## Relation to other skills
 
-- Install discovery: **`find-skills`**. Remote install rules: **`web-agent-skill`**. Runtime picker: **`browser-runtime-map`**. HTTP: **`http-api`**. Python: **`run_python`**.
+- Install discovery: **`find-skills`**. Remote install rules: **`web-agent-skill`**. Runtime picker: **`browser-runtime-map`**. HTTP: **`http-api`**. Python: **`run_python`** + **`pyodide-runtime`** for WASM-safe codegen.
 
 ## Pitfalls
 
