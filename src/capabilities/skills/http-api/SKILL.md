@@ -22,6 +22,8 @@ triggers: [graphql, REST API, bearer token, web_post, authenticated fetch, api c
 
 **Anti-pattern (causes 240s timeouts):** `web_fetch` binary → base64 in `web_post` body → `read_file` snapshot loop. Stop and use `web_upload.file_path` or `source_url` instead.
 
+**Spilled list APIs:** When compact tool output includes `list_digest`, answer from that — do not `read_file` `memory/snapshots/`. If the summary says the body is HTML, add `Authorization` and rerun `web_fetch` (do not parse the spill as JSON).
+
 ### Directus-style publish (3 steps)
 
 1. **Upload file** — `web_upload` to `/files` with `source_url` or `file_path` (Telegram inbox paths work as `file_path`).

@@ -216,7 +216,13 @@ export function unwrapMemorySnapshotReadContent(
   relPath: string,
   rawContent: string,
   depth = 0
-): { content: string; from_snapshot: true; content_truncated?: boolean; unwrap_depth?: number } | null {
+): {
+  content: string;
+  from_snapshot: true;
+  content_truncated?: boolean;
+  unwrap_depth?: number;
+  html_shell?: boolean;
+} | null {
   if (depth > 5) return null;
   const p = String(relPath || "");
   if (!isMemorySnapshotSpillPath(p) && !/snapshots\/run_/.test(p)) return null;
@@ -237,13 +243,26 @@ export function unwrapMemorySnapshotReadContent(
   const execPayload = parsed?.payload;
   if (!execPayload || typeof execPayload !== "object") return null;
 
-  const spillUrl =
+  const resultObj =
     execPayload.result && typeof execPayload.result === "object"
-      ? String((execPayload.result as Record<string, unknown>).url || "")
-      : "";
+      ? (execPayload.result as Record<string, unknown>)
+      : null;
+  const spillUrl = resultObj ? String(resultObj.url || "") : "";
+  if (resultObj) {
+    const rawBody = [resultObj.text, resultObj.content, resultObj.data].find(
+      (v) => typeof v === "string" && v.trim()
+    ) as string | undefined;
+    if (rawBody && looksLikeHtmlDocument(rawBody)) {
+      return {
+        content: htmlApiBodyRecoveryNote(rawBody, spillUrl),
+        from_snapshot: true,
+        html_shell: true,
+      };
+    }
+  }
 
   let text = extractPayloadResultText(execPayload);
-  if (text == null && execPayload.result && typeof execPayload.result === "object") {
+  if (text == null && resultObj) {
     try {
       text = JSON.stringify(execPayload.result, null, 2);
     } catch {
@@ -251,14 +270,6 @@ export function unwrapMemorySnapshotReadContent(
     }
   }
   if (text == null) return null;
-
-  if (looksLikeHtmlDocument(text)) {
-    return {
-      content: htmlApiBodyRecoveryNote(text, spillUrl),
-      from_snapshot: true,
-      html_shell: true,
-    };
-  }
 
   const trimmed = text.trimStart();
   if (trimmed.startsWith("{") && trimmed.includes('"payload"')) {

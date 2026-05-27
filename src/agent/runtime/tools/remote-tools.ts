@@ -16,6 +16,7 @@ import { logDebugEvent } from "../logging/debug-log.js";
 import * as memoryModule from "../memory/index.js";
 import { memoryPath } from "../memory/sql.js";
 import { createTimeoutController } from "./context.js";
+import { looksLikeHtmlDocument } from "../tool-result-preview.js";
 import { parseTinyFishFetchPayload, spaShellPageRecoveryHint } from "./tinyfish-fetch.js";
 import { expandSkillBulkSaveArgs } from "./skill-bulk-args.js";
 import {
@@ -803,9 +804,12 @@ export async function httpProxyCall(
       ...(sliced.truncated ? { truncated: true, truncated_at_chars: sliced.truncated_at_chars } : {}),
     };
   }
+  const recovery_hint =
+    looksLikeHtmlDocument(sliced.text) ? spaShellPageRecoveryHint(sliced.text, url) : undefined;
   return {
     ...base,
     text: sliced.text,
+    ...(recovery_hint ? { recovery_hint } : {}),
     ...(sliced.truncated ? { truncated: true, truncated_at_chars: sliced.truncated_at_chars } : {}),
   };
 }

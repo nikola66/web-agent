@@ -2,8 +2,27 @@ import { spaShellPageRecoveryHint } from "./tools/tinyfish-fetch.js";
 
 /** True when body looks like an HTML document (SPA shell, login page, CDN error). */
 export function looksLikeHtmlDocument(text: unknown): boolean {
-  const t = String(text || "").trimStart().slice(0, 256).toLowerCase();
-  return t.startsWith("<!doctype") || t.startsWith("<html") || /^<\?xml[\s>]/.test(t);
+  const t = String(text || "").trimStart().slice(0, 512).toLowerCase();
+  if (!t.startsWith("<")) return false;
+  return (
+    t.startsWith("<!doctype") ||
+    t.startsWith("<html") ||
+    t.startsWith("<head") ||
+    t.startsWith("<body") ||
+    /^<\?xml[\s>]/.test(t)
+  );
+}
+
+/** True when a web_fetch/web_post result body is HTML instead of API JSON. */
+export function httpResultLooksLikeHtmlShell(result: unknown): boolean {
+  if (!result || typeof result !== "object") return false;
+  const obj = result as Record<string, unknown>;
+  for (const key of ["text", "content", "markdown"]) {
+    const v = obj[key];
+    if (typeof v === "string" && looksLikeHtmlDocument(v)) return true;
+  }
+  if (typeof obj.data === "string" && looksLikeHtmlDocument(obj.data)) return true;
+  return false;
 }
 
 /**
@@ -118,13 +137,24 @@ export function extractToolResultBodyText(inner: unknown): string | null {
   if (!inner || typeof inner !== "object") return null;
   const obj = inner as Record<string, unknown>;
 
-  if (typeof obj.text === "string" && obj.text.trim()) return obj.text;
+  if (typeof obj.text === "string" && obj.text.trim()) {
+    if (looksLikeHtmlDocument(obj.text)) {
+      return htmlApiBodyRecoveryNote(obj.text, typeof obj.url === "string" ? obj.url : undefined);
+    }
+    return obj.text;
+  }
   if (typeof obj.markdown === "string" && obj.markdown.trim()) return obj.markdown;
   if (typeof obj.transcript === "string" && obj.transcript.trim()) return obj.transcript;
   if (typeof obj.error === "string" && obj.error.trim()) return obj.error;
 
   if (obj.data !== undefined && obj.data !== null) {
-    if (typeof obj.data === "string" && obj.data.trim()) return obj.data;
+    if (typeof obj.data === "string" && obj.data.trim()) {
+      const d = obj.data.trim();
+      if (looksLikeHtmlDocument(d)) {
+        return htmlApiBodyRecoveryNote(d, typeof obj.url === "string" ? obj.url : undefined);
+      }
+      return d;
+    }
     try {
       return JSON.stringify(obj.data, null, 2);
     } catch {
@@ -190,6 +220,22 @@ export function extractHttpListDigest(
   let items: unknown[] | null = null;
   if (Array.isArray(obj.data)) {
     items = obj.data;
+  } else if (typeof obj.data === "string" && obj.data.trim()) {
+    const raw = obj.data.trim();
+    if (looksLikeHtmlDocument(raw)) return null;
+    if (raw.startsWith("[") || raw.startsWith("{")) {
+      try {
+        const parsed = JSON.parse(raw) as unknown;
+        if (Array.isArray(parsed)) items = parsed;
+        else if (parsed && typeof parsed === "object") {
+          const nested = parsed as Record<string, unknown>;
+          if (Array.isArray(nested.data)) items = nested.data;
+          else if (Array.isArray(nested.items)) items = nested.items;
+        }
+      } catch {
+        return null;
+      }
+    }
   } else if (obj.data && typeof obj.data === "object") {
     const nested = obj.data as Record<string, unknown>;
     if (Array.isArray(nested.data)) items = nested.data;
@@ -248,6 +294,13 @@ export function summarizeToolResultPreview(value: unknown) {
     for (const key of ["content", "text", "markdown", "transcript", "error"]) {
       const raw = obj[key];
       if (typeof raw === "string" && raw.trim()) {
+        if (looksLikeHtmlDocument(raw)) {
+          const note = htmlApiBodyRecoveryNote(
+            raw,
+            typeof obj.url === "string" ? obj.url : undefined
+          );
+          return `html_shell: ${note.replace(/\s+/g, " ").trim().slice(0, 320)}`;
+        }
         const compact = raw.replace(/\s+/g, " ").trim();
         const cap = obj.from_snapshot ? 2_500 : 600;
         const excerpt = compact.length > cap ? `${compact.slice(0, cap)}…` : compact;
@@ -255,6 +308,13 @@ export function summarizeToolResultPreview(value: unknown) {
       }
     }
     if (obj.data !== undefined && obj.data !== null) {
+      if (typeof obj.data === "string" && looksLikeHtmlDocument(obj.data)) {
+        const note = htmlApiBodyRecoveryNote(
+          obj.data,
+          typeof obj.url === "string" ? obj.url : undefined
+        );
+        return `html_shell: ${note.replace(/\s+/g, " ").trim().slice(0, 320)}`;
+      }
       const serialized =
         typeof obj.data === "string" ? obj.data : JSON.stringify(obj.data);
       const compact = serialized.replace(/\s+/g, " ").trim();

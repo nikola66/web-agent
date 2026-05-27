@@ -3,9 +3,11 @@ import assert from "node:assert/strict";
 
 import {
   extractHttpListDigest,
+  httpResultLooksLikeHtmlShell,
   looksLikeHtmlDocument,
   summarizeToolResultPreview,
 } from "../dist/agent-runtime/tool-result-preview.js";
+import { summarizeToolExecutions } from "../dist/agent-runtime/stream-output.js";
 
 test("summarizeToolResultPreview includes text excerpt for web_fetch-shaped result", () => {
   const s = summarizeToolResultPreview({
@@ -33,7 +35,56 @@ test("extractHttpListDigest prefers article title and date for /items/ responses
 
 test("looksLikeHtmlDocument detects doctype pages", () => {
   assert.equal(looksLikeHtmlDocument("<!DOCTYPE html><html>"), true);
+  assert.equal(looksLikeHtmlDocument("<body>login</body>"), true);
   assert.equal(looksLikeHtmlDocument('{"data":[]}'), false);
+});
+
+test("httpResultLooksLikeHtmlShell detects web_fetch HTML text", () => {
+  assert.equal(
+    httpResultLooksLikeHtmlShell({
+      ok: true,
+      url: "https://hub.example.com/items/articles",
+      text: "<!DOCTYPE html><html></html>",
+    }),
+    true
+  );
+  assert.equal(
+    httpResultLooksLikeHtmlShell({
+      ok: true,
+      url: "https://hub.example.com/items/articles",
+      data: [{ title: "ok" }],
+    }),
+    false
+  );
+});
+
+test("summarizeToolExecutions warns on spilled HTML without list_digest", () => {
+  const rows = summarizeToolExecutions(
+    [
+      {
+        tool: "web_fetch",
+        result: {
+          ok: true,
+          url: "https://hub.example.com/items/articles",
+          text: "<!DOCTYPE html><html><body>Please enable JavaScript</body></html>",
+        },
+      },
+    ],
+    ["memory/snapshots/run_html_r0_0.json"]
+  );
+  assert.match(rows[0].summary, /HTML, not JSON/i);
+  assert.match(rows[0].summary, /do not read_file/i);
+  assert.equal(rows[0].list_digest, undefined);
+});
+
+test("summarizeToolResultPreview abbreviates HTML web_fetch bodies", () => {
+  const s = summarizeToolResultPreview({
+    ok: true,
+    url: "https://hub.example.com/items/articles",
+    text: "<!DOCTYPE html><html><body>x</body></html>",
+  });
+  assert.match(s, /^html_shell:/);
+  assert.doesNotMatch(s, /<!DOCTYPE/);
 });
 
 test("summarizeToolResultPreview includes JSON data excerpt for web_fetch", () => {

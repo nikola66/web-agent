@@ -7,8 +7,9 @@ export default defineTool({
   emoji: "📄",
   description:
     "Read a UTF-8 file. **`path`** is workspace-relative (`.` = root). " +
-    "Do not read `memory/runs/*.json` (agent logs) or browse `memory/snapshots/` except the exact `result_ref` from tool output (auto-unwrapped). " +
-    "For API data, rerun `web_fetch`/`web_post` instead of scavenging memory archives. " +
+    "Do not read `memory/runs/*.json` (agent logs) or browse `memory/snapshots/`. " +
+    "When tool output has `list_digest`, use it — do not read_file the spill. " +
+    "Otherwise read the exact `result_ref` once (auto-unwrapped). HTML spills need Authorization on a fresh web_fetch, not JSON.parse. " +
     "Run `list_dir({\"path\":\".\"})`, `tree`, or `find_files` before guessing paths. Returns { ok, path, bytes, content }.",
   inputSchema: {
     type: "object",

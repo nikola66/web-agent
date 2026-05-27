@@ -3,7 +3,12 @@
  */
 
 import { setTimeout as sleep } from "node:timers/promises";
-import { summarizeToolResultPreview, extractHttpListDigest } from "./tool-result-preview.js";
+import {
+  extractHttpListDigest,
+  htmlApiBodyRecoveryNote,
+  httpResultLooksLikeHtmlShell,
+  summarizeToolResultPreview,
+} from "./tool-result-preview.js";
 
 export function summarizeToolExecutions(exec, snapshotRefs = []) {
   return exec.map((item, index) => {
@@ -17,7 +22,23 @@ export function summarizeToolExecutions(exec, snapshotRefs = []) {
     } else if (resultRef) {
       const preview = summarizeToolResultPreview(item?.result);
       const digest = extractHttpListDigest(item?.result);
-      if (digest) {
+      const htmlShell = httpResultLooksLikeHtmlShell(item?.result);
+      if (htmlShell) {
+        const url =
+          item?.result && typeof item.result === "object"
+            ? String((item.result as Record<string, unknown>).url || "")
+            : "";
+        const body =
+          item?.result && typeof item.result === "object"
+            ? (item.result as Record<string, unknown>).text ||
+              (item.result as Record<string, unknown>).content ||
+              (item.result as Record<string, unknown>).data
+            : "";
+        summary =
+          `payload_spilled but response is HTML, not JSON (${resultRef}). ` +
+          `${htmlApiBodyRecoveryNote(body, url).replace(/\s+/g, " ").trim().slice(0, 280)} ` +
+          "Do not read_file or JSON.parse the spill — rerun web_fetch/web_post with Authorization.";
+      } else if (digest) {
         const sample = (digest.preview ?? digest.slugs).slice(0, 12);
         summary =
           `payload_spilled_to_snapshot (${resultRef}). Use list_digest below — do not read_file unless you need fields beyond this list. ` +

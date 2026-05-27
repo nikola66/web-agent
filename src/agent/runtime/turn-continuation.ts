@@ -752,9 +752,9 @@ export function buildContinuationNudge(
   }
   if (kind === "snapshot_read_stall") {
     return (
-      "You read a memory/snapshots spill file. Use the unwrapped `content` from that read_file result (or the inlined `result` " +
-      "in the latest \"Tool results (compact JSON)\" message) to answer the user. For JSON APIs, collections/metadata live in " +
-      "the unwrapped body — do not read another snapshot path or rerun web_fetch unless that payload is missing or stale."
+      "You read a memory/snapshots spill file. Prefer `list_digest` from the latest \"Tool results (compact JSON)\" when present. " +
+      "Otherwise use unwrapped `content` from read_file (or inlined `result`). If the body is HTML or an auth recovery note, " +
+      "rerun web_fetch/web_post with Authorization — do not read_file another snapshot or JSON.parse spill files."
     );
   }
   if (kind === "api_discovery_stall") {
