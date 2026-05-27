@@ -508,6 +508,7 @@ export async function agentTurn(
     },
     ask: typeof turnMeta?.ask === "function" ? turnMeta.ask : null,
     onTranscript: typeof turnMeta?.onTranscript === "function" ? turnMeta.onTranscript : null,
+    skipTerminalOutput: turnMeta?.skipTerminalOutput === true,
     autoApprove:
       typeof turnMeta?.autoApprove === "boolean"
         ? turnMeta.autoApprove
@@ -526,6 +527,8 @@ export async function agentTurn(
   const complexityEstimate = estimateTaskComplexity(originalUserInput);
   const maxAgentRounds = resolveMaxAgentRounds(turnMeta);
   const quietTurn = turnMeta?.quiet === true;
+  const skipTerminalOutput = turnMeta?.skipTerminalOutput === true;
+  const mirrorTerminal = !quietTurn && !skipTerminalOutput;
   const skipBackgroundReview = turnMeta?.skipBackgroundReview === true || turnMeta?.backgroundReview === true;
 
   if (!turnMeta?.backgroundReview && !turnMeta?.textOnly) {
@@ -686,7 +689,7 @@ export async function agentTurn(
       const combined = streamResult?.text || acc;
       const clarifyParsed = extractClarifyMarkers(combined);
       for (const block of clarifyParsed.blocks) {
-        process.stdout.write(block);
+        if (mirrorTerminal) process.stdout.write(block);
       }
       const clarifyEmitted = clarifyParsed.blocks.length > 0;
       const bodyForTools = clarifyParsed.visible;
@@ -750,16 +753,20 @@ export async function agentTurn(
         const rendered = visible.trim() ? renderMarkdownToAnsi(visible) : "";
         let branchBelowName = false;
         if (!turnHeaderPrinted) {
-          if (round > 1) process.stdout.write("\n");
-          process.stdout.write(`${bold(cyan(agentName))}\n`);
-          turnHeaderPrinted = true;
           branchBelowName = true;
-        } else if (round > 1) {
+          turnHeaderPrinted = true;
+          if (mirrorTerminal) {
+            if (round > 1) process.stdout.write("\n");
+            process.stdout.write(`${bold(cyan(agentName))}\n`);
+          }
+        } else if (mirrorTerminal && round > 1) {
           process.stdout.write("\n");
         }
         if (rendered) {
           const block = prefixBlock(rendered, branchBelowName);
-          await writeStdoutSmoothed(`${block}\n\n`);
+          if (mirrorTerminal) {
+            await writeStdoutSmoothed(`${block}\n\n`);
+          }
           await emitTranscriptEvent(
             turnMeta,
             createAssistantTranscriptEvent({
@@ -777,7 +784,7 @@ export async function agentTurn(
             visibleText: visible,
             renderedAnsi: rendered,
           });
-        } else if (clarifyEmitted) {
+        } else if (clarifyEmitted && mirrorTerminal) {
           await writeStdoutSmoothed(
             `${prefixBlock(dim("Choose an option in the panel above the input."), branchBelowName)}\n\n`
           );
@@ -805,13 +812,15 @@ export async function agentTurn(
           });
           await recordToolFailure(rejectedName).catch(() => {});
         }
-        process.stdout.write(
-          dim(
-            `▸ skipped ${rejected.length} invalid tool call(s): ${rejected
-              .map((r) => r.reason)
-              .join(", ")}\n`
-          )
-        );
+        if (mirrorTerminal) {
+          process.stdout.write(
+            dim(
+              `▸ skipped ${rejected.length} invalid tool call(s): ${rejected
+                .map((r) => r.reason)
+                .join(", ")}\n`
+            )
+          );
+        }
         await emitTranscriptEvent(
           turnMeta,
           createSystemLineTranscriptEvent({
@@ -1041,14 +1050,16 @@ export async function agentTurn(
             conv[conv.length - 1] = { role: "assistant", content: visible };
           }
           if (!quietTurn && visible.trim()) {
-            if (!turnHeaderPrinted) {
-              process.stdout.write(`${bold(cyan(agentName))}\n`);
-              turnHeaderPrinted = true;
-            } else {
-              process.stdout.write("\n");
+            if (mirrorTerminal) {
+              if (!turnHeaderPrinted) {
+                process.stdout.write(`${bold(cyan(agentName))}\n`);
+                turnHeaderPrinted = true;
+              } else {
+                process.stdout.write("\n");
+              }
+              const rendered = renderMarkdownToAnsi(visible);
+              await writeStdoutSmoothed(`${prefixBlock(rendered, false)}\n\n`);
             }
-            const rendered = renderMarkdownToAnsi(visible);
-            await writeStdoutSmoothed(`${prefixBlock(rendered, false)}\n\n`);
           }
         }
         await logDebugEvent("turn_completed", {
@@ -1094,7 +1105,9 @@ export async function agentTurn(
             code: before.code,
             count: before.count,
           });
-          process.stdout.write(dim(`▸ tool guardrail blocked ${tool.name}: ${before.message}\n`));
+          if (mirrorTerminal) {
+            process.stdout.write(dim(`▸ tool guardrail blocked ${tool.name}: ${before.message}\n`));
+          }
           continue;
         }
         runnableTools.push(tool);
@@ -1130,7 +1143,9 @@ export async function agentTurn(
           } else {
             result.result = guided;
           }
-          process.stdout.write(dim(`▸ tool guardrail ${after.code} (${tool.name})\n`));
+          if (mirrorTerminal) {
+            process.stdout.write(dim(`▸ tool guardrail ${after.code} (${tool.name})\n`));
+          }
           await logDebugEvent("tool_guardrail_warning", {
             round,
             tool: tool.name,
@@ -1314,7 +1329,7 @@ export async function agentTurn(
             run.final_visible_assistant_text = graceVisible;
             conv.push({ role: "assistant", content: graceVisible });
             const rendered = renderMarkdownToAnsi(graceVisible);
-            if (rendered) {
+            if (rendered && mirrorTerminal) {
               await writeStdoutSmoothed(`${prefixBlock(rendered, false)}\n\n`);
             }
             await emitTranscriptEvent(

@@ -66,6 +66,8 @@ test("channel dispatcher sends tool notices and then the final answer", async ()
       },
       agentTurn: async (_history, _cfg, meta) => {
         assert.equal(meta.onToolCalls, undefined);
+        assert.equal(meta.skipTerminalOutput, true);
+        assert.equal(meta.skipBackgroundReview, true);
         await meta.onTranscript({
           type: "tool_start",
           name: "web_search",

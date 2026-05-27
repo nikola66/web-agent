@@ -202,9 +202,11 @@ export async function artifactPresentTool(args = {}, ctx) {
     };
   }
 
-  process.stdout.write(
-    `${ARTIFACT_PRESENT_START}${JSON.stringify(payload)}${ARTIFACT_PRESENT_END}\n`
-  );
+  if (!ctx?.skipTerminalOutput) {
+    process.stdout.write(
+      `${ARTIFACT_PRESENT_START}${JSON.stringify(payload)}${ARTIFACT_PRESENT_END}\n`
+    );
+  }
 
   if (typeof ctx?.services?.sendDocument === "function") {
     try {
