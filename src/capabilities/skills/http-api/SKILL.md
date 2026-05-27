@@ -113,11 +113,14 @@ Authenticated GET always passes `headers` → routes via `/api/proxy` (JSON), no
 
 ### Directus / CMS via MCP (optional)
 
-Configure a Directus Streamable HTTP MCP endpoint (browser tab must stay open):
+Configure a Directus Streamable HTTP MCP endpoint (**browser tab must stay open** with the profile running — including from Telegram):
 
-1. `/mcp use https://<host>/mcp` — Telegram may send `/mcp@YourBot use …`; that is normalized automatically.
-2. `/reload-mcp` if tools do not appear after save.
-3. Agent workflow: `tool_search` (query `mcp` or server name) → `tool_activate` with exact tool name → call `mcp_<server>_<tool>`. MCP tools are **not** in the default LLM tool list.
+1. `/mcp auth <token>` — saves bearer token in workspace (`.webagent/mcp-secrets.json`); works from Telegram without pasting the token into `/mcp use`.
+2. `/mcp use https://<host>/mcp` — Telegram: `/mcp@YourBot use …` (normalized automatically).
+3. `/reload-mcp` or `/reload_mcp` if tools do not appear after save.
+4. Agent workflow: `tool_search` (query `mcp` or server name) → `tool_activate` with exact tool name → call `mcp_<server>_<tool>`. MCP tools are **not** in the default LLM tool list.
+
+If probe times out: open Web Agent in the browser, start the profile, then `/reload_mcp`. Config may already be saved as enabled.
 
 Prefer MCP for CMS mutations when REST from the sandbox is blocked; prefer REST (`/items/…` + Bearer) when `headers` work.
 

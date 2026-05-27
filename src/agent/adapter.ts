@@ -716,6 +716,10 @@ function buildEnv(profileId: string, profile: Profile, apiKeys: Record<string, s
     assignIfPresent(envKey, settingKey);
   }
 
+  assignIfPresent("DIRECTUS_TOKEN", "directus_token");
+  assignIfPresent("DIRECTUS_API_TOKEN", "directus_api_token");
+  assignIfPresent("DIRECTUS_ACCESS_TOKEN", "directus_access_token");
+
   for (const channel of CHANNELS) {
     const envVar = channel.auth?.envVar;
     const settingKey = channel.auth?.settingKey;

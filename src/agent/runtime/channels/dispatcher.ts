@@ -332,7 +332,10 @@ export function createChannelInboundHandler(deps) {
           return sendReply(chatId, msg);
         });
         if (!mcpReplied) {
-          await sendReply(chatId, "MCP command produced no output. Retry with the browser tab open.");
+          await sendReply(
+            chatId,
+            "MCP command produced no output. Open Web Agent in your browser, start this profile, then retry (MCP runs in the page adapter)."
+          );
         }
         await logDebugEvent("mcp_slash_command", { channel, chatId, preview: localSlash.input.slice(0, 120) });
         return;

@@ -13,7 +13,16 @@ import {
   formatMcpStartupBanner,
   formatMcpIpcError,
   getMcpCatalogCache,
+  ensureMcpAdapterReady,
 } from "./mcp-registry.js";
+import {
+  clearMcpSecrets,
+  defaultMcpAuthHeaderTemplate,
+  loadMcpSecrets,
+  maskMcpToken,
+  resolveMcpBearerToken,
+  saveMcpSecrets,
+} from "./mcp-secrets.js";
 import { normalizeSlashCommandInput } from "./slash-routing.js";
 import { reloadMcpTools } from "./tools/registry.js";
 
@@ -67,7 +76,10 @@ export function parseMcpUseInput(input: string): {
   return { name, url, headers };
 }
 
-function mcpAuthHeadersFromEnv(): Record<string, string> {
+async function mcpAuthHeadersResolved(): Promise<Record<string, string>> {
+  const secrets = await loadMcpSecrets();
+  const fromSecrets = resolveMcpBearerToken(secrets);
+  if (fromSecrets) return { Authorization: `Bearer ${fromSecrets}` };
   if (typeof process === "undefined" || !process.env) return {};
   const token = String(
     process.env.DIRECTUS_TOKEN ||
@@ -77,6 +89,26 @@ function mcpAuthHeadersFromEnv(): Record<string, string> {
   ).trim();
   if (!token) return {};
   return { Authorization: `Bearer ${token}` };
+}
+
+function mcpAuthHeadersForConfig(hasStoredSecret: boolean): Record<string, string> {
+  if (hasStoredSecret) return defaultMcpAuthHeaderTemplate();
+  return {};
+}
+
+function isMcpAdapterDisconnectedError(err: unknown): boolean {
+  const msg = err instanceof Error ? err.message : String(err ?? "");
+  return /browser tab is not connected|IPC MCP request timed out/i.test(msg);
+}
+
+export function parseMcpAuthInput(input: string): { token: string } | { clear: true } | null {
+  const trimmed = normalizeSlashCommandInput(input);
+  if (!trimmed.startsWith("/mcp auth")) return null;
+  const rest = trimmed.slice("/mcp auth".length).trim();
+  if (!rest) return null;
+  if (rest === "clear" || rest === "reset") return { clear: true };
+  const token = rest.replace(/^["']|["']$/g, "").trim();
+  return token ? { token } : null;
 }
 
 function parseMcpAddArgs(input: string): {
@@ -201,6 +233,7 @@ export async function runMcpSlashCommand(
   const trimmed = normalizeSlashCommandInput(input);
   if (trimmed === "/reload-mcp" || trimmed === "/reload_mcp") {
     try {
+      await ensureMcpAdapterReady();
       const resp = (await mcpReload()) as {
         ok?: boolean;
         diff?: { added?: string[]; removed?: string[]; reconnected?: string[]; failed?: Array<{ name: string; error: string }> };
@@ -237,6 +270,7 @@ export async function runMcpSlashCommand(
       printLine(dim("MCP commands:"), emit);
       printLine(dim("  /mcp list"), emit);
       printLine(dim("  /mcp use <url> [--name <id>] [--header Key=Val]  (quick-add Streamable HTTP)"), emit);
+      printLine(dim("  /mcp auth [<token>|clear]  (save bearer token; works from Telegram)"), emit);
       printLine(dim("  /mcp add <name> --url <endpoint> [--transport sse] [--include a,b]"), emit);
       printLine(dim("  /mcp add <name> --command <cmd> --args ... [--env KEY=VAL]"), emit);
       printLine(dim("  /mcp remove <name>"), emit);
@@ -281,6 +315,27 @@ export async function runMcpSlashCommand(
       return true;
     }
 
+    if (sub === "auth" || sub.startsWith("auth ")) {
+      const parsed = parseMcpAuthInput(trimmed);
+      if (!parsed) {
+        printLine(red("Usage: /mcp auth <token>  |  /mcp auth clear\n"), emit);
+        return true;
+      }
+      if ("clear" in parsed) {
+        await clearMcpSecrets();
+        printLine(green("Cleared MCP auth token from workspace.\n"), emit);
+        return true;
+      }
+      await saveMcpSecrets({ directus_token: parsed.token });
+      printLine(
+        green(
+          `Saved MCP bearer token (${maskMcpToken(parsed.token)}). Use /mcp use <url> then /reload-mcp with the browser tab open.\n`
+        ),
+        emit
+      );
+      return true;
+    }
+
     if (sub.startsWith("test ")) {
       const name = sub.slice("test ".length).trim();
       if (!name) {
@@ -288,6 +343,7 @@ export async function runMcpSlashCommand(
         return true;
       }
       try {
+        await ensureMcpAdapterReady();
         const resp = (await mcpProbeServer(name)) as {
           ok?: boolean;
           tools?: Array<{ name: string; description?: string }>;
@@ -316,15 +372,26 @@ export async function runMcpSlashCommand(
         printLine(red("Usage: /mcp use <url> [--name <id>] [--header Authorization=Bearer …]\n"), emit);
         return true;
       }
-      const headers = { ...mcpAuthHeadersFromEnv(), ...parsed.headers };
+      const secrets = await loadMcpSecrets();
+      const hasStoredSecret = Boolean(resolveMcpBearerToken(secrets));
+      const runtimeHeaders = { ...(await mcpAuthHeadersResolved()), ...parsed.headers };
+      const configHeaders = {
+        ...mcpAuthHeadersForConfig(hasStoredSecret),
+        ...parsed.headers,
+      };
       const serverConfig: McpServerConfig = {
         enabled: true,
         url: parsed.url,
         transport: "streamable-http",
-        ...(Object.keys(headers).length ? { headers } : {}),
+        ...(Object.keys(configHeaders).length ? { headers: configHeaders } : {}),
       };
       try {
-        const probeResp = (await mcpProbeServer(parsed.name, serverConfig)) as {
+        await ensureMcpAdapterReady();
+        const probeConfig: McpServerConfig = {
+          ...serverConfig,
+          ...(Object.keys(runtimeHeaders).length ? { headers: runtimeHeaders } : {}),
+        };
+        const probeResp = (await mcpProbeServer(parsed.name, probeConfig)) as {
           ok?: boolean;
           tools?: Array<{ name: string; description?: string }>;
           error?: string;
@@ -356,12 +423,30 @@ export async function runMcpSlashCommand(
         printLine("", emit);
         await warnIfMcpCatalogEmpty(emit);
       } catch (err) {
-        serverConfig.enabled = false;
-        await upsertMcpServer(parsed.name, serverConfig);
-        printLine(
-          red(`Probe failed — saved '${parsed.name}' as disabled: ${formatMcpIpcError(err)}\n`),
-          emit
-        );
+        if (isMcpAdapterDisconnectedError(err)) {
+          await upsertMcpServer(parsed.name, serverConfig);
+          printLine(
+            amber(
+              `Browser tab not connected — saved '${parsed.name}' (enabled). Open Web Agent, start this profile, then run /reload-mcp.\n`
+            ),
+            emit
+          );
+          if (!hasStoredSecret && !Object.keys(parsed.headers).length) {
+            printLine(
+              dim(
+                "Tip: run /mcp auth <token> first so the server uses Bearer auth without pasting the token in chat.\n"
+              ),
+              emit
+            );
+          }
+        } else {
+          serverConfig.enabled = false;
+          await upsertMcpServer(parsed.name, serverConfig);
+          printLine(
+            red(`Probe failed — saved '${parsed.name}' as disabled: ${formatMcpIpcError(err)}\n`),
+            emit
+          );
+        }
       }
       return true;
     }

@@ -69,6 +69,8 @@ export const TELEGRAM_AUTH_REL = ".webagent/telegram-auth.json";
 export const COMPOSIO_AUDIT_REL = ".webagent/composio-actions.jsonl";
 /** MCP server definitions. Must match `WORKSPACE_MCP_SERVERS_REL` in `src/core/workspace-layout.ts`. */
 export const MCP_SERVERS_REL = ".webagent/mcp-servers.json";
+/** MCP bearer tokens for `${DIRECTUS_TOKEN}` header interpolation. */
+export const MCP_SECRETS_REL = ".webagent/mcp-secrets.json";
 /** Tool allow/deny policy. Must match `WORKSPACE_TOOL_POLICY_REL` in `src/core/workspace-layout.ts`. */
 export const TOOL_POLICY_REL = ".webagent/tool-policy.json";
 /** Auto-generated brief index of all policy-allowed tools (system prompt + human reference). */

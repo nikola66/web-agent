@@ -1,7 +1,7 @@
 import { ipcMcpRequest } from "./ipc.js";
 import {
   loadMcpServersConfig,
-  mcpEnvForConfig,
+  mcpEnvForConfigResolved,
   type McpServersConfig,
 } from "./mcp-config.js";
 
@@ -28,15 +28,40 @@ type McpToolEntry = {
 
 let mcpToolsCache: Record<string, McpToolEntry> | null = null;
 
+const MCP_TAB_HINT =
+  "Keep the Web Agent browser tab open with this profile running — MCP connections run in the page adapter.";
+const MCP_CORS_HINT =
+  "Cross-origin MCP needs the browser tab open (requests route via /api/proxy).";
+
 export function formatMcpIpcError(err: unknown): string {
   const msg = err instanceof Error ? err.message : String(err ?? "unknown error");
   if (/IPC MCP request timed out/i.test(msg)) {
-    return `${msg} Keep the Web Agent browser tab open — MCP connections run in the page adapter.`;
+    if (msg.includes(MCP_TAB_HINT)) return msg;
+    return `${msg} ${MCP_TAB_HINT}`;
+  }
+  if (/browser tab is not connected|page adapter is not connected/i.test(msg)) {
+    return msg;
   }
   if (/failed to fetch|network|CORS/i.test(msg)) {
-    return `${msg} Cross-origin MCP needs the browser tab open (requests route via /api/proxy).`;
+    if (msg.includes(MCP_CORS_HINT)) return msg;
+    return `${msg} ${MCP_CORS_HINT}`;
   }
   return msg;
+}
+
+/** Fail fast when the browser page adapter is not processing MCP IPC. */
+export async function ensureMcpAdapterReady(timeoutMs = 8_000): Promise<void> {
+  try {
+    await ipcMcpRequest({ action: "status" }, {}, timeoutMs);
+  } catch (err) {
+    const detail = err instanceof Error ? err.message : String(err);
+    if (/IPC MCP request timed out/i.test(detail)) {
+      throw new Error(
+        "Web Agent browser tab is not connected (profile stopped or tab closed). Open Web Agent in your browser, start this profile, then retry /mcp or /reload-mcp."
+      );
+    }
+    throw err;
+  }
 }
 
 async function mcpIpc(
@@ -46,7 +71,8 @@ async function mcpIpc(
 ) {
   const servers = config ?? (await loadMcpServersConfig());
   try {
-    return await ipcMcpRequest({ ...payload, config: servers, env: mcpEnvForConfig(servers) }, timeoutMs);
+    const env = await mcpEnvForConfigResolved(servers);
+    return await ipcMcpRequest({ ...payload, config: servers, env }, timeoutMs);
   } catch (err) {
     throw new Error(formatMcpIpcError(err));
   }

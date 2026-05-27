@@ -1,5 +1,6 @@
 import fs from "node:fs/promises";
 import { MCP_SERVERS_REL, workspaceStatePath } from "./constants.js";
+import { loadMcpSecrets, mcpSecretsToEnv } from "./mcp-secrets.js";
 
 export type McpToolsFilter = {
   include?: string[];
@@ -69,17 +70,43 @@ function collectEnvVarRefs(config: McpServersConfig): Set<string> {
   return keys;
 }
 
-export function mcpEnvForConfig(config: McpServersConfig): Record<string, string> {
-  if (typeof process === "undefined" || !process.env) return {};
-  const full = process.env;
+export function mergeMcpEnv(
+  config: McpServersConfig,
+  baseEnv: Record<string, string> = typeof process !== "undefined" && process.env
+    ? (process.env as Record<string, string>)
+    : {}
+): Record<string, string> {
   const out: Record<string, string> = {};
   for (const key of collectEnvVarRefs(config)) {
-    if (full[key] != null) out[key] = String(full[key]);
+    if (baseEnv[key] != null) out[key] = String(baseEnv[key]);
   }
-  for (const [key, value] of Object.entries(full)) {
+  for (const [key, value] of Object.entries(baseEnv)) {
     if (key.startsWith("MCP_") && value != null) out[key] = String(value);
   }
+  const directusKeys = ["DIRECTUS_TOKEN", "DIRECTUS_API_TOKEN", "DIRECTUS_ACCESS_TOKEN"] as const;
+  for (const key of directusKeys) {
+    if (baseEnv[key] != null && baseEnv[key] !== "") out[key] = String(baseEnv[key]);
+  }
   return out;
+}
+
+export function mcpEnvForConfig(config: McpServersConfig): Record<string, string> {
+  const full =
+    typeof process !== "undefined" && process.env
+      ? (process.env as Record<string, string>)
+      : {};
+  return mergeMcpEnv(config, full);
+}
+
+/** Async env merge including workspace `.webagent/mcp-secrets.json`. */
+export async function mcpEnvForConfigResolved(config: McpServersConfig): Promise<Record<string, string>> {
+  const secrets = await loadMcpSecrets();
+  const fromSecrets = mcpSecretsToEnv(secrets);
+  const full =
+    typeof process !== "undefined" && process.env
+      ? { ...(process.env as Record<string, string>), ...fromSecrets }
+      : { ...fromSecrets };
+  return mergeMcpEnv(config, full);
 }
 
 export async function upsertMcpServer(name: string, serverConfig: McpServerConfig): Promise<void> {

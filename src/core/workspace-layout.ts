@@ -25,6 +25,7 @@ export const WORKSPACE_CHANNEL_STATE_REL = ".webagent/channel-state.json";
 export const WORKSPACE_MIGRATIONS_REL = ".webagent/migrations.json";
 export const WORKSPACE_COMPOSIO_AUDIT_REL = ".webagent/composio-actions.jsonl";
 export const WORKSPACE_MCP_SERVERS_REL = ".webagent/mcp-servers.json";
+export const WORKSPACE_MCP_SECRETS_REL = ".webagent/mcp-secrets.json";
 export const WORKSPACE_TOOL_POLICY_REL = ".webagent/tool-policy.json";
 
 /** Dotfiles / single files under `.webagent/` that must survive OPFS snapshot export. */
@@ -39,6 +40,7 @@ export const WORKSPACE_WEBAGENT_USER_FILES = [
   WORKSPACE_MIGRATIONS_REL,
   WORKSPACE_COMPOSIO_AUDIT_REL,
   WORKSPACE_MCP_SERVERS_REL,
+  WORKSPACE_MCP_SECRETS_REL,
   WORKSPACE_TOOL_POLICY_REL,
 ] as const;
 
