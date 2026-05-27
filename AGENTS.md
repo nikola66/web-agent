@@ -30,3 +30,14 @@ The `src/agent/runtime` tree is **excluded from `tsc`** (see `tsconfig.json`). E
 - `npm test` passes.
 - `npm run build` succeeds; no new oversized chunks.
 - For UI changes, smoke the affected panel in `npm run dev` once.
+
+## Cursor Cloud specific instructions
+
+Single-service SPA — only one process needed: `npm run dev` (Vite + embed-runtime watcher via concurrently). No Docker, databases, or external services required for development.
+
+- **Type checking requires a pre-built embed runtime.** Run `npm run build:embed-runtime` before `npx tsc -b --noEmit` if you haven't started the dev server yet. The dev server builds it automatically on start.
+- **Unit tests** (`npm test`) also build the embed runtime first; no extra steps needed.
+- **No linter configured** — there is no ESLint/Prettier/Biome. Type checking (`tsc`) is the primary static analysis tool.
+- **Playwright E2E** (`npm run test:browser`) requires `TESTING_OPENROUTER_API_KEY` in `.env.local` and installed browsers (`npx playwright install chromium`). Skip unless you have an API key.
+- Dev server serves at `http://localhost:5173`. LLM interactions require an API key configured per-profile in the UI (OpenRouter, Ollama, or custom provider).
+- Standard commands are documented in `package.json` scripts and README "Development" section.
