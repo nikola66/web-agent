@@ -28,16 +28,16 @@ type McpToolEntry = {
 
 let mcpToolsCache: Record<string, McpToolEntry> | null = null;
 
-const MCP_TAB_HINT =
-  "Keep the Web Agent browser tab open with this profile running — MCP connections run in the page adapter.";
+const MCP_IPC_HINT =
+  "The MCP bridge did not respond in time (often a stalled probe to the remote server, or IPC backlog while the agent is busy). Retry /reload_mcp; if it persists, reload the page.";
 const MCP_CORS_HINT =
   "Cross-origin MCP needs the browser tab open (requests route via /api/proxy).";
 
 export function formatMcpIpcError(err: unknown): string {
   const msg = err instanceof Error ? err.message : String(err ?? "unknown error");
   if (/IPC MCP request timed out/i.test(msg)) {
-    if (msg.includes(MCP_TAB_HINT)) return msg;
-    return `${msg} ${MCP_TAB_HINT}`;
+    if (msg.includes(MCP_IPC_HINT)) return msg;
+    return `${msg} ${MCP_IPC_HINT}`;
   }
   if (/browser tab is not connected|page adapter is not connected/i.test(msg)) {
     return msg;
@@ -57,7 +57,7 @@ export async function ensureMcpAdapterReady(timeoutMs = 8_000): Promise<void> {
     const detail = err instanceof Error ? err.message : String(err);
     if (/IPC MCP request timed out/i.test(detail)) {
       throw new Error(
-        "Web Agent browser tab is not connected (profile stopped or tab closed). Open Web Agent in your browser, start this profile, then retry /mcp or /reload-mcp."
+        "MCP bridge did not respond in time. Telegram can run while MCP setup still fails — retry /reload_mcp, or reload the Web Agent page if the problem continues."
       );
     }
     throw err;

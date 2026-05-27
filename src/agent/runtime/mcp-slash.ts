@@ -98,7 +98,7 @@ function mcpAuthHeadersForConfig(hasStoredSecret: boolean): Record<string, strin
 
 function isMcpAdapterDisconnectedError(err: unknown): boolean {
   const msg = err instanceof Error ? err.message : String(err ?? "");
-  return /browser tab is not connected|IPC MCP request timed out/i.test(msg);
+  return /MCP bridge did not respond|IPC MCP request timed out/i.test(msg);
 }
 
 export function parseMcpAuthInput(input: string): { token: string } | { clear: true } | null {
@@ -427,7 +427,7 @@ export async function runMcpSlashCommand(
           await upsertMcpServer(parsed.name, serverConfig);
           printLine(
             amber(
-              `Browser tab not connected — saved '${parsed.name}' (enabled). Open Web Agent, start this profile, then run /reload-mcp.\n`
+              `MCP bridge did not respond — saved '${parsed.name}' (enabled). Open Web Agent, start this profile, then run /reload-mcp.\n`
             ),
             emit
           );

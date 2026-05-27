@@ -113,7 +113,7 @@ Authenticated GET always passes `headers` → routes via `/api/proxy` (JSON), no
 
 ### Directus / CMS via MCP (optional)
 
-Configure a Directus Streamable HTTP MCP endpoint (**browser tab must stay open** with the profile running — including from Telegram):
+Configure a Directus Streamable HTTP MCP endpoint (**the Web Agent page must be running** (Telegram messages already prove this — MCP failures are usually auth, remote server reachability, or an IPC bridge bug, not a closed tab):
 
 1. `/mcp auth <token>` — saves bearer token in workspace (`.webagent/mcp-secrets.json`); works from Telegram without pasting the token into `/mcp use`.
 2. `/mcp use https://<host>/mcp` — Telegram: `/mcp@YourBot use …` (normalized automatically).

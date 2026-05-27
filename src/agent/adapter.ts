@@ -407,7 +407,11 @@ function capAgentOutputBuffer(
   onFlush: (chunk: string) => void
 ): string {
   if (buffer.length <= AGENT_OUTPUT_BUFFER_MAX) return buffer;
-  const lastMarker = Math.max(buffer.lastIndexOf("<<<WEBAGENT_"), buffer.lastIndexOf(PROXY_REQ_PREFIX));
+  const lastMarker = Math.max(
+    buffer.lastIndexOf("<<<WEBAGENT_"),
+    buffer.lastIndexOf(PROXY_REQ_PREFIX),
+    buffer.lastIndexOf(MCP_REQ_PREFIX)
+  );
   if (lastMarker > 0) {
     const safe = buffer.slice(0, lastMarker);
     if (safe.length > 0) {
@@ -715,10 +719,6 @@ function buildEnv(profileId: string, profile: Profile, apiKeys: Record<string, s
   for (const [envKey, settingKey] of emailEnvMap) {
     assignIfPresent(envKey, settingKey);
   }
-
-  assignIfPresent("DIRECTUS_TOKEN", "directus_token");
-  assignIfPresent("DIRECTUS_API_TOKEN", "directus_api_token");
-  assignIfPresent("DIRECTUS_ACCESS_TOKEN", "directus_access_token");
 
   for (const channel of CHANNELS) {
     const envVar = channel.auth?.envVar;
@@ -1131,6 +1131,7 @@ export async function startWebAgent(options: AgentStartOptions): Promise<void> {
       const proxyStreamReqStart = agentOutputBuffer.indexOf(PROXY_STREAM_REQ_PREFIX);
       const spawnReqStart = agentOutputBuffer.indexOf(SPAWN_REQ_PREFIX);
       const pythonReqStart = agentOutputBuffer.indexOf(PYTHON_REQ_PREFIX);
+      const mcpReqStart = agentOutputBuffer.indexOf(MCP_REQ_PREFIX);
       const sttReqStart = agentOutputBuffer.indexOf(STT_REQ_PREFIX);
       const fatalStart = agentOutputBuffer.indexOf(FATAL_ERROR_START);
       const nextStartCandidates = [
@@ -1147,6 +1148,7 @@ export async function startWebAgent(options: AgentStartOptions): Promise<void> {
         proxyStreamReqStart,
         spawnReqStart,
         pythonReqStart,
+        mcpReqStart,
         sttReqStart,
         fatalStart,
       ].filter((v) => v >= 0);
