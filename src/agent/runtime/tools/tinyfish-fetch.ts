@@ -21,7 +21,7 @@ export function spaShellPageRecoveryHint(text: unknown, url?: string): string | 
     }
     if (/\/items\/|\/collections\/|\/graphql|\/mcp\b|\/server\/|\/auth\//i.test(u.pathname)) {
       return (
-        `${hostNote}This URL looks like an API path but returned HTML — add Authorization (Bearer) on web_fetch/web_post, or configure Directus MCP in `.webagent/mcp-servers.json`. Do not treat HTTP 200 here as unreachable or retry without auth.`
+        `${hostNote}This URL looks like an API path but returned HTML — add Authorization (Bearer) on web_fetch/web_post, or configure Directus MCP in .webagent/mcp-servers.json. Do not treat HTTP 200 here as unreachable or retry without auth.`
       );
     }
   } catch {

@@ -112,14 +112,14 @@ function appendMcpSection(
 
     const header = `## MCP (${server})`;
     if (header.length + 1 > budget.remaining) {
-      lines.push(`- … +${tools.length} MCP tool(s) on ${server} (tool_search "mcp")`);
+      lines.push(`- … +${tools.length} MCP tool(s) on ${server} (see ## MCP in index)`);
       return;
     }
     lines.push(header);
     budget.remaining -= header.length + 1;
 
     if (tools.length > MCP_TOOLS_LIST_CAP) {
-      const summary = `- [deferred] ${tools.length} tools (e.g. ${tools.slice(0, 3).join(", ")}, …) — tool_search "${server}" then tool_activate`;
+      const summary = `- [active] ${tools.length} mcp_* tools (e.g. ${tools.slice(0, 3).join(", ")}, …) — call by exact name`;
       if (summary.length + 1 <= budget.remaining) {
         lines.push(summary);
         budget.remaining -= summary.length + 1;
@@ -154,10 +154,10 @@ export function buildToolCapabilityIndexBlock(opts: BuildToolCapabilityIndexOpts
   const mcpCount = Object.keys(catalog).filter((n) => n.startsWith("mcp_") && catalog[n]).length;
   const lines: string[] = [
     "# Tool capability index",
-    "All tools below exist in this agent. **Active** = callable now. **Deferred** = use `tool_search` then `tool_activate` before calling.",
+    "All tools below exist in this agent. **Active** = callable now. **Deferred** = policy-group or hidden-alias tools — use `tool_search` then `tool_activate` before calling (not for `mcp_*`).",
     mcpCount
-      ? `**MCP:** ${mcpCount} registered tool(s) under ## MCP below (\`mcp_*\` integrations). \`list_dir\`/\`find_files\`/\`tree\` are built-in browse aliases — not MCP.`
-      : "**MCP:** none registered yet — `/mcp use <url>` then `/reload-mcp` (browser tab open).",
+      ? `**MCP:** ${mcpCount} registered tool(s) under ## MCP below (\`mcp_*\` integrations, active when configured). \`list_dir\`/\`find_files\`/\`tree\` are built-in browse aliases — not MCP.`
+      : "**MCP:** none registered yet — add servers in `.webagent/mcp-servers.json` (and secrets in `.webagent/mcp-secrets.json`), then restart the profile.",
   ];
   const budget = { remaining: toolIndexCharBudget() - lines.join("\n").length - 2 };
 

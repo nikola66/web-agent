@@ -97,7 +97,7 @@ test("guessedResourceRecoveryHint ignores shallow paths", () => {
 test("formatProxyTransportError adds MCP hint for Failed to fetch", () => {
   const msg = formatProxyTransportError("Failed to fetch", "https://hub.aratech.ae/items/posts");
   assert.match(msg, /\/api\/proxy/);
-  assert.match(msg, /\/mcp use/);
+  assert.match(msg, /mcp_\*/);
   assert.match(msg, /hub\.aratech\.ae/);
 });
 

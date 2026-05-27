@@ -6,9 +6,9 @@ import {
   searchDeferredTools,
 } from "../src/agent/runtime/tools/tool-search-tools.ts";
 
-test("isDeferredCatalogTool marks llmVisible false and mcp tools", () => {
+test("isDeferredCatalogTool marks llmVisible false but not mcp tools", () => {
   assert.equal(isDeferredCatalogTool("list_dir", { llmVisible: false }), true);
-  assert.equal(isDeferredCatalogTool("mcp_github_search", {}), true);
+  assert.equal(isDeferredCatalogTool("mcp_github_search", {}), false);
   assert.equal(isDeferredCatalogTool("read_file", {}), false);
 });
 
@@ -18,7 +18,7 @@ test("tool_activate schema requires name", async () => {
   assert.deepEqual(mod.default.inputSchema.required, ["name"]);
 });
 
-test("searchDeferredTools empty query returns mcp tools not browse aliases", async () => {
+test("searchDeferredTools empty query returns hidden browse aliases not mcp", async () => {
   const catalog = {
     list_dir: { description: "list one dir", llmVisible: false },
     find_files: { description: "find files", llmVisible: false },
@@ -26,17 +26,17 @@ test("searchDeferredTools empty query returns mcp tools not browse aliases", asy
     mcp_demo_server_items_read: { description: "[MCP:demo-server] Read item.", llmVisible: false },
   };
   const matches = await searchDeferredTools("", new Set(["read_file"]), 12, catalog);
-  assert.ok(matches.every((m) => m.name.startsWith("mcp_")));
+  assert.ok(matches.every((m) => isHiddenBrowseAlias(m.name)));
   assert.equal(matches.length, 2);
 });
 
-test("searchDeferredTools mcp query ranks mcp above browse aliases", async () => {
+test("searchDeferredTools mcp query does not return mcp tools", async () => {
   const catalog = {
     list_dir: { description: "list", llmVisible: false },
     mcp_hub_items_list: { description: "[MCP:hub] List.", llmVisible: false },
   };
   const matches = await searchDeferredTools("mcp", new Set(["read_file"]), 12, catalog);
-  assert.equal(matches[0]?.name, "mcp_hub_items_list");
+  assert.ok(matches.every((m) => !m.name.startsWith("mcp_")));
 });
 
 test("tool_search is in core tool group policy", async () => {

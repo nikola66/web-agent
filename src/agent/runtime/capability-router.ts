@@ -5,7 +5,7 @@ export type CapabilityRoute = {
   skill?: string;
   tools: string[];
   avoid?: string;
-  /** Show even when deferred tools are not yet active (skill_view unlocks them). */
+  /** Show even when listed tools are not in the active schema (e.g. dynamic mcp_*). skill_view unlocks deferred policy-group tools. */
   alwaysShow?: boolean;
 };
 
@@ -61,8 +61,9 @@ export const CAPABILITY_ROUTES: CapabilityRoute[] = [
   {
     need: "DOM click/type automation",
     skill: "imported-skill-compat",
-    tools: ["tool_search", "tool_activate"],
-    avoid: "web_fetch for clicks; use configured mcp_* browser tools when listed in the capability index",
+    tools: ["mcp_*"],
+    alwaysShow: true,
+    avoid: "web_fetch for clicks; call configured mcp_* tools from ## MCP in the Tool capability index",
   },
   {
     need: "JS-heavy page as text",
