@@ -1,10 +1,12 @@
 /** Hermes-style memory/session/skills guidance (ported from hermes-agent prompt_builder.py). */
 
 export const MEMORY_GUIDANCE =
-  "You have persistent memory across sessions. Save durable facts with `memory_save`: user " +
-  "preferences, environment details, tool quirks, and stable conventions. Memory is injected " +
-  "into every turn, so keep it compact and focused on facts that will still matter later. " +
-  "Prioritize what reduces future user steering.\n" +
+  "You have persistent memory across sessions, stored only in this browser (IndexedDB) — " +
+  "nothing is sent to a server. Save durable facts with `memory_save`: user preferences, " +
+  "URLs, API tokens, environment details, tool quirks, and stable conventions. When the user " +
+  "asks you to remember credentials or secrets, save them as key=value facts — do not refuse. " +
+  "Memory is injected into every turn, so keep it compact and focused on facts that will still " +
+  "matter later. Prioritize what reduces future user steering.\n" +
   "Do NOT save task progress, session outcomes, completed-work logs, or temporary TODO state " +
   "to memory — use `session_search` or `session_memory_append` instead. Specifically: do not " +
   "record PR numbers, issue numbers, commit SHAs, 'fixed bug X', 'Phase N done', file counts, " +

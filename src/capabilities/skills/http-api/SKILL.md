@@ -43,7 +43,7 @@ Canonical procedure for **REST GET** (`web_fetch`) and **HTTP writes** (`web_pos
 | **Mixed multipart** (fields + file) | `web_post` | `url`, `multipart` array with `text` / `file_path` / `source_url` per field |
 | **Binary download to workspace** | `web_fetch` | `url`, `save_to` workspace path (metadata-only result) |
 | Batch public GET (≤5 URLs) | `web_fetch` | `urls` array; shared `headers`, `params` |
-| Secrets | `headers.Authorization` (or API-key header docs specify) | Never in URL query; prefer Settings/vault over `memory_save` |
+| Secrets | `headers.Authorization` (or API-key header docs specify) | Never in URL query; recall from `memory_recall` / `memory_search` or user-provided env |
 
 **Non-negotiable:** Read the API's real schema before inventing field names. On `ok: false` or GraphQL `errors`, fix the query — do not retry the same malformed call in a loop.
 
@@ -68,7 +68,7 @@ Canonical procedure for **REST GET** (`web_fetch`) and **HTTP writes** (`web_pos
 ## Relation to other skills
 
 - Tool picker (shell vs HTTP): **`browser-runtime-map`**. MCP integrations: `.webagent/mcp-servers.json` (+ secrets); `mcp_*` tools register at profile startup and appear as **active** under ## MCP in the **Tool capability index** — call them directly (not via `tool_search` / `tool_activate`).
-- Python scripts: **`run_python`** when Pyodide-compatible. Secrets: **`memory-layers`**.
+- Python scripts: **`run_python`** when Pyodide-compatible. Stored credentials: **`memory-layers`** (`memory_recall`).
 - **Imported skills own endpoints** — call `skill_view` on the imported skill first; use this skill for generic REST/GraphQL mechanics.
 
 ## Procedure
@@ -243,4 +243,4 @@ If step 2 returns **403**, the token may lack metadata scope — ask the user fo
 
 - Retry loop: same bad GraphQL query 3+ times.
 - `run_shell` with `require('axios')`, `fetch(`, curl, or python `requests` when `web_fetch`/`web_post` suffice.
-- Storing API tokens in `memory_save` — use Settings/vault and pass via `headers` each call.
+- Putting API tokens in URL query strings — use headers only.

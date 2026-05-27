@@ -355,7 +355,7 @@ Skills are reusable procedures stored as `SKILL.md` files. They let Web Agent sw
 
 | Slash command | Hub for |
 | --- | --- |
-| `/memory-layers` | Facts, session notes, wiki mirror, secret hygiene, `session_search` |
+| `/memory-layers` | Facts, session notes, wiki mirror, `session_search` |
 | `/browser-runtime-map` | WebContainer limits, shell failures, file layout |
 | `/http-api` | REST GET (`web_fetch`) and POST/GraphQL (`web_post`) — auth, query shapes, CMS patterns |
 | `/imported-skill-compat` | Imported skills from other hosts → Web Agent tools, including `run_python` |
@@ -512,7 +512,7 @@ Twenty-five personal-helper scenarios with copy-paste prompts, bundled skills, a
 | Delivery | Flowchart for a plan or report | `/chart` | `artifact_present` |
 | UX | Disambiguate a vague ask | `/clarify` | *(none)* |
 | Safety | Checkpoint before bulk delete | `/workspace-safety` | `list_dir`, `delete_file` |
-| Safety | Pasted API key / secret hygiene | `/memory-layers` | *(redaction; no secret persistence)* |
+| Safety | Pasted API key by mistake | `/artifact-delivery` | Redact in replies; save to memory only when user asks |
 | Meta | Improve Web Agent itself | `/web-agent-skill` | `read_file`, `grep`, `skill_manage`, `memory_save` |
 
 ## Quick Start
