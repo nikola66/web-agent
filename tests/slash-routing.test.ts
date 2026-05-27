@@ -34,19 +34,8 @@ test("findSkillBySlashToken matches hyphen and underscore forms", () => {
 });
 
 test("normalizeSlashCommandInput strips Telegram bot suffix", () => {
-  assert.equal(
-    normalizeSlashCommandInput("/mcp@webagent_bot use https://x/mcp"),
-    "/mcp use https://x/mcp"
-  );
-  assert.equal(normalizeSlashCommandInput("/reload_mcp@my_bot"), "/reload_mcp");
-});
-
-test("parseLocalSlashCommand recognizes /mcp@bot as mcp", () => {
-  assert.deepEqual(parseLocalSlashCommand("/mcp@my_bot use https://hub.example/mcp"), {
-    kind: "mcp",
-    input: "/mcp use https://hub.example/mcp",
-  });
-  assert.deepEqual(parseLocalSlashCommand("/reload_mcp@bot"), { kind: "reload_mcp" });
+  assert.equal(normalizeSlashCommandInput("/help@webagent_bot"), "/help");
+  assert.equal(normalizeSlashCommandInput("/clear@my_bot"), "/clear");
 });
 
 test("parseLocalSlashCommand recognizes shared local commands", () => {

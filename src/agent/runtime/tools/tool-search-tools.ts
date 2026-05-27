@@ -5,7 +5,7 @@ export function isHiddenBrowseAlias(name: string): boolean {
 }
 
 export function isDeferredCatalogTool(name: string, meta: { llmVisible?: boolean } | null | undefined): boolean {
-  if (String(name || "").startsWith("mcp_")) return true;
+  if (String(name || "").startsWith("mcp_")) return false;
   if (meta?.llmVisible === false) return true;
   return false;
 }

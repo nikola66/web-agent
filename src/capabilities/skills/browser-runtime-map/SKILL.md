@@ -32,7 +32,7 @@ Canonical built-in tool picker. Other skills defer here for filesystem vs HTTP v
 | Mixed multipart (fields + file) | `web_post` with `multipart` array — see **`http-api`** |
 | HTTP(S) POST/PATCH/PUT/DELETE/GraphQL | `web_post` (+ `json`, `form`, `params`, `timeout_ms`) — not for CMS file bytes |
 | OAuth-connected SaaS (Gmail, LinkedIn, Slack, …) | `skill_view` **`composio-oauth`**, then `composio_status` → `composio_action`; never claim no access without status |
-| DOM click/type automation | MCP browser tools (if configured via `/mcp add`) — see **`imported-skill-compat`** |
+| DOM click/type automation | MCP browser tools (if configured in `.webagent/mcp-servers.json`) — see **`imported-skill-compat`** |
 | JS-heavy page as markdown text | `web_fetch` (optional rendered-fetch provider when unauthenticated) |
 | Web search | `web_search` |
 | Environment facts | `system_info` |
@@ -56,7 +56,7 @@ Canonical built-in tool picker. Other skills defer here for filesystem vs HTTP v
 
 ## Relation to other skills
 
-- **Full tool inventory:** each turn’s system prompt includes the **Tool capability index** (all built-ins + MCP, one line each). Deferred/MCP tools still need `tool_search` → `tool_activate` before calling; the index only lists what exists.
+- **Full tool inventory:** each turn’s system prompt includes the **Tool capability index** (all built-ins + MCP, one line each). Deferred/MCP tools are listed in the Tool capability index before calling; the index only lists what exists.
 - Scheduled jobs: **`heartbeat-cron`**. Deliverables: **`artifact-delivery`**. Persistence: **`memory-layers`**.
 
 ## Surfaces

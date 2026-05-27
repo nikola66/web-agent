@@ -62,7 +62,7 @@ export const CAPABILITY_ROUTES: CapabilityRoute[] = [
     need: "DOM click/type automation",
     skill: "imported-skill-compat",
     tools: ["tool_search", "tool_activate"],
-    avoid: "web_fetch for clicks; use MCP browser via tool_search",
+    avoid: "web_fetch for clicks; use configured mcp_* browser tools when listed in the capability index",
   },
   {
     need: "JS-heavy page as text",

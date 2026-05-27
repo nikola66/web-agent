@@ -23,8 +23,6 @@ export const RESERVED_SLASH_TOKENS = new Set([
   "wiki_setup",
   "wiki_sync",
   "wiki_search",
-  "reload_mcp",
-  "mcp",
 ]);
 
 export function commandSlug(value: unknown): string {
@@ -136,8 +134,6 @@ export type LocalSlashKind =
   | "compact"
   | "stop"
   | "voice"
-  | "reload_mcp"
-  | "mcp";
 
 export type LocalSlashCommand =
   | { kind: "none" }
@@ -150,10 +146,8 @@ export type LocalSlashCommand =
   | { kind: "compact" }
   | { kind: "stop" }
   | { kind: "voice"; arg: string }
-  | { kind: "reload_mcp" }
-  | { kind: "mcp"; input: string };
 
-/** Strip Telegram `@botname` suffix so `/mcp@bot use …` routes like `/mcp use …`. */
+/** Strip Telegram `@botname` suffix (e.g. `/help@bot`). */
 export function normalizeSlashCommandInput(text: string): string {
   return String(text ?? "")
     .trim()
@@ -181,10 +175,6 @@ export function parseLocalSlashCommand(trimmed: string): LocalSlashCommand {
   }
   if (input.startsWith("/rollback")) {
     return { kind: "rollback", name: input.slice("/rollback".length).trim() };
-  }
-  if (input === "/reload-mcp" || input === "/reload_mcp") return { kind: "reload_mcp" };
-  if (input === "/mcp" || /^\/mcp(?:\s|$)/.test(input)) {
-    return { kind: "mcp", input };
   }
   return { kind: "none" };
 }

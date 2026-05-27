@@ -64,7 +64,7 @@ import { buildToolRowsFromCatalog } from "./slash-command-views.js";
 import { formatHelpForSurface, runSkillsSlashCommand } from "./channel-outbound.js";
 import { SLASH_COMMANDS } from "./commands.js";
 import { parseLocalSlashCommand, resolveSlashUserMessage } from "./slash-routing.js";
-import { discoverMcpOnStartup, runMcpSlashCommand, shutdownMcpOnExit } from "./mcp-slash.js";
+import { discoverMcpOnStartup, shutdownMcpOnExit } from "./mcp-registry.js";
 import {
   compactHistory,
   formatCompactionNotice,
@@ -479,14 +479,6 @@ export async function main() {
       continue;
     }
     const localSlash = parseLocalSlashCommand(input);
-    if (localSlash.kind === "reload_mcp") {
-      await runMcpSlashCommand("/reload-mcp");
-      continue;
-    }
-    if (localSlash.kind === "mcp") {
-      await runMcpSlashCommand(localSlash.input);
-      continue;
-    }
     if (input === "/stop") {
       if (abortCurrentTurn("user_stopped")) {
         console.log(dim("Stopping current run…"));

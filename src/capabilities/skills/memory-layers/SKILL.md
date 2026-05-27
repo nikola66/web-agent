@@ -19,7 +19,7 @@ Canonical picker for **what to persist**, **which memory tool**, and **secret ha
 | **Skills** | `skill_view`, `skill_list`, `skill_manage`, `skill_bulk_save` | Repeatable procedures with a clear trigger. |
 | **Wiki vault** | `wiki_setup`, `wiki_sync`, `wiki_search` | PARA markdown mirror (default `.webagent/knowledge-vault/`). Also `/wiki_setup`, `/wiki_sync`, `/wiki_search`. |
 | **OAuth SaaS** | `composio_connect`, `composio_status`, `composio_action` | Connected apps (Gmail, Sheets, HubSpot, …) — not raw `web_post` without OAuth setup. |
-| **MCP extensions** | Dynamic MCP tools (after `/mcp add`) | User-configured servers — see **`imported-skill-compat`**. |
+| **MCP extensions** | Dynamic MCP tools (from `.webagent/mcp-servers.json`) | User-configured servers — see **`imported-skill-compat`**. |
 
 **Non-negotiable:** One-off facts → `memory_save`. Debugging trail → `session_memory_append`. Repeatable recipe → `skill_manage` create after `skill_view`. Secrets belong in **Settings / vault** — never in memory, session, skills, or workspace prose.
 

@@ -20,7 +20,6 @@ import {
 import { buildToolRowsFromCatalog } from "../slash-command-views.js";
 import { loadToolCatalog } from "../tools/registry.js";
 import { parseLocalSlashCommand, resolveSlashUserMessage } from "../slash-routing.js";
-import { runMcpSlashCommand } from "../mcp-slash.js";
 import { archiveCurrentHistoryForSessionSearch } from "../startup-context.js";
 import {
   listCheckpoints,
@@ -317,27 +316,6 @@ export function createChannelInboundHandler(deps) {
 
       if (localSlash.kind === "skills") {
         await runSkillsSlashCommand(localSlash.input, surface, (msg) => sendReply(chatId, msg));
-        return;
-      }
-
-      if (localSlash.kind === "reload_mcp") {
-        await runMcpSlashCommand("/reload-mcp", (msg) => sendReply(chatId, msg));
-        return;
-      }
-
-      if (localSlash.kind === "mcp") {
-        let mcpReplied = false;
-        await runMcpSlashCommand(localSlash.input, (msg) => {
-          mcpReplied = true;
-          return sendReply(chatId, msg);
-        });
-        if (!mcpReplied) {
-          await sendReply(
-            chatId,
-            "MCP command produced no output. Open Web Agent in your browser, start this profile, then retry (MCP runs in the page adapter)."
-          );
-        }
-        await logDebugEvent("mcp_slash_command", { channel, chatId, preview: localSlash.input.slice(0, 120) });
         return;
       }
 

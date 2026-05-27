@@ -344,7 +344,7 @@ export async function loadToolCatalog() {
   const mcpCatalog = Object.fromEntries(
     Object.entries(getMcpCatalogCache()).flatMap(([name, entry]) => {
       if (BUILTIN_TOOLS[name] || capabilityCatalog[name] || !isValidToolName(name)) return [];
-      return [[name, { emoji: entry.emoji, description: entry.description, inputSchema: entry.inputSchema, llmVisible: false }]];
+      return [[name, { emoji: entry.emoji, description: entry.description, inputSchema: entry.inputSchema, llmVisible: true }]];
     })
   );
   return {

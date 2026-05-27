@@ -65,7 +65,6 @@ import runtimeClarifySlashSource from "../../dist/agent-runtime/clarify-slash.js
 import runtimeFindSkillsSlashSource from "../../dist/agent-runtime/find-skills-slash.js?raw";
 import runtimeWikiSlashSource from "../../dist/agent-runtime/wiki-slash.js?raw";
 import runtimeSlashRoutingSource from "../../dist/agent-runtime/slash-routing.js?raw";
-import runtimeMcpSlashSource from "../../dist/agent-runtime/mcp-slash.js?raw";
 import runtimeMcpConfigSource from "../../dist/agent-runtime/mcp-config.js?raw";
 import runtimeMcpRegistrySource from "../../dist/agent-runtime/mcp-registry.js?raw";
 import runtimeTerminalFormatSource from "../../dist/agent-runtime/terminal-format.js?raw";
@@ -407,11 +406,7 @@ function capAgentOutputBuffer(
   onFlush: (chunk: string) => void
 ): string {
   if (buffer.length <= AGENT_OUTPUT_BUFFER_MAX) return buffer;
-  const lastMarker = Math.max(
-    buffer.lastIndexOf("<<<WEBAGENT_"),
-    buffer.lastIndexOf(PROXY_REQ_PREFIX),
-    buffer.lastIndexOf(MCP_REQ_PREFIX)
-  );
+  const lastMarker = Math.max(buffer.lastIndexOf("<<<WEBAGENT_"), buffer.lastIndexOf(PROXY_REQ_PREFIX));
   if (lastMarker > 0) {
     const safe = buffer.slice(0, lastMarker);
     if (safe.length > 0) {
@@ -538,7 +533,6 @@ async function writeRuntimeSources(profileId: string): Promise<void> {
   await emulator.fs.writeFile(`${webagentDir}/find-skills-slash.js`, runtimeFindSkillsSlashSource);
   await emulator.fs.writeFile(`${webagentDir}/wiki-slash.js`, runtimeWikiSlashSource);
   await emulator.fs.writeFile(`${webagentDir}/slash-routing.js`, runtimeSlashRoutingSource);
-  await emulator.fs.writeFile(`${webagentDir}/mcp-slash.js`, runtimeMcpSlashSource);
   await emulator.fs.writeFile(`${webagentDir}/mcp-config.js`, runtimeMcpConfigSource);
   await emulator.fs.writeFile(`${webagentDir}/mcp-registry.js`, runtimeMcpRegistrySource);
   await emulator.fs.writeFile(`${webagentDir}/terminal-format.js`, runtimeTerminalFormatSource);
@@ -1131,7 +1125,6 @@ export async function startWebAgent(options: AgentStartOptions): Promise<void> {
       const proxyStreamReqStart = agentOutputBuffer.indexOf(PROXY_STREAM_REQ_PREFIX);
       const spawnReqStart = agentOutputBuffer.indexOf(SPAWN_REQ_PREFIX);
       const pythonReqStart = agentOutputBuffer.indexOf(PYTHON_REQ_PREFIX);
-      const mcpReqStart = agentOutputBuffer.indexOf(MCP_REQ_PREFIX);
       const sttReqStart = agentOutputBuffer.indexOf(STT_REQ_PREFIX);
       const fatalStart = agentOutputBuffer.indexOf(FATAL_ERROR_START);
       const nextStartCandidates = [
@@ -1148,7 +1141,6 @@ export async function startWebAgent(options: AgentStartOptions): Promise<void> {
         proxyStreamReqStart,
         spawnReqStart,
         pythonReqStart,
-        mcpReqStart,
         sttReqStart,
         fatalStart,
       ].filter((v) => v >= 0);

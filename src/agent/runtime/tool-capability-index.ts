@@ -130,7 +130,7 @@ function appendMcpSection(
     for (const name of tools) {
       const line = formatToolLine(name, catalog[name], active);
       if (line.length + 1 > budget.remaining) {
-        lines.push(`- … +${tools.length} MCP tool(s) (tool_search "mcp")`);
+        lines.push(`- … +${tools.length} MCP tool(s) on ${server}`);
         return;
       }
       lines.push(line);

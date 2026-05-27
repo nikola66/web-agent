@@ -260,7 +260,7 @@ export const UNSUPPORTED_BINARIES: Record<string, string> = {
   docker: "Docker is not available in the browser sandbox.",
   kubectl: "kubectl is not available in the browser sandbox.",
   osascript: "osascript (macOS AppleScript) is not available in Nodebox.",
-  mcporter: "mcporter MCP CLI is not available — configure MCP via `/mcp add` instead.",
+  mcporter: "mcporter MCP CLI is not available — configure MCP in `.webagent/mcp-servers.json` instead.",
   terraform: "Terraform CLI is not available. Use cloud provider REST APIs via `web_fetch`/`web_post`.",
   bicep: "Bicep CLI is not available. Use Azure REST APIs via `web_fetch`/`web_post`.",
   edirect: "NCBI EDirect tools are not available. Use NCBI E-utilities REST API via `web_fetch`.",

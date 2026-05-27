@@ -1,7 +1,7 @@
 import { ipcMcpRequest } from "./ipc.js";
 import {
   loadMcpServersConfig,
-  mcpEnvForConfigResolved,
+  mcpEnvForConfig,
   type McpServersConfig,
 } from "./mcp-config.js";
 
@@ -28,40 +28,15 @@ type McpToolEntry = {
 
 let mcpToolsCache: Record<string, McpToolEntry> | null = null;
 
-const MCP_IPC_HINT =
-  "The MCP bridge did not respond in time (often a stalled probe to the remote server, or IPC backlog while the agent is busy). Retry /reload_mcp; if it persists, reload the page.";
-const MCP_CORS_HINT =
-  "Cross-origin MCP needs the browser tab open (requests route via /api/proxy).";
-
 export function formatMcpIpcError(err: unknown): string {
   const msg = err instanceof Error ? err.message : String(err ?? "unknown error");
   if (/IPC MCP request timed out/i.test(msg)) {
-    if (msg.includes(MCP_IPC_HINT)) return msg;
-    return `${msg} ${MCP_IPC_HINT}`;
-  }
-  if (/browser tab is not connected|page adapter is not connected/i.test(msg)) {
-    return msg;
+    return `${msg} Keep the Web Agent browser tab open — MCP connections run in the page adapter.`;
   }
   if (/failed to fetch|network|CORS/i.test(msg)) {
-    if (msg.includes(MCP_CORS_HINT)) return msg;
-    return `${msg} ${MCP_CORS_HINT}`;
+    return `${msg} Cross-origin MCP needs the browser tab open (requests route via /api/proxy).`;
   }
   return msg;
-}
-
-/** Fail fast when the browser page adapter is not processing MCP IPC. */
-export async function ensureMcpAdapterReady(timeoutMs = 8_000): Promise<void> {
-  try {
-    await ipcMcpRequest({ action: "status" }, {}, timeoutMs);
-  } catch (err) {
-    const detail = err instanceof Error ? err.message : String(err);
-    if (/IPC MCP request timed out/i.test(detail)) {
-      throw new Error(
-        "MCP bridge did not respond in time. Telegram can run while MCP setup still fails — retry /reload_mcp, or reload the Web Agent page if the problem continues."
-      );
-    }
-    throw err;
-  }
 }
 
 async function mcpIpc(
@@ -71,8 +46,7 @@ async function mcpIpc(
 ) {
   const servers = config ?? (await loadMcpServersConfig());
   try {
-    const env = await mcpEnvForConfigResolved(servers);
-    return await ipcMcpRequest({ ...payload, config: servers, env }, timeoutMs);
+    return await ipcMcpRequest({ ...payload, config: servers, env: mcpEnvForConfig(servers) }, timeoutMs);
   } catch (err) {
     throw new Error(formatMcpIpcError(err));
   }
@@ -180,4 +154,30 @@ export function clearMcpToolsCache() {
 export function formatMcpStartupBanner(tools: McpDiscoveredTool[], failed = 0): string {
   const serverCount = new Set(tools.map((t) => t.server)).size;
   return `MCP: ${tools.length} tool(s) from ${serverCount} server(s)${failed ? ` (${failed} failed)` : ""}`;
+}
+
+/** Discover MCP servers from `.webagent/mcp-servers.json` at agent startup. */
+export async function discoverMcpOnStartup(): Promise<void> {
+  const config = await loadMcpServersConfig();
+  if (!Object.keys(config).length) return;
+  try {
+    const { dim } = await import("./terminal-format.js");
+    const { tools, status } = await discoverAndRegisterMcpTools();
+    const failed = status?.failed ?? 0;
+    console.log(dim(formatMcpStartupBanner(tools, failed)));
+    void import("./turn.js").then((m) => m.invalidateToolNamesCache?.());
+  } catch (err) {
+    const { dim } = await import("./terminal-format.js");
+    console.log(
+      dim(`MCP: startup discover failed (${err instanceof Error ? err.message : String(err)})`)
+    );
+  }
+}
+
+export async function shutdownMcpOnExit(): Promise<void> {
+  try {
+    await mcpShutdown();
+  } catch {
+    /* ignore */
+  }
 }

@@ -115,10 +115,10 @@ Authenticated GET always passes `headers` → routes via `/api/proxy` (JSON), no
 
 Configure a Directus Streamable HTTP MCP endpoint (**the Web Agent page must be running** (Telegram messages already prove this — MCP failures are usually auth, remote server reachability, or an IPC bridge bug, not a closed tab):
 
-1. `/mcp auth <token>` — saves bearer token in workspace (`.webagent/mcp-secrets.json`); works from Telegram without pasting the token into `/mcp use`.
-2. `/mcp use https://<host>/mcp` — Telegram: `/mcp@YourBot use …` (normalized automatically).
-3. `/reload-mcp` or `/reload_mcp` if tools do not appear after save.
-4. Agent workflow: `tool_search` (query `mcp` or server name) → `tool_activate` with exact tool name → call `mcp_<server>_<tool>`. MCP tools are **not** in the default LLM tool list.
+1. Bearer token in `.webagent/mcp-secrets.json` (`directus_token`) — saves bearer token in workspace (`.webagent/mcp-secrets.json`); works from Telegram without pasting the token into `/mcp use`.
+2. Server entry in `.webagent/mcp-servers.json` — Telegram: `/mcp@YourBot use …` (normalized automatically).
+3. Relaunch profile to discover tools if tools do not appear after save.
+4. Agent workflow: call `mcp_*` tools directly with exact tool name → call `mcp_<server>_<tool>`. MCP tools are **not** in the default LLM tool list.
 
 If probe times out: open Web Agent in the browser, start the profile, then `/reload_mcp`. Config may already be saved as enabled.
 

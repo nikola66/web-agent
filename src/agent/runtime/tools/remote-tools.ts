@@ -126,8 +126,8 @@ export function formatProxyTransportError(message: string, url?: string): string
     }
   })();
   const mcpHint = host
-    ? ` If REST is blocked, configure MCP: /mcp use https://${host}/mcp then /reload-mcp.`
-    : " If REST is blocked, configure MCP with /mcp use <mcp-url> then /reload-mcp.";
+    ? ` If REST is blocked, use configured mcp_* tools (see .webagent/mcp-servers.json) for ${host}.`
+    : " If REST is blocked, use configured mcp_* tools from .webagent/mcp-servers.json.";
   return `${base} (browser sandbox could not reach upstream — requests are routed via /api/proxy).${mcpHint}`;
 }
 

@@ -240,7 +240,7 @@ export function buildWebAgentExecutionAppendix(analysis: SkillCompatAnalysis): s
     );
   }
   if (analysis.uses_mcp) {
-    lines.push("| MCP / CallMcpTool | Configure via `/mcp add` or `.webagent/mcp-servers.json`, then `/reload-mcp` |");
+    lines.push("| MCP / CallMcpTool | Configure `.webagent/mcp-servers.json` + `.webagent/mcp-secrets.json`; `mcp_*` tools auto-register at startup |");
   }
   if (analysis.uses_system_cli || analysis.uses_bash) {
     lines.push("| aws / az / azd / terraform / docker / kubectl / openclaw CLI | **Not available** — use that service's REST API via `web_fetch`/`web_post`; see **`browser-runtime-map`** CLI→REST table |");
@@ -327,7 +327,7 @@ export function compatScanWarnings(analysis: SkillCompatAnalysis): string[] {
     warnings.push(`contains Python/pip references${libs} — use run_python for Pyodide-compatible scripts; no system pip/native deps`);
   }
   if (analysis.uses_mcp) {
-    warnings.push("references MCP tools — configure servers with /mcp add or .webagent/mcp-servers.json, then /reload-mcp");
+    warnings.push("references MCP tools — configure `.webagent/mcp-servers.json` (and secrets); tools register automatically at startup");
   }
   if (analysis.uses_npx) {
     warnings.push("references npx — use skill_manage import_url / skill_bulk_save instead of CLI install");
