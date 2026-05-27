@@ -67,7 +67,7 @@ Canonical procedure for **REST GET** (`web_fetch`) and **HTTP writes** (`web_pos
 
 ## Relation to other skills
 
-- Tool picker (shell vs HTTP): **`browser-runtime-map`**. MCP integrations: configure via `/mcp`; names appear in the system **Tool capability index** — activate with `tool_search` / `tool_activate` before use.
+- Tool picker (shell vs HTTP): **`browser-runtime-map`**. MCP integrations: `.webagent/mcp-servers.json` (+ secrets); `mcp_*` tools register at profile startup and appear as **active** under ## MCP in the **Tool capability index** — call them directly (not via `tool_search` / `tool_activate`).
 - Python scripts: **`run_python`** when Pyodide-compatible. Secrets: **`memory-layers`**.
 - **Imported skills own endpoints** — call `skill_view` on the imported skill first; use this skill for generic REST/GraphQL mechanics.
 
@@ -107,7 +107,7 @@ When `web_fetch` uses TinyFish (default when no `headers`) and markdown returns 
 
 - **HTTP 200 means the host responded** — not outage, not "unreachable", and not proof the REST API is broken.
 - That body is the **non-API UI shell** (no JS in TinyFish). Do **not** loop on the same admin/root URL or declare the site down.
-- **Do instead:** call documented REST paths (`/items/…`, `/collections/…`, `/server/info`, …) with `headers.Authorization: Bearer <token>`, `web_post` for writes, or `/mcp use <url>/mcp` for Directus MCP.
+- **Do instead:** call documented REST paths (`/items/…`, `/collections/…`, `/server/info`, …) with `headers.Authorization: Bearer <token>`, `web_post` for writes, or add the Directus MCP server in `.webagent/mcp-servers.json` and call `mcp_*` tools.
 
 Authenticated GET always passes `headers` → routes via `/api/proxy` (JSON), not TinyFish markdown.
 
@@ -115,12 +115,12 @@ Authenticated GET always passes `headers` → routes via `/api/proxy` (JSON), no
 
 Configure a Directus Streamable HTTP MCP endpoint (**the Web Agent page must be running** (Telegram messages already prove this — MCP failures are usually auth, remote server reachability, or an IPC bridge bug, not a closed tab):
 
-1. Bearer token in `.webagent/mcp-secrets.json` (`directus_token`) — saves bearer token in workspace (`.webagent/mcp-secrets.json`); works from Telegram without pasting the token into `/mcp use`.
-2. Server entry in `.webagent/mcp-servers.json` — Telegram: `/mcp@YourBot use …` (normalized automatically).
-3. Relaunch profile to discover tools if tools do not appear after save.
-4. Agent workflow: call `mcp_*` tools directly with exact tool name → call `mcp_<server>_<tool>`. MCP tools are **not** in the default LLM tool list.
+1. Bearer token in `.webagent/mcp-secrets.json` (`directus_token` or server-specific keys).
+2. Server entry in `.webagent/mcp-servers.json` (Streamable HTTP URL for Directus MCP).
+3. Restart the profile (or reload the workspace) so startup discovery registers `mcp_*` tools.
+4. Agent workflow: call `mcp_<server>_<tool>` by exact name from ## MCP in the Tool capability index — they are in the active tool schema when configured.
 
-If probe times out: open Web Agent in the browser, start the profile, then `/reload_mcp`. Config may already be saved as enabled.
+If probe times out: keep the Web Agent tab open, verify the remote MCP endpoint and auth, then restart the profile. Config may already be saved as enabled.
 
 Prefer MCP for CMS mutations when REST from the sandbox is blocked; prefer REST (`/items/…` + Bearer) when `headers` work.
 

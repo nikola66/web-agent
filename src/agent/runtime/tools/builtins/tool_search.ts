@@ -17,9 +17,9 @@ export default defineTool({
   emoji: "🔍",
   toolGroup: "core",
   description:
-    "Search deferred tools (MCP `mcp_*` integrations and hidden aliases) not in the active schema. " +
-    "For MCP capabilities use query `mcp` (not empty — empty omits browse aliases but may miss MCP). " +
-    "Read ## MCP in the Tool capability index first. Use before `tool_activate`.",
+    "Search deferred tools (policy-group tools and hidden browse aliases like list_dir/find_files/tree) not in the active schema. " +
+    "`mcp_*` tools are active when configured — see ## MCP in the Tool capability index; do not use this tool to discover MCP. " +
+    "Use before `tool_activate`.",
   inputSchema: {
     type: "object",
     properties: {

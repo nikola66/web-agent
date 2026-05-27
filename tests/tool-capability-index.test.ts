@@ -114,13 +114,20 @@ test("MCP tools appear in index under default policy without explicit allow grou
     DEFAULT_TOOL_POLICY,
     {}
   );
+  const active = resolveInitialActiveToolNames(
+    policyNames,
+    ["read_file", mcpName],
+    DEFAULT_TOOL_POLICY,
+    {},
+    []
+  );
   const block = buildToolCapabilityIndexBlock({
     catalog,
     policyToolNames: policyNames,
-    activeToolNames: ["read_file"],
+    activeToolNames: active,
   });
   assert.match(block, /## MCP \(demo-server\)/);
-  assert.match(block, new RegExp(`\\[deferred\\] ${mcpName}`));
+  assert.match(block, new RegExp(`\\[active\\] ${mcpName}`));
 });
 
 test("MCP tools grouped under server header", () => {
@@ -134,13 +141,21 @@ test("MCP tools grouped under server header", () => {
     [mcpTools[1]]: { description: "[MCP:hub-aratech-ae-mcp] Read one item." },
     [mcpTools[2]]: { description: "[MCP:hub-aratech-ae-mcp] Create item." },
   });
+  const policyNames = resolvePolicyToolNames(["read_file", ...mcpTools], DEFAULT_TOOL_POLICY, {});
+  const active = resolveInitialActiveToolNames(
+    policyNames,
+    ["read_file", ...mcpTools],
+    DEFAULT_TOOL_POLICY,
+    {},
+    []
+  );
   const block = buildToolCapabilityIndexBlock({
     catalog,
-    policyToolNames: ["read_file", ...mcpTools],
-    activeToolNames: ["read_file"],
+    policyToolNames: policyNames,
+    activeToolNames: active,
   });
   assert.match(block, /## MCP \(hub-aratech-ae-mcp\)/);
-  assert.match(block, /\[deferred\] mcp_hub_aratech_ae_mcp_items_list/);
+  assert.match(block, /\[active\] mcp_hub_aratech_ae_mcp_items_list/);
 });
 
 test("budget truncation keeps MCP summary when many MCP tools", () => {
