@@ -3,7 +3,7 @@ import { runPythonTool } from "../python-tools.js";
 
 const RUN_PYTHON_EXAMPLES = [
   { code: "print('ok')" },
-  { path: "scripts/publish-5lang.py", env: { DIRECTUS_API_TOKEN: "<from Settings/vault>" }, timeout_ms: 300000 },
+  { path: "scripts/publish-5lang.py", env: { DIRECTUS_API_TOKEN: "<from memory_recall or user>" }, timeout_ms: 300000 },
   {
     code:
       "import zipfile\nfrom pathlib import Path\nroot=Path('work/my-bundle'); out=root/'bundle.zip'\nwith zipfile.ZipFile(out,'w',compression=zipfile.ZIP_DEFLATED) as zf:\n  [zf.write(f,f.relative_to(root)) for f in root.rglob('*') if f.is_file() and f!=out]\nprint(out)",

@@ -7,7 +7,7 @@ const RUN_SHELL_EXAMPLES = [
   {
     command: "python3 scripts/publish-5lang.py article.md",
     cwd: ".webagent/skills/imported/example",
-    env: { API_TOKEN: "<from Settings/vault>" },
+    env: { API_TOKEN: "<from memory_recall or user>" },
     timeout_ms: 300000,
   },
 ];

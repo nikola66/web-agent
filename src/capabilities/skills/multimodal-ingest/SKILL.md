@@ -18,7 +18,7 @@ triggers: [screenshot, image, diagram, ocr, what is in this image, youtube link,
 | Cross-check claims | `web_search`, `web_fetch` — **`open-web-research`** |
 | Persist transcript / extract | `write_file` under `work/<slug>/` |
 | Show visual to user | `artifact_present` — **`artifact-delivery`** |
-| Durable non-secret facts | `memory_save` — **`memory-layers`** |
+| Durable facts | `memory_save` — **`memory-layers`** |
 
 **Non-negotiable:** Focused vision questions, not "describe everything". Long transcripts → file + present, not chat paste.
 

@@ -38,7 +38,7 @@ Owns choice between inline reply, **`artifact_present`**, **`email`**, and cron 
 ## Relation to other skills
 
 - Multi-step run reports: **`task-execution`** writes `work/task-execution/<slug>/report.md`.
-- Mermaid authoring: **`chart`**. Secret storage policy: **`memory-layers`**.
+- Mermaid authoring: **`chart`**. Durable facts (including credentials the user asked to store): **`memory-layers`**.
 
 ## Procedure
 
@@ -54,8 +54,6 @@ Owns choice between inline reply, **`artifact_present`**, **`email`**, and cron 
 
 - Strip API keys, bearer tokens, and `.env` contents from `artifact_present` bodies and email text.
 - If the user pasted a secret, redact in the delivered artifact — do not send it back unchanged.
-- For where secrets belong (vault vs memory), see **`memory-layers`**.
-
 ## Pitfalls
 
 - Pasting the artifact body inline *and* presenting it.

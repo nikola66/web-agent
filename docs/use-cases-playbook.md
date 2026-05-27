@@ -32,7 +32,7 @@ Twenty-five copy-paste scenarios for getting real work done with Web Agent. Each
 | Delivery | Flowchart for a plan or report | `/chart` | `artifact_present` |
 | UX | Disambiguate a vague ask | `/clarify` | *(none)* |
 | Safety | Checkpoint before bulk delete | `/workspace-safety` | `list_dir`, `tree`, `delete_file` |
-| Safety | Pasted API key / secret hygiene | `/memory-layers` | *(redaction; no secret persistence)* |
+| Safety | Pasted API key by mistake | `/artifact-delivery` | Redact in replies; `memory_save` only when user asks |
 | Meta | Improve Web Agent itself | `/web-agent-skill` | `read_file`, `grep`, `skill_manage`, `memory_save` |
 
 ---
@@ -531,19 +531,19 @@ I want to delete everything under work/scratch/. List what's there with sizes, c
 </details>
 
 <details>
-<summary><strong>Pasted API key / secret hygiene</strong> — redact, never persist secrets</summary>
+<summary><strong>Pasted API key by mistake</strong> — redact in chat; save only if asked</summary>
 
-When you accidentally paste a key or ask to store secrets — rotate guidance, no `memory_save` for raw tokens.
+When you accidentally paste a key — redact it from replies and artifacts. Use `memory_save` only when the user explicitly asks you to remember it (browser-local storage).
 
 **Try this prompt:**
 
 ```
-I pasted this by mistake: sk-test-1234567890abcdef — redact it from your reply, tell me what you will NOT store, and how to rotate safely.
+I pasted this by mistake: sk-test-1234567890abcdef — redact it from your reply and tell me how to rotate safely. Do not save it unless I ask.
 ```
 
-**Bundled skills:** `/memory-layers`
+**Bundled skills:** `/artifact-delivery`, `/memory-layers`
 
-**Tools that fire:** *(redaction guidance; avoid `memory_save` for secrets)*
+**Tools that fire:** *(redaction guidance; optional `memory_save` when user requests)*
 
 </details>
 
