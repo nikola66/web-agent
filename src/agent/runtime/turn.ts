@@ -440,6 +440,18 @@ export async function agentTurn(
     }
   };
 
+  const applyFindSkillsDeliveryLock = async () => {
+    if (findSkillsDeliveryContinuations <= 0) return;
+    if (!/find-skills mode/i.test(originalUserInput)) return;
+    const locked = activeToolNames.filter((n) => n !== "web_search" && n !== "web_fetch");
+    if (locked.length === activeToolNames.length) return;
+    activeToolNames = locked;
+    streamToolsKey = `${activeToolNames.join(",")}::${catalogSchemaFingerprint(buildActiveCatalog(activeToolNames))}`;
+    streamTools = await rebuildStreamTools(activeToolNames);
+    const activeState = turnCtx.services?.activeToolNamesState as { list?: string[] } | undefined;
+    if (activeState) activeState.list = activeToolNames;
+  };
+
   const noteToolUnlocksFromResults = async (
     exec: Array<Record<string, unknown>>,
     calls: Array<{ name?: string; arguments?: unknown }>
@@ -521,6 +533,7 @@ export async function agentTurn(
   let executedToolsInTurn = false;
   let webSearchCountInTurn = 0;
   let webFetchCountInTurn = 0;
+  let webDiscoveryCallsInTurn = 0;
   const researchIntent = isResearchIntent(originalUserInput);
   const successfulToolKeysInTurn = new Set<string>();
   let conv = [...fullMessages];
@@ -614,6 +627,7 @@ export async function agentTurn(
       }
       round++;
       const roundStartedAt = Date.now();
+      await applyFindSkillsDeliveryLock();
       const convCharsBefore = conv.reduce((n, m) => n + String(m?.content || "").length, 0);
       const estTokensBefore = estimateMessagesTokens(conv);
       const midPrune = pruneConversationForMidTurn(conv, cfg);
@@ -985,13 +999,14 @@ export async function agentTurn(
             originalUserInput,
             visible,
             executedToolsInTurn,
-            lastToolExecutions,
+            webDiscoveryCallsInTurn,
             findSkillsDeliveryContinuations
           )
         ) {
           findSkillsDeliveryContinuations++;
           continuationRecoveriesFired++;
           conv.push({ role: "user", content: buildContinuationNudge("find_skills_delivery") });
+          await applyFindSkillsDeliveryLock();
           await logDebugEvent("turn_find_skills_delivery_continuation", {
             round,
             count: findSkillsDeliveryContinuations,
@@ -1190,6 +1205,7 @@ export async function agentTurn(
       for (let i = 0; i < tools.length; i++) {
         const tname = String(tools[i]?.name || "");
         const item = exec[i];
+        if (tname === "web_search" || tname === "web_fetch") webDiscoveryCallsInTurn += 1;
         if (!item?.error) {
           successfulToolKeysInTurn.add(toolExecutionKey(tools[i]));
           if (tname === "web_search") webSearchCountInTurn += 1;
@@ -1290,6 +1306,25 @@ export async function agentTurn(
           role: "user",
           content:
             "Research reminder: your last step was search-only. Run web_fetch on at least two URLs from those results (YouTube channel or video pages first) before concluding.",
+        });
+      }
+      if (
+        shouldContinueFindSkillsDelivery(
+          originalUserInput,
+          "",
+          true,
+          webDiscoveryCallsInTurn,
+          findSkillsDeliveryContinuations
+        )
+      ) {
+        findSkillsDeliveryContinuations++;
+        continuationRecoveriesFired++;
+        conv.push({ role: "user", content: buildContinuationNudge("find_skills_delivery") });
+        await applyFindSkillsDeliveryLock();
+        await logDebugEvent("turn_find_skills_delivery_midturn", {
+          round,
+          count: findSkillsDeliveryContinuations,
+          webDiscoveryCalls: webDiscoveryCallsInTurn,
         });
       }
       if (

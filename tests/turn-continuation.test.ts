@@ -595,20 +595,22 @@ test("looksLikePostToolStall nudges plan after offer when user already approved 
 
 test("looksLikeFindSkillsDeliveryStall after web tools without table", () => {
   const user = "The user invoked **find-skills mode** via `/find_skills`.";
-  const execs = [{ tool: "web_search" }, { tool: "web_fetch" }];
-  assert.equal(looksLikeFindSkillsDeliveryStall(user, "", true, execs), true);
+  assert.equal(looksLikeFindSkillsDeliveryStall(user, "", true, 2), true);
   assert.equal(
-    looksLikeFindSkillsDeliveryStall(user, "Still fetching registry pages…", true, execs),
+    looksLikeFindSkillsDeliveryStall(user, "Still fetching registry pages…", true, 3),
+    true
+  );
+  assert.equal(
+    looksLikeFindSkillsDeliveryStall(user, "I'll grab another live registry page.", true, 6),
     true
   );
   const table =
     "## Top 5 skills for python\n\n| # | Skill | Registry | Popularity | Summary | Install / link |\n|---|---|---|---|---|---|";
-  assert.equal(looksLikeFindSkillsDeliveryStall(user, table, true, execs), false);
+  assert.equal(looksLikeFindSkillsDeliveryStall(user, table, true, 6), false);
 });
 
 test("shouldContinueFindSkillsDelivery respects cap", () => {
   const user = "find-skills mode";
-  const execs = [{ tool: "web_search" }, { tool: "web_fetch" }];
-  assert.equal(shouldContinueFindSkillsDelivery(user, "", true, execs, 0), true);
-  assert.equal(shouldContinueFindSkillsDelivery(user, "", true, execs, 2), false);
+  assert.equal(shouldContinueFindSkillsDelivery(user, "", true, 2, 0), true);
+  assert.equal(shouldContinueFindSkillsDelivery(user, "", true, 2, 3), false);
 });

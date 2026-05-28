@@ -17,7 +17,7 @@ export const MAX_API_DISCOVERY_STALL_CONTINUATIONS = 1;
 export const MAX_PRE_TOOL_PROMISE_CONTINUATIONS = 5;
 export const MAX_CRON_VERIFY_CONTINUATIONS = 1;
 export const MAX_INCOMPLETE_TODO_CONTINUATIONS = 2;
-export const MAX_FIND_SKILLS_DELIVERY_CONTINUATIONS = 2;
+export const MAX_FIND_SKILLS_DELIVERY_CONTINUATIONS = 3;
 
 export const SYNTHETIC_EMPTY_ASSISTANT_CONTENT = "(empty)";
 
@@ -605,27 +605,21 @@ export function looksLikeEmptyResponse(visible: string): boolean {
   return !String(visible || "").trim();
 }
 
-type WebToolExecution = { tool?: string };
-
 /** find-skills ran web discovery but never delivered the ranked pipe table. */
 export function looksLikeFindSkillsDeliveryStall(
   userMessage: string,
   visible: string,
   executedToolsInTurn: boolean,
-  lastExecutions: WebToolExecution[]
+  webDiscoveryCalls: number
 ): boolean {
   if (!executedToolsInTurn) return false;
   if (!/find-skills mode/i.test(String(userMessage || ""))) return false;
-  const webCalls = (lastExecutions || []).filter(
-    (item) => item?.tool === "web_search" || item?.tool === "web_fetch"
-  ).length;
-  if (webCalls < 2) return false;
+  if (webDiscoveryCalls < 2) return false;
   const vis = String(visible || "").trim();
-  if (!vis) return true;
   if (/\|\s*#\s*\|/i.test(vis) && /\|\s*Skill/i.test(vis)) return false;
   const pipes = vis.match(/\|/g)?.length ?? 0;
   if (/top 5 skills/i.test(vis) && pipes >= 6) return false;
-  return true;
+  return webDiscoveryCalls >= 2;
 }
 
 export function looksLikeTruncatedResponse(finishReason: string | null | undefined): boolean {
@@ -817,8 +811,9 @@ export function buildContinuationNudge(
   if (kind === "find_skills_delivery") {
     return (
       "You completed find-skills web_search/web_fetch but have not delivered the final answer. " +
+      "Stop fetching more registry pages. Synthesize from search snippets and any successful fetches you already have. " +
       "Present exactly 5 deduped skills in a markdown pipe table (Skill | Registry | Popularity | Summary | Install/link) " +
-      "ranked by installs, stars, or votes. Do not install — offer install only after the table."
+      "ranked by installs, stars, or votes — note 'metric unavailable' when a registry blocked fetch. Do not install."
     );
   }
   if (kind === "all_tools_rejected") {
@@ -918,11 +913,11 @@ export function shouldContinueFindSkillsDelivery(
   userMessage: string,
   visible: string,
   executedToolsInTurn: boolean,
-  lastExecutions: WebToolExecution[],
+  webDiscoveryCalls: number,
   findSkillsDeliveryContinuations: number
 ): boolean {
   if (findSkillsDeliveryContinuations >= MAX_FIND_SKILLS_DELIVERY_CONTINUATIONS) return false;
-  return looksLikeFindSkillsDeliveryStall(userMessage, visible, executedToolsInTurn, lastExecutions);
+  return looksLikeFindSkillsDeliveryStall(userMessage, visible, executedToolsInTurn, webDiscoveryCalls);
 }
 
 export function shouldContinueSnapshotReadStall(

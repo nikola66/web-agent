@@ -25,13 +25,13 @@ export function editProfileButton(page: Page, profileName: string) {
 }
 
 export function runningChatInput(page: Page) {
-  return page.getByPlaceholder("Type message (Enter to send, /stop to interrupt)");
+  return page.getByPlaceholder("Type message (Enter to send, @ to reference files)");
 }
 
 /** Matches chat input in idle or running states (placeholder changes). */
 export function anyChatInput(page: Page) {
   return page.locator(
-    'textarea[placeholder="Type message (Enter to send, /stop to interrupt)"], textarea[placeholder="Launch the agent to start chatting"], textarea[placeholder="Press Enter to accept default, or type a name"]'
+    'textarea[placeholder="Type message (Enter to send, @ to reference files)"], textarea[placeholder="Launch the agent to start chatting"], textarea[placeholder="Press Enter to accept default, or type a name"]'
   );
 }
 
