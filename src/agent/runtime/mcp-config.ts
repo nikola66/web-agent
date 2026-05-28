@@ -1,4 +1,5 @@
 import fs from "node:fs/promises";
+import { interpolateEnvString } from "../../core/mcp/config.js";
 import { MCP_SERVERS_REL, workspaceStatePath } from "./constants.js";
 import { loadMcpSecrets, mcpSecretsToEnv } from "./mcp-secrets.js";
 
@@ -107,6 +108,25 @@ export async function mcpEnvForConfigResolved(config: McpServersConfig): Promise
       ? { ...(process.env as Record<string, string>), ...fromSecrets }
       : { ...fromSecrets };
   return mergeMcpEnv(config, full);
+}
+
+export function mcpAuthEnvWarnings(
+  config: McpServersConfig,
+  env: Record<string, string>
+): string[] {
+  const warnings: string[] = [];
+  for (const [name, srv] of Object.entries(config || {})) {
+    for (const [header, template] of Object.entries(srv.headers || {})) {
+      if (!/authorization/i.test(header)) continue;
+      const resolved = interpolateEnvString(String(template), env).trim();
+      if (!resolved || /^Bearer\s*$/i.test(resolved)) {
+        warnings.push(
+          `server '${name}' has empty Authorization — set directus_token in .webagent/mcp-secrets.json (or the referenced env var)`
+        );
+      }
+    }
+  }
+  return warnings;
 }
 
 export async function upsertMcpServer(name: string, serverConfig: McpServerConfig): Promise<void> {

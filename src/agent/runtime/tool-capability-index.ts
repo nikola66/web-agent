@@ -157,7 +157,7 @@ export function buildToolCapabilityIndexBlock(opts: BuildToolCapabilityIndexOpts
     "All tools below exist in this agent. **Active** = callable now. **Deferred** = policy-group or hidden-alias tools — use `tool_search` then `tool_activate` before calling (not for `mcp_*`).",
     mcpCount
       ? `**MCP:** ${mcpCount} registered tool(s) under ## MCP below (\`mcp_*\` integrations, active when configured). \`list_dir\`/\`find_files\`/\`tree\` are built-in browse aliases — not MCP.`
-      : "**MCP:** none registered yet — add servers in `.webagent/mcp-servers.json` (and secrets in `.webagent/mcp-secrets.json`), then restart the profile.",
+      : "**MCP:** none registered yet — add servers in `.webagent/mcp-servers.json` (and secrets in `.webagent/mcp-secrets.json`); `write_file` on those paths triggers reload when the browser tab is open.",
   ];
   const budget = { remaining: toolIndexCharBudget() - lines.join("\n").length - 2 };
 

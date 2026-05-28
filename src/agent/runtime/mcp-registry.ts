@@ -1,7 +1,9 @@
 import { ipcMcpRequest } from "./ipc.js";
+import { MCP_SECRETS_REL, MCP_SERVERS_REL } from "./constants.js";
 import {
   loadMcpServersConfig,
-  mcpEnvForConfig,
+  mcpAuthEnvWarnings,
+  mcpEnvForConfigResolved,
   type McpServersConfig,
 } from "./mcp-config.js";
 
@@ -46,7 +48,8 @@ async function mcpIpc(
 ) {
   const servers = config ?? (await loadMcpServersConfig());
   try {
-    return await ipcMcpRequest({ ...payload, config: servers, env: mcpEnvForConfig(servers) }, timeoutMs);
+    const env = await mcpEnvForConfigResolved(servers);
+    return await ipcMcpRequest({ ...payload, config: servers, env }, timeoutMs);
   } catch (err) {
     throw new Error(formatMcpIpcError(err));
   }
@@ -156,15 +159,36 @@ export function formatMcpStartupBanner(tools: McpDiscoveredTool[], failed = 0): 
   return `MCP: ${tools.length} tool(s) from ${serverCount} server(s)${failed ? ` (${failed} failed)` : ""}`;
 }
 
+export async function maybeReloadMcpAfterConfigWrite(relPath: string): Promise<string | null> {
+  const norm = String(relPath || "").replace(/\\/g, "/").replace(/^\/+/, "");
+  if (norm !== MCP_SERVERS_REL && norm !== MCP_SECRETS_REL) return null;
+  try {
+    const { tools, status } = await discoverAndRegisterMcpTools();
+    void import("./turn.js").then((m) => m.invalidateToolNamesCache?.());
+    const failed = status?.failed ?? 0;
+    return formatMcpStartupBanner(tools, failed);
+  } catch (err) {
+    return `MCP reload failed (${err instanceof Error ? err.message : String(err)})`;
+  }
+}
+
 /** Discover MCP servers from `.webagent/mcp-servers.json` at agent startup. */
 export async function discoverMcpOnStartup(): Promise<void> {
   const config = await loadMcpServersConfig();
   if (!Object.keys(config).length) return;
   try {
     const { dim } = await import("./terminal-format.js");
+    const env = await mcpEnvForConfigResolved(config);
+    for (const warning of mcpAuthEnvWarnings(config, env)) {
+      console.log(dim(`MCP: ${warning}`));
+    }
     const { tools, status } = await discoverAndRegisterMcpTools();
     const failed = status?.failed ?? 0;
     console.log(dim(formatMcpStartupBanner(tools, failed)));
+    if (!tools.length && failed) {
+      const authHint = mcpAuthEnvWarnings(config, env)[0];
+      if (authHint) console.log(dim(`MCP: ${authHint}`));
+    }
     void import("./turn.js").then((m) => m.invalidateToolNamesCache?.());
   } catch (err) {
     const { dim } = await import("./terminal-format.js");
