@@ -120,7 +120,7 @@ Configure a Directus Streamable HTTP MCP endpoint (**the Web Agent page must be 
 1. Bearer token in `.webagent/mcp-secrets.json` (`directus_token` or server-specific keys).
 2. Server entry in `.webagent/mcp-servers.json` (Streamable HTTP URL for Directus MCP).
 3. After `write_file` on either config file, check `mcp_reload` in the result — tools register without a full profile restart when the browser tab is open.
-4. Agent workflow: call `skill_view` **`directus-mcp`** for setup; then call `mcp_<server>_<tool>` by exact name from ## MCP in the Tool capability index.
+4. Agent workflow: call `mcp_<server>_<tool>` by exact name from ## MCP in the Tool capability index — they are in the active tool schema when configured.
 
 If probe times out: keep the Web Agent tab open, verify the remote MCP endpoint and auth, then re-write config or restart the profile. Config may already be saved as enabled.
 

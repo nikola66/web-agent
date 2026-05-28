@@ -21,7 +21,7 @@ triggers: [imported skill, skills.sh install, skill compat, WebFetch, agent-brow
 | Python HTTP (`urllib`, `requests`) | `webagent.http` inside `run_python`, or `web_fetch`/`web_post` for REST/CMS — **`http-api`** |
 | pip / native deps | No system pip; use Pyodide packages if available or replace the native dependency step |
 | agent-browser / Playwright | **Not available** — `web_fetch` + file tools |
-| MCP / CallMcpTool | configure `.webagent/mcp-servers.json` (+ `.webagent/mcp-secrets.json`); call `mcp_*` tools directly (active when configured) |
+| MCP / CallMcpTool | `.webagent/mcp-servers.json` + `.webagent/mcp-secrets.json`; `write_file` on those paths returns `mcp_reload`; call registered `mcp_*` from ## MCP — not `web_post` to the MCP URL |
 | Rendered-fetch provider (JS-heavy pages) | `web_fetch` only — not DOM automation; optional backend for markdown text |
 
 **Non-negotiable:** After any remote install (`skill_manage import_url`, `skill_bulk_save`, `/skills install`), call `skill_view` on the installed slug and follow its **Web Agent execution (auto-appended)** section before tool fan-out. Check `script_warnings` in the `skill_view` result for per-file Pyodide preflight notes.

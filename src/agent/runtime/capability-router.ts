@@ -59,13 +59,6 @@ export const CAPABILITY_ROUTES: CapabilityRoute[] = [
     alwaysShow: true,
   },
   {
-    need: "Directus CMS via MCP",
-    skill: "directus-mcp",
-    tools: ["write_file", "mcp_*"],
-    alwaysShow: true,
-    avoid: "web_post to /mcp for discovery; grep memory/snapshots; bare write_file for SKILL.md",
-  },
-  {
     need: "DOM click/type automation",
     skill: "imported-skill-compat",
     tools: ["mcp_*"],
