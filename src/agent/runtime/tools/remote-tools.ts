@@ -2,7 +2,7 @@ import fs from "node:fs/promises";
 import type { Dirent } from "node:fs";
 import nodePath from "node:path";
 import crypto from "node:crypto";
-import { ipcProxyRequest } from "../ipc.js";
+import { ipcProxyRequest, readProxyResponse } from "../ipc.js";
 import { resolveWorkspacePath, normalizeWorkspaceRelativePath } from "../workspace-paths.js";
 import {
   BROWSER_AGENT_CATALOG_PATH,
@@ -90,31 +90,6 @@ type BrowserCatalogProvider = {
   fetch?: { endpoint?: string; timeoutMs?: number };
 };
 
-function readProxyResponse(value: unknown): {
-  status: number;
-  body: string;
-  contentType: string;
-  bodyEncoding?: string;
-  proxyError?: string;
-} {
-  if (value && typeof value === "object") {
-    const rec = value as Record<string, unknown>;
-    const proxyError =
-      typeof rec.error === "string" && rec.error.trim() ? rec.error.trim() : undefined;
-    const status = Number(rec.status);
-    const body = typeof rec.body === "string" ? rec.body : "";
-    const contentType = typeof rec.contentType === "string" ? rec.contentType : "";
-    const bodyEncoding = typeof rec.bodyEncoding === "string" ? rec.bodyEncoding : undefined;
-    return {
-      status: Number.isFinite(status) ? status : 0,
-      body,
-      contentType,
-      bodyEncoding,
-      proxyError,
-    };
-  }
-  return { status: 0, body: "", contentType: "" };
-}
 
 export function formatProxyTransportError(message: string, url?: string): string {
   const base = String(message || "unknown error").trim() || "unknown error";

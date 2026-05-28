@@ -7,7 +7,8 @@
  * matches web_fetch fallback — see remote-tools.js `proxyRequest`.
  */
 
-import { ipcProxyRequest } from "../ipc.js";
+import { ipcProxyRequest, readProxyResponse } from "../ipc.js";
+import { isNodeboxRuntime } from "../constants.js";
 import { gateToolExecution, summarizeToolApproval } from "./tool-policy.js";
 
 const EMAIL_MUTATING = new Set(["send"]);
@@ -26,10 +27,6 @@ function missingResend(cfg) {
   return null;
 }
 
-function isNodeboxRuntime() {
-  return String(process.env.WEBAGENT_RUNTIME ?? "").trim() === "nodebox";
-}
-
 /** POST https://api.resend.com/emails — direct fetch on host Node, IPC proxy in Nodebox. */
 async function postResendEmails(cfg, emailPayload) {
   const url = "https://api.resend.com/emails";
@@ -46,11 +43,10 @@ async function postResendEmails(cfg, emailPayload) {
       headers,
       body: serialized,
     });
-    if (payload?.error) {
-      throw new Error(String(payload.error));
+    const { status, body: bodyText, proxyError } = readProxyResponse(payload);
+    if (proxyError) {
+      throw new Error(proxyError);
     }
-    const status = Number(payload?.status ?? 0);
-    const bodyText = String(payload?.body ?? "");
     if (!Number.isFinite(status) || status <= 0) {
       throw new Error(
         `Resend send failed (proxy): unexpected response ${JSON.stringify(payload).slice(0, 240)}`

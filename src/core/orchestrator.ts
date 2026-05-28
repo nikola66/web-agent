@@ -51,6 +51,8 @@ import { resolveProfileTtsVoice } from "@/core/voice/edge-tts-client";
 import { snapXtermViewportToLatest } from "./terminal-viewport-sync";
 import { maybeTrimTerminalScrollback } from "./terminal-scrollback-gc";
 import { fitTerminalForViewport } from "./xterm-fit-viewport";
+import { formatBytes } from "@/ui/utils/format";
+import { errorMessage } from "@/agent/runtime/utils";
 
 interface OrchestratorAgentState {
   profileId: string;
@@ -86,17 +88,6 @@ function omitDeprecatedCredentialKeys(keys: Record<string, string>): Record<stri
   return out;
 }
 
-function formatBytes(bytes: number): string {
-  if (!Number.isFinite(bytes) || bytes <= 0) return "0 B";
-  const units = ["B", "KB", "MB", "GB", "TB"];
-  let value = bytes;
-  let unit = 0;
-  while (value >= 1024 && unit < units.length - 1) {
-    value /= 1024;
-    unit += 1;
-  }
-  return `${value >= 10 || unit === 0 ? value.toFixed(0) : value.toFixed(1)} ${units[unit]}`;
-}
 
 function getOrCreateAgentState(profileId: string): OrchestratorAgentState {
   if (!agentStates.has(profileId)) {
@@ -563,7 +554,7 @@ export async function startAgent(profileId?: string): Promise<void> {
       });
       void refreshStorageUsage({ warn: true });
     } catch (err) {
-      const message = (err as Error).message;
+      const message = errorMessage(err);
       write(`\x1b[31m✗ Failed to start: ${message}\x1b[0m\n`);
       const rt = useRuntimeStore.getState();
       rt.setRuntimeStatus(profile.id, "error");

@@ -20,6 +20,10 @@ function envPathOverride(name: string): string {
   return typeof process !== "undefined" ? String(process.env?.[name] || "").trim() : "";
 }
 
+export function isNodeboxRuntime(): boolean {
+  return String(process.env.WEBAGENT_RUNTIME ?? "").trim() === "nodebox";
+}
+
 export function getWorkspaceRoot(): string {
   return envPathOverride("WEBAGENT_WORKSPACE_ROOT") || WS;
 }

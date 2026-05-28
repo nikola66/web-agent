@@ -275,6 +275,32 @@ export function ipcProxyRequest(request, timeoutMs = 120_000) {
   });
 }
 
+export function readProxyResponse(value: unknown): {
+  status: number;
+  body: string;
+  contentType: string;
+  bodyEncoding?: string;
+  proxyError?: string;
+} {
+  if (value && typeof value === "object") {
+    const rec = value as Record<string, unknown>;
+    const proxyError =
+      typeof rec.error === "string" && rec.error.trim() ? rec.error.trim() : undefined;
+    const status = Number(rec.status);
+    const body = typeof rec.body === "string" ? rec.body : "";
+    const contentType = typeof rec.contentType === "string" ? rec.contentType : "";
+    const bodyEncoding = typeof rec.bodyEncoding === "string" ? rec.bodyEncoding : undefined;
+    return {
+      status: Number.isFinite(status) ? status : 0,
+      body,
+      contentType,
+      bodyEncoding,
+      proxyError,
+    };
+  }
+  return { status: 0, body: "", contentType: "" };
+}
+
 export function ipcProxyStreamRequest(
   request,
   {
