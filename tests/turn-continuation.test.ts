@@ -31,6 +31,8 @@ import {
   MAX_PRE_TOOL_PROMISE_CONTINUATIONS,
   MAX_EMPTY_RESPONSE_CONTINUATIONS,
   MAX_TRUNCATION_CONTINUATIONS,
+  looksLikeFindSkillsDeliveryStall,
+  shouldContinueFindSkillsDelivery,
 } from "../dist/agent-runtime/turn-continuation.js";
 
 const NO_TOOLS: never[] = [];
@@ -589,4 +591,26 @@ test("looksLikePostToolStall nudges plan after offer when user already approved 
     "Want me to try the native sequence?\n\nPlan:\n1. Parse the markdown.\n2. Create parent records.\n\nLet's start with parsing.";
   assert.equal(looksLikePostToolStall(text, true), true);
   assert.equal(shouldSuppressContinuationNudge(text), false);
+});
+
+test("looksLikeFindSkillsDeliveryStall after web tools without table", () => {
+  const user = "The user invoked **find-skills mode** via `/find_skills`.";
+  assert.equal(looksLikeFindSkillsDeliveryStall(user, "", true, 2), true);
+  assert.equal(
+    looksLikeFindSkillsDeliveryStall(user, "Still fetching registry pages…", true, 3),
+    true
+  );
+  assert.equal(
+    looksLikeFindSkillsDeliveryStall(user, "I'll grab another live registry page.", true, 6),
+    true
+  );
+  const table =
+    "## Top 5 skills for python\n\n| # | Skill | Registry | Popularity | Summary | Install / link |\n|---|---|---|---|---|---|";
+  assert.equal(looksLikeFindSkillsDeliveryStall(user, table, true, 6), false);
+});
+
+test("shouldContinueFindSkillsDelivery respects cap", () => {
+  const user = "find-skills mode";
+  assert.equal(shouldContinueFindSkillsDelivery(user, "", true, 2, 0), true);
+  assert.equal(shouldContinueFindSkillsDelivery(user, "", true, 2, 3), false);
 });
