@@ -15,7 +15,25 @@ function readAppVersion() {
 
 export const WEB_AGENT_USER_AGENT = `web-agent/${readAppVersion()}`;
 
-export function withWebAgentUserAgent(headers = {}) {
+export function isYouTubeUpstreamUrl(url) {
+  try {
+    const host = new URL(url).hostname.toLowerCase();
+    return (
+      host === "youtu.be" ||
+      host.endsWith(".youtube.com") ||
+      host === "youtube.com" ||
+      host.endsWith(".googlevideo.com") ||
+      host === "googlevideo.com"
+    );
+  } catch {
+    return false;
+  }
+}
+
+export function withWebAgentUserAgent(headers = {}, options = {}) {
+  if (options.url && isYouTubeUpstreamUrl(options.url)) {
+    return { ...headers };
+  }
   const out = { ...headers };
   let uaKey = "User-Agent" in out ? "User-Agent" : "user-agent" in out ? "user-agent" : undefined;
   if (!uaKey) {

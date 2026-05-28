@@ -232,7 +232,7 @@ function corsProxyGate() {
               : body;
           const upstream = await fetch(url, {
             method,
-            headers: withWebAgentUserAgent(headers),
+            headers: withWebAgentUserAgent(headers, { url }),
             ...(upstreamBody != null ? { body: upstreamBody } : {}),
           });
           const PROXY_BODY_CAP = 100_000;

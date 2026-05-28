@@ -66,7 +66,7 @@ const server = http.createServer((req, res) => {
             : body;
         const upstream = await fetch(url, {
           method,
-          headers: withWebAgentUserAgent(headers),
+          headers: withWebAgentUserAgent(headers, { url }),
           ...(upstreamBody != null ? { body: upstreamBody } : {}),
         });
         const responseBody = binaryResponse

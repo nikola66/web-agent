@@ -21,6 +21,11 @@ import { looksLikeHtmlDocument } from "../tool-result-preview.js";
 import { parseTinyFishFetchPayload, spaShellPageRecoveryHint } from "./tinyfish-fetch.js";
 import { expandSkillBulkSaveArgs } from "./skill-bulk-args.js";
 import {
+  extractYouTubeVideoId,
+  fetchYouTubeCaptionTracks,
+  parseCaptionXml,
+} from "./youtube-caption-fetch.js";
+import {
   buildCronListSchedulingMeta,
   enrichCronJobForList,
 } from "../cron-scheduling.js";
@@ -1772,82 +1777,6 @@ export async function todoWriteTool(payload: ToolArgs | unknown[] = {}, _ctx) {
   await fs.mkdir(getWorkspaceRoot(), { recursive: true });
   await fs.writeFile(todosPath, JSON.stringify(todos, null, 2), "utf8");
   return { ok: true, count: todos.length };
-}
-
-function extractYouTubeVideoId(url) {
-  try {
-    const u = new URL(url);
-    if (u.hostname === "youtu.be") {
-      const id = u.pathname.slice(1).split(/[?&#]/)[0];
-      return id || null;
-    }
-    if (u.hostname.includes("youtube.com")) return u.searchParams.get("v") || null;
-  } catch {}
-  return null;
-}
-
-function decodeHtmlEntities(text) {
-  return String(text)
-    .replace(/&amp;/g, "&")
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">")
-    .replace(/&quot;/g, '"')
-    .replace(/&#39;/g, "'")
-    .replace(/&#x27;/g, "'");
-}
-
-async function fetchYouTubeCaptionTracks(videoId, ctx) {
-  // InnerTube ANDROID POST — the only reliable source of working timedtext URLs.
-  // YouTube's API is CORS-blocked in browser JS, so proxyRequest routes it through
-  // the local Vite dev server (WEBAGENT_LOCAL_PROXY_URL) which fetches server-side.
-  // In Nodebox, the fetch() from the agent goes through the browser's network stack
-  // to localhost:PORT/api/proxy, which then hits YouTube without CORS restrictions.
-  const { status, body } = readProxyResponse(await proxyRequest(
-    {
-      method: "POST",
-      url: "https://www.youtube.com/youtubei/v1/player?key=AIzaSyAO_FJ2SlqU8Q4STEHLGCilw_Y9_11qcW8",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        context: { client: { clientName: "ANDROID", clientVersion: "20.10.38" } },
-        videoId,
-      }),
-    },
-    ctx
-  ));
-  if (status < 200 || status >= 300) throw new Error(`YouTube player API returned ${status}.`);
-  let playerData;
-  try {
-    playerData = JSON.parse(body);
-  } catch {
-    throw new Error("YouTube player response could not be parsed.");
-  }
-  const tracks = playerData?.captions?.playerCaptionsTracklistRenderer?.captionTracks;
-  if (!Array.isArray(tracks) || !tracks.length) {
-    const s = playerData?.playabilityStatus?.status;
-    const r = playerData?.playabilityStatus?.reason;
-    throw new Error(s && s !== "OK" ? `Video unavailable: ${r || s}` : "No captions available for this video.");
-  }
-  return tracks;
-}
-
-function parseCaptionXml(xml) {
-  // Extract text from timedtext XML: <s>word</s> inside <p> elements
-  const segments: string[] = [];
-  const pMatches = [...xml.matchAll(/<p[^>]*>([\s\S]*?)<\/p>/g)];
-  for (const pm of pMatches) {
-    const inner = pm[1];
-    const sMatches = [...inner.matchAll(/<s[^>]*>([^<]*)<\/s>/g)];
-    if (sMatches.length) {
-      segments.push(sMatches.map((m) => m[1]).join(""));
-    } else {
-      // Plain text inside <p> with no <s> children
-      const text = inner.replace(/<[^>]+>/g, "").trim();
-      if (text) segments.push(text);
-    }
-  }
-  return segments
-    .map((s) => decodeHtmlEntities(s).replace(/\n/g, " ").trim())
-    .filter(Boolean);
 }
 
 export async function youtubeTranscribeTool(args: ToolArgs = {}, ctx) {
