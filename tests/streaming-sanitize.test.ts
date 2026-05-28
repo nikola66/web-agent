@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 
 import {
   createToolAwareStreamWriter,
+  estimateMessageTokens,
   extractClarifyMarkers,
   extractLooseCallToolLines,
   extractPlainToolCommandLines,
@@ -14,6 +15,29 @@ import {
   stripPseudoToolCallLines,
   stripReasoningPlaceholderLines,
 } from "../dist/agent-runtime/llm/streaming.js";
+
+test("estimateMessageTokens counts array content and tool_calls, not [object Object]", () => {
+  const longText = "x".repeat(4000);
+  const stringMsg = { role: "user", content: longText };
+  const arrayMsg = {
+    role: "user",
+    content: [{ type: "text", text: longText }, { type: "image_url", image_url: { url: longText } }],
+  };
+  // Array content must count its parts, not collapse to "[object Object]" (~4 tokens).
+  assert.ok(estimateMessageTokens(arrayMsg) > estimateMessageTokens(stringMsg));
+  assert.ok(estimateMessageTokens(arrayMsg) > 1000);
+
+  // Assistant tool_calls payloads are real tokens even when content is null.
+  const toolCallMsg = {
+    role: "assistant",
+    content: null,
+    tool_calls: [{ function: { name: "web_fetch", arguments: JSON.stringify({ url: longText }) } }],
+  };
+  assert.ok(estimateMessageTokens(toolCallMsg) > 900);
+
+  // Empty/short messages stay cheap.
+  assert.ok(estimateMessageTokens({ role: "user", content: "" }) < 10);
+});
 
 test("sanitizeAssistantVisibleText strips pseudo tool lines when names provided", () => {
   const raw = `I'll scan the tree.

@@ -82,6 +82,30 @@ test("built-in tool registry and catalog keys match", async () => {
   }
 });
 
+// Pillar 1 — schema visibility. A tool with a contentless inputSchema is a
+// black hole: the model gets no shape signal and validateRequiredArguments has
+// nothing to check, so wrong-shaped args (e.g. todo_write's `items`) get eaten
+// silently. Every builtin must declare its properties, except genuine no-arg
+// tools listed here. Adding a new contentless-schema tool must fail this test.
+const NO_ARG_TOOLS = new Set(["cron_list", "skill_list", "system_info"]);
+
+test("every builtin declares an input schema (no black-hole tools)", async () => {
+  const registry = await import("../dist/agent-runtime/tools/registry.js");
+  const offenders: string[] = [];
+  for (const [name, def] of Object.entries(registry.BUILTIN_TOOLS)) {
+    if (NO_ARG_TOOLS.has(name)) continue;
+    const props = (def as { inputSchema?: { properties?: Record<string, unknown> } })?.inputSchema
+      ?.properties;
+    const count = props && typeof props === "object" ? Object.keys(props).length : 0;
+    if (count === 0) offenders.push(name);
+  }
+  assert.deepEqual(
+    offenders,
+    [],
+    `These tools ship a contentless inputSchema. Declare their properties, or add to NO_ARG_TOOLS if they truly take no args: ${offenders.join(", ")}`
+  );
+});
+
 test("buildOpenAiToolDefinitions omits llmVisible:false alias tools", async () => {
   const registry = await import("../dist/agent-runtime/tools/registry.js");
   const catalog = await registry.loadToolCatalog();

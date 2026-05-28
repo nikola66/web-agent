@@ -179,6 +179,29 @@ function classifyFromMessage(message: string, statusHint: number | null): Omit<C
     };
   }
 
+  // Extracting archives via run_python in Pyodide: zipfile/tarfile + os.listdir
+  // return JsProxy objects and binary reads fail. Redirect to the dedicated tool
+  // before the generic JsProxy/HTTP branch below claims this is an HTTP error.
+  if (
+    /\b(?:zipfile|tarfile)\b/i.test(message) ||
+    /shutil\.unpack_archive|\.extractall\b/i.test(message) ||
+    (/JsProxy/i.test(message) && /\b(?:listdir|extractall|namelist)\b/i.test(message))
+  ) {
+    reason = "format_error";
+    retryable = false;
+    shouldFallback = true;
+    error_code = "pyodide_archive_misuse";
+    return {
+      reason,
+      retryable,
+      shouldCompress,
+      shouldFallback,
+      error_code,
+      hintBase:
+        "Don't extract archives with run_python in Pyodide (zipfile/tarfile + os.listdir return JsProxy objects, binary reads fail). Use the `extract_archive` tool (ZIP/TAR/TGZ) then browse_workspace the output; `archive_list` inspects without extracting. Creating a zip with stdlib zipfile is fine — only extraction needs the tool.",
+    };
+  }
+
   if (
     /JsProxy.*not iterable|pyodide\.ffi\.JsProxy|urllib\.request\.urlopen/i.test(message)
   ) {

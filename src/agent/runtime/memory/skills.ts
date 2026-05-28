@@ -1056,6 +1056,15 @@ export async function manageSkill(args: Record<string, unknown> = {}) {
   if (action === "write_file") {
     await assertSkillWritable(record, "write_file");
     const filePath = String(args.file_path || (contentName ? SKILL_FILE_NAME : "")).trim();
+    // Guard against creating an empty support file (the `content` arg was
+    // omitted). Otherwise a later read finds it blank and the work is silently
+    // lost — exactly how an empty references/*.md slipped in.
+    if (!content.trim()) {
+      throw new Error(
+        `skill_manage write_file: \`content\` is required and was empty for "${filePath || "(no file_path)"}". ` +
+          "Pass the full file body in `content`."
+      );
+    }
     return writeManagedSkillFile(record, filePath, content, action);
   }
 

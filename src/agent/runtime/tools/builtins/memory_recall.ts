@@ -6,5 +6,13 @@ export default defineTool({
   run: memoryRecallTool,
   emoji: "💭",
   description: "Recall a single saved memory fact by its exact `key`. Use `memory_search` instead when you only have a topic or substring.",
-  inputSchema: { type: "object", properties: {}, additionalProperties: true },
+  inputSchema: {
+    type: "object",
+    properties: {
+      key: { type: "string", description: "Exact key of the saved fact. Use memory_search for a topic/substring." },
+      limit: { type: "number", description: "Max rows (default 20)." },
+    },
+    required: ["key"],
+    additionalProperties: true,
+  },
 });

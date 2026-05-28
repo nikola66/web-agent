@@ -25,6 +25,7 @@ type PythonWorkerResponse = {
   exit_code?: number;
   files?: PythonFilePayload[];
   pyodide_version?: string;
+  sync_note?: string;
 };
 
 const MAX_SYNC_FILES = 800;
@@ -98,17 +99,31 @@ function toBytes(data: unknown): Uint8Array {
   return new Uint8Array();
 }
 
+type SyncSkip = { path: string; bytes: number; reason: string };
+const MAX_SYNC_SKIP_REPORTED = 20;
+
 async function collectFiles(cwd: string): Promise<{
   files: PythonFilePayload[];
   inputByPath: Map<string, string>;
+  skipped: SyncSkip[];
+  truncated: boolean;
 }> {
   const emulator = await getNodebox();
   const files: PythonFilePayload[] = [];
   const inputByPath = new Map<string, string>();
+  const skipped: SyncSkip[] = [];
   let totalBytes = 0;
+  let truncated = false;
+
+  const noteSkip = (path: string, bytes: number, reason: string) => {
+    if (skipped.length < MAX_SYNC_SKIP_REPORTED) skipped.push({ path, bytes, reason });
+  };
 
   async function walk(dir: string): Promise<void> {
-    if (files.length >= MAX_SYNC_FILES || totalBytes >= MAX_SYNC_TOTAL_BYTES) return;
+    if (files.length >= MAX_SYNC_FILES || totalBytes >= MAX_SYNC_TOTAL_BYTES) {
+      truncated = true;
+      return;
+    }
     let names: string[] = [];
     try {
       names = await emulator.fs.readdir(dir);
@@ -116,7 +131,10 @@ async function collectFiles(cwd: string): Promise<{
       return;
     }
     for (const name of names) {
-      if (files.length >= MAX_SYNC_FILES || totalBytes >= MAX_SYNC_TOTAL_BYTES) return;
+      if (files.length >= MAX_SYNC_FILES || totalBytes >= MAX_SYNC_TOTAL_BYTES) {
+        truncated = true;
+        return;
+      }
       const abs = `${dir.replace(/\/+$/, "")}/${name}`;
       const rel = abs.startsWith(`${cwd}/`) ? abs.slice(cwd.length + 1) : name;
       let stat: { type?: string; size?: number };
@@ -132,7 +150,18 @@ async function collectFiles(cwd: string): Promise<{
         continue;
       }
       const size = Number(stat.size ?? 0);
-      if (size > MAX_SYNC_FILE_BYTES || totalBytes + size > MAX_SYNC_TOTAL_BYTES) continue;
+      // A file that exists in the workspace but is too large is otherwise
+      // SILENTLY absent in Pyodide — open() raises FileNotFoundError with no
+      // hint the file is real. Record it so run_python can tell the agent to
+      // use a host tool (extract_archive / read_file / web_fetch) instead.
+      if (size > MAX_SYNC_FILE_BYTES) {
+        noteSkip(rel, size, "file_exceeds_1mb");
+        continue;
+      }
+      if (totalBytes + size > MAX_SYNC_TOTAL_BYTES) {
+        truncated = true;
+        continue;
+      }
       try {
         const contentBase64 = bytesToBase64(toBytes(await emulator.fs.readFile(abs)));
         files.push({ path: abs, contentBase64 });
@@ -145,7 +174,26 @@ async function collectFiles(cwd: string): Promise<{
   }
 
   await walk(cwd);
-  return { files, inputByPath };
+  return { files, inputByPath, skipped, truncated };
+}
+
+/** Human-readable nudge appended to run_python results when workspace files were not synced into Pyodide. */
+export function buildSyncOmissionNote(skipped: SyncSkip[], truncated: boolean): string | null {
+  if (!skipped.length && !truncated) return null;
+  const parts: string[] = [];
+  if (skipped.length) {
+    const list = skipped.map((s) => `${s.path} (${Math.round(s.bytes / 1024)}KB)`).join(", ");
+    parts.push(
+      `These workspace files were too large to load into Python (>1MB) and are NOT visible to open()/os.listdir here: ${list}.`
+    );
+  }
+  if (truncated) {
+    parts.push("The workspace exceeded the Python sync budget, so not all files were loaded.");
+  }
+  parts.push(
+    "They DO exist in the workspace — use a host tool instead: `extract_archive`/`archive_list` for .zip/.tar, `read_file` for text, `pdf_extract`/`docx_extract` for documents, `web_fetch` with save_to for downloads. Do not conclude the file is missing or the runtime is broken."
+  );
+  return parts.join(" ");
 }
 
 async function writeBackFiles(
@@ -207,7 +255,8 @@ async function executePythonNow(req: PythonRequest, workspaceRoot: string) {
     typeof req.timeout_ms === "number" && Number.isFinite(req.timeout_ms) && req.timeout_ms > 0
       ? req.timeout_ms
       : 120_000;
-  const { files, inputByPath } = await collectFiles(cwd);
+  const { files, inputByPath, skipped, truncated } = await collectFiles(cwd);
+  const syncNote = buildSyncOmissionNote(skipped, truncated);
   const response = await postWorker({
     code: String(req.code || ""),
     cwd,
@@ -226,7 +275,7 @@ async function executePythonNow(req: PythonRequest, workspaceRoot: string) {
     // postMessage crash). Recycle the worker so the next run starts clean
     // instead of inheriting the broken FS / module state.
     resetWorker();
-    return response;
+    return syncNote ? { ...response, sync_note: syncNote } : response;
   }
   const files_written = await writeBackFiles(cwd, inputByPath, response.files || []);
   return {
@@ -236,6 +285,7 @@ async function executePythonNow(req: PythonRequest, workspaceRoot: string) {
     exit_code: Number(response.exit_code ?? 0),
     files_written,
     pyodide_version: response.pyodide_version || "",
+    ...(syncNote ? { sync_note: syncNote } : {}),
   };
 }
 

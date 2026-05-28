@@ -158,6 +158,74 @@ test("composio_status reports missing configuration without network", async () =
   assert.ok((result.allowed_actions?.length ?? 0) >= 5);
 });
 
+test("every tool error carries a recovery_hint (classifier routing)", async () => {
+  // Pillar 3 — tool failures must route through classifyToolError so domain
+  // recovery hints always reach the agent. read_file on an archive triggers the
+  // binary-read guard end-to-end: guard throws -> classifier delivers the hint.
+  await withIsolatedWorkspace(async () => {
+    const catalog = await loadToolCatalog();
+    const out = (await runOne("read_file", { path: "bundle.zip" }, catalog)) as {
+      error?: string;
+      recovery_hint?: string;
+      error_code?: string;
+    };
+    assert.ok(out?.error, "read_file on a .zip should error");
+    assert.ok(out?.recovery_hint, "tool error should carry a recovery_hint from the classifier");
+    assert.ok(out?.error_code, "tool error should carry an error_code from the classifier");
+  });
+});
+
+test("no silent no-op: every required-field tool rejects empty input", async () => {
+  // Pillar 2 — a tool that declares required schema fields must LOUDLY reject a
+  // call missing them (error_code invalid_arguments), never silently succeed.
+  // Enforced centrally in runTools, so adding a required field to any tool's
+  // schema automatically gets this protection — and new tools inherit it.
+  await withIsolatedWorkspace(async () => {
+    const catalog = await loadToolCatalog();
+    const checked: string[] = [];
+    for (const [name, def] of Object.entries(BUILTIN_TOOLS)) {
+      const required = (def as { inputSchema?: { required?: string[] } })?.inputSchema?.required;
+      if (!Array.isArray(required) || required.length === 0) continue;
+      checked.push(name);
+      const out = (await runOne(name, {}, catalog)) as { error?: string; error_code?: string };
+      assert.ok(out?.error, `${name} should error on empty args, not silently succeed`);
+      assert.equal(
+        out?.error_code,
+        "invalid_arguments",
+        `${name} empty-args error should be classified invalid_arguments`
+      );
+    }
+    assert.ok(checked.length >= 8, `expected several required-field tools, saw ${checked.length}`);
+  });
+});
+
+test("todo_write accepts items/text aliases and rejects empty lists", async () => {
+  await withIsolatedWorkspace(async () => {
+    const catalog = await loadToolCatalog();
+    // Regression: the model passes `items` with `text`/`title`, not `todos`/`content`.
+    const out = await runOne(
+      "todo_write",
+      {
+        items: [
+          { id: 1, text: "Get transcript", status: "in_progress" },
+          { id: 2, title: "Write article", status: "pending" },
+        ],
+      },
+      catalog
+    );
+    assert.ok(!out?.error, out?.error);
+    assert.equal((out?.result as { count?: number }).count, 2);
+    const root = process.env.WEBAGENT_WORKSPACE_ROOT || "";
+    const saved = JSON.parse(await fs.readFile(nodePath.join(root, ".webagent/todos.json"), "utf8"));
+    assert.equal(saved[0].content, "Get transcript");
+    assert.equal(saved[1].content, "Write article");
+
+    // An explicit but empty list is an error, not a silent count:0 success.
+    const empty = await runOne("todo_write", { todos: [] }, catalog);
+    assert.ok(empty?.error, "empty todo list should surface an error");
+  });
+});
+
 test("archive tools honor explicit archive_path and extract skill archives", async () => {
   await withIsolatedWorkspace(async () => {
     const catalog = await loadToolCatalog();

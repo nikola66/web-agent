@@ -83,6 +83,7 @@ export async function runPythonTool(args: Record<string, unknown>, ctx: any) {
     exit_code?: number;
     files_written?: string[];
     pyodide_version?: string;
+    sync_note?: string;
   };
   if (!raw.ok) {
     throw new Error(String(raw.error || "run_python failed"));
@@ -92,6 +93,7 @@ export async function runPythonTool(args: Record<string, unknown>, ctx: any) {
     stderr: String(raw.stderr ?? ""),
     exit_code: Number(raw.exit_code ?? 0),
     files_written: Array.isArray(raw.files_written) ? raw.files_written : [],
+    ...(raw.sync_note ? { sync_note: raw.sync_note } : {}),
     ...(raw.pyodide_version ? { pyodide_version: raw.pyodide_version } : {}),
     ...(pre.autoPackages.length ? { auto_packages: pre.autoPackages } : {}),
     ...(pre.micropipPackages.length ? { micropip_packages: pre.micropipPackages } : {}),

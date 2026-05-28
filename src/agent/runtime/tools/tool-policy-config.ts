@@ -34,7 +34,7 @@ export const TOOL_GROUPS: Record<string, readonly string[]> = {
   filesystem_mutate: ["make_dir", "delete_file", "move_file", "file_diff"],
   memory: ["memory_save", "memory_recall", "memory_search", "memory_forget"],
   session: ["session_memory_append", "session_memory_list", "session_search"],
-  skills: ["skill_manage", "skill_bulk_save"],
+  skills: ["skill_manage", "skill_bulk_save", "capability_list"],
   wiki: ["wiki_setup", "wiki_sync", "wiki_search"],
   composio: ["composio_connect", "composio_status", "composio_action"],
   cron: ["cron_register", "cron_list"],
