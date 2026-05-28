@@ -1,5 +1,4 @@
 import fs from "node:fs/promises";
-import { interpolateEnvString } from "../../core/mcp/config.js";
 import { MCP_SERVERS_REL, workspaceStatePath } from "./constants.js";
 import { loadMcpSecrets, mcpSecretsToEnv } from "./mcp-secrets.js";
 
@@ -26,6 +25,13 @@ export type McpServerConfig = {
 export type McpServersConfig = Record<string, McpServerConfig>;
 
 const ENV_VAR_PATTERN = /\$\{([^}]+)\}/g;
+
+function interpolateEnvString(text: string, env: Record<string, string>): string {
+  return String(text || "").replace(ENV_VAR_PATTERN, (_, name: string) => {
+    const key = String(name || "").trim();
+    return key && env[key] != null ? String(env[key]) : "";
+  });
+}
 
 export function mcpConfigPath(): string {
   return workspaceStatePath(MCP_SERVERS_REL);
