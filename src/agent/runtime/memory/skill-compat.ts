@@ -240,7 +240,7 @@ export function buildWebAgentExecutionAppendix(analysis: SkillCompatAnalysis): s
     );
   }
   if (analysis.uses_mcp) {
-    lines.push("| MCP / CallMcpTool | Configure `.webagent/mcp-servers.json` + `.webagent/mcp-secrets.json`; `mcp_*` tools auto-register at startup |");
+    lines.push("| MCP / CallMcpTool | `.webagent/mcp-servers.json` + `.webagent/mcp-secrets.json`; `write_file` on those paths returns `mcp_reload`; call registered `mcp_*` from ## MCP — not `web_post` to the MCP URL |");
   }
   if (analysis.uses_system_cli || analysis.uses_bash) {
     lines.push("| aws / az / azd / terraform / docker / kubectl / openclaw CLI | **Not available** — use that service's REST API via `web_fetch`/`web_post`; see **`browser-runtime-map`** CLI→REST table |");

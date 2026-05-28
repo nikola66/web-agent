@@ -46,10 +46,14 @@ export async function writeFileTool(args = {}, ctx) {
   assertAllowedWorkspaceWritePath(abs);
   await ensureParentDir(abs);
   await fs.writeFile(abs, contents, "utf8");
+  const mcpReload = await import("../../mcp-registry.js")
+    .then((m) => m.maybeReloadMcpAfterConfigWrite(rel))
+    .catch(() => null);
   return {
     ok: true,
     path: rel,
     bytes: Buffer.byteLength(contents, "utf8"),
+    ...(mcpReload ? { mcp_reload: mcpReload } : {}),
   };
 }
 
