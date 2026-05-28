@@ -283,11 +283,13 @@ export async function waitForTurnDrained(page: Page, timeout = 180_000) {
     await approvePendingToolGate(page);
     const awaiting = await root.getAttribute("data-agent-awaiting");
     const queued = await root.getAttribute("data-agent-queued-count");
-    if (awaiting === "false" && queued === "0") return;
+    const working = await root.getAttribute("data-agent-working");
+    if (awaiting === "false" && queued === "0" && working === "false") return;
     await page.waitForTimeout(400);
   }
   await expect(root).toHaveAttribute("data-agent-awaiting", "false", { timeout: 5_000 });
   await expect(root).toHaveAttribute("data-agent-queued-count", "0", { timeout: 5_000 });
+  await expect(root).toHaveAttribute("data-agent-working", "false", { timeout: 5_000 });
 }
 
 export async function transcriptLength(page: Page): Promise<number> {

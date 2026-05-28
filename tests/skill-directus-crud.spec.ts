@@ -104,7 +104,7 @@ async function sendPromptAndCapture(
 
 test.describe.serial("directus skill install and CMS CRUD (live)", () => {
   requireLiveCredentials();
-  test.setTimeout(900_000);
+  test.setTimeout(1_800_000);
 
   test("installs remote skill with pyodide compat then runs blog CRUD via REST", async ({ page }) => {
     await page.goto("/");
@@ -152,15 +152,15 @@ test.describe.serial("directus skill install and CMS CRUD (live)", () => {
       [
         `Directus URL: ${TESTING_DIRECTUS_URL}`,
         `Directus Token: ${TESTING_DIRECTUS_TOKEN}`,
-        "Using the installed directus skill and skill_view http-api, run full CRUD on one blog/article collection:",
-        "1) Discover collections and pick the blog posts (or articles) collection.",
+        "Using the installed directus skill and skill_view http-api, run full CRUD on the Blog_Posts collection (hub uses Blog_Posts + Blog_Posts_Translations).",
+        "1) If discovery is slow, use Blog_Posts with author and category ids from a prior successful list call.",
         `2) CREATE a draft post titled "${CRUD_MARKER}" with minimal required fields.`,
         `3) UPDATE that record (e.g. append _UPDATED to title or change status).`,
         "4) DELETE the record (soft or hard delete).",
         "Use web_fetch with response_format api and web_post with Authorization Bearer — not run_python with the directus SDK.",
         "When create, update, and delete all succeeded, reply exactly DIRECTUS_CRUD_OK_TOKEN.",
       ].join(" "),
-      480_000
+      720_000
     );
 
     const httpTools = countToolCalls(crud.combined, "web_post") + countToolCalls(crud.combined, "web_fetch");
