@@ -187,8 +187,28 @@ export function estimateTokens(text) {
   return Math.max(1, Math.ceil(String(text).length / 4));
 }
 
+function stringifyForEstimate(value) {
+  if (value == null) return "";
+  if (typeof value === "string") return value;
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return "";
+  }
+}
+
 export function estimateMessageTokens(msg) {
-  return 4 + estimateTokens(msg?.role || "") + estimateTokens(msg?.content || "");
+  // Content may be a string, an array of multimodal parts, or null with the
+  // payload carried in tool_calls. Stringify non-string shapes so array/tool
+  // content (including base64 image data) is counted instead of collapsing to
+  // "[object Object]" — undercounting here would suppress context compression
+  // exactly when messages are largest.
+  return (
+    4 +
+    estimateTokens(msg?.role || "") +
+    estimateTokens(stringifyForEstimate(msg?.content)) +
+    (msg?.tool_calls ? estimateTokens(stringifyForEstimate(msg.tool_calls)) : 0)
+  );
 }
 
 export function estimateMessagesTokens(messages) {

@@ -53,6 +53,82 @@ export function focusToolNamesForIntent(allNames: string[] = [], input = ""): st
   return next.length ? next : allNames;
 }
 
+/**
+ * Input carries (or references) an image, audio, video, or YouTube link — the
+ * cases the `multimodal-ingest` skill handles. Used to pre-unlock the deferred
+ * `multimodal` tool group so `vision_analyze`/`audio_analyze`/`youtube_transcribe`
+ * are active on the same turn instead of forcing a tool_activate hop.
+ */
+export const MULTIMODAL_INPUT_RE = new RegExp(
+  [
+    "data:(?:image|audio|video)/",
+    "\\buploads/[^\\s\"']+\\.(?:png|jpe?g|gif|webp|bmp|svg|heic|heif|tiff?|mp3|wav|m4a|aac|ogg|flac|opus|mp4|mov|webm|mkv|avi)\\b",
+    "\\.(?:png|jpe?g|gif|webp|bmp|heic|heif|tiff?|mp3|wav|m4a|aac|ogg|flac|opus|mp4|mov|webm|mkv|avi)\\b",
+    "\\b(?:youtu\\.be/|youtube\\.com/(?:watch\\?|shorts/|embed/|live/))",
+    "\\b(?:this|the|attached|uploaded)\\s+(?:image|photo|screenshot|picture|diagram|chart|audio|recording|video|clip)\\b",
+    "\\btranscribe\\b",
+  ].join("|"),
+  "i"
+);
+
+export function inputSuggestsMultimodal(input) {
+  return MULTIMODAL_INPUT_RE.test(String(input || ""));
+}
+
+/**
+ * Input carries (or references) a ZIP/TAR archive — the `extract_archive` /
+ * `archive_list` case. Used to pre-unlock the deferred `archives` group so the
+ * agent sees the dedicated extract tool instead of flailing with run_python
+ * zipfile (which hits JsProxy/binary errors in Pyodide).
+ */
+export const ARCHIVE_INPUT_RE =
+  /(?:[\w./-]+\.(?:zip|tar|tgz|tar\.gz)\b|\b(?:unzip|extract|decompress)\b[^.!?]{0,40}\b(?:archive|zip|tarball|bundle)\b)/i;
+
+export function inputSuggestsArchive(input) {
+  return ARCHIVE_INPUT_RE.test(String(input || ""));
+}
+
+/**
+ * Input carries (or references) a PDF or DOCX — the `pdf_extract` /
+ * `docx_extract` case. Pre-unlocks the deferred `documents` group.
+ */
+export const DOCUMENT_INPUT_RE = /[\w./-]+\.(?:pdf|docx)\b/i;
+
+export function inputSuggestsDocument(input) {
+  return DOCUMENT_INPUT_RE.test(String(input || ""));
+}
+
+/**
+ * One-shot prefix when the turn references a binary file or media: name the
+ * dedicated tool for the type so the agent does not read_file binary bytes,
+ * run_python zipfile to extract, or shell out (Nodebox has no POSIX shell).
+ */
+export function buildFileHandlingContextPrefix(input) {
+  const text = String(input || "");
+  const archive = inputSuggestsArchive(text);
+  const document = inputSuggestsDocument(text);
+  const media = inputSuggestsMultimodal(text);
+  if (!archive && !document && !media) return null;
+  const lines = [
+    "[File handling] A file/media reference was detected. Use the dedicated tool for its type — do NOT read_file binary bytes, do NOT shell out (Nodebox has no POSIX shell):",
+  ];
+  if (archive) {
+    lines.push(
+      "- ZIP/TAR/TGZ → `extract_archive` (then browse_workspace the output); `archive_list` inspects without extracting. Never run_python zipfile to EXTRACT (os.listdir/binary reads raise JsProxy errors); never read_file the archive."
+    );
+  }
+  if (document) {
+    lines.push("- PDF → `pdf_extract`; DOCX → `docx_extract`. Do not read_file these as text.");
+  }
+  if (media) {
+    lines.push(
+      "- Image → `vision_analyze` / `image_info`; audio → `audio_analyze`; YouTube URL → `youtube_transcribe`."
+    );
+  }
+  lines.push("Full tool picker: skill_view **`browser-runtime-map`**.");
+  return lines.join("\n");
+}
+
 const PYTHON_SKILL_INSTALL_RE = /\b(pip install|python3?|python\s+-m|\.py\b)\b/i;
 
 const API_CALL_INTENT_RE = new RegExp(

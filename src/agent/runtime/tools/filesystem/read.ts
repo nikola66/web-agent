@@ -39,6 +39,48 @@ async function snapshotJsonPeers(absFilePath, limit = 44) {
     .slice(0, limit);
 }
 
+/**
+ * Map a workspace path's extension to the dedicated tool for that binary/media
+ * type. read_file decodes utf8, which corrupts these formats and returns
+ * mojibake (the agent then "succeeds" on garbage). Short-circuit with a
+ * recovery message naming the right tool instead. Returns null for
+ * text-readable files. Pure + exported for unit testing.
+ */
+const BINARY_READ_TOOL_HINTS: Array<{ re: RegExp; hint: string }> = [
+  {
+    re: /\.(?:zip|tar|tgz|tar\.gz)$/i,
+    hint: "extract it with `extract_archive` (ZIP/TAR/TGZ) or inspect entries with `archive_list` — read_file cannot decode archive bytes, and Nodebox has no POSIX `unzip`/`tar`. Do not run_python zipfile to EXTRACT (os.listdir/binary reads raise JsProxy errors in Pyodide)",
+  },
+  { re: /\.pdf$/i, hint: "extract text with `pdf_extract` — read_file returns raw PDF bytes, not text" },
+  {
+    re: /\.docx$/i,
+    hint: "extract text with `docx_extract` — a .docx is a zipped XML bundle, not plain text",
+  },
+  {
+    re: /\.(?:png|jpe?g|gif|webp|bmp|heic|heif|tiff?|ico)$/i,
+    hint: "analyze it with `vision_analyze`, or get dimensions/metadata with `image_info` — read_file cannot decode image bytes",
+  },
+  {
+    re: /\.(?:mp3|wav|m4a|aac|ogg|flac|opus)$/i,
+    hint: "transcribe/analyze it with `audio_analyze` — read_file cannot decode audio bytes",
+  },
+  {
+    re: /\.(?:mp4|mov|webm|mkv|avi)$/i,
+    hint: "extract audio then `audio_analyze`; for a YouTube URL use `youtube_transcribe` — read_file cannot decode video bytes",
+  },
+];
+
+export function binaryReadRecovery(rel: string): string | null {
+  const path = String(rel || "").trim().toLowerCase();
+  if (!path) return null;
+  for (const { re, hint } of BINARY_READ_TOOL_HINTS) {
+    if (re.test(path)) {
+      return `'${rel}' is a binary file — ${hint}. See skill_view \`browser-runtime-map\` for the full tool picker.`;
+    }
+  }
+  return null;
+}
+
 export function getReadFileMaxChars() {
   const n = Number(process.env.WEBAGENT_READ_FILE_MAX_CHARS);
   if (Number.isFinite(n) && n >= 1000) return Math.floor(n);
@@ -115,6 +157,8 @@ export async function readFileTool(args = {}, ctx) {
   if (isMemoryRunArchivePath(normalized)) {
     throw new Error(memoryRunArchiveBlockedMessage(normalized));
   }
+  const binaryHint = binaryReadRecovery(normalized);
+  if (binaryHint) throw new Error(binaryHint);
 
   async function innerReadFile() {
     const abs = resolveWorkspacePath(ctx, rel);

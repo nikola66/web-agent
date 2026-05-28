@@ -628,7 +628,19 @@ export function summarizeHttpErrorBody(data: unknown, status: number): string {
 export function graphqlSchemaRecoveryHint(data: unknown, status: number): string | undefined {
   if (status !== 400 && status !== 422) return undefined;
   const text = JSON.stringify(data || "");
-  if (!/graphql|Cannot query field/i.test(text)) return undefined;
+  const isGraphql = /graphql|Cannot query field|_input\b|of required type|was not provided/i.test(text);
+  if (!isGraphql) return undefined;
+  // Relation input-shape error: trying to link an existing related record but
+  // the create-input demands all its non-null fields. This is the loop that
+  // stalled a blog publish across ~8 introspection calls.
+  if (/_input\b|of required type|was not provided|non[- ]?null/i.test(text)) {
+    return (
+      "GraphQL mutation input-shape error. To LINK an existing related record (author, category, etc.), pass the relation as a nested object with only its id — e.g. `author: { id: \"1\" }` — not a bare id, and not the full create object with all fields. " +
+      "If a `create_*_input` still demands every non-null field, the relation field actually accepts the lighter input that only needs `id`. " +
+      "Put large or HTML field values in GraphQL `variables` (web_post `json: { query, variables }`) rather than inlining them in the query string, to avoid JSON-escaping corruption. " +
+      "See skill_view on the relevant imported skill and **`http-api`** for the exact shape."
+    );
+  }
   return (
     "GraphQL root fields must match that API's schema — do not assume generic names. " +
     "Call skill_view on the relevant imported skill (and **`http-api`**) for discovery endpoints and query shape, " +
@@ -1636,8 +1648,13 @@ function normalizeTodoStatus(status) {
 
 function normalizeTodoItem(item, index) {
   const src = item && typeof item === "object" && !Array.isArray(item) ? item : {};
-  const content = String(src.content || "").trim() || `Todo ${index + 1}`;
-  const id = String(src.id || `todo-${Date.now()}-${index + 1}`).trim() || `todo-${Date.now()}-${index + 1}`;
+  // Accept the common label aliases models reach for (text/title/task/label),
+  // not just `content` — otherwise every todo silently becomes "Todo N".
+  const content =
+    String(src.content ?? src.text ?? src.title ?? src.task ?? src.label ?? src.name ?? "").trim() ||
+    `Todo ${index + 1}`;
+  const fallbackId = `todo-${Date.now()}-${index + 1}`;
+  const id = String(src.id ?? fallbackId).trim() || fallbackId;
   return { id, content, status: normalizeTodoStatus(src.status) };
 }
 
@@ -1764,17 +1781,37 @@ export async function skillManageTool(args: ToolArgs = {}, ctx) {
 export async function todoWriteTool(payload: ToolArgs | unknown[] = {}, _ctx) {
   const todosPath = workspaceStatePath(".webagent/todos.json");
   let rawTodos: unknown[] = [];
+  let sawArrayKey = false;
   if (Array.isArray(payload)) rawTodos = payload;
-  else if (Array.isArray((payload as ToolArgs).todos)) rawTodos = (payload as ToolArgs).todos as unknown[];
-  else if (payload && typeof payload === "object" && !Array.isArray(payload)) {
+  else if (payload && typeof payload === "object") {
     const p = payload as ToolArgs;
-    const looksLikeSingleTodo = ["id", "content", "status"].some((key) =>
-      Object.prototype.hasOwnProperty.call(p, key)
+    // Accept any of the array keys models commonly use, not just `todos`.
+    const arrayKey = ["todos", "items", "tasks", "list", "steps", "checklist"].find((key) =>
+      Array.isArray(p[key])
     );
-    if (looksLikeSingleTodo) rawTodos = [p];
+    if (arrayKey) {
+      rawTodos = p[arrayKey] as unknown[];
+      sawArrayKey = true;
+    } else {
+      const looksLikeSingleTodo = ["id", "content", "text", "title", "task", "status"].some((key) =>
+        Object.prototype.hasOwnProperty.call(p, key)
+      );
+      if (looksLikeSingleTodo) rawTodos = [p];
+    }
+  }
+  // A non-empty array that yielded nothing usable means the caller's item shape
+  // is wrong — surface it instead of silently returning count:0 (which reads as
+  // success and makes the model abandon planning).
+  if (sawArrayKey && rawTodos.length === 0) {
+    throw new Error(
+      "todo_write received an empty todo list. Pass `todos` as an array of objects like " +
+        '`{ "todos": [{ "id": "1", "text": "step", "status": "in_progress" }] }`.'
+    );
   }
   const todos = rawTodos.map((todo, index) => normalizeTodoItem(todo, index));
-  await fs.mkdir(getWorkspaceRoot(), { recursive: true });
+  // mkdir the `.webagent` parent, not just the workspace root — otherwise the
+  // write ENOENTs on a fresh workspace where `.webagent/` does not exist yet.
+  await fs.mkdir(nodePath.dirname(todosPath), { recursive: true });
   await fs.writeFile(todosPath, JSON.stringify(todos, null, 2), "utf8");
   return { ok: true, count: todos.length };
 }

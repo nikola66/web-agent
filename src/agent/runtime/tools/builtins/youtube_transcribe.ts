@@ -6,5 +6,13 @@ export default defineTool({
   run: youtubeTranscribeTool,
   emoji: "📹",
   description: "Fetch and return the full transcript/captions of a YouTube video by URL. Returns text with timestamps. Useful for understanding video content without watching.",
-  inputSchema: { type: "object", properties: {}, additionalProperties: true },
+  inputSchema: {
+    type: "object",
+    properties: {
+      url: { type: "string", description: "YouTube video URL or id." },
+      language: { type: "string", description: "Preferred caption language code (default en)." },
+    },
+    required: ["url"],
+    additionalProperties: true,
+  },
 });

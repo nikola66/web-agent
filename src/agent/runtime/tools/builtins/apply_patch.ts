@@ -6,5 +6,15 @@ export default defineTool({
   run: applyPatchTool,
   emoji: "🩹",
   description: "Unified patch blocks (`*** Begin Patch`). For single hunk use `edit_file`; for many inline replacements use `multi_edit`. Prefer targets under `projects/<slug>/` or `work/<slug>/`.",
-  inputSchema: { type: "object", properties: {}, additionalProperties: true },
+  inputSchema: {
+    type: "object",
+    properties: {
+      patch: {
+        type: "string",
+        description: "Unified patch text bounded by `*** Begin Patch` / `*** End Patch`.",
+      },
+    },
+    required: ["patch"],
+    additionalProperties: true,
+  },
 });

@@ -86,6 +86,24 @@ test("graphqlSchemaRecoveryHint points to skill discovery", () => {
   assert.doesNotMatch(String(hint), /directus/i);
 });
 
+test("graphqlSchemaRecoveryHint teaches relation linking on input-shape error", () => {
+  const data = {
+    errors: [
+      {
+        message: 'Field "name" of required type "String!" was not provided.',
+        extensions: { code: "GRAPHQL_VALIDATION_EXCEPTION" },
+      },
+      { message: 'Expected value of type "create_Blog_Authors_input".' },
+    ],
+  };
+  const hint = graphqlSchemaRecoveryHint(data, 400);
+  assert.match(String(hint), /id/);
+  assert.match(String(hint), /variables/i);
+  assert.match(String(hint), /http-api/);
+  // Stays generic — no hardcoded customer collection names.
+  assert.doesNotMatch(String(hint), /directus/i);
+});
+
 test("guessedResourceRecoveryHint nudges discovery after deep-path 403", () => {
   const hint = guessedResourceRecoveryHint("https://api.example.com/v1/items/posts?limit=0", 403);
   assert.match(String(hint), /skill_view/i);

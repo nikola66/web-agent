@@ -12,6 +12,25 @@ test("isDeferredCatalogTool marks llmVisible false but not mcp tools", () => {
   assert.equal(isDeferredCatalogTool("read_file", {}), false);
 });
 
+test("isDeferredCatalogTool recognizes group-deferred tools not marked llmVisible", () => {
+  // Regression: extract_archive is deferred via DEFERRED_TOOL_GROUPS, not via
+  // llmVisible:false. Before the fix, tool_search could not find it by name —
+  // even when the user said "use the extract_archive tool".
+  assert.equal(isDeferredCatalogTool("extract_archive", {}), true);
+  assert.equal(isDeferredCatalogTool("archive_list", {}), true);
+  assert.equal(isDeferredCatalogTool("pdf_extract", {}), true);
+});
+
+test("searchDeferredTools finds a group-deferred tool by exact name", async () => {
+  const catalog = {
+    extract_archive: { description: "Extract a ZIP, TAR, or TAR.GZ archive into a workspace directory." },
+    read_file: { description: "Read a file." },
+  };
+  const matches = await searchDeferredTools("extract_archive", new Set(["read_file"]), 12, catalog);
+  assert.equal(matches.length, 1);
+  assert.equal(matches[0].name, "extract_archive");
+});
+
 test("tool_activate schema requires name", async () => {
   const mod = await import("../dist/agent-runtime/tools/builtins/tool_activate.js");
   assert.equal(mod.default.name, "tool_activate");

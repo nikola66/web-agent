@@ -35,6 +35,20 @@ test("classifyToolError treats run_shell aborted as non-retryable aborted", () =
   assert.equal(c.retryable, false);
 });
 
+test("classifyToolError redirects run_python zipfile extraction to extract_archive", () => {
+  const c = classifyToolError(
+    "PythonError: zipfile.ZipFile(...).extractall failed; os.listdir returned pyodide.ffi.JsProxy"
+  );
+  assert.equal(c.error_code, "pyodide_archive_misuse");
+  assert.equal(c.retryable, false);
+  assert.match(c.recovery_hint, /extract_archive/);
+});
+
+test("classifyToolError keeps urllib JsProxy as HTTP misroute, not archive", () => {
+  const c = classifyToolError("pyodide.ffi.JsProxy from urllib.request.urlopen");
+  assert.equal(c.error_code, "pyodide_http_jsproxy");
+});
+
 test("classifyToolError does not treat generic 'abort' substring as timeout/retryable", () => {
   const c = classifyToolError("Something went wrong: abortedConnection=true");
   assert.notEqual(c.error_code, "timeout");

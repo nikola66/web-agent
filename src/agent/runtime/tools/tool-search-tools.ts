@@ -1,3 +1,5 @@
+import { toolsInDeferredGroups } from "./tool-policy-config.js";
+
 const HIDDEN_BROWSE_ALIASES = new Set(["list_dir", "find_files", "tree"]);
 
 export function isHiddenBrowseAlias(name: string): boolean {
@@ -7,6 +9,12 @@ export function isHiddenBrowseAlias(name: string): boolean {
 export function isDeferredCatalogTool(name: string, meta: { llmVisible?: boolean } | null | undefined): boolean {
   if (String(name || "").startsWith("mcp_")) return false;
   if (meta?.llmVisible === false) return true;
+  // Group-deferred tools (archives/documents/multimodal/wiki/cron/delivery/…)
+  // are NOT marked llmVisible:false — they're held back by DEFERRED_TOOL_GROUPS
+  // and the active-tool filter. They must still be discoverable here, or
+  // `tool_search("extract_archive")` returns nothing for a real, unlockable
+  // tool (the exact failure that stranded a zip extraction).
+  if (toolsInDeferredGroups().has(String(name || ""))) return true;
   return false;
 }
 

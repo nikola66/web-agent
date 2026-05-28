@@ -67,6 +67,10 @@ import {
   extractExactResponseTokens,
   repairExactResponseText,
   isResearchIntent,
+  inputSuggestsMultimodal,
+  inputSuggestsArchive,
+  inputSuggestsDocument,
+  buildFileHandlingContextPrefix,
   MIN_RESEARCH_FETCHES,
   MIN_RESEARCH_SEARCHES,
   buildPlanExecutionContextPrefix,
@@ -99,6 +103,7 @@ import {
   resolveInitialActiveToolNames,
   resolvePolicyToolNames,
   canUnlockTool,
+  TOOL_GROUPS,
   type ToolPolicyConfig,
 } from "./tools/tool-policy-config.js";
 import { resolveSkillPrimaryToolsForSlug } from "./memory/skills.js";
@@ -362,6 +367,30 @@ export async function agentTurn(
   const indexPolicyNames = filterToolNames(policyToolNames, turnMeta);
   const filteredPolicyNames = focusToolNamesForIntent(indexPolicyNames, originalUserInput);
   const unlockedTools = new Set<string>();
+  // Pre-unlock deferred file-handling groups when the turn references a binary
+  // file or media so the dedicated tool is active on the same turn instead of
+  // forcing a tool_activate hop (attachments may live in content arrays, not the
+  // input string): multimodal (image/audio/video/YouTube), archives (ZIP/TAR),
+  // documents (PDF/DOCX). Without this the agent never sees extract_archive and
+  // flails with run_python zipfile (JsProxy errors in Pyodide).
+  const recentTurnContent = safeList
+    .slice(-4)
+    .map((message) =>
+      typeof message?.content === "string" ? message.content : JSON.stringify(message?.content ?? "")
+    )
+    .join("\n");
+  const fileSignalBlob = `${originalUserInput}\n${recentTurnContent}`;
+  if (!turnMeta?.textOnly) {
+    const groupsToSeed: string[] = [];
+    if (inputSuggestsMultimodal(fileSignalBlob)) groupsToSeed.push("multimodal");
+    if (inputSuggestsArchive(fileSignalBlob)) groupsToSeed.push("archives");
+    if (inputSuggestsDocument(fileSignalBlob)) groupsToSeed.push("documents");
+    for (const group of groupsToSeed) {
+      for (const name of TOOL_GROUPS[group] || []) {
+        if (canUnlockTool(name, allToolNames, toolPolicy, process.env)) unlockedTools.add(name);
+      }
+    }
+  }
   let activeToolNames = resolveInitialActiveToolNames(
     filteredPolicyNames,
     allToolNames,
@@ -406,6 +435,9 @@ export async function agentTurn(
     !turnMeta?.textOnly && originalUserInput
       ? buildComposioSaasContextPrefix(originalUserInput)
       : null;
+  const fileHandlingPrefix = !turnMeta?.textOnly
+    ? buildFileHandlingContextPrefix(fileSignalBlob)
+    : null;
   const refreshActiveToolState = async () => {
     activeToolNames = resolveInitialActiveToolNames(
       filteredPolicyNames,
@@ -590,6 +622,9 @@ export async function agentTurn(
     composioSaasPrefix !== continuationPrefix
   ) {
     conv.push({ role: "user", content: composioSaasPrefix });
+  }
+  if (fileHandlingPrefix) {
+    conv.push({ role: "user", content: fileHandlingPrefix });
   }
 
   let usedTodoWriteInTurn = false;
