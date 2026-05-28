@@ -31,7 +31,7 @@ export function testingDirectusToken(): string {
 }
 
 export function countToolCalls(transcript: string, tool: string): number {
-  const re = new RegExp(`▸\\s*${tool}\\b`, "gi");
+  const re = new RegExp(`▸(?:\\s*[^\\s]+\\s+)?${tool}\\b`, "gi");
   return (transcript.match(re) || []).length;
 }
 
@@ -52,14 +52,15 @@ export async function directusReachableViaProxy(
   baseUrl: string,
   token: string
 ): Promise<boolean> {
-  const healthUrl = `${baseUrl.replace(/\/$/, "")}/server/health`;
+  const root = baseUrl.replace(/\/$/, "");
+  const probeUrl = `${root}/items?limit=1`;
   const origin = proxyOriginForPage(page);
   for (let attempt = 0; attempt < 3; attempt++) {
     try {
       const res = await page.request.post(`${origin}/api/proxy`, {
         data: {
           method: "GET",
-          url: healthUrl,
+          url: probeUrl,
           headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
         },
       });
@@ -68,7 +69,7 @@ export async function directusReachableViaProxy(
       const status = Number(payload.status);
       if (status >= 200 && status < 300) return true;
       const body = String(payload.body || "");
-      if (body.includes('"status"') && body.includes("ok")) return true;
+      if (body.includes('"data"') && !body.includes("Just a moment")) return true;
     } catch {
       /* retry */
     }
