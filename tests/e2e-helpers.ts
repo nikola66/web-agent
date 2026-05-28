@@ -257,13 +257,14 @@ export async function clearBrowserStorage(page: Page) {
 
 async function approvePendingToolGate(page: Page) {
   const root = page.getByTestId("chat-input-root");
-  const pending = await root.getAttribute("data-agent-pending-tool-confirm");
-  if (pending !== "true") return;
+  const pendingAttr = await root.getAttribute("data-agent-pending-tool-confirm");
+  const gateVisible = await page.getByText("Permission required").isVisible().catch(() => false);
+  if (pendingAttr !== "true" && !gateVisible) return;
   const input = runningChatInput(page);
   await input.focus();
   await input.fill("yes");
   await input.press("Enter");
-  await page.waitForTimeout(600);
+  await page.waitForTimeout(800);
 }
 
 export async function waitForTurnDrained(page: Page, timeout = 180_000) {

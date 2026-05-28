@@ -140,8 +140,8 @@ test.describe.serial("directus skill install and CMS CRUD (live)", () => {
       420_000
     );
 
-    expect(install.combined).toMatch(/▸[^\n]*skill_(manage|bulk_save)/i);
-    expect(install.combined).toMatch(/▸[^\n]*skill_view/i);
+    expect(install.combined).toMatch(/▸(?:\s*[^\s]+\s+)?skill_(manage|bulk_save)/i);
+    expect(install.combined).toMatch(/▸(?:\s*[^\s]+\s+)?skill_view/i);
     expect(install.combined).toMatch(/DIRECTUS_SKILL_READY_TOKEN/);
 
     const crud = await sendPromptAndCapture(
