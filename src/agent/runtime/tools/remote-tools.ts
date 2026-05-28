@@ -859,7 +859,7 @@ export function looksLikeApiFetchUrl(url: string): boolean {
     const path = u.pathname.toLowerCase();
     if (host.startsWith("api.") || host.includes(".api.") || host.endsWith(".api")) return true;
     if (/\.(json|xml|ya?ml|graphql)$/i.test(path)) return true;
-    if (/\/graphql\/?$/i.test(path) || /\/graphql\b/i.test(path)) return true;
+    if (/\/graphql\b/i.test(path)) return true;
     if (/\/(api|rest)\b/i.test(path) || /\/v\d+\b/i.test(path)) return true;
     if (/\/(items|collections|assets|files|fields|schema|users|roles|permissions|webhooks)\b/i.test(path)) {
       return true;
@@ -875,16 +875,6 @@ export function looksLikeApiFetchUrl(url: string): boolean {
   }
 }
 
-function headersImplyApiFetch(headers: Record<string, string>): boolean {
-  for (const [k, v] of Object.entries(headers)) {
-    const key = k.toLowerCase();
-    if (key === "authorization" || key === "x-api-key" || key === "api-key") return true;
-    if (key === "accept" && /application\/(json|graphql|xml|ld\+json)/i.test(String(v))) return true;
-  }
-  return false;
-}
-
-/** Direct `/api/proxy` fetch — never TinyFish markdown rendering. */
 export function shouldWebFetchUseDirectProxy(
   url: string,
   headers: Record<string, string> = {},
@@ -892,10 +882,7 @@ export function shouldWebFetchUseDirectProxy(
 ): boolean {
   if (responseFormat === "api") return true;
   if (Object.keys(headers).length > 0) return true;
-  if (headersImplyApiFetch(headers)) return true;
-  if (looksLikeApiFetchUrl(url)) return true;
-  if (responseFormat === "markdown") return false;
-  return false;
+  return looksLikeApiFetchUrl(url);
 }
 
 async function webFetchReadableFromProxy(url, ctx, headers: Record<string, string> = {}) {

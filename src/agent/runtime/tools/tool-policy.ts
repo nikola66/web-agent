@@ -315,10 +315,7 @@ export function formatApprovalTerminalBlock({ toolLabel, summary, args, toolEmoj
  */
 export async function gateToolExecution(p) {
   const { ctx, risky = false, toolLabel, summary, args, toolEmoji } = p;
-  const envAuto =
-    String(ctx?.env?.WEBAGENT_AUTO_APPROVE_TOOLS ?? process.env.WEBAGENT_AUTO_APPROVE_TOOLS ?? "").trim() ===
-    "1";
-  if (!risky || ctx?.autoApprove || envAuto || typeof ctx?.ask !== "function") {
+  if (!risky || ctx?.autoApprove || typeof ctx?.ask !== "function") {
     return true;
   }
   const payload = { tool: toolLabel, summary: String(summary || "").slice(0, 800) };
