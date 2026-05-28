@@ -7,6 +7,7 @@
  */
 import http from "node:http";
 import { EDGE_TTS_PATH, handleEdgeTtsHttp, isEdgeTtsPath, requestPathname } from "./edge-tts-handler.mjs";
+import { withWebAgentUserAgent } from "./http-upstream-defaults.mjs";
 import { handleSubscriptionHttp, isSubscriptionLlmPath, isSubscriptionOAuthPath } from "./subscription/router.mjs";
 
 const PROXY_PATH = "/api/proxy";
@@ -65,7 +66,7 @@ const server = http.createServer((req, res) => {
             : body;
         const upstream = await fetch(url, {
           method,
-          headers,
+          headers: withWebAgentUserAgent(headers),
           ...(upstreamBody != null ? { body: upstreamBody } : {}),
         });
         const responseBody = binaryResponse

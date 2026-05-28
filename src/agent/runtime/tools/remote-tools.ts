@@ -2,6 +2,7 @@ import fs from "node:fs/promises";
 import type { Dirent } from "node:fs";
 import nodePath from "node:path";
 import crypto from "node:crypto";
+import { withWebAgentUserAgent } from "../http-upstream.js";
 import { ipcProxyRequest, readProxyResponse } from "../ipc.js";
 import { resolveWorkspacePath, normalizeWorkspaceRelativePath } from "../workspace-paths.js";
 import {
@@ -672,7 +673,7 @@ export async function httpProxyCall(
   ctx,
   options?: { timeoutMs?: number }
 ): Promise<HttpProxyResult> {
-  const normHeaders = normalizeHttpHeaders(headers);
+  const normHeaders = withWebAgentUserAgent(normalizeHttpHeaders(headers));
   const m = String(method || "GET").toUpperCase();
   const ipcTimeout = pickRemoteTimeoutMs(ctx, options?.timeoutMs, 120_000);
   await logDebugEvent("http_proxy_call", {

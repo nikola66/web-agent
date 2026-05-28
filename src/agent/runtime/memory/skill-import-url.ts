@@ -3,11 +3,12 @@
  * Nodebox cannot use global fetch — route through the adapter IPC proxy (same as web_fetch).
  */
 
+import { withWebAgentUserAgent } from "../http-upstream.js";
 import { ipcProxyRequest } from "../ipc.js";
 import { errorMessage } from "../utils.js";
 
 const SKILL_IMPORT_BODY_CAP = 200_000;
-const FETCH_HEADERS = { "User-Agent": "web-agent-skills" };
+const FETCH_HEADERS = withWebAgentUserAgent({});
 
 type GithubSkillInstall = {
   owner: string;
