@@ -29,6 +29,17 @@ test("normalizeSkillImportUrl converts github tree dir to raw SKILL.md", () => {
   );
 });
 
+test("normalizeSkillImportUrl converts bare github repo root to main/SKILL.md", () => {
+  assert.equal(
+    normalizeSkillImportUrl("https://github.com/nikola66/directus-skill"),
+    "https://raw.githubusercontent.com/nikola66/directus-skill/main/SKILL.md"
+  );
+  assert.equal(
+    normalizeSkillImportUrl("https://github.com/nikola66/directus-skill/"),
+    "https://raw.githubusercontent.com/nikola66/directus-skill/main/SKILL.md"
+  );
+});
+
 test("resolveSkillImportUrlFromPage extracts github tree from skillsmp HTML", () => {
   const html = `
     <a href="https://github.com/LaWebcapsule/d9-skills/tree/main/skills/d9-fork-setup">repo</a>

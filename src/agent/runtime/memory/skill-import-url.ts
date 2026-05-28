@@ -68,6 +68,10 @@ export function normalizeSkillImportUrl(url: string): string {
     }
     return `https://raw.githubusercontent.com/${tree[1]}/${tree[2]}/${tree[3]}/${path}/SKILL.md`;
   }
+  const repoRoot = raw.match(/^https:\/\/github\.com\/([^/]+)\/([^/]+)\/?$/i);
+  if (repoRoot) {
+    return `https://raw.githubusercontent.com/${repoRoot[1]}/${repoRoot[2]}/main/SKILL.md`;
+  }
   return raw;
 }
 
