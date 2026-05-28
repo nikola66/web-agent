@@ -24,6 +24,12 @@ function adapterDeployPaths(adapterSource: string): Set<string> {
   while ((m = writeRe.exec(adapterSource))) {
     paths.add(m[1]);
   }
+  if (adapterSource.includes("dist/agent-runtime/**/*.js")) {
+    for (const rel of listDistJsFiles(distRuntime)) {
+      paths.add(rel);
+    }
+    return paths;
+  }
   if (adapterSource.includes('dist/agent-runtime/tools/**/*.js')) {
     for (const rel of listDistJsFiles(path.join(distRuntime, "tools"))) {
       paths.add(`tools/${rel}`);
