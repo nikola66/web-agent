@@ -35,17 +35,6 @@ export function countToolCalls(transcript: string, tool: string): number {
   return (transcript.match(re) || []).length;
 }
 
-function proxyOriginForPage(page: Page): string {
-  try {
-    const u = new URL(page.url());
-    if (u.protocol.startsWith("http")) return u.origin;
-  } catch {
-    /* fall through */
-  }
-  const port = String(process.env.PLAYWRIGHT_PORT || "5173").trim();
-  return `http://127.0.0.1:${port}`;
-}
-
 /** Probe Directus REST via the dev-server CORS proxy (same path as web_fetch in the browser). */
 export async function directusReachableViaProxy(
   page: Page,
@@ -54,7 +43,17 @@ export async function directusReachableViaProxy(
 ): Promise<boolean> {
   const root = baseUrl.replace(/\/$/, "");
   const probeUrl = `${root}/collections?limit=1`;
-  const origin = proxyOriginForPage(page);
+  let origin: string;
+  try {
+    const u = new URL(page.url());
+    origin = u.protocol.startsWith("http") ? u.origin : "";
+  } catch {
+    origin = "";
+  }
+  if (!origin) {
+    const port = String(process.env.PLAYWRIGHT_PORT || "5173").trim();
+    origin = `http://127.0.0.1:${port}`;
+  }
   for (let attempt = 0; attempt < 3; attempt++) {
     try {
       const res = await page.request.post(`${origin}/api/proxy`, {
@@ -219,11 +218,6 @@ export async function completeFirstRunSetup(page: Page, userName = "Smoke User")
   await chatInput.fill(userName);
   await page.keyboard.press("Enter");
   await expect(chatRoot).toHaveAttribute("data-agent-onboarding", "false", { timeout: 60_000 });
-}
-
-/** Survives profile storage clears; adapter reads this when spawning the Nodebox agent. */
-export async function enableE2eAutoApproveTools(page: Page) {
-  await page.evaluate(() => sessionStorage.setItem("WEBAGENT_AUTO_APPROVE_TOOLS", "1"));
 }
 
 export async function clearBrowserStorage(page: Page) {

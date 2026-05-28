@@ -9,7 +9,6 @@ import {
   CHAT_READY_TIMEOUT_MS,
   clearBrowserStorage,
   configureOpenCodeProvider,
-  enableE2eAutoApproveTools,
   countToolCalls,
   createProfile,
   directusReachableViaProxy,
@@ -78,10 +77,6 @@ async function writeSnapshot(name: string, payload: Record<string, unknown>) {
   );
 }
 
-function combinedTranscript(payload: { transcript: string; delta: string }): string {
-  return `${payload.transcript}\n${payload.delta}`.trim();
-}
-
 async function sendPromptAndCapture(
   page: Page,
   name: string,
@@ -99,7 +94,7 @@ async function sendPromptAndCapture(
   const transcript = await transcriptSince(page, transcriptStart);
   const delta = after.startsWith(before) ? after.slice(before.length).trim() : after;
   await writeSnapshot(name, { prompt, transcript, delta, afterTail: after.slice(-8000) });
-  return { before, after, delta, transcript, combined: combinedTranscript({ transcript, delta }) };
+  return { before, after, delta, transcript, combined: `${transcript}\n${delta}`.trim() };
 }
 
 test.describe.serial("directus skill install and CMS CRUD (live)", () => {
@@ -115,7 +110,6 @@ test.describe.serial("directus skill install and CMS CRUD (live)", () => {
     );
     await clearBrowserStorage(page);
     await page.goto("/");
-    await enableE2eAutoApproveTools(page);
     await waitForProfilesLoaded(page);
     await createProfile(page, PROFILE_NAME);
     await configureOpenCodeProvider(page, PROFILE_NAME);
@@ -142,8 +136,8 @@ test.describe.serial("directus skill install and CMS CRUD (live)", () => {
       420_000
     );
 
-    expect(install.combined).toMatch(/▸(?:\s*[^\s]+\s+)?skill_(manage|bulk_save)/i);
-    expect(install.combined).toMatch(/▸(?:\s*[^\s]+\s+)?skill_view/i);
+    expect(countToolCalls(install.combined, "skill_manage") + countToolCalls(install.combined, "skill_bulk_save")).toBeGreaterThan(0);
+    expect(countToolCalls(install.combined, "skill_view")).toBeGreaterThan(0);
     expect(install.combined).toMatch(/DIRECTUS_SKILL_READY_TOKEN/);
 
     const crud = await sendPromptAndCapture(

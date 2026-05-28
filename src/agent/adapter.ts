@@ -470,19 +470,11 @@ function withSubscriptionProfileHeader(
   return next;
 }
 
-function runtimeAutoApproveTools(): boolean {
-  if (String(import.meta.env.VITE_WEBAGENT_AUTO_APPROVE_TOOLS || "").trim() === "1") return true;
-  try {
-    return (
-      typeof sessionStorage !== "undefined" &&
-      sessionStorage.getItem("WEBAGENT_AUTO_APPROVE_TOOLS") === "1"
-    );
-  } catch {
-    return false;
-  }
-}
-
 function buildEnv(profileId: string, profile: Profile, apiKeys: Record<string, string>): Record<string, string> {
+  const autoApproveTools =
+    String(import.meta.env.VITE_WEBAGENT_AUTO_APPROVE_TOOLS || "").trim() === "1" ||
+    (typeof sessionStorage !== "undefined" &&
+      sessionStorage.getItem("WEBAGENT_AUTO_APPROVE_TOOLS") === "1");
   const activeProvider = PROVIDERS.find((provider) => provider.id === profile.provider);
   const activeProviderId = activeProvider?.id || DEFAULT_PROVIDER_ID;
   const activeBrowserAgent =
@@ -506,7 +498,7 @@ function buildEnv(profileId: string, profile: Profile, apiKeys: Record<string, s
     WEBAGENT_MEMORY_ROOT: "memory",
     WEBAGENT_DEBUG_LOG: VITE_DEBUG_LOG_ENABLED ? "1" : "0",
     WEBAGENT_DEBUG_LOG_DIR: RUNTIME_DEBUG_LOG_DIR,
-    ...(runtimeAutoApproveTools() ? { WEBAGENT_AUTO_APPROVE_TOOLS: "1" } : {}),
+    ...(autoApproveTools ? { WEBAGENT_AUTO_APPROVE_TOOLS: "1" } : {}),
     ...toolGuardrailsEnvForRuntime(import.meta.env),
   };
   const personalityLabel = getPersonalityDisplayLabelForPrompt(profile.personality);
