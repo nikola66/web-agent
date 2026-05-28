@@ -494,6 +494,9 @@ function buildEnv(profileId: string, profile: Profile, apiKeys: Record<string, s
     WEBAGENT_MEMORY_ROOT: "memory",
     WEBAGENT_DEBUG_LOG: VITE_DEBUG_LOG_ENABLED ? "1" : "0",
     WEBAGENT_DEBUG_LOG_DIR: RUNTIME_DEBUG_LOG_DIR,
+    ...(String(import.meta.env.VITE_WEBAGENT_AUTO_APPROVE_TOOLS || "").trim() === "1"
+      ? { WEBAGENT_AUTO_APPROVE_TOOLS: "1" }
+      : {}),
     ...toolGuardrailsEnvForRuntime(import.meta.env),
   };
   const personalityLabel = getPersonalityDisplayLabelForPrompt(profile.personality);

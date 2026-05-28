@@ -1,23 +1,26 @@
 import fs from "node:fs/promises";
 import path from "node:path";
+import { config as loadDotenv } from "dotenv";
 import { expect, test, type Page } from "@playwright/test";
+
+loadDotenv({ path: path.resolve(process.cwd(), ".env"), quiet: true });
+loadDotenv({ path: path.resolve(process.cwd(), ".env.local"), override: true, quiet: true });
 import {
   CHAT_READY_TIMEOUT_MS,
   clearBrowserStorage,
-  configureOpenRouterApiKey,
+  configureOpenCodeProvider,
   countToolCalls,
   createProfile,
   directusReachableViaProxy,
   launchDefaultAgent,
+  stopAgentAndWait,
   runningChatInput,
   testingDirectusToken,
   testingDirectusUrl,
-  testingOpenRouterApiKey,
   waitForProfilesLoaded,
   waitForTurnDrained,
 } from "./e2e-helpers";
 
-const TESTING_OPENROUTER_API_KEY = testingOpenRouterApiKey();
 const TESTING_DIRECTUS_URL = testingDirectusUrl();
 const TESTING_DIRECTUS_TOKEN = testingDirectusToken();
 const LOG_DIR = path.resolve(process.cwd(), "test-results/skill-directus-crud");
@@ -26,7 +29,6 @@ const SKILL_REPO_URL = "https://github.com/nikola66/directus-skill";
 const CRUD_MARKER = `E2E_BLOG_CRUD_${Date.now()}`;
 
 function requireLiveCredentials() {
-  test.skip(!TESTING_OPENROUTER_API_KEY, "Set TESTING_OPENROUTER_API_KEY to run live Directus skill E2E.");
   test.skip(!TESTING_DIRECTUS_TOKEN, "Set TESTING_DIRECTUS_TOKEN to run live Directus skill E2E.");
 }
 
@@ -75,6 +77,10 @@ async function writeSnapshot(name: string, payload: Record<string, unknown>) {
   );
 }
 
+function combinedTranscript(payload: { transcript: string; delta: string }): string {
+  return `${payload.transcript}\n${payload.delta}`.trim();
+}
+
 async function sendPromptAndCapture(
   page: Page,
   name: string,
@@ -92,7 +98,7 @@ async function sendPromptAndCapture(
   const transcript = await transcriptSince(page, transcriptStart);
   const delta = after.startsWith(before) ? after.slice(before.length).trim() : after;
   await writeSnapshot(name, { prompt, transcript, delta, afterTail: after.slice(-8000) });
-  return { before, after, delta, transcript };
+  return { before, after, delta, transcript, combined: combinedTranscript({ transcript, delta }) };
 }
 
 test.describe.serial("directus skill install and CMS CRUD (live)", () => {
@@ -101,23 +107,24 @@ test.describe.serial("directus skill install and CMS CRUD (live)", () => {
 
   test("installs remote skill with pyodide compat then runs blog CRUD via REST", async ({ page }) => {
     await page.goto("/");
+    await waitForProfilesLoaded(page);
+    const reachable = await directusReachableViaProxy(page, TESTING_DIRECTUS_URL, TESTING_DIRECTUS_TOKEN);
+    expect(reachable, `Directus at ${TESTING_DIRECTUS_URL} must be reachable via /api/proxy (check Cloudflare UA allowlist)`).toBe(
+      true
+    );
     await clearBrowserStorage(page);
     await page.goto("/");
     await waitForProfilesLoaded(page);
     await createProfile(page, PROFILE_NAME);
-    await configureOpenRouterApiKey(page, TESTING_OPENROUTER_API_KEY, PROFILE_NAME);
+    await configureOpenCodeProvider(page, PROFILE_NAME);
     await page.getByRole("button", { name: new RegExp(PROFILE_NAME) }).first().click();
     await launchDefaultAgent(page, "Directus E2E User", true, PROFILE_NAME);
+    await stopAgentAndWait(page);
+    await launchDefaultAgent(page, "Directus E2E User", false, PROFILE_NAME);
     await expect(page.getByTestId("chat-input-root")).toHaveAttribute(
       "data-agent-runtime-status",
       "running",
       { timeout: CHAT_READY_TIMEOUT_MS }
-    );
-
-    const reachable = await directusReachableViaProxy(page, TESTING_DIRECTUS_URL, TESTING_DIRECTUS_TOKEN);
-    test.skip(
-      !reachable,
-      `Directus at ${TESTING_DIRECTUS_URL} is not reachable via /api/proxy (Cloudflare or network).`
     );
 
     const install = await sendPromptAndCapture(
@@ -133,9 +140,9 @@ test.describe.serial("directus skill install and CMS CRUD (live)", () => {
       420_000
     );
 
-    expect(install.transcript).toMatch(/▸\s*skill_(manage|bulk_save)/i);
-    expect(install.transcript).toMatch(/▸\s*skill_view/i);
-    expect(install.delta).toMatch(/DIRECTUS_SKILL_READY_TOKEN/);
+    expect(install.combined).toMatch(/▸[^\n]*skill_(manage|bulk_save)/i);
+    expect(install.combined).toMatch(/▸[^\n]*skill_view/i);
+    expect(install.combined).toMatch(/DIRECTUS_SKILL_READY_TOKEN/);
 
     const crud = await sendPromptAndCapture(
       page,
@@ -154,10 +161,10 @@ test.describe.serial("directus skill install and CMS CRUD (live)", () => {
       480_000
     );
 
-    const httpTools = countToolCalls(crud.transcript, "web_post") + countToolCalls(crud.transcript, "web_fetch");
+    const httpTools = countToolCalls(crud.combined, "web_post") + countToolCalls(crud.combined, "web_fetch");
     expect(httpTools, "expected REST calls via web_fetch/web_post").toBeGreaterThanOrEqual(2);
-    expect(crud.transcript).not.toMatch(/ModuleNotFoundError:\s*No module named ['"]directus['"]/i);
-    expect(crud.transcript).not.toMatch(/✗\s*run_python[^\n]*directus/i);
-    expect(crud.delta).toMatch(/DIRECTUS_CRUD_OK_TOKEN/);
+    expect(crud.combined).not.toMatch(/ModuleNotFoundError:\s*No module named ['"]directus['"]/i);
+    expect(crud.combined).not.toMatch(/✗\s*run_python[^\n]*directus/i);
+    expect(crud.combined).toMatch(/DIRECTUS_CRUD_OK_TOKEN/);
   });
 });

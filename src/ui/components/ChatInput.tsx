@@ -230,6 +230,7 @@ export function ChatInput() {
     onboardingActive,
     awaitingResponse,
     queuedInputs,
+    pendingToolConfirm,
     modelId,
   } = rt;
   const agentWorking = profileAgentWorking(rt);
@@ -573,6 +574,7 @@ export function ChatInput() {
       data-agent-onboarding={onboardingActive ? "true" : "false"}
       data-agent-awaiting={awaitingResponse ? "true" : "false"}
       data-agent-working={agentWorking ? "true" : "false"}
+      data-agent-pending-tool-confirm={pendingToolConfirm ? "true" : "false"}
       data-agent-queued-count={queuedInputs.length}
       data-agent-runtime-status={runtimeStatus}
       data-agent-model={modelId ?? ""}
