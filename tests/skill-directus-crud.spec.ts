@@ -148,7 +148,7 @@ test.describe.serial("directus skill install and CMS CRUD (live)", () => {
         `2) CREATE a draft post titled "${CRUD_MARKER}" with minimal required fields.`,
         `3) UPDATE that record (e.g. append _UPDATED to title or change status).`,
         "4) DELETE the record (soft or hard delete).",
-        "Use web_fetch/web_post with Authorization Bearer — not run_python with the directus SDK.",
+        "Use web_fetch with response_format api and web_post with Authorization Bearer — not run_python with the directus SDK.",
         "When create, update, and delete all succeeded, reply exactly DIRECTUS_CRUD_OK_TOKEN.",
       ].join(" "),
       480_000

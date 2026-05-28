@@ -836,6 +836,68 @@ export async function webSearchTool(args: ToolArgs = {}, ctx) {
 
 const WEB_FETCH_READABLE_HTML_CAP = 50_000;
 
+export type WebFetchResponseFormat = "markdown" | "api";
+
+/** `response_format` on web_fetch: `api` = direct proxy JSON/text; `markdown` = TinyFish page reader when eligible. */
+export function resolveWebFetchResponseFormat(args: {
+  response_format?: unknown;
+  format?: unknown;
+} = {}): WebFetchResponseFormat {
+  const raw = String(args.response_format ?? args.format ?? "")
+    .trim()
+    .toLowerCase();
+  if (raw === "api" || raw === "json" || raw === "rest" || raw === "raw") return "api";
+  if (raw === "markdown" || raw === "page" || raw === "html") return "markdown";
+  return "markdown";
+}
+
+/** True when the URL path/host looks like a REST/GraphQL API surface (not a marketing HTML page). */
+export function looksLikeApiFetchUrl(url: string): boolean {
+  try {
+    const u = new URL(url);
+    const host = u.hostname.toLowerCase();
+    const path = u.pathname.toLowerCase();
+    if (host.startsWith("api.") || host.includes(".api.") || host.endsWith(".api")) return true;
+    if (/\.(json|xml|ya?ml|graphql)$/i.test(path)) return true;
+    if (/\/graphql\/?$/i.test(path) || /\/graphql\b/i.test(path)) return true;
+    if (/\/(api|rest)\b/i.test(path) || /\/v\d+\b/i.test(path)) return true;
+    if (/\/(items|collections|assets|files|fields|schema|users|roles|permissions|webhooks)\b/i.test(path)) {
+      return true;
+    }
+    if (/\/server\/(info|health|ping|specs)\b/i.test(path)) return true;
+    if (/\/wp-json\b/i.test(path)) return true;
+    if (/\/oauth2?\b/i.test(path)) return true;
+    const fmt = u.searchParams.get("format")?.toLowerCase();
+    if (fmt && /^(json|xml|graphql)$/.test(fmt)) return true;
+    return false;
+  } catch {
+    return false;
+  }
+}
+
+function headersImplyApiFetch(headers: Record<string, string>): boolean {
+  for (const [k, v] of Object.entries(headers)) {
+    const key = k.toLowerCase();
+    if (key === "authorization" || key === "x-api-key" || key === "api-key") return true;
+    if (key === "accept" && /application\/(json|graphql|xml|ld\+json)/i.test(String(v))) return true;
+  }
+  return false;
+}
+
+/** Direct `/api/proxy` fetch — never TinyFish markdown rendering. */
+export function shouldWebFetchUseDirectProxy(
+  url: string,
+  headers: Record<string, string> = {},
+  responseFormat: WebFetchResponseFormat = "markdown"
+): boolean {
+  if (responseFormat === "api") return true;
+  if (Object.keys(headers).length > 0) return true;
+  if (headersImplyApiFetch(headers)) return true;
+  if (looksLikeApiFetchUrl(url)) return true;
+  if (responseFormat === "markdown") return false;
+  return false;
+}
+
 async function webFetchReadableFromProxy(url, ctx, headers: Record<string, string> = {}) {
   const proxy = await proxyFetch(url, ctx, headers);
   if (proxy.ok === false) {
@@ -901,7 +963,12 @@ async function webFetchReadableFromProxy(url, ctx, headers: Record<string, strin
 
 const WEB_FETCH_BATCH_MAX = 5;
 
-async function webFetchOne(url: string, ctx, headers: Record<string, string> = {}, fetchOpts: { saveTo?: string; responseEncoding?: string } = {}) {
+async function webFetchOne(
+  url: string,
+  ctx,
+  headers: Record<string, string> = {},
+  fetchOpts: { saveTo?: string; responseEncoding?: string; responseFormat?: WebFetchResponseFormat } = {}
+) {
   const u = new URL(url);
   if (!["http:", "https:"].includes(u.protocol)) {
     throw new Error(`web_fetch only supports http(s) URLs, got: ${u.protocol}`);
@@ -966,7 +1033,8 @@ async function webFetchOne(url: string, ctx, headers: Record<string, string> = {
     };
   }
 
-  if (Object.keys(headers).length > 0) {
+  const responseFormat = fetchOpts.responseFormat ?? "markdown";
+  if (shouldWebFetchUseDirectProxy(url, headers, responseFormat)) {
     return webFetchReadableFromProxy(url, ctx, headers);
   }
   const provider = await getBrowserAgentProvider(ctx);
@@ -1012,7 +1080,8 @@ export async function webFetchTool(args: ToolArgs = {}, ctx) {
       : undefined;
   const saveTo = typeof args.save_to === "string" ? args.save_to.trim() : "";
   const responseEncoding = typeof args.response_encoding === "string" ? args.response_encoding.trim() : "";
-  const fetchOpts = { saveTo, responseEncoding };
+  const responseFormat = resolveWebFetchResponseFormat(args);
+  const fetchOpts = { saveTo, responseEncoding, responseFormat };
 
   const rawUrls = Array.isArray(args.urls) ? args.urls : [];
   const single = typeof args.url === "string" ? args.url.trim() : "";
@@ -1033,7 +1102,7 @@ export async function webFetchTool(args: ToolArgs = {}, ctx) {
   const documents = await Promise.all(
     targets.map(async (url) => {
       try {
-        return await webFetchOne(url, ctx, headers);
+        return await webFetchOne(url, ctx, headers, fetchOpts);
       } catch (err) {
         return { ok: false, url, error: String(err?.message || err) };
       }

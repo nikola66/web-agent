@@ -5,9 +5,12 @@ import {
   formatProxyTransportError,
   graphqlSchemaRecoveryHint,
   guessedResourceRecoveryHint,
+  looksLikeApiFetchUrl,
   mergeUrlQueryParams,
   normalizeWebPostMethod,
+  resolveWebFetchResponseFormat,
   resolveWebPostBody,
+  shouldWebFetchUseDirectProxy,
   summarizeHttpErrorBody,
   buildMultipartBody,
   webFetchTool,
@@ -128,6 +131,43 @@ test("webFetchTool schema includes save_to and response_encoding", () => {
   const schema = BUILTIN_TOOLS.web_fetch.inputSchema;
   assert.ok(schema.properties.save_to);
   assert.ok(schema.properties.response_encoding);
+  assert.ok(schema.properties.response_format);
+});
+
+test("looksLikeApiFetchUrl detects REST and CMS paths", () => {
+  assert.equal(looksLikeApiFetchUrl("https://hub.aratech.ae/items/posts"), true);
+  assert.equal(looksLikeApiFetchUrl("https://api.example.com/v1/users"), true);
+  assert.equal(looksLikeApiFetchUrl("https://cms.example.com/graphql"), true);
+  assert.equal(looksLikeApiFetchUrl("https://example.com/blog/post"), false);
+});
+
+test("shouldWebFetchUseDirectProxy routes API URLs and headers away from TinyFish", () => {
+  assert.equal(
+    shouldWebFetchUseDirectProxy("https://hub.aratech.ae/items/posts", {}, "markdown"),
+    true
+  );
+  assert.equal(
+    shouldWebFetchUseDirectProxy("https://example.com/about", {}, "markdown"),
+    false
+  );
+  assert.equal(
+    shouldWebFetchUseDirectProxy(
+      "https://example.com/about",
+      { Authorization: "Bearer x" },
+      "markdown"
+    ),
+    true
+  );
+  assert.equal(
+    shouldWebFetchUseDirectProxy("https://example.com/about", {}, "api"),
+    true
+  );
+});
+
+test("resolveWebFetchResponseFormat accepts api aliases", () => {
+  assert.equal(resolveWebFetchResponseFormat({ response_format: "api" }), "api");
+  assert.equal(resolveWebFetchResponseFormat({ format: "json" }), "api");
+  assert.equal(resolveWebFetchResponseFormat({}), "markdown");
 });
 
 test("webPostTool schema includes extended methods and optional body", () => {
