@@ -534,7 +534,9 @@ export async function main() {
         runId,
         input,
         ask: turnAsk,
-        autoApprove: String(process.env.WEBAGENT_AUTO_APPROVE_TOOLS || "").trim() === "1",
+        ...(String(process.env.WEBAGENT_AUTO_APPROVE_TOOLS || "").trim() === "1"
+          ? { autoApprove: true }
+          : {}),
       });
       for (const m of tail) history.push(m);
       history = await sanitizeMessagesMissingSnapshotRefs(history);

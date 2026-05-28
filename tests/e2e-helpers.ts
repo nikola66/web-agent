@@ -261,10 +261,14 @@ async function approvePendingToolGate(page: Page) {
   const gateVisible = await page.getByText("Permission required").isVisible().catch(() => false);
   if (pendingAttr !== "true" && !gateVisible) return;
   const input = runningChatInput(page);
-  await input.focus();
-  await input.fill("yes");
-  await input.press("Enter");
-  await page.waitForTimeout(800);
+  for (let i = 0; i < 3; i++) {
+    await input.focus();
+    await input.fill("yes");
+    await input.press("Enter");
+    await page.waitForTimeout(900);
+    const still = await page.getByText("Permission required").isVisible().catch(() => false);
+    if (!still && (await root.getAttribute("data-agent-pending-tool-confirm")) !== "true") return;
+  }
 }
 
 export async function waitForTurnDrained(page: Page, timeout = 180_000) {
