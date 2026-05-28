@@ -9,7 +9,12 @@ import {
   parseInnertubePlayerBody,
   parseYtInitialPlayerResponse,
 } from "../src/agent/runtime/tools/youtube-caption-fetch.js";
-import { isYouTubeUpstreamUrl, withWebAgentUserAgent } from "../src/agent/runtime/http-upstream.js";
+import {
+  isYouTubeUpstreamUrl,
+  proxyTextBodyCapForUrl,
+  YOUTUBE_PROXY_BODY_CAP,
+} from "../src/agent/runtime/proxy-body-cap.js";
+import { withWebAgentUserAgent } from "../src/agent/runtime/http-upstream.js";
 
 test("extractYouTubeVideoId handles watch and youtu.be URLs", () => {
   assert.equal(extractYouTubeVideoId("https://www.youtube.com/watch?v=DlzkIjhJ18o"), "DlzkIjhJ18o");
@@ -37,6 +42,10 @@ test("parseInnertubePlayerBody rejects empty and HTML bodies", () => {
   assert.throws(() => parseInnertubePlayerBody(""), /empty body/i);
   assert.throws(() => parseInnertubePlayerBody("<!DOCTYPE html><html>"), /HTML instead of JSON/i);
   assert.throws(() => parseInnertubePlayerBody("not-json"), /could not be parsed/i);
+  assert.throws(
+    () => parseInnertubePlayerBody('{"responseContext":{', { truncated: true, truncated_at_chars: 100_000 }),
+    /truncated/i
+  );
   assert.deepEqual(parseInnertubePlayerBody('{"ok":true}'), { ok: true });
 });
 
@@ -45,6 +54,14 @@ test("formatMissingCaptionsError explains LOGIN_REQUIRED bot checks", () => {
     playabilityStatus: { status: "LOGIN_REQUIRED", reason: "Sign in to confirm you're not a bot" },
   });
   assert.match(msg, /bot check/i);
+});
+
+test("proxyTextBodyCapForUrl raises cap for YouTube upstream", () => {
+  assert.equal(
+    proxyTextBodyCapForUrl("https://www.youtube.com/youtubei/v1/player"),
+    YOUTUBE_PROXY_BODY_CAP
+  );
+  assert.equal(proxyTextBodyCapForUrl("https://example.com"), 100_000);
 });
 
 test("isYouTubeUpstreamUrl and withWebAgentUserAgent skip YouTube hosts", () => {

@@ -40,6 +40,7 @@ import { parseMcpServersConfig, resolveServerConfig } from "@/core/mcp/config";
 import heartbeatSource from "./runtime/HEARTBEAT.md?raw";
 import soulSource from "./runtime/SOUL.md?raw";
 import { TOOL_CATALOG_JSON } from "./tool-catalog";
+import { proxyTextBodyCapForUrl } from "./runtime/proxy-body-cap";
 import { normalizeLaunchMode, sanitizeForLogs } from "./runtime/privacy";
 import sqlWasmRuntimeSource from "sql.js/dist/sql-wasm.js?raw";
 import sqlWasmUrl from "sql.js/dist/sql-wasm.wasm?url";
@@ -1231,7 +1232,7 @@ export async function startWebAgent(options: AgentStartOptions): Promise<void> {
               );
               return;
             }
-            const PROXY_BODY_CAP = 100_000;
+            const PROXY_BODY_CAP = proxyTextBodyCapForUrl(req.url);
             let body = String(data?.body ?? "");
             let truncated = Boolean(data?.truncated);
             if (!data?.bodyEncoding && body.length > PROXY_BODY_CAP) {

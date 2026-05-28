@@ -5,6 +5,7 @@ import fs from "node:fs";
 import path from "path";
 import type { IncomingMessage } from "node:http";
 import { randomUUID } from "node:crypto";
+import { proxyTextBodyCapForUrl } from "./src/agent/runtime/proxy-body-cap";
 import { withWebAgentUserAgent } from "./src/agent/runtime/http-upstream";
 import {
   buildProxyDebugLogEntry,
@@ -235,7 +236,7 @@ function corsProxyGate() {
             headers: withWebAgentUserAgent(headers, { url }),
             ...(upstreamBody != null ? { body: upstreamBody } : {}),
           });
-          const PROXY_BODY_CAP = 100_000;
+          const PROXY_BODY_CAP = proxyTextBodyCapForUrl(String(url ?? ""));
           let responseBody = binaryResponse
             ? Buffer.from(await upstream.arrayBuffer()).toString("base64")
             : await upstream.text();

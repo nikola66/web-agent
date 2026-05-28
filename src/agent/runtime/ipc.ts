@@ -11,6 +11,8 @@
  * Streaming LLM (Nodebox): adapter fetches same-origin /api/llm/... URLs directly.
  */
 
+import { PROXY_TEXT_BODY_CAP, proxyTextBodyCapForUrl } from "./proxy-body-cap.js";
+
 export const IPC_PROXY_REQ_PREFIX = "<<<WEBAGENT_PROXY_REQ:";
 export const IPC_PROXY_REQ_END = "<<<END_WEBAGENT_PROXY_REQ>>>";
 export const IPC_PROXY_RESP_PREFIX = "<<<WEBAGENT_PROXY_RESP:";
@@ -223,7 +225,14 @@ export function processStdinChunk(text) {
   return out;
 }
 
-const IPC_PROXY_TEXT_BODY_CAP = 100_000;
+const IPC_PROXY_TEXT_BODY_CAP = PROXY_TEXT_BODY_CAP;
+
+function resolveProxyTextBodyCap(request: { url?: string; textBodyCap?: number } | null | undefined): number {
+  const explicit = Number(request?.textBodyCap);
+  if (Number.isFinite(explicit) && explicit > 0) return Math.floor(explicit);
+  const url = typeof request?.url === "string" ? request.url : "";
+  return url ? proxyTextBodyCapForUrl(url) : IPC_PROXY_TEXT_BODY_CAP;
+}
 
 function ipcProxyRequestBuffered(request, timeoutMs = 120_000) {
   const wait = Math.min(Math.max(Number(timeoutMs) || 120_000, 5_000), 600_000);
@@ -251,26 +260,27 @@ export function ipcProxyRequest(request, timeoutMs = 120_000) {
   if (request?.binaryResponse) {
     return ipcProxyRequestBuffered(request, wait);
   }
+  const textBodyCap = resolveProxyTextBodyCap(request);
   let body = "";
   let meta: { status?: number; statusText?: string; contentType?: string } = {};
-  return ipcProxyStreamRequest({ ...request, textBodyCap: IPC_PROXY_TEXT_BODY_CAP }, {
+  return ipcProxyStreamRequest({ ...request, textBodyCap }, {
     timeoutMs: wait,
     onStart: (payload) => {
       meta = payload as typeof meta;
     },
     onChunk: (chunk) => {
-      if (body.length >= IPC_PROXY_TEXT_BODY_CAP) return;
-      const room = IPC_PROXY_TEXT_BODY_CAP - body.length;
+      if (body.length >= textBodyCap) return;
+      const room = textBodyCap - body.length;
       body += String(chunk || "").slice(0, room);
     },
   }).then(() => {
-    const truncated = body.length >= IPC_PROXY_TEXT_BODY_CAP;
+    const truncated = body.length >= textBodyCap;
     return {
       status: Number(meta.status ?? 0),
       statusText: String(meta.statusText ?? ""),
       contentType: String(meta.contentType ?? ""),
       body,
-      ...(truncated ? { truncated: true, truncated_at_chars: IPC_PROXY_TEXT_BODY_CAP } : {}),
+      ...(truncated ? { truncated: true, truncated_at_chars: textBodyCap } : {}),
     };
   });
 }
@@ -281,6 +291,8 @@ export function readProxyResponse(value: unknown): {
   contentType: string;
   bodyEncoding?: string;
   proxyError?: string;
+  truncated?: boolean;
+  truncated_at_chars?: number;
 } {
   if (value && typeof value === "object") {
     const rec = value as Record<string, unknown>;
@@ -290,12 +302,18 @@ export function readProxyResponse(value: unknown): {
     const body = typeof rec.body === "string" ? rec.body : "";
     const contentType = typeof rec.contentType === "string" ? rec.contentType : "";
     const bodyEncoding = typeof rec.bodyEncoding === "string" ? rec.bodyEncoding : undefined;
+    const truncated = rec.truncated === true ? true : undefined;
+    const cap = Number(rec.truncated_at_chars);
+    const truncated_at_chars =
+      truncated && Number.isFinite(cap) && cap > 0 ? Math.floor(cap) : undefined;
     return {
       status: Number.isFinite(status) ? status : 0,
       body,
       contentType,
       bodyEncoding,
       proxyError,
+      truncated,
+      truncated_at_chars,
     };
   }
   return { status: 0, body: "", contentType: "" };

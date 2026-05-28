@@ -1,5 +1,13 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { isYouTubeUpstreamUrl } from "./proxy-body-cap.js";
+
+export {
+  PROXY_TEXT_BODY_CAP,
+  YOUTUBE_PROXY_BODY_CAP,
+  isYouTubeUpstreamUrl,
+  proxyTextBodyCapForUrl,
+} from "./proxy-body-cap.js";
 
 function readAppVersion(): string {
   try {
@@ -15,21 +23,6 @@ function readAppVersion(): string {
 export const WEB_AGENT_USER_AGENT = `web-agent/${readAppVersion()}`;
 
 /** YouTube blocks or degrades requests that advertise a non-browser automation UA. */
-export function isYouTubeUpstreamUrl(url: string): boolean {
-  try {
-    const host = new URL(url).hostname.toLowerCase();
-    return (
-      host === "youtu.be" ||
-      host.endsWith(".youtube.com") ||
-      host === "youtube.com" ||
-      host.endsWith(".googlevideo.com") ||
-      host === "googlevideo.com"
-    );
-  } catch {
-    return false;
-  }
-}
-
 export function withWebAgentUserAgent(
   headers: Record<string, string> = {},
   options: { url?: string } = {}

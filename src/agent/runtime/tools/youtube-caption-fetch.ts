@@ -101,13 +101,18 @@ export function captionTracksFromPlayerData(
 
 export function parseInnertubePlayerBody(
   body: string,
-  meta: { proxyError?: string; status?: number } = {}
+  meta: { proxyError?: string; status?: number; truncated?: boolean; truncated_at_chars?: number } = {}
 ): Record<string, unknown> {
   const trimmed = String(body ?? "").trim();
   if (!trimmed) {
     const proxyHint = meta.proxyError ? ` Proxy error: ${meta.proxyError}.` : "";
     throw new Error(
       `YouTube player API returned an empty body (HTTP ${meta.status ?? 0}).${proxyHint} Ensure the local CORS proxy is running (/api/proxy).`
+    );
+  }
+  if (meta.truncated) {
+    throw new Error(
+      `YouTube player API response was truncated at ${meta.truncated_at_chars ?? "?"} characters (proxy body cap). Retry or increase YOUTUBE_PROXY_BODY_CAP.`
     );
   }
   if (looksLikeHtmlDocument(trimmed)) {
@@ -171,7 +176,7 @@ async function fetchInnertubePlayer(
   client: (typeof INNERTUBE_PLAYER_CLIENTS)[number],
   ctx: ProxyCtx
 ): Promise<Record<string, unknown> | null> {
-  const { status, body, proxyError } = await youtubeProxy(
+  const { status, body, proxyError, truncated, truncated_at_chars } = await youtubeProxy(
     {
       method: "POST",
       url: `https://www.youtube.com/youtubei/v1/player?key=${YOUTUBE_INNERTUBE_API_KEY}`,
@@ -193,7 +198,7 @@ async function fetchInnertubePlayer(
   if (status < 200 || status >= 300) {
     throw new Error(`YouTube player API returned ${status}.${proxyError ? ` ${proxyError}` : ""}`);
   }
-  return parseInnertubePlayerBody(body, { proxyError, status });
+  return parseInnertubePlayerBody(body, { proxyError, status, truncated, truncated_at_chars });
 }
 
 async function fetchWatchPagePlayer(videoId: string, ctx: ProxyCtx): Promise<Record<string, unknown> | null> {
