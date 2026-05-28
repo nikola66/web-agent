@@ -53,7 +53,7 @@ export async function directusReachableViaProxy(
   token: string
 ): Promise<boolean> {
   const root = baseUrl.replace(/\/$/, "");
-  const probeUrl = `${root}/items?limit=1`;
+  const probeUrl = `${root}/collections?limit=1`;
   const origin = proxyOriginForPage(page);
   for (let attempt = 0; attempt < 3; attempt++) {
     try {
