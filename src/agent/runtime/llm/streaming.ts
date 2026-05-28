@@ -8,6 +8,7 @@ import {
   parseToolArguments,
   repairLooseToolCallObject,
 } from "../tools/argument-normalization.js";
+import { levenshtein } from "../utils.js";
 
 type LlmRequestOptions = {
   signal?: AbortSignal;
@@ -45,25 +46,6 @@ type LlmProviderConfig = {
   extraHeaders?: Record<string, string>;
 };
 
-function levenshtein(a: string, b: string): number {
-  const m = a.length;
-  const n = b.length;
-  if (!m) return n;
-  if (!n) return m;
-  const dp = Array.from({ length: m + 1 }, (_, i) => {
-    const row = new Array<number>(n + 1);
-    row[0] = i;
-    return row;
-  });
-  for (let j = 1; j <= n; j++) dp[0][j] = j;
-  for (let i = 1; i <= m; i++) {
-    for (let j = 1; j <= n; j++) {
-      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
-      dp[i][j] = Math.min(dp[i - 1][j] + 1, dp[i][j - 1] + 1, dp[i - 1][j - 1] + cost);
-    }
-  }
-  return dp[m][n];
-}
 
 const SKILL_MANAGE_NAME_ALIASES = new Set([
   "skill_save",

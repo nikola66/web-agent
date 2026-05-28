@@ -180,7 +180,6 @@ export interface AgentStartOptions {
 }
 
 const agentProcesses = new Map<string, NodeboxProcess>();
-const lastResizes = new Map<string, SpawnPtySize>();
 
 const DEFAULT_PTY: SpawnPtySize = { cols: 120, rows: 40 };
 const STARTUP_TIMEOUT_MS = 20_000;
@@ -367,19 +366,6 @@ function stripWebagentControlMarkerFromStream(
   const data = hold === 0 ? buf : buf.slice(0, -hold);
   const nextCarry = hold === 0 ? "" : buf.slice(-hold);
   return { data, nextCarry };
-}
-
-/**
- * Strip hidden input-ready markers from stdout without newline-gating the whole stream.
- * Newline-based buffering blocked prompt detection: the shell prints `❯ ` with no trailing \n
- * until the user types, so nothing reached promptParseBuffer and the UI stayed "working"/queued.
- */
-function stripWebagentInputReadyFromStream(
-  carry: string,
-  chunk: string,
-  onReady: () => void
-): { data: string; nextCarry: string } {
-  return stripWebagentControlMarkerFromStream(carry, chunk, INPUT_READY_LINE, onReady);
 }
 
 function stripRenderedPrompt(input: string): string {
@@ -957,7 +943,6 @@ export async function startWebAgent(options: AgentStartOptions): Promise<void> {
 
   onOutput("\x1b[38;2;251;117;252m▸ Starting Web Agent…\x1b[0m\n");
 
-  lastResizes.delete(profile.id);
   const agentProcess = await withTimeout(
     spawnProcess("node", [".webagent/agent.js"], {
       env,
@@ -1037,9 +1022,10 @@ export async function startWebAgent(options: AgentStartOptions): Promise<void> {
       }
     );
     awaitingResponseMarkerCarry = awaitingStrip.nextCarry;
-    const { data, nextCarry } = stripWebagentInputReadyFromStream(
+    const { data, nextCarry } = stripWebagentControlMarkerFromStream(
       inputReadyMarkerCarry,
       awaitingStrip.data,
+      INPUT_READY_LINE,
       () => {
         onPromptReady?.();
         scheduleSnapshotSave();
@@ -1125,6 +1111,7 @@ export async function startWebAgent(options: AgentStartOptions): Promise<void> {
       const spawnReqStart = agentOutputBuffer.indexOf(SPAWN_REQ_PREFIX);
       const pythonReqStart = agentOutputBuffer.indexOf(PYTHON_REQ_PREFIX);
       const sttReqStart = agentOutputBuffer.indexOf(STT_REQ_PREFIX);
+      const mcpReqStart = agentOutputBuffer.indexOf(MCP_REQ_PREFIX);
       const fatalStart = agentOutputBuffer.indexOf(FATAL_ERROR_START);
       const nextStartCandidates = [
         profileStart,
@@ -1141,6 +1128,7 @@ export async function startWebAgent(options: AgentStartOptions): Promise<void> {
         spawnReqStart,
         pythonReqStart,
         sttReqStart,
+        mcpReqStart,
         fatalStart,
       ].filter((v) => v >= 0);
       if (nextStartCandidates.length === 0) {
@@ -1717,8 +1705,7 @@ export async function startWebAgent(options: AgentStartOptions): Promise<void> {
       onOutput(`\x1b[31m▸ Agent stopped unexpectedly (exit ${code}). Restart from the sidebar.\x1b[0m\n`);
     }
     agentProcesses.delete(profile.id);
-    lastResizes.delete(profile.id);
-    adapterDebugLogPaths.delete(profile.id);
+      adapterDebugLogPaths.delete(profile.id);
     adapterDebugPending.delete(profile.id);
     adapterDebugFlushPromises.delete(profile.id);
     const timer = adapterDebugFlushTimers.get(profile.id);
@@ -1735,7 +1722,6 @@ export async function stopWebAgent(profileId: string | null): Promise<void> {
   await shutdownMcpHost(profileId).catch(() => {});
   const agentProcess = agentProcesses.get(profileId);
   if (!agentProcess) {
-    lastResizes.delete(profileId);
     return;
   }
   try {
@@ -1753,7 +1739,6 @@ export async function stopWebAgent(profileId: string | null): Promise<void> {
     /* process may already be gone */
   }
   agentProcesses.delete(profileId);
-  lastResizes.delete(profileId);
 }
 
 export async function writeToWebAgent(profileId: string, data: string): Promise<boolean> {

@@ -1,7 +1,7 @@
 import fs from "node:fs/promises";
 import nodePath from "node:path";
-import { ipcProxyRequest } from "../ipc.js";
-import { workspaceStatePath, COMPOSIO_AUDIT_REL } from "../constants.js";
+import { ipcProxyRequest, readProxyResponse } from "../ipc.js";
+import { workspaceStatePath, COMPOSIO_AUDIT_REL, isNodeboxRuntime } from "../constants.js";
 import { logDebugEvent } from "../logging/debug-log.js";
 import { createTimeoutController } from "./context.js";
 import { gateToolExecution, summarizeToolApproval } from "./tool-policy.js";
@@ -380,10 +380,6 @@ async function readJsonOrText(res: Response) {
   }
 }
 
-function isNodeboxRuntime() {
-  return String(process.env.WEBAGENT_RUNTIME ?? "").trim() === "nodebox";
-}
-
 function stringifyErrorField(value: unknown): string {
   if (value == null) return "";
   if (typeof value === "string") return value;
@@ -426,12 +422,10 @@ async function composioFetch(ctx, baseUrl: string, path: string, init: RequestIn
       headers,
       body: typeof init.body === "string" ? init.body : init.body ? String(init.body) : null,
     });
-    if (payload?.error) {
-      throw new Error(String(payload.error));
+    const { status, body: bodyText, contentType, proxyError } = readProxyResponse(payload);
+    if (proxyError) {
+      throw new Error(proxyError);
     }
-    const status = Number(payload?.status ?? 0);
-    const bodyText = String(payload?.body ?? "");
-    const contentType = String(payload?.contentType ?? "");
     if (!Number.isFinite(status) || status <= 0) {
       throw new Error(
         `Composio request failed (proxy): unexpected response ${JSON.stringify(payload).slice(0, 240)}`

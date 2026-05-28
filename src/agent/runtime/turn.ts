@@ -655,14 +655,14 @@ export async function agentTurn(
         estimatedPromptTokens:
           estimateMessagesTokens(conv) + estimateToolSchemaTokens(streamTools),
       });
-      let acc = "";
+      const accChunks: string[] = [];
       let streamedVisible = "";
       const streamWriter = createToolAwareStreamWriter((chunk) => {
         if (!chunk) return;
         streamedVisible += chunk;
       });
       const onDelta = (c) => {
-        acc += c;
+        accChunks.push(c);
         streamWriter.push(c);
       };
       let streamResult;
@@ -686,7 +686,7 @@ export async function agentTurn(
         break;
       }
       streamWriter.flush();
-      const combined = streamResult?.text || acc;
+      const combined = streamResult?.text || accChunks.join("");
       const clarifyParsed = extractClarifyMarkers(combined);
       for (const block of clarifyParsed.blocks) {
         if (mirrorTerminal) process.stdout.write(block);
@@ -1244,7 +1244,7 @@ export async function agentTurn(
       });
       conv.push({
         role: "user",
-        content: "Tool results (compact JSON):\n" + JSON.stringify(summarized, null, 2),
+        content: "Tool results (compact JSON):\n" + JSON.stringify(summarized),
       });
       if (guardrailHalt) {
         const reason = toolGuardrails.haltDecision?.message || "Tool loop guardrail halt";
