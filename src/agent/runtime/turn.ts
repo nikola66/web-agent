@@ -119,6 +119,7 @@ import {
   shouldContinuePreToolPromiseStall,
   shouldContinueSnapshotReadStall,
   shouldContinueApiDiscoveryStall,
+  shouldContinueFindSkillsDelivery,
   shouldContinueTruncation,
 } from "./turn-continuation.js";
 import { dropTrailingEmptyResponseScaffolding, sanitizeMessagesForLlm } from "./message-sanitizer.js";
@@ -587,6 +588,7 @@ export async function agentTurn(
   let postToolStallContinuations = 0;
   let snapshotReadStallContinuations = 0;
   let apiDiscoveryStallContinuations = 0;
+  let findSkillsDeliveryContinuations = 0;
   let preToolPromiseContinuations = 0;
   let cronVerifyContinuations = 0;
   let incompleteTodoContinuations = 0;
@@ -974,6 +976,25 @@ export async function agentTurn(
           await logDebugEvent("turn_api_discovery_stall_continuation", {
             round,
             count: apiDiscoveryStallContinuations,
+            visiblePreview: String(visible || "").slice(0, 200),
+          });
+          continue;
+        }
+        if (
+          shouldContinueFindSkillsDelivery(
+            originalUserInput,
+            visible,
+            executedToolsInTurn,
+            lastToolExecutions,
+            findSkillsDeliveryContinuations
+          )
+        ) {
+          findSkillsDeliveryContinuations++;
+          continuationRecoveriesFired++;
+          conv.push({ role: "user", content: buildContinuationNudge("find_skills_delivery") });
+          await logDebugEvent("turn_find_skills_delivery_continuation", {
+            round,
+            count: findSkillsDeliveryContinuations,
             visiblePreview: String(visible || "").slice(0, 200),
           });
           continue;
