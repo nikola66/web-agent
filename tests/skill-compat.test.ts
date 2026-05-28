@@ -60,6 +60,23 @@ test("analyzeSkillCompat marks pdf skill as limited", () => {
   assert.equal(analysis.uses_python, true);
 });
 
+test("buildWebAgentExecutionAppendix maps directus SDK to http-api", () => {
+  const directus = [
+    "---",
+    "name: directus",
+    "---",
+    "",
+    "pip install directus-skill",
+    "from directus import DirectusClient",
+    "",
+    "client = DirectusClient(url=os.environ['DIRECTUS_URL'], token=os.environ['DIRECTUS_API_TOKEN'])",
+  ].join("\n");
+  const appendix = buildWebAgentExecutionAppendix(analyzeSkillCompat(directus));
+  assert.match(appendix, /Directus Python SDK/i);
+  assert.match(appendix, /web_fetch.*web_post|web_post.*web_fetch/i);
+  assert.match(appendix, /http-api/);
+});
+
 test("buildWebAgentExecutionAppendix includes core mappings", () => {
   const appendix = buildWebAgentExecutionAppendix(analyzeSkillCompat(WEB_DESIGN_GUIDELINES));
   assert.match(appendix, /WebFetch.*web_fetch/);

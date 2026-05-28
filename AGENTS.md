@@ -39,5 +39,6 @@ Single-service SPA — only one process needed: `npm run dev` (Vite + embed-runt
 - **Unit tests** (`npm test`) also build the embed runtime first; no extra steps needed.
 - **No linter configured** — there is no ESLint/Prettier/Biome. Type checking (`tsc`) is the primary static analysis tool.
 - **Playwright E2E** (`npm run test:browser`) requires `TESTING_OPENROUTER_API_KEY` in `.env.local` and installed browsers (`npx playwright install chromium`). Skip unless you have an API key.
+- **Directus skill E2E** (`tests/skill-directus-crud.spec.ts`) also needs `TESTING_DIRECTUS_TOKEN` (and optionally `TESTING_DIRECTUS_URL`). Skips when Directus is unreachable via `/api/proxy`.
 - Dev server serves at `http://localhost:5173`. LLM interactions require an API key configured per-profile in the UI (OpenRouter, Ollama, or custom provider).
 - Standard commands are documented in `package.json` scripts and README "Development" section.

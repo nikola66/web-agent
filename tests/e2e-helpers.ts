@@ -15,6 +15,59 @@ export function testingOpenRouterApiKey(): string {
   return k;
 }
 
+export function testingDirectusUrl(): string {
+  return String(process.env.TESTING_DIRECTUS_URL ?? "https://hub.aratech.ae").trim();
+}
+
+export function testingDirectusToken(): string {
+  let t = String(process.env.TESTING_DIRECTUS_TOKEN ?? "").trim();
+  if (
+    (t.startsWith('"') && t.endsWith('"')) ||
+    (t.startsWith("'") && t.endsWith("'"))
+  ) {
+    t = t.slice(1, -1).trim();
+  }
+  return t;
+}
+
+export function countToolCalls(transcript: string, tool: string): number {
+  const re = new RegExp(`▸\\s*${tool}\\b`, "gi");
+  return (transcript.match(re) || []).length;
+}
+
+/** Probe Directus REST via the dev-server CORS proxy (same path as web_fetch in the browser). */
+export async function directusReachableViaProxy(
+  page: Page,
+  baseUrl: string,
+  token: string
+): Promise<boolean> {
+  const healthUrl = `${baseUrl.replace(/\/$/, "")}/server/health`;
+  return page.evaluate(
+    async ({ url, bearer }) => {
+      try {
+        const res = await fetch("/api/proxy", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            method: "GET",
+            url,
+            headers: { Authorization: `Bearer ${bearer}`, Accept: "application/json" },
+          }),
+        });
+        if (!res.ok) return false;
+        const payload = (await res.json()) as { status?: number; body?: string };
+        const status = Number(payload.status);
+        if (status >= 200 && status < 300) return true;
+        const body = String(payload.body || "");
+        return body.includes('"status"') && body.includes("ok");
+      } catch {
+        return false;
+      }
+    },
+    { url: healthUrl, bearer: token }
+  );
+}
+
 export async function ensureProfilesTab(page: Page) {
   await page.getByRole("button", { name: "Profiles" }).click();
 }

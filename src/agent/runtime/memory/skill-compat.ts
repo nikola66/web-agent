@@ -114,6 +114,7 @@ export function detectPythonLibraries(source: string): string[] {
     libs.add("wikipedia");
   }
   if (/\bpip\s+install\b/.test(text)) libs.add("pip");
+  if (/\bpip\s+install\b[^;\n]*\bdirectus(?:-skill)?\b/i.test(text)) libs.add("directus");
   if (/\bpython3?\s+-m\b/.test(text)) libs.add("python-module-cli");
   return [...libs].sort();
 }
@@ -259,6 +260,11 @@ export function buildWebAgentExecutionAppendix(analysis: SkillCompatAnalysis): s
   }
   if (analysis.python_libraries.includes("wikipedia")) {
     lines.push("| `wikipedia` Python module | Wikipedia REST API via `web_fetch` (`https://en.wikipedia.org/api/rest_v1/…`) |");
+  }
+  if (analysis.python_libraries.includes("directus")) {
+    lines.push(
+      "| Directus Python SDK (`directus`, `directus-skill`, `pip install directus-skill`) | Directus REST/GraphQL via `web_fetch`/`web_post` with `Authorization: Bearer` — **`http-api`**; no Pyodide SDK |"
+    );
   }
   if (/\bwp-json\b|\bWordPress REST\b|\bwp_publisher\b/i.test(analysis.flags.join(" ") + analysis.python_libraries.join(" "))) {
     lines.push("| WordPress REST publisher | `web_post` to `/wp-json/wp/v2/*` with Basic auth — **`http-api`** |");
