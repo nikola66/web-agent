@@ -244,26 +244,11 @@ test("adapter injects every bootstrap static ./ import (runtime entry pulls the 
   ].map((match) => match[1]);
 
   assert.ok(runtimeImports.includes("context-compression.js"));
-  for (const runtimeImport of runtimeImports) {
-    if (runtimeImport.startsWith("tools/")) {
-      assert.ok(
-        adapterSource.includes("../../dist/agent-runtime/tools/**/*.js"),
-        `adapter must glob-copy ${runtimeImport} into .webagent`
-      );
-      continue;
-    }
-    if (runtimeImport.startsWith("llm/")) {
-      assert.ok(
-        adapterSource.includes("../../dist/agent-runtime/llm/**/*.js"),
-        `adapter must glob-copy ${runtimeImport} into .webagent`
-      );
-      continue;
-    }
-    assert.ok(
-      adapterSource.includes(`\${webagentDir}/${runtimeImport}`),
-      `adapter must write ${runtimeImport} into .webagent`
-    );
-  }
+  assert.ok(
+    adapterSource.includes("../../dist/agent-runtime/**/*.js"),
+    "adapter must glob-copy the full embed-runtime tree into .webagent"
+  );
+  assert.ok(adapterSource.includes("runtimeModuleSources"));
 });
 
 test("adapter mirrors turn.js static runtime imports into .webagent", async () => {
@@ -277,20 +262,8 @@ test("adapter mirrors turn.js static runtime imports into .webagent", async () =
   ].map((match) => match[1]);
 
   assert.ok(runtimeImports.includes("message-sanitizer.js"));
-  for (const runtimeImport of runtimeImports) {
-    if (runtimeImport.startsWith("tools/")) continue;
-    if (runtimeImport.startsWith("llm/")) {
-      assert.ok(
-        adapterSource.includes("../../dist/agent-runtime/llm/**/*.js"),
-        `adapter must glob-copy ${runtimeImport} into .webagent`
-      );
-      continue;
-    }
-    assert.ok(
-      adapterSource.includes(`\${webagentDir}/${runtimeImport}`),
-      `adapter must write ${runtimeImport} into .webagent`
-    );
-  }
+  assert.ok(adapterSource.includes("../../dist/agent-runtime/**/*.js"));
+  assert.ok(adapterSource.includes("runtimeModuleSources"));
 });
 
 test("pruneConversationForMidTurn collapses old tool JSON when above 80% window", () => {
@@ -314,9 +287,7 @@ test("pruneConversationForMidTurn collapses old tool JSON when above 80% window"
 
 test("adapter mirrors every tools/*.js and llm/*.js relative dependency into .webagent", async () => {
   const adapterSource = await fs.readFile(path.join(process.cwd(), "src/agent/adapter.ts"), "utf8");
-  assert.ok(adapterSource.includes("../../dist/agent-runtime/tools/**/*.js"));
-  assert.ok(adapterSource.includes('replace(/^.*dist\\/agent-runtime\\/tools\\//, "tools/")'));
-  assert.ok(adapterSource.includes("runtimeToolSources"));
-  assert.ok(adapterSource.includes("../../dist/agent-runtime/llm/**/*.js"));
-  assert.ok(adapterSource.includes("runtimeLlmModuleSources"));
+  assert.ok(adapterSource.includes("../../dist/agent-runtime/**/*.js"));
+  assert.ok(adapterSource.includes("dist\\/agent-runtime\\/"));
+  assert.ok(adapterSource.includes("runtimeModuleSources"));
 });

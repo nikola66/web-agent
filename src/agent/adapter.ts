@@ -40,95 +40,12 @@ import { parseMcpServersConfig, resolveServerConfig } from "@/core/mcp/config";
 import heartbeatSource from "./runtime/HEARTBEAT.md?raw";
 import soulSource from "./runtime/SOUL.md?raw";
 import { TOOL_CATALOG_JSON } from "./tool-catalog";
-import runtimeAgentSource from "../../dist/agent-runtime/agent.js?raw";
-import runtimeConstantsSource from "../../dist/agent-runtime/constants.js?raw";
-import runtimeReflectionSource from "../../dist/agent-runtime/reflection.js?raw";
-import runtimeTurnSequencingSource from "../../dist/agent-runtime/turn-sequencing.js?raw";
-import runtimeTurnContinuationSource from "../../dist/agent-runtime/turn-continuation.js?raw";
-import runtimeStartupContextSource from "../../dist/agent-runtime/startup-context.js?raw";
-import runtimeMemoryGuidanceSource from "../../dist/agent-runtime/memory-guidance.js?raw";
-import runtimeCapabilityRouterSource from "../../dist/agent-runtime/capability-router.js?raw";
-import runtimeToolCapabilityIndexSource from "../../dist/agent-runtime/tool-capability-index.js?raw";
-import runtimeExecutionGuidanceSource from "../../dist/agent-runtime/execution-guidance.js?raw";
-import runtimeUtilsSource from "../../dist/agent-runtime/utils.js?raw";
-import runtimeBootstrapSource from "../../dist/agent-runtime/bootstrap.js?raw";
-import runtimeTurnSource from "../../dist/agent-runtime/turn.js?raw";
-import runtimeSystemPromptCacheSource from "../../dist/agent-runtime/system-prompt-cache.js?raw";
-import runtimeBackgroundReviewSource from "../../dist/agent-runtime/background-review.js?raw";
-import runtimeSkillProvenanceSource from "../../dist/agent-runtime/skill-provenance.js?raw";
-import runtimeCuratorSource from "../../dist/agent-runtime/curator.js?raw";
-import runtimeMessageSanitizerSource from "../../dist/agent-runtime/message-sanitizer.js?raw";
-import runtimeStreamOutputSource from "../../dist/agent-runtime/stream-output.js?raw";
-import runtimeContextCompressionSource from "../../dist/agent-runtime/context-compression.js?raw";
-import runtimePlanningSlashSource from "../../dist/agent-runtime/planning-slash.js?raw";
-import runtimeClarifySlashSource from "../../dist/agent-runtime/clarify-slash.js?raw";
-import runtimeFindSkillsSlashSource from "../../dist/agent-runtime/find-skills-slash.js?raw";
-import runtimeWikiSlashSource from "../../dist/agent-runtime/wiki-slash.js?raw";
-import runtimeSlashRoutingSource from "../../dist/agent-runtime/slash-routing.js?raw";
-import runtimeMcpConfigSource from "../../dist/agent-runtime/mcp-config.js?raw";
-import runtimeMcpRegistrySource from "../../dist/agent-runtime/mcp-registry.js?raw";
-import runtimeTerminalFormatSource from "../../dist/agent-runtime/terminal-format.js?raw";
-import runtimeToolResultPreviewSource from "../../dist/agent-runtime/tool-result-preview.js?raw";
-import runtimeTranscriptSource from "../../dist/agent-runtime/transcript.js?raw";
-import runtimeTranscriptDeliverySource from "../../dist/agent-runtime/transcript-delivery.js?raw";
-import runtimeWorkspacePathsSource from "../../dist/agent-runtime/workspace-paths.js?raw";
-import runtimeArtifactPreviewSource from "../../dist/agent-runtime/artifact-preview.js?raw";
-import runtimeCommandsSource from "../../dist/agent-runtime/commands.js?raw";
-import runtimeSlashCommandViewsSource from "../../dist/agent-runtime/slash-command-views.js?raw";
-import runtimeChannelOutboundSource from "../../dist/agent-runtime/channel-outbound.js?raw";
-import runtimeOnboardingSource from "../../dist/agent-runtime/identity/onboarding.js?raw";
-import runtimeDebugLogSource from "../../dist/agent-runtime/logging/debug-log.js?raw";
-import runtimePrivacySource from "../../dist/agent-runtime/privacy.js?raw";
 import { normalizeLaunchMode, sanitizeForLogs } from "./runtime/privacy";
-import runtimeMemorySource from "../../dist/agent-runtime/memory/index.js?raw";
-import runtimeMemorySqlSource from "../../dist/agent-runtime/memory/sql.js?raw";
-import runtimeMemoryRunsSource from "../../dist/agent-runtime/memory/runs.js?raw";
-import runtimeMemoryJobsSource from "../../dist/agent-runtime/memory/jobs.js?raw";
-import runtimeMemorySnapshotsSource from "../../dist/agent-runtime/memory/snapshots.js?raw";
-import runtimeMemoryInternalPathsSource from "../../dist/agent-runtime/memory/internal-paths.js?raw";
-import runtimeMemoryReflectionSource from "../../dist/agent-runtime/memory/reflection.js?raw";
-import runtimeMemoryFactsSource from "../../dist/agent-runtime/memory/facts.js?raw";
-import runtimeMemorySemanticIndexSource from "../../dist/agent-runtime/memory/semantic-index.js?raw";
-import runtimeMemoryToolStatsSource from "../../dist/agent-runtime/memory/tool-stats.js?raw";
-import runtimeMemoryLearningsSource from "../../dist/agent-runtime/memory/learnings.js?raw";
-import runtimeMemorySkillsSource from "../../dist/agent-runtime/memory/skills.js?raw";
-import runtimeMemorySkillCompatSource from "../../dist/agent-runtime/memory/skill-compat.js?raw";
-import runtimeMemorySkillImportUrlSource from "../../dist/agent-runtime/memory/skill-import-url.js?raw";
-import runtimeMemoryContextBlocksSource from "../../dist/agent-runtime/memory/context-blocks.js?raw";
-/** Nodebox copies this string at agent start — it is `dist/`, not `src/`; run `npm run build:embed-runtime` after changing runtime TS. */
-import runtimePersistenceSource from "../../dist/agent-runtime/state/persistence.js?raw";
-import runtimeMigrationsIndexSource from "../../dist/agent-runtime/migrations/index.js?raw";
-import runtimeMigrationsTypesSource from "../../dist/agent-runtime/migrations/types.js?raw";
-import runtimeMigrationsStateSource from "../../dist/agent-runtime/migrations/state.js?raw";
-import runtimeMigrationsRunnerSource from "../../dist/agent-runtime/migrations/runner.js?raw";
-import runtimeMigrationsRegistrySource from "../../dist/agent-runtime/migrations/registry.js?raw";
-import runtimeMigration001Source from "../../dist/agent-runtime/migrations/001-relocate-state-files.js?raw";
-import runtimeMigrationsNotifySource from "../../dist/agent-runtime/migrations/notify.js?raw";
-import runtimeChannelDispatcherSource from "../../dist/agent-runtime/channels/dispatcher.js?raw";
-import runtimeChannelIndexSource from "../../dist/agent-runtime/channels/index.js?raw";
-import runtimeChannelTelegramSource from "../../dist/agent-runtime/channels/telegram.js?raw";
-import runtimeChannelTelegramFilesSource from "../../dist/agent-runtime/channels/telegram-files.js?raw";
-import runtimeTelegramVoiceSource from "../../dist/agent-runtime/voice/telegram-voice.js?raw";
-import runtimeIpcSource from "../../dist/agent-runtime/ipc.js?raw";
-import runtimeUserInputFramingSource from "../../dist/agent-runtime/user-input-framing.js?raw";
-import runtimeCronSchedulingSource from "../../dist/agent-runtime/cron-scheduling.js?raw";
 import sqlWasmRuntimeSource from "sql.js/dist/sql-wasm.js?raw";
 import sqlWasmUrl from "sql.js/dist/sql-wasm.wasm?url";
 
-const runtimeToolSources = import.meta.glob("../../dist/agent-runtime/tools/**/*.js", {
-  eager: true,
-  query: "?raw",
-  import: "default",
-}) as Record<string, string>;
-
-const runtimeLlmModuleSources = import.meta.glob("../../dist/agent-runtime/llm/**/*.js", {
-  eager: true,
-  query: "?raw",
-  import: "default",
-}) as Record<string, string>;
-
-/** Root-level runtime modules (e.g. cron-scheduling.js) — not under tools/. */
-const runtimeRootModuleSources = import.meta.glob("../../dist/agent-runtime/*.js", {
+/** Built embed-runtime tree — single source for Nodebox copy (run `npm run build:embed-runtime` after TS edits). */
+const runtimeModuleSources = import.meta.glob("../../dist/agent-runtime/**/*.js", {
   eager: true,
   query: "?raw",
   import: "default",
@@ -474,109 +391,22 @@ async function writeRuntimeSources(profileId: string): Promise<void> {
   const webagentDir = `/workspace/${profileId}/.webagent`;
 
   await emulator.fs.mkdir(webagentDir, { recursive: true });
-  await emulator.fs.mkdir(`${webagentDir}/identity`, { recursive: true });
-  await emulator.fs.mkdir(`${webagentDir}/llm`, { recursive: true });
-  await emulator.fs.mkdir(`${webagentDir}/logging`, { recursive: true });
-  await emulator.fs.mkdir(`${webagentDir}/memory`, { recursive: true });
-  await emulator.fs.mkdir(`${webagentDir}/migrations`, { recursive: true });
-  await emulator.fs.mkdir(`${webagentDir}/state`, { recursive: true });
-  await emulator.fs.mkdir(`${webagentDir}/tools`, { recursive: true });
-  await emulator.fs.mkdir(`${webagentDir}/channels`, { recursive: true });
-  await emulator.fs.mkdir(`${webagentDir}/voice`, { recursive: true });
-  await emulator.fs.mkdir(`${webagentDir}/capabilities`, { recursive: true });
   await emulator.fs.mkdir(`${webagentDir}/vendor`, { recursive: true });
 
-  // Required so Node.js treats .js files in this directory as ESM.
   await emulator.fs.writeFile(
     `${webagentDir}/package.json`,
     JSON.stringify({ name: "@webagent/runtime", private: true, type: "module" })
   );
 
-  await emulator.fs.writeFile(`${webagentDir}/ipc.js`, runtimeIpcSource);
-  await emulator.fs.writeFile(`${webagentDir}/user-input-framing.js`, runtimeUserInputFramingSource);
-  await emulator.fs.writeFile(`${webagentDir}/agent.js`, runtimeAgentSource);
-  await emulator.fs.writeFile(`${webagentDir}/constants.js`, runtimeConstantsSource);
-  await emulator.fs.writeFile(`${webagentDir}/reflection.js`, runtimeReflectionSource);
-  await emulator.fs.writeFile(`${webagentDir}/turn-sequencing.js`, runtimeTurnSequencingSource);
-  await emulator.fs.writeFile(`${webagentDir}/turn-continuation.js`, runtimeTurnContinuationSource);
-  await emulator.fs.writeFile(`${webagentDir}/startup-context.js`, runtimeStartupContextSource);
-  await emulator.fs.writeFile(`${webagentDir}/memory-guidance.js`, runtimeMemoryGuidanceSource);
-  await emulator.fs.writeFile(`${webagentDir}/capability-router.js`, runtimeCapabilityRouterSource);
-  await emulator.fs.writeFile(`${webagentDir}/tool-capability-index.js`, runtimeToolCapabilityIndexSource);
-  await emulator.fs.writeFile(`${webagentDir}/execution-guidance.js`, runtimeExecutionGuidanceSource);
-  await emulator.fs.writeFile(`${webagentDir}/utils.js`, runtimeUtilsSource);
-  await emulator.fs.writeFile(`${webagentDir}/bootstrap.js`, runtimeBootstrapSource);
-  await emulator.fs.writeFile(`${webagentDir}/turn.js`, runtimeTurnSource);
-  await emulator.fs.writeFile(`${webagentDir}/system-prompt-cache.js`, runtimeSystemPromptCacheSource);
-  await emulator.fs.writeFile(`${webagentDir}/background-review.js`, runtimeBackgroundReviewSource);
-  await emulator.fs.writeFile(`${webagentDir}/skill-provenance.js`, runtimeSkillProvenanceSource);
-  await emulator.fs.writeFile(`${webagentDir}/curator.js`, runtimeCuratorSource);
-  await emulator.fs.writeFile(`${webagentDir}/message-sanitizer.js`, runtimeMessageSanitizerSource);
-  await emulator.fs.writeFile(`${webagentDir}/stream-output.js`, runtimeStreamOutputSource);
-  await emulator.fs.writeFile(`${webagentDir}/context-compression.js`, runtimeContextCompressionSource);
-  await emulator.fs.writeFile(`${webagentDir}/planning-slash.js`, runtimePlanningSlashSource);
-  await emulator.fs.writeFile(`${webagentDir}/find-skills-slash.js`, runtimeFindSkillsSlashSource);
-  await emulator.fs.writeFile(`${webagentDir}/wiki-slash.js`, runtimeWikiSlashSource);
-  await emulator.fs.writeFile(`${webagentDir}/slash-routing.js`, runtimeSlashRoutingSource);
-  await emulator.fs.writeFile(`${webagentDir}/mcp-config.js`, runtimeMcpConfigSource);
-  await emulator.fs.writeFile(`${webagentDir}/mcp-registry.js`, runtimeMcpRegistrySource);
-  await emulator.fs.writeFile(`${webagentDir}/terminal-format.js`, runtimeTerminalFormatSource);
-  await emulator.fs.writeFile(`${webagentDir}/tool-result-preview.js`, runtimeToolResultPreviewSource);
-  await emulator.fs.writeFile(`${webagentDir}/transcript.js`, runtimeTranscriptSource);
-  await emulator.fs.writeFile(`${webagentDir}/transcript-delivery.js`, runtimeTranscriptDeliverySource);
-  await emulator.fs.writeFile(`${webagentDir}/commands.js`, runtimeCommandsSource);
-  await emulator.fs.writeFile(`${webagentDir}/slash-command-views.js`, runtimeSlashCommandViewsSource);
-  await emulator.fs.writeFile(`${webagentDir}/channel-outbound.js`, runtimeChannelOutboundSource);
-  await emulator.fs.writeFile(`${webagentDir}/workspace-paths.js`, runtimeWorkspacePathsSource);
-  await emulator.fs.writeFile(`${webagentDir}/artifact-preview.js`, runtimeArtifactPreviewSource);
-  await emulator.fs.writeFile(`${webagentDir}/privacy.js`, runtimePrivacySource);
-  await emulator.fs.writeFile(`${webagentDir}/identity/onboarding.js`, runtimeOnboardingSource);
-  await emulator.fs.writeFile(`${webagentDir}/logging/debug-log.js`, runtimeDebugLogSource);
-  await emulator.fs.writeFile(`${webagentDir}/memory/index.js`, runtimeMemorySource);
-  await emulator.fs.writeFile(`${webagentDir}/memory/sql.js`, runtimeMemorySqlSource);
-  await emulator.fs.writeFile(`${webagentDir}/memory/runs.js`, runtimeMemoryRunsSource);
-  await emulator.fs.writeFile(`${webagentDir}/memory/jobs.js`, runtimeMemoryJobsSource);
-  await emulator.fs.writeFile(`${webagentDir}/memory/internal-paths.js`, runtimeMemoryInternalPathsSource);
-  await emulator.fs.writeFile(`${webagentDir}/memory/snapshots.js`, runtimeMemorySnapshotsSource);
-  await emulator.fs.writeFile(`${webagentDir}/memory/reflection.js`, runtimeMemoryReflectionSource);
-  await emulator.fs.writeFile(`${webagentDir}/memory/facts.js`, runtimeMemoryFactsSource);
-  await emulator.fs.writeFile(`${webagentDir}/memory/semantic-index.js`, runtimeMemorySemanticIndexSource);
-  await emulator.fs.writeFile(`${webagentDir}/memory/tool-stats.js`, runtimeMemoryToolStatsSource);
-  await emulator.fs.writeFile(`${webagentDir}/memory/learnings.js`, runtimeMemoryLearningsSource);
-  await emulator.fs.writeFile(`${webagentDir}/memory/skills.js`, runtimeMemorySkillsSource);
-  await emulator.fs.writeFile(`${webagentDir}/memory/skill-compat.js`, runtimeMemorySkillCompatSource);
-  await emulator.fs.writeFile(`${webagentDir}/memory/skill-import-url.js`, runtimeMemorySkillImportUrlSource);
-  await emulator.fs.writeFile(`${webagentDir}/memory/context-blocks.js`, runtimeMemoryContextBlocksSource);
-  await emulator.fs.writeFile(`${webagentDir}/migrations/index.js`, runtimeMigrationsIndexSource);
-  await emulator.fs.writeFile(`${webagentDir}/migrations/types.js`, runtimeMigrationsTypesSource);
-  await emulator.fs.writeFile(`${webagentDir}/migrations/state.js`, runtimeMigrationsStateSource);
-  await emulator.fs.writeFile(`${webagentDir}/migrations/runner.js`, runtimeMigrationsRunnerSource);
-  await emulator.fs.writeFile(`${webagentDir}/migrations/registry.js`, runtimeMigrationsRegistrySource);
-  await emulator.fs.writeFile(`${webagentDir}/migrations/001-relocate-state-files.js`, runtimeMigration001Source);
-  await emulator.fs.writeFile(`${webagentDir}/migrations/notify.js`, runtimeMigrationsNotifySource);
-  await emulator.fs.writeFile(`${webagentDir}/state/persistence.js`, runtimePersistenceSource);
-  await emulator.fs.writeFile(`${webagentDir}/cron-scheduling.js`, runtimeCronSchedulingSource);
-  for (const [sourcePath, content] of Object.entries(runtimeRootModuleSources)) {
+  for (const [sourcePath, content] of Object.entries(runtimeModuleSources)) {
     const rel = sourcePath.replace(/^.*dist\/agent-runtime\//, "");
-    await emulator.fs.writeFile(`${webagentDir}/${rel}`, content);
-  }
-  for (const [sourcePath, content] of Object.entries(runtimeToolSources)) {
-    const rel = sourcePath.replace(/^.*dist\/agent-runtime\/tools\//, "tools/");
+    if (!rel) continue;
+    const target = `${webagentDir}/${rel}`;
     const parent = rel.split("/").slice(0, -1).join("/");
     if (parent) await emulator.fs.mkdir(`${webagentDir}/${parent}`, { recursive: true });
-    await emulator.fs.writeFile(`${webagentDir}/${rel}`, content);
+    await emulator.fs.writeFile(target, content);
   }
-  for (const [sourcePath, content] of Object.entries(runtimeLlmModuleSources)) {
-    const rel = sourcePath.replace(/^.*dist\/agent-runtime\//, "");
-    const parent = rel.split("/").slice(0, -1).join("/");
-    if (parent) await emulator.fs.mkdir(`${webagentDir}/${parent}`, { recursive: true });
-    await emulator.fs.writeFile(`${webagentDir}/${rel}`, content);
-  }
-  await emulator.fs.writeFile(`${webagentDir}/channels/telegram.js`, runtimeChannelTelegramSource);
-  await emulator.fs.writeFile(`${webagentDir}/channels/telegram-files.js`, runtimeChannelTelegramFilesSource);
-  await emulator.fs.writeFile(`${webagentDir}/channels/dispatcher.js`, runtimeChannelDispatcherSource);
-  await emulator.fs.writeFile(`${webagentDir}/channels/index.js`, runtimeChannelIndexSource);
-  await emulator.fs.writeFile(`${webagentDir}/voice/telegram-voice.js`, runtimeTelegramVoiceSource);
+
   await emulator.fs.writeFile(`${webagentDir}/vendor/sql-wasm.cjs`, sqlWasmRuntimeSource);
 
   const sqlWasmResponse = await fetch(sqlWasmUrl);
