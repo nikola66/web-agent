@@ -530,7 +530,14 @@ export async function main() {
       history = await sanitizeMessagesMissingSnapshotRefs(history);
       await cleanupSnapshotsNotReferenced(history).catch(() => {});
       const runId = createRunId();
-      const tail = await wrappedAgentTurn(history, cfg, { runId, input, ask: turnAsk });
+      const tail = await wrappedAgentTurn(history, cfg, {
+        runId,
+        input,
+        ask: turnAsk,
+        ...(String(process.env.WEBAGENT_AUTO_APPROVE_TOOLS || "").trim() === "1"
+          ? { autoApprove: true }
+          : {}),
+      });
       for (const m of tail) history.push(m);
       history = await sanitizeMessagesMissingSnapshotRefs(history);
       await saveHistory(history);

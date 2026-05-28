@@ -5,6 +5,7 @@ import fs from "node:fs";
 import path from "path";
 import type { IncomingMessage } from "node:http";
 import { randomUUID } from "node:crypto";
+import { withWebAgentUserAgent } from "./src/agent/runtime/http-upstream";
 import {
   buildProxyDebugLogEntry,
   isTransitOnlyProxyMode,
@@ -231,7 +232,7 @@ function corsProxyGate() {
               : body;
           const upstream = await fetch(url, {
             method,
-            headers,
+            headers: withWebAgentUserAgent(headers),
             ...(upstreamBody != null ? { body: upstreamBody } : {}),
           });
           const PROXY_BODY_CAP = 100_000;

@@ -31,7 +31,7 @@ export default defineConfig({
   },
   webServer: {
     /** `npm run dev -- --host` does not reach Vite (concurrently consumes argv); pass flags on the vite child. */
-    command: `VITE_WEBAGENT_DEBUG_LOG=1 npm run build:embed-runtime && npx concurrently -k "npm:watch:embed-runtime" "vite --host 127.0.0.1 --port ${port} --strictPort"`,
+    command: `VITE_WEBAGENT_DEBUG_LOG=1 VITE_WEBAGENT_AUTO_APPROVE_TOOLS=1 npm run build:embed-runtime && npx concurrently -k "npm:watch:embed-runtime" "vite --host 127.0.0.1 --port ${port} --strictPort"`,
     url: baseURL,
     reuseExistingServer: process.env.PW_REUSE_SERVER === "1",
     timeout: 120_000,

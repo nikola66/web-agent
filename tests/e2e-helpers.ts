@@ -31,8 +31,19 @@ export function testingDirectusToken(): string {
 }
 
 export function countToolCalls(transcript: string, tool: string): number {
-  const re = new RegExp(`▸\\s*${tool}\\b`, "gi");
+  const re = new RegExp(`▸(?:\\s*[^\\s]+\\s+)?${tool}\\b`, "gi");
   return (transcript.match(re) || []).length;
+}
+
+function proxyOriginForPage(page: Page): string {
+  try {
+    const u = new URL(page.url());
+    if (u.protocol.startsWith("http")) return u.origin;
+  } catch {
+    /* fall through */
+  }
+  const port = String(process.env.PLAYWRIGHT_PORT || "5173").trim();
+  return `http://127.0.0.1:${port}`;
 }
 
 /** Probe Directus REST via the dev-server CORS proxy (same path as web_fetch in the browser). */
@@ -41,31 +52,30 @@ export async function directusReachableViaProxy(
   baseUrl: string,
   token: string
 ): Promise<boolean> {
-  const healthUrl = `${baseUrl.replace(/\/$/, "")}/server/health`;
-  return page.evaluate(
-    async ({ url, bearer }) => {
-      try {
-        const res = await fetch("/api/proxy", {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({
-            method: "GET",
-            url,
-            headers: { Authorization: `Bearer ${bearer}`, Accept: "application/json" },
-          }),
-        });
-        if (!res.ok) return false;
-        const payload = (await res.json()) as { status?: number; body?: string };
-        const status = Number(payload.status);
-        if (status >= 200 && status < 300) return true;
-        const body = String(payload.body || "");
-        return body.includes('"status"') && body.includes("ok");
-      } catch {
-        return false;
-      }
-    },
-    { url: healthUrl, bearer: token }
-  );
+  const root = baseUrl.replace(/\/$/, "");
+  const probeUrl = `${root}/collections?limit=1`;
+  const origin = proxyOriginForPage(page);
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      const res = await page.request.post(`${origin}/api/proxy`, {
+        data: {
+          method: "GET",
+          url: probeUrl,
+          headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
+        },
+      });
+      const payload = (await res.json()) as { status?: number; body?: string; error?: string };
+      if (payload.error) continue;
+      const status = Number(payload.status);
+      if (status >= 200 && status < 300) return true;
+      const body = String(payload.body || "");
+      if (body.includes('"data"') && !body.includes("Just a moment")) return true;
+    } catch {
+      /* retry */
+    }
+    await page.waitForTimeout(800);
+  }
+  return false;
 }
 
 export async function ensureProfilesTab(page: Page) {
@@ -144,6 +154,24 @@ export async function clickStopAgent(page: Page, profileName?: string) {
   await profileLaunchControl(page, "Stop").first().click();
 }
 
+export async function configureOpenCodeProvider(page: Page, profileName?: string) {
+  await waitForProfilesLoaded(page);
+  await ensureProfilesTab(page);
+  if (profileName) {
+    await editProfileButton(page, profileName).click();
+  } else {
+    await page.locator('button[aria-label^="Edit "]').first().click();
+  }
+  const dialog = page.getByRole("dialog");
+  await expect(dialog).toBeVisible();
+  const providerCombo = dialog.locator('[aria-haspopup="listbox"]').nth(1);
+  await providerCombo.click();
+  await dialog.getByPlaceholder("Search provider...").fill("OpenCode");
+  await dialog.getByRole("option", { name: "OpenCode (free, limited)" }).click();
+  await dialog.getByRole("button", { name: "Save" }).click();
+  await expect(dialog).toBeHidden({ timeout: 10_000 });
+}
+
 export async function configureOpenRouterApiKey(page: Page, apiKey: string, profileName?: string) {
   await waitForProfilesLoaded(page);
   await ensureProfilesTab(page);
@@ -193,6 +221,11 @@ export async function completeFirstRunSetup(page: Page, userName = "Smoke User")
   await expect(chatRoot).toHaveAttribute("data-agent-onboarding", "false", { timeout: 60_000 });
 }
 
+/** Survives profile storage clears; adapter reads this when spawning the Nodebox agent. */
+export async function enableE2eAutoApproveTools(page: Page) {
+  await page.evaluate(() => sessionStorage.setItem("WEBAGENT_AUTO_APPROVE_TOOLS", "1"));
+}
+
 export async function clearBrowserStorage(page: Page) {
   await page.evaluate(async () => {
     localStorage.clear();
@@ -227,10 +260,36 @@ export async function clearBrowserStorage(page: Page) {
   });
 }
 
+async function approvePendingToolGate(page: Page) {
+  const root = page.getByTestId("chat-input-root");
+  const pendingAttr = await root.getAttribute("data-agent-pending-tool-confirm");
+  const gateVisible = await page.getByText("Permission required").isVisible().catch(() => false);
+  if (pendingAttr !== "true" && !gateVisible) return;
+  const input = runningChatInput(page);
+  for (let i = 0; i < 3; i++) {
+    await input.focus();
+    await input.fill("yes");
+    await input.press("Enter");
+    await page.waitForTimeout(900);
+    const still = await page.getByText("Permission required").isVisible().catch(() => false);
+    if (!still && (await root.getAttribute("data-agent-pending-tool-confirm")) !== "true") return;
+  }
+}
+
 export async function waitForTurnDrained(page: Page, timeout = 180_000) {
   const root = page.getByTestId("chat-input-root");
-  await expect(root).toHaveAttribute("data-agent-awaiting", "false", { timeout });
-  await expect(root).toHaveAttribute("data-agent-queued-count", "0", { timeout: 10_000 });
+  const deadline = Date.now() + timeout;
+  while (Date.now() < deadline) {
+    await approvePendingToolGate(page);
+    const awaiting = await root.getAttribute("data-agent-awaiting");
+    const queued = await root.getAttribute("data-agent-queued-count");
+    const working = await root.getAttribute("data-agent-working");
+    if (awaiting === "false" && queued === "0" && working === "false") return;
+    await page.waitForTimeout(400);
+  }
+  await expect(root).toHaveAttribute("data-agent-awaiting", "false", { timeout: 5_000 });
+  await expect(root).toHaveAttribute("data-agent-queued-count", "0", { timeout: 5_000 });
+  await expect(root).toHaveAttribute("data-agent-working", "false", { timeout: 5_000 });
 }
 
 export async function transcriptLength(page: Page): Promise<number> {

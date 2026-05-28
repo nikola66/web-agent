@@ -106,7 +106,7 @@ export function buildApiCallContextPrefix(input) {
   if (!isApiCallIntent(input)) return null;
   return (
     "[HTTP API] Call skill_view **`http-api`** and any imported skill for this API before the first request. " +
-    "GET + Bearer → web_fetch `{ url, headers }`. POST/GraphQL → web_post `{ url, body, headers }`. " +
+    "GET + Bearer → web_fetch `{ url, headers, response_format: \"api\" }` (never TinyFish). POST/GraphQL → web_post `{ url, body, headers }`. " +
     "Follow the skill's discovery order (health, list metadata, schema) before guessing resource names or GraphQL root fields. " +
     "On validation errors, read `recovery_hint` and fix query shape — do not retry the same malformed call."
   );

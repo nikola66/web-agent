@@ -36,7 +36,7 @@ Canonical procedure for **REST GET** (`web_fetch`) and **HTTP writes** (`web_pos
 
 | Need | Tool | Required args |
 |------|------|----------------|
-| Public or authenticated **GET** | `web_fetch` | `url`; optional `headers`, `params` |
+| Public or authenticated **GET** | `web_fetch` | `url`; optional `headers`, `params`, `response_format` (`api` for REST/GraphQL) |
 | **POST** JSON / GraphQL | `web_post` | `url`, `body` or `json`; optional `headers`, `params`, `timeout_ms` |
 | **PATCH/PUT** REST update | `web_post` | `url`, `body`/`json`, `method` (`"PATCH"` or `"PUT"`); optional `headers`, `params` |
 | **DELETE** REST resource | `web_post` | `url`, `method`: `"DELETE"`; optional `headers`, `params` (body optional) |
@@ -89,6 +89,7 @@ Canonical procedure for **REST GET** (`web_fetch`) and **HTTP writes** (`web_pos
 ```json
 {
   "url": "https://api.example.com/v1/resources/posts",
+  "response_format": "api",
   "params": { "limit": 10, "fields": "id,title" },
   "headers": { "Authorization": "Bearer <token>" }
 }
@@ -105,13 +106,13 @@ JSON responses return `data` + `status`. HTML returns readable `text`.
 
 ### TinyFish markdown vs API (Directus and other SPAs)
 
-When `web_fetch` uses TinyFish (default when no `headers`) and markdown returns a **"JavaScript required"** page (Directus admin often shows: *"Directus doesn't work without JavaScript enabled"*):
+**Routing:** `web_fetch` uses **TinyFish** only for public **HTML pages** (`response_format: "markdown"`). **REST/GraphQL/workflow GETs** use the **direct proxy** (`response_format: "api"`, or inferred automatically for `/items/`, `/graphql`, `/api/`, `api.*` hosts, and any `headers` including `Authorization`).
+
+When TinyFish markdown returns a **"JavaScript required"** page (Directus admin UI often shows: *"Directus doesn't work without JavaScript enabled"*):
 
 - **HTTP 200 means the host responded** — not outage, not "unreachable", and not proof the REST API is broken.
 - That body is the **non-API UI shell** (no JS in TinyFish). Do **not** loop on the same admin/root URL or declare the site down.
-- **Do instead:** call documented REST paths (`/items/…`, `/collections/…`, `/server/info`, …) with `headers.Authorization: Bearer <token>`, `web_post` for writes, or add the Directus MCP server in `.webagent/mcp-servers.json` and call `mcp_*` tools.
-
-Authenticated GET always passes `headers` → routes via `/api/proxy` (JSON), not TinyFish markdown.
+- **Do instead:** call documented REST paths (`/items/…`, `/collections/…`, `/server/info`, …) with `response_format: "api"` and `headers.Authorization: Bearer <token>`, `web_post` for writes, or add the Directus MCP server in `.webagent/mcp-servers.json` and call `mcp_*` tools.
 
 ### Directus / CMS via MCP (optional)
 
