@@ -221,6 +221,11 @@ export async function completeFirstRunSetup(page: Page, userName = "Smoke User")
   await expect(chatRoot).toHaveAttribute("data-agent-onboarding", "false", { timeout: 60_000 });
 }
 
+/** Survives profile storage clears; adapter reads this when spawning the Nodebox agent. */
+export async function enableE2eAutoApproveTools(page: Page) {
+  await page.evaluate(() => sessionStorage.setItem("WEBAGENT_AUTO_APPROVE_TOOLS", "1"));
+}
+
 export async function clearBrowserStorage(page: Page) {
   await page.evaluate(async () => {
     localStorage.clear();

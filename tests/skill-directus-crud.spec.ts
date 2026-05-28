@@ -9,6 +9,7 @@ import {
   CHAT_READY_TIMEOUT_MS,
   clearBrowserStorage,
   configureOpenCodeProvider,
+  enableE2eAutoApproveTools,
   countToolCalls,
   createProfile,
   directusReachableViaProxy,
@@ -114,6 +115,7 @@ test.describe.serial("directus skill install and CMS CRUD (live)", () => {
     );
     await clearBrowserStorage(page);
     await page.goto("/");
+    await enableE2eAutoApproveTools(page);
     await waitForProfilesLoaded(page);
     await createProfile(page, PROFILE_NAME);
     await configureOpenCodeProvider(page, PROFILE_NAME);
