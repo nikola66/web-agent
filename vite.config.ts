@@ -246,7 +246,7 @@ function corsProxyGate() {
             truncated = true;
           }
           res.statusCode = upstream.status;
-          res.setHeader("content-type", upstream.headers.get("content-type") ?? "application/octet-stream");
+          res.setHeader("content-type", "application/json");
           const responseHeaders: Record<string, string> = {};
           upstream.headers.forEach((value, key) => {
             responseHeaders[key] = value;

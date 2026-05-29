@@ -134,6 +134,7 @@ const PYTHON_SKILL_INSTALL_RE = /\b(pip install|python3?|python\s+-m|\.py\b)\b/i
 const API_CALL_INTENT_RE = new RegExp(
   [
     "\\bgraphql\\b",
+    "\\bdirectus\\b",
     "\\brest\\s+api\\b",
     "\\bapi\\s+(call|request|endpoint)\\b",
     "\\bbearer\\b",

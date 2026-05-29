@@ -112,6 +112,14 @@ test("every bundled capability skill is indexed and viewable on demand", async (
         assert.match(viewed.content, /No tools/i, `${slug} should state no-tool contract`);
       }
 
+      if (slug === "http-api") {
+        assert.match(viewed.content, /## Directus GraphQL/);
+        assert.match(viewed.content, /create_Blog_Posts_item/);
+        assert.match(viewed.content, /Blog_Posts_aggregated/);
+        assert.match(viewed.content, /variables/);
+        assert.match(viewed.content, /create_.*_item/);
+      }
+
       if (slug === "web-agent-skill") {
         assert.match(viewed.content, /## Self-Evolution Loop/);
         assert.match(viewed.content, /skill_manage/);

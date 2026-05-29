@@ -8,11 +8,13 @@ import {
   looksLikeApiFetchUrl,
   mergeUrlQueryParams,
   normalizeWebPostMethod,
+  resolveHttpAuthHeaders,
   resolveWebFetchResponseFormat,
   resolveWebPostBody,
   shouldWebFetchUseDirectProxy,
   summarizeHttpErrorBody,
   buildMultipartBody,
+  urlExpectsApiJson,
   webFetchTool,
   webPostTool,
 } from "../dist/agent-runtime/tools/remote-tools.js";
@@ -100,7 +102,17 @@ test("graphqlSchemaRecoveryHint teaches relation linking on input-shape error", 
   assert.match(String(hint), /id/);
   assert.match(String(hint), /variables/i);
   assert.match(String(hint), /http-api/);
-  // Stays generic — no hardcoded customer collection names.
+  assert.match(String(hint), /create_.*Collection.*_item/i);
+  assert.doesNotMatch(String(hint), /directus/i);
+});
+
+test("graphqlSchemaRecoveryHint nudges CMS mutation naming on create_*_item errors", () => {
+  const data = {
+    errors: [{ message: 'Cannot query field "create_posts_item" on type "Mutation". Did you mean "create_Blog_Posts_item"?' }],
+  };
+  const hint = graphqlSchemaRecoveryHint(data, 400);
+  assert.match(String(hint), /create_.*Collection.*_item|Blog_Posts/i);
+  assert.match(String(hint), /http-api/);
   assert.doesNotMatch(String(hint), /directus/i);
 });
 
@@ -157,6 +169,32 @@ test("looksLikeApiFetchUrl detects REST and CMS paths", () => {
   assert.equal(looksLikeApiFetchUrl("https://api.example.com/v1/users"), true);
   assert.equal(looksLikeApiFetchUrl("https://cms.example.com/graphql"), true);
   assert.equal(looksLikeApiFetchUrl("https://example.com/blog/post"), false);
+});
+
+test("urlExpectsApiJson treats CMS GET and all writes as API", () => {
+  assert.equal(urlExpectsApiJson("https://hub.aratech.ae/items/posts", "GET"), true);
+  assert.equal(urlExpectsApiJson("https://hub.aratech.ae/items/posts", "POST"), true);
+  assert.equal(urlExpectsApiJson("https://example.com/about", "GET"), false);
+  assert.equal(urlExpectsApiJson("https://example.com/about", "POST"), true);
+});
+
+test("resolveHttpAuthHeaders maps auth.directus_token to Bearer", async () => {
+  const headers = await resolveHttpAuthHeaders(
+    { auth: { directus_token: "tok123" } },
+    "https://hub.example.com/items/posts"
+  );
+  assert.equal(headers.Authorization, "Bearer tok123");
+});
+
+test("resolveHttpAuthHeaders preserves existing Authorization", async () => {
+  const headers = await resolveHttpAuthHeaders(
+    {
+      headers: { Authorization: "Bearer existing" },
+      auth: { directus_token: "ignored" },
+    },
+    "https://hub.example.com/items/posts"
+  );
+  assert.equal(headers.Authorization, "Bearer existing");
 });
 
 test("shouldWebFetchUseDirectProxy routes API URLs and headers away from TinyFish", () => {

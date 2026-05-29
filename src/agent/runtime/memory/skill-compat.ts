@@ -115,6 +115,7 @@ export function detectPythonLibraries(source: string): string[] {
   }
   if (/\bpip\s+install\b/.test(text)) libs.add("pip");
   if (/\bpip\s+install\b[^;\n]*\bdirectus(?:-skill)?\b/i.test(text)) libs.add("directus");
+  if (/\bnikola66\/directus-skill\b|\bdirectus-skill\b/i.test(text)) libs.add("directus");
   if (/\bpython3?\s+-m\b/.test(text)) libs.add("python-module-cli");
   return [...libs].sort();
 }
@@ -263,7 +264,7 @@ export function buildWebAgentExecutionAppendix(analysis: SkillCompatAnalysis): s
   }
   if (analysis.python_libraries.includes("directus")) {
     lines.push(
-      "| Directus Python SDK (`directus`, `directus-skill`, `pip install directus-skill`) | Directus REST/GraphQL via `web_fetch`/`web_post` with `Authorization: Bearer` — **`http-api`**; no Pyodide SDK |"
+      "| Directus Python SDK (`directus`, `directus-skill`, `pip install directus-skill`, [nikola66/directus-skill](https://github.com/nikola66/directus-skill)) | `skill_view` **`http-api`** (§ Directus GraphQL): `web_fetch`/`web_post` with Bearer — REST `/items/…` or `POST /graphql`; no Pyodide SDK |"
     );
   }
   if (/\bwp-json\b|\bWordPress REST\b|\bwp_publisher\b/i.test(analysis.flags.join(" ") + analysis.python_libraries.join(" "))) {
