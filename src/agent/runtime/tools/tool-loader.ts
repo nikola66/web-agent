@@ -1,7 +1,7 @@
 import fs from "node:fs/promises";
 import nodePath from "node:path";
 import { pathToFileURL } from "node:url";
-import { CAPABILITIES_DIR, WS } from "../constants.js";
+import { getCapabilitiesDir, WS } from "../constants.js";
 import { logDebugEvent } from "../logging/debug-log.js";
 import { errorMessage } from "../utils.js";
 import { BUILTIN_TOOL_DEFINITIONS } from "./builtins/index.js";
@@ -62,7 +62,7 @@ let capabilityToolCatalogCache: Record<string, CapabilityCatalogEntry> | null = 
 
 function capabilityToolRoots() {
   return [
-    nodePath.join(CAPABILITIES_DIR, "tools"),
+    nodePath.join(getCapabilitiesDir(), "tools"),
     nodePath.join(WS, "src", "capabilities", "tools"),
   ];
 }

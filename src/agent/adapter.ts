@@ -385,6 +385,8 @@ async function ensureOnboardingFiles(profileId: string): Promise<void> {
     await emulator.fs.writeFile(cronjobsPath, JSON.stringify({ jobs: [] }, null, 2));
   }
 
+  await emulator.fs.mkdir(`${workspaceDir}/.webagent/skills`, { recursive: true });
+
   const toolPolicyPath = `${workspaceDir}/.webagent/tool-policy.json`;
   try {
     await emulator.fs.readFile(toolPolicyPath);
@@ -528,6 +530,7 @@ function buildEnv(profileId: string, profile: Profile, apiKeys: Record<string, s
     WEBAGENT_MEMORY_ROOT: `${profileWorkspaceRoot}/memory`,
     WEBAGENT_DEBUG_LOG: VITE_DEBUG_LOG_ENABLED ? "1" : "0",
     WEBAGENT_DEBUG_LOG_DIR: RUNTIME_DEBUG_LOG_DIR,
+    ...(import.meta.env.DEV ? { WEBAGENT_PROXY_ALLOW_PRIVATE: "1" } : {}),
     ...(autoApproveTools ? { WEBAGENT_AUTO_APPROVE_TOOLS: "1" } : {}),
     ...toolGuardrailsEnvForRuntime(import.meta.env),
   };

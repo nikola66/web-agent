@@ -207,7 +207,7 @@ function edgeTtsGate() {
   };
 }
 
-function corsProxyGate() {
+function corsProxyGate(proxyEnv: Record<string, string | undefined>) {
   const gate = (server: {
     middlewares: {
       use: (fn: (req: IncomingMessage, res: import("node:http").ServerResponse, next: () => void) => void) => void;
@@ -244,7 +244,7 @@ function corsProxyGate() {
             Buffer.concat(chunks).toString("utf8")
           );
           try {
-            assertProxyTargetAllowed(url);
+            assertProxyTargetAllowed(url, proxyEnv);
           } catch (blockErr) {
             res.statusCode = 403;
             res.setHeader("content-type", "application/json");
@@ -476,6 +476,12 @@ const LLM_PROXIES = buildLlmProxies();
 
 export default defineConfig(({ mode }) => {
   APP_ENV = loadEnv(mode, process.cwd(), "");
+  const proxyEnv: Record<string, string | undefined> = {
+    ...process.env,
+    WEBAGENT_PROXY_ALLOW_PRIVATE:
+      APP_ENV.WEBAGENT_PROXY_ALLOW_PRIVATE ||
+      (mode === "development" ? "1" : process.env.WEBAGENT_PROXY_ALLOW_PRIVATE),
+  };
   if (mode === "production" && !isTransitOnlyProxyMode(LAUNCH_MODE())) {
     console.warn("[privacy] Production deploys should set VITE_WEBAGENT_LAUNCH_MODE=transit_only_proxy.");
   }
@@ -490,7 +496,7 @@ export default defineConfig(({ mode }) => {
       crossOriginIsolationHeaders(),
       edgeTtsGate(),
       llmProxyGate(),
-      corsProxyGate(),
+      corsProxyGate(proxyEnv),
       react(),
       tailwindcss(),
     ],

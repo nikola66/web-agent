@@ -1,11 +1,21 @@
-let WS_VALUE = "/workspace";
-let ROOT_VALUE = "/workspace";
-
-if (typeof process !== "undefined" && process.cwd) {
-  WS_VALUE = process.cwd();
-  // Use process.cwd() as ROOT; path.resolve() not available at module init time
-  ROOT_VALUE = WS_VALUE;
+function ensurePosixAbsolutePath(value: string, defaultRoot = "/workspace"): string {
+  const s = String(value || "").trim().replace(/\\/g, "/");
+  if (!s) return defaultRoot;
+  if (s.startsWith("/")) return s.replace(/\/+$/, "") || "/";
+  const parts = s.split("/").filter(Boolean);
+  if (parts[0] === "workspace") return `/${parts.join("/")}`;
+  return posixResolve(defaultRoot, s);
 }
+
+function readInitialWorkspaceRoot(): string {
+  if (typeof process === "undefined") return "/workspace";
+  const fromEnv = String(process.env?.WEBAGENT_WORKSPACE_ROOT || "").trim();
+  const raw = fromEnv || (typeof process.cwd === "function" ? process.cwd() : "");
+  return ensurePosixAbsolutePath(raw || "/workspace");
+}
+
+let WS_VALUE = readInitialWorkspaceRoot();
+let ROOT_VALUE = WS_VALUE;
 
 export const WS = WS_VALUE;
 export const WORKSPACE_LABEL = "/workspace";
@@ -60,6 +70,14 @@ export function workspaceStatePath(relativePath: string): string {
 
 export function getMemoryRoot(): string {
   return toAbsoluteRoot(envPathOverride("WEBAGENT_MEMORY_ROOT") || `${getRuntimeRoot()}/memory`);
+}
+
+export function getSkillsDir(): string {
+  return `${getWorkspaceRoot()}/.webagent/skills`;
+}
+
+export function getCapabilitiesDir(): string {
+  return `${getWorkspaceRoot()}/.webagent/capabilities`;
 }
 
 export function memoryStatePath(relativePath: string): string {

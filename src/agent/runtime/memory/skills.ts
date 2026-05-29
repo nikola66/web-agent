@@ -4,11 +4,7 @@
 
 import fs from "node:fs/promises";
 import nodePath from "node:path";
-import {
-  CAPABILITIES_DIR,
-  SKILLS_DIR,
-  WS,
-} from "../constants.js";
+import { getCapabilitiesDir, getSkillsDir, WS } from "../constants.js";
 import { resolveWorkspacePath } from "../workspace-paths.js";
 import { errorMessage } from "../utils.js";
 import {
@@ -47,7 +43,7 @@ const SKILL_EXCLUDED_DIRS = new Set(["tests", "examples", "node_modules", ".git"
 const SKILL_SUPPORT_MAX_FILES = 64;
 const SKILL_SUPPORT_MAX_TOTAL_BYTES = 2 * 1024 * 1024;
 const SKILL_SAFE_FILE_MAX_BYTES = 512 * 1024;
-const BUNDLED_SKILLS_DIR = nodePath.join(CAPABILITIES_DIR, "skills");
+const bundledSkillsDir = () => nodePath.join(getCapabilitiesDir(), "skills");
 const MAX_BULK_SKILL_ITEMS = 75;
 const BUNDLED_SKILL_PRIMARY_TOOLS: Record<string, string[]> = {};
 
@@ -262,15 +258,16 @@ function skillPublicPath(absPath) {
 }
 
 function canonicalSkillDir({ category, slug }) {
-  return nodePath.join(SKILLS_DIR, skillCategorySlug(category), skillSlug(slug));
+  return nodePath.join(getSkillsDir(), skillCategorySlug(category), skillSlug(slug));
 }
 
 async function migrateLegacySkillFiles() {
-  await fs.mkdir(SKILLS_DIR, { recursive: true });
-  const entries = await fs.readdir(SKILLS_DIR, { withFileTypes: true }).catch(() => []);
+  const skillsDir = getSkillsDir();
+  await fs.mkdir(skillsDir, { recursive: true });
+  const entries = await fs.readdir(skillsDir, { withFileTypes: true }).catch(() => []);
   for (const entry of entries) {
     if (!entry.isFile() || !entry.name.endsWith(".md")) continue;
-    const legacyPath = nodePath.join(SKILLS_DIR, entry.name);
+    const legacyPath = nodePath.join(skillsDir, entry.name);
     const raw = await fs.readFile(legacyPath, "utf8").catch(() => "");
     if (!raw.trim()) continue;
     let nextRaw = raw;
@@ -349,8 +346,8 @@ async function collectSkillRecords(): Promise<SkillRecord[]> {
       await walk(abs, source);
     }
   };
-  await walk(SKILLS_DIR, "local");
-  await walk(BUNDLED_SKILLS_DIR, "bundled");
+  await walk(getSkillsDir(), "local");
+  await walk(bundledSkillsDir(), "bundled");
   if (!records.some((record) => record.source === "bundled")) {
     await walk(nodePath.join(WS, "src", "capabilities", "skills"), "bundled");
   }
@@ -793,7 +790,7 @@ async function installSkillFromUrl({ url, category }) {
     category: String(category || validation.meta.category || "imported"),
     content: patchedRaw,
   });
-  const hubDir = nodePath.join(SKILLS_DIR, ".hub");
+  const hubDir = nodePath.join(getSkillsDir(), ".hub");
   await fs.mkdir(hubDir, { recursive: true });
   await recordSkillHubLock(result.slug, {
     source: normalizedUrl,

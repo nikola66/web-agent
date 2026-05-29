@@ -1,13 +1,13 @@
 import fs from "node:fs/promises";
 import nodePath from "node:path";
 import { pathToFileURL } from "node:url";
-import { CAPABILITIES_DIR } from "../constants.js";
+import { getCapabilitiesDir } from "../constants.js";
 import { createChannelInboundHandler } from "./dispatcher.js";
 
 async function loadCapabilityChannel(id) {
   const safeId = String(id || "").trim();
   if (!/^[a-z][a-z0-9_-]*$/.test(safeId)) return null;
-  const dir = nodePath.join(CAPABILITIES_DIR, "channels", safeId);
+  const dir = nodePath.join(getCapabilitiesDir(), "channels", safeId);
   const runtimePath = nodePath.join(dir, "runtime.js");
   const manifestPath = nodePath.join(dir, "manifest.json");
   const stat = await fs.stat(runtimePath).catch(() => null);

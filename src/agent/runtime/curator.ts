@@ -4,7 +4,7 @@
 
 import fs from "node:fs/promises";
 import nodePath from "node:path";
-import { SKILLS_DIR, workspaceStatePath } from "./constants.js";
+import { getSkillsDir, workspaceStatePath } from "./constants.js";
 import { dim } from "./terminal-format.js";
 import { logDebugEvent } from "./logging/debug-log.js";
 import { emitSelfImprovementSummary } from "./identity/onboarding.js";
@@ -78,7 +78,7 @@ export async function loadCuratorState(): Promise<CuratorState> {
 }
 
 async function saveCuratorState(state: CuratorState): Promise<void> {
-  await fs.mkdir(SKILLS_DIR, { recursive: true });
+  await fs.mkdir(getSkillsDir(), { recursive: true });
   await fs.writeFile(CURATOR_STATE_PATH, JSON.stringify(state, null, 2), "utf8");
 }
 
@@ -234,7 +234,7 @@ export async function archiveAgentSkillBySlug(slug: string, absorbedInto?: strin
   if (!skill || skill.source === "bundled") {
     throw new Error(`skill curator: '${slug}' not found or protected.`);
   }
-  const dir = nodePath.join(SKILLS_DIR, skill.category, slug);
+  const dir = nodePath.join(getSkillsDir(), skill.category, slug);
   await archiveSkillDirectory(dir, slug, absorbedInto || null);
 }
 
