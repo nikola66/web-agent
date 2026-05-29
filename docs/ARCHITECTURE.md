@@ -89,8 +89,10 @@ The same framing is used for streaming LLM responses (`ipcProxyStreamRequest` in
 
 ## Skills
 
-- Bundled procedures live under `src/capabilities/skills/<id>/SKILL.md` (compact index injected each turn; full body via `skill` action=view).
-- User/imported skills live under `.webagent/skills/`. Remote imports auto-append a **Web Agent execution** compatibility section via `memory/skill-compat.ts` so skills.sh hosts map to built-in tools (`web_fetch`, `web_post`, file tools, etc.).
+- **In the sandbox:** user/imported skills live under `.webagent/skills/<category>/<slug>/SKILL.md` (install via `skill` action=manage `import_dir` after `extract_archive`). Bundled procedures are seeded each launch under `.webagent/capabilities/skills/<id>/` (read-only; included in `skill` action=list — do not copy user skills there).
+- **In the host repo:** contributors edit `src/capabilities/skills/<id>/SKILL.md`; the adapter copies them into `.webagent/capabilities/skills/` on profile boot.
+- Remote imports auto-append a **Web Agent execution** compatibility section via `memory/skill-compat.ts` so skills.sh hosts map to built-in tools (`web_fetch`, `web_post`, file tools, etc.).
+- Every turn injects a **Workspace & filesystem** directory map (`workspace-map.ts` → system prompt + `.webagent/workspace-map.md`).
 
 ## Build pipeline
 

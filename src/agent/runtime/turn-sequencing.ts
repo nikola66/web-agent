@@ -192,7 +192,7 @@ export function buildSkillInstallContextPrefix(input) {
   if (!isSkillInstallIntent(input)) return null;
   let prefix =
     "[Skill install] Some GitHub repos are curated indexes (README + outbound links), not skill hosts. " +
-    "For uploaded/extracted skill archives: after `extract_archive`, locate the directory containing `SKILL.md`, then call `skill` with `action: \"manage\"`, `manage_action: \"import_dir\"`, and that directory path. " +
+    "For uploaded/extracted skill archives: after `extract_archive` (from `.webagent/telegram-inbox/` when needed), locate the directory containing `SKILL.md`, then `skill` action=manage manage_action=import_dir path=<that-folder> — installs under `.webagent/skills/<category>/<slug>/`, NOT `.webagent/capabilities/skills/`. " +
     "Read the README, follow registry links (officialskills.sh / skills.sh / skillsmp) or source-repo URLs — " +
     "do not guess raw paths from list labels. On 404: web_fetch registry pages, resolve GitHub links, " +
     "try alternate repo layouts, web_search — pivot before declaring a blocker. " +

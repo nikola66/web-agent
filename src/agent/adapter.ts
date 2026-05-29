@@ -385,7 +385,10 @@ async function ensureOnboardingFiles(profileId: string): Promise<void> {
     await emulator.fs.writeFile(cronjobsPath, JSON.stringify({ jobs: [] }, null, 2));
   }
 
-  await emulator.fs.mkdir(`${workspaceDir}/.webagent/skills`, { recursive: true });
+  const { workspaceBootstrapDirRels } = await import("@/core/workspace-layout");
+  for (const rel of workspaceBootstrapDirRels()) {
+    await emulator.fs.mkdir(`${workspaceDir}/${rel}`, { recursive: true });
+  }
 
   const toolPolicyPath = `${workspaceDir}/.webagent/tool-policy.json`;
   try {

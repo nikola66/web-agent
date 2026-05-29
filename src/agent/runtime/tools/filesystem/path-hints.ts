@@ -70,9 +70,11 @@ function workspaceLayoutHint(input) {
   const base = nodePath.posix.basename(normalizeRelPath(input));
   const findHint = base && base !== input ? ` Or find_files({"pattern":"${base}"}).` : "";
   return (
-    "Paths are relative to workspace root (`.` = top level), not the host repo — " +
-    "run list_dir({\"path\":\".\"}) or tree({\"path\":\".\"}) before assuming package.json, " +
-    `src/, or .webagent/... paths exist.${findHint}`
+    "Paths are workspace-relative (`.` = sandbox root), not the host repo. " +
+    "See the Workspace & filesystem map in the system prompt (or read `.webagent/workspace-map.md`). " +
+    "User skills: `.webagent/skills/<category>/<slug>/` — not `.webagent/capabilities/skills/`. " +
+    "Deliverables: `projects/<slug>/` or `work/<slug>/`. Uploads: `.webagent/telegram-inbox/`. " +
+    `Run browse_workspace({"action":"tree","path":"."}) before assuming paths exist.${findHint}`
   );
 }
 

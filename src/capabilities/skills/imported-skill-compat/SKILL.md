@@ -51,7 +51,7 @@ triggers: [imported skill, skills.sh install, skill compat, WebFetch, agent-brow
 | **limited** | Needs Pyodide compatibility checks or host-only shell | pdf (Python), mcp-builder, tdd (shell), **skill-creator** (Python scripts + skip `claude -p`) |
 | **unsupported** | No browser automation in Nodebox | agent-browser, webapp-testing (Playwright) |
 
-Remote imports auto-append a **Web Agent execution (auto-appended)** section to saved `SKILL.md` files under `.webagent/skills/`. Bundled skills under `src/capabilities/skills/` are not patched.
+Remote imports auto-append a **Web Agent execution (auto-appended)** section to saved `SKILL.md` files under `.webagent/skills/<category>/<slug>/`. Bundled skills under `.webagent/capabilities/skills/` (sandbox seed from host `src/capabilities/skills/`) are not patched — never install user skills there; use `skill` action=manage `import_dir` instead.
 
 ## Relation to other skills
 

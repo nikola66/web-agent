@@ -517,6 +517,17 @@ export function validateRequiredArguments(
   ) {
     hint = ' Use JSON key `name` (not `slug`), e.g. {"name":"http-api"}.';
   }
+  if (toolName === "write_file" && missing.includes("path") && missing.includes("content")) {
+    hint =
+      ' Example: {"path":"projects/my-slug/file.txt","content":"line1\\nline2"}. Both must be top-level JSON strings.';
+  } else if (toolName === "write_file" && missing.includes("content")) {
+    hint = ' Add string field `content` (file body). Example: {"path":"work/notes.md","content":"# Notes"}';
+  } else if (toolName === "write_file" && missing.includes("path")) {
+    hint =
+      ' Add string field `path` (workspace-relative). Example: {"path":"projects/my-slug/out.txt","content":"..."}';
+  } else if (toolName === "skill" && missing.includes("action")) {
+    hint = ' Example: {"action":"list"} or {"action":"manage","manage_action":"import_dir","path":".webagent/telegram-inbox/foo-extracted/my-skill"}';
+  }
   const ex = schema?.examples;
   if (Array.isArray(ex) && ex.length && ex[0] && typeof ex[0] === "object") {
     try {

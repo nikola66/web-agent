@@ -63,7 +63,7 @@ Create `src/capabilities/channels/<channel_id>/`:
 
 Create `src/capabilities/skills/<skill_id>/SKILL.md`.
 
-Bundled skills use the same `SKILL.md` validation as user-created skills. User-created skills in `.webagent/skills/` take precedence over bundled skills with the same slug.
+Bundled skills use the same `SKILL.md` validation as user-created skills. In the **sandbox**, user skills live in `.webagent/skills/<category>/<slug>/` and take precedence over bundled copies under `.webagent/capabilities/skills/`. Install imports with `skill` action=manage `import_dir` — do not copy into `capabilities/skills/`. Host contributors edit `src/capabilities/skills/<skill_id>/SKILL.md`.
 
 **Discovery surface:** Each turn injects a compact index built from frontmatter only (`name`, `description`, optional `triggers`, `tags`) — not the full `SKILL.md` body. Write `description` and `triggers` so they match how users phrase requests; load procedures with `skill_view`.
 

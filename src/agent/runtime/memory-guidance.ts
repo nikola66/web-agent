@@ -24,21 +24,27 @@ export const SESSION_SEARCH_GUIDANCE =
   "or `last session` for recency-only browse. Prior-session transcript may already appear in the " +
   "prompt — search when you need older or keyword-specific detail.";
 
+export const WORKSPACE_LAYOUT_GUIDANCE =
+  "Full directory map is in the **Workspace & filesystem** block above (also `.webagent/workspace-map.md`). " +
+  "Deliverables → `projects/<slug>/` or `work/<slug>/` (make_dir first). User/imported skills → `.webagent/skills/<category>/<slug>/` " +
+  "via `skill` import_dir — never `.webagent/capabilities/skills/` (bundled seed only). Telegram/archives → `.webagent/telegram-inbox/` then extract_archive. " +
+  "Host repo paths like `src/capabilities/skills/` are outside the sandbox.";
+
 export const WORKSPACE_BROWSE_GUIDANCE =
-  "Workspace paths in `browse_workspace`, `read_file`, and `grep` are **relative to " +
+  "Workspace paths in `browse_workspace`, `read_file`, `write_file`, and `grep` are **relative to " +
   "the workspace root** (`.` = top level). Never use `/` or host paths like `/home/...`. " +
-  "**First browse step:** run `browse_workspace({\"action\":\"list\",\"path\":\".\"})` or " +
-  "`browse_workspace({\"action\":\"tree\",\"path\":\".\"})` before assuming files exist. " +
+  "**First browse step:** run `browse_workspace({\"action\":\"tree\",\"path\":\".\"})` before assuming paths exist. " +
   "`browse_workspace` **`action`**: `list` (one directory), `tree` (layout), `find` (cross-tree by name). " +
   "`grep` **`root`** is a directory to recurse (default `.`) or a single file path to search. " +
-  "`grep` / browse `find` use **`pattern`**; **`query`** is only for `session_search`.";
+  "`grep` / browse `find` use **`pattern`**; **`query`** is only for `session_search`. " +
+  WORKSPACE_LAYOUT_GUIDANCE;
 
 export const TOOL_JSON_ARGS_GUIDANCE =
   "Tool arguments must be plain JSON with the schema keys each tool declares — do not swap names " +
-  "(grep/browse find: `pattern`; session_search: `query`; read_file/browse_workspace: `path` or `root`; " +
-  "skill (action=view/manage): `name` — not `slug`). " +
-  "Examples: {\"pattern\":\"TODO\"}, {\"query\":\"last outreach\"}, {\"path\":\".\"}. " +
-  "Do not escape property names and do not wrap values in extra quote layers.";
+  "(grep/browse find: `pattern`; session_search: `query`; read_file/write_file: `path` + `content`; " +
+  "browse_workspace: `action` + `path`; skill view/manage: `name` — not `slug`; skill manage: `action` required). " +
+  "Examples: {\"path\":\"projects/demo/out.txt\",\"content\":\"hello\"}, {\"pattern\":\"TODO\"}, " +
+  "{\"action\":\"view\",\"name\":\"http-api\"}. Do not escape property names or wrap values in extra quote layers.";
 
 export const SESSION_MEMORY_GUIDANCE =
   "Use `session_memory_append` for rolling investigation notes, temporary decisions, and artifact " +
