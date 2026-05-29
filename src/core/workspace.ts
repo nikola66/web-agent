@@ -22,6 +22,7 @@ import {
   WORKSPACE_PLANS_DIR_REL,
   WORKSPACE_WEBAGENT_USER_FILES,
   WORKSPACE_WEBAGENT_USER_SUBDIRS,
+  workspaceBootstrapDirRels,
 } from "./workspace-layout";
 
 export * from "./workspace-layout";
@@ -433,10 +434,9 @@ async function listLiveWorkspaceFiles(profileId: string): Promise<WorkspaceFileE
   const results: WorkspaceFileEntry[] = [];
 
   try {
-    for (const sub of WORKSPACE_WEBAGENT_USER_SUBDIRS) {
-      await emulator.fs.mkdir(`${workspaceDir}/.webagent/${sub}`, { recursive: true });
+    for (const rel of workspaceBootstrapDirRels()) {
+      await emulator.fs.mkdir(`${workspaceDir}/${rel}`, { recursive: true });
     }
-    await emulator.fs.mkdir(`${workspaceDir}/${WORKSPACE_PLANS_DIR_REL}`, { recursive: true });
   } catch {
     /* best effort */
   }

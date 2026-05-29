@@ -1,9 +1,6 @@
 /**
- * Canonical workspace-relative paths for the Nodebox profile cwd
- * (`/workspace/{profileId}` in-browser). Kept in one place so OPFS sync,
- * live listing, and the Files explorer stay aligned with agent runtime tools.
- *
- * Runtime mirror: `src/agent/runtime/workspace-layout.ts` (embed bundle).
+ * Canonical workspace-relative paths for the Nodebox profile cwd.
+ * Mirror of `src/core/workspace-layout.ts` — keep in sync (see tests/workspace-layout-parity.test.ts).
  */
 
 export const WORKSPACE_PROJECTS_DIR_REL = "projects";
@@ -61,7 +58,7 @@ export const WORKSPACE_WEBAGENT_USER_FILES = [
   WORKSPACE_TOOL_POLICY_REL,
 ] as const;
 
-/** Default dirs to show in the Files tree even when empty (matches primary user-facing vaults). */
+/** Default dirs to show in the Files tree even when empty. */
 export const WORKSPACE_EMPTY_DIR_INJECTION: readonly string[] = [
   WORKSPACE_PLANS_DIR_REL,
   WORKSPACE_KNOWLEDGE_VAULT_DIR_REL,

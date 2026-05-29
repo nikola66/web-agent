@@ -24,21 +24,29 @@ export const SESSION_SEARCH_GUIDANCE =
   "or `last session` for recency-only browse. Prior-session transcript may already appear in the " +
   "prompt — search when you need older or keyword-specific detail.";
 
+export const WORKSPACE_LAYOUT_GUIDANCE =
+  "Full directory map is in the **Workspace & filesystem** block above (also `.webagent/workspace-map.md`). " +
+  "Deliverables → `projects/<slug>/` or `work/<slug>/` (make_dir first). User/imported skills → `.webagent/skills/<category>/<slug>/` " +
+  "via `skill` import_dir — never `.webagent/capabilities/skills/` (bundled seed only). Telegram/archives → `.webagent/telegram-inbox/` then extract_archive. " +
+  "Host repo paths like `src/capabilities/skills/` are outside the sandbox.";
+
 export const WORKSPACE_BROWSE_GUIDANCE =
-  "Workspace paths in `browse_workspace`, `read_file`, and `grep` are **relative to " +
+  "Workspace paths in `browse_workspace`, `read_file`, `write_file`, and `grep` are **relative to " +
   "the workspace root** (`.` = top level). Never use `/` or host paths like `/home/...`. " +
-  "**First browse step:** run `browse_workspace({\"action\":\"list\",\"path\":\".\"})` or " +
-  "`browse_workspace({\"action\":\"tree\",\"path\":\".\"})` before assuming files exist. " +
+  "**First browse step:** run `browse_workspace({\"action\":\"tree\",\"path\":\".\"})` before assuming paths exist. " +
   "`browse_workspace` **`action`**: `list` (one directory), `tree` (layout), `find` (cross-tree by name). " +
   "`grep` **`root`** is a directory to recurse (default `.`) or a single file path to search. " +
-  "`grep` / browse `find` use **`pattern`**; **`query`** is only for `session_search`.";
+  "`grep` / browse `find` use **`pattern`**; **`query`** is only for `session_search`. " +
+  WORKSPACE_LAYOUT_GUIDANCE;
+
+export const WRITE_FILE_GUIDANCE =
+  "write_file: one JSON object `{\"path\":\"projects/<slug>/file.md\",\"content\":\"...\"}` — not markdown-wrapped, not split across pseudo-fields. " +
+  "Full article body goes in `content` as one escaped string (\\n for newlines). Up to 16 MiB per call; split by section if larger.";
 
 export const TOOL_JSON_ARGS_GUIDANCE =
-  "Tool arguments must be plain JSON with the schema keys each tool declares — do not swap names " +
-  "(grep/browse find: `pattern`; session_search: `query`; read_file/browse_workspace: `path` or `root`; " +
-  "skill (action=view/manage): `name` — not `slug`). " +
-  "Examples: {\"pattern\":\"TODO\"}, {\"query\":\"last outreach\"}, {\"path\":\".\"}. " +
-  "Do not escape property names and do not wrap values in extra quote layers.";
+  "Tool arguments must be plain JSON with schema keys — grep/browse: `pattern`; session_search: `query`; " +
+  "browse_workspace: `action` + `path`; skill: `name` not `slug`, manage needs `action`. " +
+  WRITE_FILE_GUIDANCE;
 
 export const SESSION_MEMORY_GUIDANCE =
   "Use `session_memory_append` for rolling investigation notes, temporary decisions, and artifact " +
@@ -95,6 +103,9 @@ export function buildMemoryLayerGuidanceBlock(toolNames: string[] = []): string 
     tools.has("session_memory_list")
   ) {
     parts.push(TOOL_JSON_ARGS_GUIDANCE);
+  }
+  if (tools.has("write_file")) {
+    parts.push(WRITE_FILE_GUIDANCE);
   }
   if (
     tools.has("browse_workspace") ||

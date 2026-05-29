@@ -3,6 +3,13 @@
  */
 
 import { WORKSPACE_LABEL } from "../constants.js";
+import {
+  formatWriteFileMissingFieldsHint,
+  normalizeWriteFileArgs,
+  parseWriteFileToolArguments,
+  salvageWriteFileArgumentsFromRawJson,
+  writeFileArgsMissing,
+} from "./write-file-args.js";
 
 interface JSONSchema {
   type?: string | string[];
@@ -258,17 +265,34 @@ export function repairLooseToolCallObject(raw: unknown): { name: string; argumen
 export function parseToolArguments(raw: unknown, toolName?: string): Record<string, unknown> {
   if (raw == null) return {};
   if (typeof raw === "object" && !Array.isArray(raw)) {
-    return repairMalformedToolArguments(raw as Record<string, unknown>);
+    const repaired = repairMalformedToolArguments(raw as Record<string, unknown>);
+    return toolName === "write_file" ? parseWriteFileToolArguments(raw, repaired) : repaired;
   }
   if (typeof raw === "string") {
     const wire = repairToolCallArgumentsJson(raw, toolName);
     try {
       const parsed = JSON.parse(wire);
       if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
-        return repairMalformedToolArguments(parsed as Record<string, unknown>);
+        const repaired = repairMalformedToolArguments(parsed as Record<string, unknown>);
+        if (toolName === "write_file") {
+          return parseWriteFileToolArguments(raw, repaired);
+        }
+        return repaired;
       }
     } catch {
+      if (toolName === "write_file") {
+        const salvaged = salvageWriteFileArgumentsFromRawJson(raw);
+        if (salvaged) {
+          return repairMalformedToolArguments(normalizeWriteFileArgs(salvaged));
+        }
+      }
       return {};
+    }
+    if (toolName === "write_file") {
+      const salvaged = salvageWriteFileArgumentsFromRawJson(raw);
+      if (salvaged) {
+        return repairMalformedToolArguments(normalizeWriteFileArgs(salvaged));
+      }
     }
     return {};
   }
@@ -501,7 +525,16 @@ export function validateRequiredArguments(
   const required = Array.isArray(schema?.required) ? schema.required : [];
   if (!required.length) return null;
 
-  const argsObj = args && typeof args === "object" ? (args as Record<string, unknown>) : {};
+  let argsObj = args && typeof args === "object" ? (args as Record<string, unknown>) : {};
+  if (toolName === "write_file") {
+    argsObj = normalizeWriteFileArgs(argsObj);
+    const writeMissing = writeFileArgsMissing(argsObj);
+    if (!writeMissing.length) return null;
+    let hint = ` ${formatWriteFileMissingFieldsHint(writeMissing)}`;
+    return `invalid arguments: missing required field(s) [${writeMissing.join(
+      ", "
+    )}] for ${toolName}. Provide all required fields from the tool schema.${hint}`;
+  }
   const missing = required.filter((key) => {
     if (!(key in argsObj)) return true;
     return argsObj[key] === undefined;
@@ -516,6 +549,11 @@ export function validateRequiredArguments(
     !String(argsObj.name || "").trim()
   ) {
     hint = ' Use JSON key `name` (not `slug`), e.g. {"name":"http-api"}.';
+  }
+  if (toolName === "write_file") {
+    hint = ` ${formatWriteFileMissingFieldsHint(missing)}`;
+  } else if (toolName === "skill" && missing.includes("action")) {
+    hint = ' Example: {"action":"list"} or {"action":"manage","manage_action":"import_dir","path":".webagent/telegram-inbox/foo-extracted/my-skill"}';
   }
   const ex = schema?.examples;
   if (Array.isArray(ex) && ex.length && ex[0] && typeof ex[0] === "object") {

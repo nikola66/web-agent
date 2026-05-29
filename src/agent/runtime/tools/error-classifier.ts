@@ -424,10 +424,17 @@ function classifyFromMessage(message: string, statusHint: number | null): Omit<C
     retryable = false;
     error_code = message.includes("unknown tool") ? "unknown_tool" : "invalid_arguments";
     shouldFallback = true;
-    const hintBase =
-      /create_archive/i.test(message)
-        ? "There is no create_archive tool. Use run_python with stdlib zipfile to write work/<slug>/bundle.zip, then archive_list and artifact_present."
-        : "Fix tool name and arguments per schema.";
+    let hintBase = "Fix tool name and arguments per schema.";
+    if (/create_archive/i.test(message)) {
+      hintBase =
+        "There is no create_archive tool. Use run_python with stdlib zipfile to write work/<slug>/bundle.zip, then archive_list and artifact_present.";
+    } else if (/write_file/i.test(message) && /missing required|invalid arguments/i.test(message)) {
+      hintBase =
+        'write_file: one JSON object with string "path" and "content" — not markdown-fenced; see Memory layers → write_file guidance.';
+    } else if (/^skill:/i.test(message) && /missing required.*action/i.test(message)) {
+      hintBase =
+        'skill needs `action` (list|view|manage|bulk), e.g. {"action":"list"} or {"action":"manage","manage_action":"import_dir","path":"<dir-with-SKILL.md>"}.';
+    }
     return { reason, retryable, shouldCompress, shouldFallback, error_code, hintBase };
   }
 

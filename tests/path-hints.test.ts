@@ -23,8 +23,8 @@ test("buildMissingPathHint explains missing parent and workspace layout", async 
     `tmp/_missing_path_hint_${Date.now()}/src/agent/runtime/background-review.ts`
   );
   assert.match(hint, /Path not found:/);
-  assert.match(hint, /workspace root/);
-  assert.match(hint, /list_dir/);
+  assert.match(hint, /workspace-relative|workspace root/i);
+  assert.match(hint, /browse_workspace|workspace-map/);
 });
 
 test("resolveGrepSearchTarget accepts existing file paths", async () => {

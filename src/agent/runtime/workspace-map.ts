@@ -1,70 +1,116 @@
 /**
  * Runtime filesystem orientation for the agent.
  *
- * The agent runs inside an in-browser Nodebox sandbox rooted at the workspace
- * directory. The host application source (MCP client/host, the IPC adapter, and
- * the host-side tool implementations) lives OUTSIDE this sandbox and is not
- * reachable by any file tool. Without an explicit map the agent wastes turns
- * grepping the workspace for host code that physically isn't there, and
- * second-guesses where its own state files live.
- *
- * `buildWorkspaceMapBlock()` is appended to the system prompt; the same content
- * is written to `.webagent/workspace-map.md` so it is also discoverable via
- * `read_file` and the Files explorer.
+ * `buildWorkspaceMapBlock()` is appended to the system prompt every turn; the same
+ * content is written to `.webagent/workspace-map.md` for read_file / Files explorer.
  */
 
 import fs from "node:fs/promises";
 import {
   WORKSPACE_MAP_REL,
+  WS,
   getMemoryRoot,
   getWorkspaceRoot,
   workspaceStatePath,
 } from "./constants.js";
-import { ensureParentDir } from "./workspace-paths.js";
+import {
+  WORKSPACE_BUNDLED_SKILLS_REL,
+  WORKSPACE_KNOWLEDGE_VAULT_DIR_REL,
+  WORKSPACE_PLANS_DIR_REL,
+  WORKSPACE_PROJECTS_DIR_REL,
+  WORKSPACE_TELEGRAM_INBOX_REL,
+  WORKSPACE_WORK_DIR_REL,
+  workspaceBootstrapDirRels,
+} from "./workspace-layout.js";
+import { ensureParentDir, resolveWorkspacePath } from "./workspace-paths.js";
+import { createToolContext } from "./tools/context.js";
 
-/** Single source of truth for the orientation text. Derived from runtime path constants so it can't drift. */
 export function buildWorkspaceMapBlock(): string {
   const root = getWorkspaceRoot();
   const memory = getMemoryRoot();
   return [
-    "# Workspace & filesystem",
+    "# Workspace & filesystem (injected every turn)",
     "",
-    `You run inside an in-browser Nodebox sandbox. Your workspace root is \`${root}\`.`,
-    "Every file tool (read_file, write_file, grep, find_files, list_dir, tree, browse_workspace)",
-    "resolves paths under this root — relative paths anchor here and the root is the boundary",
-    "(paths that escape it are rejected). The workspace root itself is reserved: put deliverables",
-    "under `projects/<slug>/` or `work/<slug>/` (make_dir first), not at the root.",
+    `Sandbox root: \`${root}\` (display label \`/workspace\`). All file tools resolve paths here.`,
+    "Use workspace-relative paths only — never `/home/...`, never host repo paths like `src/agent/...`.",
     "",
-    "## What lives here, and what persists",
-    "Persisted across sessions (your durable state — safe to read and edit):",
-    "- `.webagent/skills/`, `.webagent/capabilities/`, `.webagent/knowledge-vault/`, `.webagent/checkpoints/`",
-    "- `.webagent/mcp-servers.json`, `.webagent/mcp-secrets.json`, `.webagent/tool-policy.json`",
-    "- `.webagent/history.json`, `.webagent/todos.json`, `.webagent/cronjobs.json`, `.webagent/session-memory.jsonl`,",
-    "  `.webagent/channel-state.json`, `.webagent/heartbeat-state.json`, `.webagent/composio-actions.jsonl`",
-    "- `plans/` (saved `/plan` markdown)",
-    `- \`${memory}/\` (long-term memory: conversations, runs, reflections, snapshots, memory.sqlite)`,
+    "## Directory map (where things belong)",
+    "```",
+    ".                          # workspace root — identity files only; NOT deliverables",
+    "├── AGENT.md USER.md SOUL.md HEARTBEAT.md",
+    `├── ${WORKSPACE_PLANS_DIR_REL}/                 # saved /plan markdown`,
+    `├── ${WORKSPACE_PROJECTS_DIR_REL}/<slug>/        # durable user deliverables (apps, demos, client work)`,
+    `├── ${WORKSPACE_WORK_DIR_REL}/<slug>/            # scratch / spikes / one-off exports`,
+    "├── memory/                  # agent persistence (sql.js + JSON artifacts)",
+    "│   ├── conversations/       # archived chats (session_search)",
+    "│   ├── runs/                # turn logs — tool names/errors ONLY; never grep for API bodies",
+    "│   ├── reflections/ learnings (via sqlite)",
+    "│   ├── snapshots/           # oversized tool-result spill — use list_digest, not scavenger reads",
+    "│   ├── jobs/ channels/",
+    "│   └── memory.sqlite",
+    "└── .webagent/",
+    `    ├── skills/<category>/<slug>/SKILL.md   # USER + imported skills (skill list/manage/import_dir)`,
+    `    ├── ${WORKSPACE_BUNDLED_SKILLS_REL}/<slug>/   # BUNDLED seed — read-only; re-copied each launch`,
+    "    │   └── (do NOT install or copy user skills here)",
+    `    ├── ${WORKSPACE_TELEGRAM_INBOX_REL}/   # Telegram/channel uploads; archives land here`,
+    "    │   └── extract with extract_archive / archive_list (no path = newest inbox zip)",
+    `    ├── ${WORKSPACE_KNOWLEDGE_VAULT_DIR_REL}/  # wiki / knowledge base files`,
+    "    ├── checkpoints/         # /checkpoint rollback snapshots",
+    "    ├── capabilities/      # capability tool handlers (system-seeded)",
+    "    ├── session-memory.jsonl history.json todos.json cronjobs.json …",
+    "    ├── mcp-servers.json mcp-secrets.json tool-policy.json",
+    "    └── workspace-map.md     # this map (also in system prompt)",
+    "```",
     "",
-    "System-seeded and EPHEMERAL — regenerated on every launch, do not hand-edit (changes are lost):",
-    "- `.webagent/tools.json`, `.webagent/providers.json`, `.webagent/browseragent.json`, `.webagent/channels.json`",
-    "- `.webagent/tools-capability-index.md`, `.webagent/workspace-map.md` (this map), `agent.js`",
+    "## Skills (common confusion)",
+    `- **Install / import / edit procedures:** \`.webagent/skills/<category>/<slug>/\` (e.g. \`.webagent/skills/local/my-skill/SKILL.md\`).`,
+    `- **After \`extract_archive\`:** find the folder that contains \`SKILL.md\`, then \`skill\` action=manage manage_action=import_dir path=<that-folder> — do not hand-copy to capabilities.`,
+    `- **Bundled built-ins:** \`${WORKSPACE_BUNDLED_SKILLS_REL}/\` is seeded from the app each launch — \`skill\` action=list already includes them; never move user skills here.`,
+    "- Repo contributor path `src/capabilities/skills/` is **outside** this sandbox (host source only).",
     "",
-    "## The sandbox boundary (read this before debugging the runtime)",
-    "The host application's OWN source code is NOT in this workspace and cannot be found with",
-    "grep / find_files / read_file. That includes the MCP client and host, the IPC adapter that",
-    "bridges your tool calls to the browser, and the host-side implementations of your tools.",
-    "Searching the workspace for symbols like `McpHost`, the IPC adapter, or `mcp_reload` will",
-    "always come up empty — that code runs in the host process, outside the sandbox.",
+    "## Tool path & argument contract",
+    "| Tool | Required path keys | Notes |",
+    "|------|-------------------|-------|",
+    "| read_file, write_file, edit_file, list_dir, tree | `path` | Aliases: `file`, `filename`, `file_path` |",
+    "| write_file | `path` + `content` (both strings, one JSON object) | Up to 16 MiB; full article in `content`; split sections if larger |",
+    "| grep | `pattern`; optional `root` (dir or file) | Not `query` |",
+    "| browse_workspace | `action` + `path` | `list` \\| `tree` \\| `find` |",
+    "| session_search | `query` | Not `pattern` |",
+    "| skill view/manage | `name` (slug) | Not `slug` key alone |",
+    "| extract_archive | `archive_path` (or omit for newest inbox zip) | Then import_dir on extracted SKILL.md folder |",
+    "| make_dir | `path` | Prefer `projects/<slug>/` or `work/<slug>/` before writes |",
     "",
-    "To debug MCP: inspect/edit `.webagent/mcp-servers.json` and `.webagent/mcp-secrets.json`,",
-    "use the MCP tools, and probe servers directly with `web_post`. Writing either MCP config file",
-    "triggers a host-side reload and the write result reports the new connection status — rely on",
-    "that signal rather than hunting for host source.",
+    "First orientation step when unsure: `browse_workspace({\"action\":\"tree\",\"path\":\".\"})` or `list_dir({\"path\":\".webagent\"})`.",
+    "",
+    "## Persisted vs ephemeral",
+    "Persisted (safe to read/edit): `.webagent/skills/`, `.webagent/knowledge-vault/`, `.webagent/checkpoints/`,",
+    "`.webagent/mcp-*.json`, `.webagent/tool-policy.json`, `.webagent/history.json`, `.webagent/session-memory.jsonl`,",
+    "`plans/`, `projects/`, `work/`,",
+    `\`${memory}/\` (except treat \`memory/runs/\` and \`memory/snapshots/\` as internal — see memory-layers skill).`,
+    "",
+    "Ephemeral (re-seeded each launch — do not hand-edit): `.webagent/tools.json`, `.webagent/providers.json`,",
+    "`.webagent/browseragent.json`, `.webagent/channels.json`, `.webagent/tools-capability-index.md`,",
+    "`.webagent/workspace-map.md`, `.webagent/capabilities/` tree, `agent.js`.",
+    "",
+    "## Sandbox boundary",
+    "Host app source (adapter, MCP host, UI) is NOT in this workspace — grep for `McpHost` or IPC symbols returns nothing.",
+    "Debug MCP via `.webagent/mcp-servers.json` + MCP tools + `web_post`, not by searching for host code.",
     "",
   ].join("\n");
 }
 
-/** Write the same orientation content to `.webagent/workspace-map.md` for on-demand reads and the Files explorer. */
+/** Create standard workspace folders on boot (idempotent). */
+export async function ensureWorkspaceLayoutDirs(cwd = WS): Promise<void> {
+  const ctx = createToolContext({ cwd, runId: "bootstrap" });
+  for (const rel of workspaceBootstrapDirRels()) {
+    const abs = resolveWorkspacePath(ctx, rel);
+    await fs.mkdir(abs, { recursive: true });
+  }
+}
+
+/** Write orientation map to `.webagent/workspace-map.md`. */
 export async function writeWorkspaceMapFile(): Promise<void> {
+  await ensureWorkspaceLayoutDirs().catch(() => {});
   const abs = workspaceStatePath(WORKSPACE_MAP_REL);
   await ensureParentDir(abs);
   await fs.writeFile(abs, buildWorkspaceMapBlock(), "utf8");
