@@ -1,11 +1,19 @@
-function rewriteLocalRefs(node: unknown): unknown {
-  if (Array.isArray(node)) return node.map(rewriteLocalRefs);
+/**
+ * A malicious MCP server can return a deeply nested tool inputSchema; without a
+ * bound, these mutually-recursive walkers would stack-overflow and crash the agent.
+ * Past this depth we return the node untouched (degrade, don't crash).
+ */
+const MAX_SCHEMA_DEPTH = 64;
+
+function rewriteLocalRefs(node: unknown, depth = 0): unknown {
+  if (depth > MAX_SCHEMA_DEPTH) return node;
+  if (Array.isArray(node)) return node.map((n) => rewriteLocalRefs(n, depth + 1));
   if (!node || typeof node !== "object") return node;
   const src = node as Record<string, unknown>;
   const out: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(src)) {
     const outKey = key === "definitions" ? "$defs" : key;
-    out[outKey] = rewriteLocalRefs(value);
+    out[outKey] = rewriteLocalRefs(value, depth + 1);
   }
   const ref = out.$ref;
   if (typeof ref === "string" && ref.startsWith("#/definitions/")) {
@@ -14,8 +22,9 @@ function rewriteLocalRefs(node: unknown): unknown {
   return out;
 }
 
-function stripNullableUnion(node: unknown): unknown {
-  if (Array.isArray(node)) return node.map(stripNullableUnion);
+function stripNullableUnion(node: unknown, depth = 0): unknown {
+  if (depth > MAX_SCHEMA_DEPTH) return node;
+  if (Array.isArray(node)) return node.map((n) => stripNullableUnion(n, depth + 1));
   if (!node || typeof node !== "object") return node;
   const obj = node as Record<string, unknown>;
   const anyOf = obj.anyOf;
@@ -32,23 +41,24 @@ function stripNullableUnion(node: unknown): unknown {
         merged.nullable = true;
       }
       if (typeof obj.description === "string") merged.description = obj.description;
-      return stripNullableUnion(merged);
+      return stripNullableUnion(merged, depth + 1);
     }
   }
   const out: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(obj)) {
-    out[key] = stripNullableUnion(value);
+    out[key] = stripNullableUnion(value, depth + 1);
   }
   return out;
 }
 
-function repairObjectShape(node: unknown): unknown {
-  if (Array.isArray(node)) return node.map(repairObjectShape);
+function repairObjectShape(node: unknown, depth = 0): unknown {
+  if (depth > MAX_SCHEMA_DEPTH) return node;
+  if (Array.isArray(node)) return node.map((n) => repairObjectShape(n, depth + 1));
   if (!node || typeof node !== "object") return node;
   const src = node as Record<string, unknown>;
   const repaired: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(src)) {
-    repaired[key] = repairObjectShape(value);
+    repaired[key] = repairObjectShape(value, depth + 1);
   }
   if (!repaired.type && ("properties" in repaired || "required" in repaired)) {
     repaired.type = "object";

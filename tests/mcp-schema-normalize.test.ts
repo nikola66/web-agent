@@ -30,3 +30,11 @@ test("normalizeMcpInputSchema collapses nullable anyOf", () => {
 test("normalizeMcpInputSchema empty input becomes object schema", () => {
   assert.deepEqual(normalizeMcpInputSchema(null), { type: "object", properties: {} });
 });
+
+test("normalizeMcpInputSchema survives deeply nested schema (no stack overflow)", () => {
+  let node: Record<string, unknown> = { type: "string" };
+  for (let i = 0; i < 5000; i++) {
+    node = { type: "object", properties: { child: node } };
+  }
+  assert.doesNotThrow(() => normalizeMcpInputSchema(node));
+});

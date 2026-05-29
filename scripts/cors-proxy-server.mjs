@@ -7,7 +7,12 @@
  */
 import http from "node:http";
 import { EDGE_TTS_PATH, handleEdgeTtsHttp, isEdgeTtsPath, requestPathname } from "./edge-tts-handler.mjs";
-import { withWebAgentUserAgent } from "./http-upstream-defaults.mjs";
+import {
+  PROXY_MAX_REQUEST_BYTES,
+  proxyTextBodyCapForUrl,
+  withWebAgentUserAgent,
+} from "./http-upstream-defaults.mjs";
+import { assertProxyTargetAllowed, redactProxyError } from "./proxy-ssrf-guard.mjs";
 import { handleSubscriptionHttp, isSubscriptionLlmPath, isSubscriptionOAuthPath } from "./subscription/router.mjs";
 
 const PROXY_PATH = "/api/proxy";
@@ -54,12 +59,34 @@ const server = http.createServer((req, res) => {
       return;
     }
     const chunks = [];
-    req.on("data", (c) => chunks.push(c));
+    let received = 0;
+    let aborted = false;
+    req.on("data", (c) => {
+      received += c.length;
+      if (received > PROXY_MAX_REQUEST_BYTES) {
+        aborted = true;
+        res.statusCode = 413;
+        res.setHeader("content-type", "application/json");
+        res.end(JSON.stringify({ error: "proxy: request body too large" }));
+        req.destroy();
+        return;
+      }
+      chunks.push(c);
+    });
     req.on("end", async () => {
+      if (aborted) return;
       try {
         const { method = "GET", url, headers = {}, body, bodyEncoding, binaryResponse } = JSON.parse(
           Buffer.concat(chunks).toString("utf8"),
         );
+        try {
+          assertProxyTargetAllowed(url);
+        } catch (blockErr) {
+          res.statusCode = 403;
+          res.setHeader("content-type", "application/json");
+          res.end(JSON.stringify({ error: redactProxyError(String(blockErr?.message ?? blockErr)) }));
+          return;
+        }
         const upstreamBody =
           bodyEncoding === "base64" && typeof body === "string"
             ? Buffer.from(body, "base64")
@@ -71,7 +98,7 @@ const server = http.createServer((req, res) => {
         });
         const responseBody = binaryResponse
           ? Buffer.from(await upstream.arrayBuffer()).toString("base64")
-          : await upstream.text();
+          : (await upstream.text()).slice(0, proxyTextBodyCapForUrl(String(url ?? "")));
         res.statusCode = upstream.status;
         res.setHeader("content-type", "application/json");
         const responseHeaders = {};
@@ -91,7 +118,7 @@ const server = http.createServer((req, res) => {
       } catch (e) {
         res.statusCode = 502;
         res.setHeader("content-type", "application/json");
-        res.end(JSON.stringify({ error: String(e instanceof Error ? e.message : e) }));
+        res.end(JSON.stringify({ error: redactProxyError(String(e instanceof Error ? e.message : e)) }));
       }
     });
   } catch {

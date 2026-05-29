@@ -7,6 +7,8 @@ import type { IncomingMessage } from "node:http";
 import { randomUUID } from "node:crypto";
 import { proxyTextBodyCapForUrl } from "./src/agent/runtime/proxy-body-cap";
 import { withWebAgentUserAgent } from "./src/agent/runtime/http-upstream";
+import { PROXY_MAX_REQUEST_BYTES } from "./scripts/http-upstream-defaults.mjs";
+import { assertProxyTargetAllowed, redactProxyError } from "./scripts/proxy-ssrf-guard.mjs";
 import {
   buildProxyDebugLogEntry,
   isTransitOnlyProxyMode,
@@ -221,12 +223,34 @@ function corsProxyGate() {
       if (req.method !== "POST") { res.statusCode = 405; res.end(); return; }
       setProxyRequestMeta(req, requestUrlPath(req));
       const chunks: Buffer[] = [];
-      req.on("data", (chunk: Buffer) => chunks.push(chunk));
+      let received = 0;
+      let aborted = false;
+      req.on("data", (chunk: Buffer) => {
+        received += chunk.length;
+        if (received > PROXY_MAX_REQUEST_BYTES) {
+          aborted = true;
+          res.statusCode = 413;
+          res.setHeader("content-type", "application/json");
+          res.end(JSON.stringify({ error: "proxy: request body too large" }));
+          req.destroy();
+          return;
+        }
+        chunks.push(chunk);
+      });
       req.on("end", async () => {
+        if (aborted) return;
         try {
           const { method = "GET", url, headers = {}, body, bodyEncoding, binaryResponse } = JSON.parse(
             Buffer.concat(chunks).toString("utf8")
           );
+          try {
+            assertProxyTargetAllowed(url);
+          } catch (blockErr) {
+            res.statusCode = 403;
+            res.setHeader("content-type", "application/json");
+            res.end(JSON.stringify({ error: redactProxyError(String((blockErr as Error)?.message ?? blockErr)) }));
+            return;
+          }
           const upstreamBody =
             bodyEncoding === "base64" && typeof body === "string"
               ? Buffer.from(body, "base64")
@@ -264,7 +288,7 @@ function corsProxyGate() {
         } catch (e) {
           res.statusCode = 502;
           res.setHeader("content-type", "application/json");
-          res.end(JSON.stringify({ error: String(e instanceof Error ? e.message : e) }));
+          res.end(JSON.stringify({ error: redactProxyError(String(e instanceof Error ? e.message : e)) }));
           logProxyError(req, CORS_PROXY_PATH, e);
         }
       });

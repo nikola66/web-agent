@@ -15,6 +15,12 @@ function readAppVersion() {
 
 export const WEB_AGENT_USER_AGENT = `web-agent/${readAppVersion()}`;
 
+/** Mirror of src/agent/runtime/proxy-body-cap.ts — keep in sync. */
+export const PROXY_TEXT_BODY_CAP = 100_000;
+export const YOUTUBE_PROXY_BODY_CAP = 512_000;
+/** Hard ceiling on a single /api/proxy request body (DoS guard for the sidecar). */
+export const PROXY_MAX_REQUEST_BYTES = 25 * 1024 * 1024;
+
 export function isYouTubeUpstreamUrl(url) {
   try {
     const host = new URL(url).hostname.toLowerCase();
@@ -28,6 +34,10 @@ export function isYouTubeUpstreamUrl(url) {
   } catch {
     return false;
   }
+}
+
+export function proxyTextBodyCapForUrl(url) {
+  return isYouTubeUpstreamUrl(url) ? YOUTUBE_PROXY_BODY_CAP : PROXY_TEXT_BODY_CAP;
 }
 
 export function withWebAgentUserAgent(headers = {}, options = {}) {
