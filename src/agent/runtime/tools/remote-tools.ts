@@ -17,7 +17,9 @@ import { logDebugEvent } from "../logging/debug-log.js";
 import * as memoryModule from "../memory/index.js";
 import { memoryPath } from "../memory/sql.js";
 import { createTimeoutController } from "./context.js";
-import { looksLikeHtmlDocument } from "../tool-result-preview.js";
+import { htmlApiBodyRecoveryNote, looksLikeHtmlDocument } from "../tool-result-preview.js";
+import { loadMcpSecrets, resolveMcpBearerToken } from "../mcp-secrets.js";
+import { loadMcpServersConfig } from "../mcp-config.js";
 import { parseTinyFishFetchPayload, spaShellPageRecoveryHint } from "./tinyfish-fetch.js";
 import { expandSkillBulkSaveArgs } from "./skill-bulk-args.js";
 import {
@@ -628,24 +630,39 @@ export function summarizeHttpErrorBody(data: unknown, status: number): string {
 export function graphqlSchemaRecoveryHint(data: unknown, status: number): string | undefined {
   if (status !== 400 && status !== 422) return undefined;
   const text = JSON.stringify(data || "");
-  const isGraphql = /graphql|Cannot query field|_input\b|of required type|was not provided/i.test(text);
+  // Require a real GraphQL signal. Bare "was not provided" / "of required type"
+  // also appear in plain REST validation errors, so they are not sufficient on
+  // their own — otherwise a REST 422 gets GraphQL relation advice.
+  const isGraphql = /graphql|Cannot query field|_input\b/i.test(text);
   if (!isGraphql) return undefined;
   // Relation input-shape error: trying to link an existing related record but
   // the create-input demands all its non-null fields. This is the loop that
   // stalled a blog publish across ~8 introspection calls.
+  const cmsMutationNaming =
+    /create_[A-Za-z0-9_]+_item|update_[A-Za-z0-9_]+_item|delete_[A-Za-z0-9_]+_item|_aggregated\b|Unknown type|create_.*_input/i.test(
+      text
+    );
   if (/_input\b|of required type|was not provided|non[- ]?null/i.test(text)) {
-    return (
+    let hint =
       "GraphQL mutation input-shape error. To LINK an existing related record (author, category, etc.), pass the relation as a nested object with only its id — e.g. `author: { id: \"1\" }` — not a bare id, and not the full create object with all fields. " +
       "If a `create_*_input` still demands every non-null field, the relation field actually accepts the lighter input that only needs `id`. " +
       "Put large or HTML field values in GraphQL `variables` (web_post `json: { query, variables }`) rather than inlining them in the query string, to avoid JSON-escaping corruption. " +
-      "See skill_view on the relevant imported skill and **`http-api`** for the exact shape."
-    );
+      "See skill_view on the relevant imported skill and **`http-api`** for the exact shape.";
+    if (cmsMutationNaming) {
+      hint +=
+        " CMS GraphQL mutations use `create_{ExactCollection}_item` / `update_{ExactCollection}_item` — collection name and casing must match the schema (e.g. `Blog_Posts`, not `posts`). Re-fetch `GET /fields/{Collection}` with `response_format: \"api\"` before retrying.";
+    }
+    return hint;
   }
-  return (
+  let hint =
     "GraphQL root fields must match that API's schema — do not assume generic names. " +
     "Call skill_view on the relevant imported skill (and **`http-api`**) for discovery endpoints and query shape, " +
-    "then fix field names from the error."
-  );
+    "then fix field names from the error.";
+  if (cmsMutationNaming) {
+    hint +=
+      " For CMS-style schemas: query roots and mutations follow the exact collection name (`Blog_Posts`, `Blog_Posts_aggregated`, `create_Blog_Posts_item`). See **`http-api`** (CMS GraphQL section).";
+  }
+  return hint;
 }
 
 /** 403/404 on a deep resource path — run skill discovery before guessing names. */
@@ -669,6 +686,81 @@ export function guessedResourceRecoveryHint(url: string, status: number): string
 
 function httpApiRecoveryHint(url: string, status: number, data: unknown): string | undefined {
   return graphqlSchemaRecoveryHint(data, status) ?? guessedResourceRecoveryHint(url, status);
+}
+
+/** True when callers expect JSON/API data (not a marketing HTML page read). */
+export function urlExpectsApiJson(url: string, method: string): boolean {
+  const m = String(method || "GET").toUpperCase();
+  if (m !== "GET") return true;
+  return looksLikeApiFetchUrl(url);
+}
+
+function apiHtmlFailureResult(
+  status: number,
+  url: string,
+  contentType: string,
+  text: string,
+  truncated?: { truncated?: true; truncated_at_chars?: number }
+): HttpProxyFailure {
+  const recovery_hint = spaShellPageRecoveryHint(text, url);
+  return {
+    ok: false,
+    status,
+    url,
+    contentType,
+    data: null,
+    error: htmlApiBodyRecoveryNote(text, url),
+    ...(recovery_hint ? { recovery_hint } : {}),
+    ...truncated,
+  };
+}
+
+function bearerFromAuthArgs(auth: Record<string, unknown> | null): string {
+  if (!auth) return "";
+  return String(auth.directus_token ?? auth.bearer_token ?? auth.token ?? "").trim();
+}
+
+async function bearerFromMcpSecretsForUrl(url: string): Promise<string> {
+  const secrets = await loadMcpSecrets();
+  const token = resolveMcpBearerToken(secrets);
+  if (!token) return "";
+  try {
+    const host = new URL(url).hostname.toLowerCase();
+    const config = await loadMcpServersConfig();
+    for (const srv of Object.values(config)) {
+      const srvUrl = String(srv?.url ?? "").trim();
+      if (!srvUrl) continue;
+      try {
+        if (new URL(srvUrl).hostname.toLowerCase() === host) return token;
+      } catch {
+        /* ignore bad MCP server url */
+      }
+    }
+  } catch {
+    return "";
+  }
+  return "";
+}
+
+/** Merge args.headers, auth aliases, and MCP secrets (host-matched) into Authorization. */
+export async function resolveHttpAuthHeaders(
+  args: ToolArgs,
+  url: string
+): Promise<Record<string, string>> {
+  const headers = normalizeHttpHeaders(args.headers);
+  const existing = String(headers.Authorization ?? headers.authorization ?? "").trim();
+  if (existing) return headers;
+
+  const auth =
+    args.auth && typeof args.auth === "object" && !Array.isArray(args.auth)
+      ? (args.auth as Record<string, unknown>)
+      : null;
+  let token = bearerFromAuthArgs(auth);
+  if (!token) token = await bearerFromMcpSecretsForUrl(url);
+  if (!token) return headers;
+
+  headers.Authorization = /^bearer\s+/i.test(token) ? token : `Bearer ${token}`;
+  return headers;
 }
 
 export async function httpProxyCall(
@@ -744,7 +836,13 @@ export async function httpProxyCall(
       parsedJson = JSON.parse(sliced.text);
     } catch {
       parsedJson = undefined;
-      if (trimmed.startsWith("<")) {
+      if (trimmed.startsWith("<") || looksLikeHtmlDocument(sliced.text)) {
+        const trunc = sliced.truncated
+          ? { truncated: true as const, truncated_at_chars: sliced.truncated_at_chars }
+          : {};
+        if (urlExpectsApiJson(url, m)) {
+          return apiHtmlFailureResult(status, url, contentType, sliced.text, trunc);
+        }
         const recovery_hint = spaShellPageRecoveryHint(sliced.text, url);
         return {
           ok: true as const,
@@ -753,7 +851,7 @@ export async function httpProxyCall(
           contentType,
           text: sliced.text,
           ...(recovery_hint ? { recovery_hint } : {}),
-          ...(sliced.truncated ? { truncated: true, truncated_at_chars: sliced.truncated_at_chars } : {}),
+          ...trunc,
         };
       }
     }
@@ -796,6 +894,12 @@ export async function httpProxyCall(
       data: parsedJson,
       ...(sliced.truncated ? { truncated: true, truncated_at_chars: sliced.truncated_at_chars } : {}),
     };
+  }
+  if (looksLikeHtmlDocument(sliced.text) && urlExpectsApiJson(url, m)) {
+    const trunc = sliced.truncated
+      ? { truncated: true as const, truncated_at_chars: sliced.truncated_at_chars }
+      : {};
+    return apiHtmlFailureResult(status, url, contentType, sliced.text, trunc);
   }
   const recovery_hint =
     looksLikeHtmlDocument(sliced.text) ? spaShellPageRecoveryHint(sliced.text, url) : undefined;
@@ -902,20 +1006,25 @@ export function shouldWebFetchUseDirectProxy(
   return looksLikeApiFetchUrl(url);
 }
 
+/**
+ * Throw an HTTP failure as an Error that still carries the structured
+ * `recovery_hint`, parsed error `data`, and `status` that httpProxyCall built.
+ * The runTools catch propagates these onto the tool result, so a thrown HTTP
+ * error keeps its GraphQL/relation recovery hint and full error body instead of
+ * collapsing to a bare message string.
+ */
+function throwHttpProxyFailure(result: HttpProxyFailure): never {
+  throw Object.assign(new Error(result.error || "HTTP request failed"), {
+    status: result.status,
+    ...(result.recovery_hint ? { recovery_hint: result.recovery_hint } : {}),
+    ...(result.data !== undefined ? { data: result.data } : {}),
+  });
+}
+
 async function webFetchReadableFromProxy(url, ctx, headers: Record<string, string> = {}) {
   const proxy = await proxyFetch(url, ctx, headers);
   if (proxy.ok === false) {
-    return {
-      ok: false as const,
-      url,
-      provider: "proxy",
-      status: proxy.status,
-      content_type: String(proxy.contentType || ""),
-      data: proxy.data,
-      error: proxy.error,
-      ...(proxy.recovery_hint ? { recovery_hint: proxy.recovery_hint } : {}),
-      ...(proxy.truncated ? { truncated: proxy.truncated, truncated_at_chars: proxy.truncated_at_chars } : {}),
-    };
+    throwHttpProxyFailure(proxy as HttpProxyFailure);
   }
   const contentType = String(proxy.contentType || "");
   const hasJsonData = "data" in proxy;
@@ -1077,7 +1186,6 @@ export async function webFetchTool(args: ToolArgs = {}, ctx) {
     );
   }
 
-  const headers = normalizeHttpHeaders(args.headers);
   const queryParams =
     args.params && typeof args.params === "object" && !Array.isArray(args.params)
       ? (args.params as Record<string, unknown>)
@@ -1101,11 +1209,17 @@ export async function webFetchTool(args: ToolArgs = {}, ctx) {
     throw new Error("save_to and response_encoding apply to a single url only (not batch urls).");
   }
 
-  if (targets.length === 1) return webFetchOne(targets[0], ctx, headers, fetchOpts);
+  // Resolve auth per-target: a Bearer/MCP token is host-matched to its own url,
+  // never reused across a mixed-host batch (which would leak it to other hosts).
+  if (targets.length === 1) {
+    const headers = await resolveHttpAuthHeaders(args, targets[0]);
+    return webFetchOne(targets[0], ctx, headers, fetchOpts);
+  }
 
   const documents = await Promise.all(
     targets.map(async (url) => {
       try {
+        const headers = await resolveHttpAuthHeaders(args, url);
         return await webFetchOne(url, ctx, headers, fetchOpts);
       } catch (err) {
         return { ok: false, url, error: String(err?.message || err) };
@@ -1126,7 +1240,7 @@ export async function webPostTool(args: ToolArgs = {}, ctx) {
     throw new Error(`web_post only supports http(s) URLs, got: ${u.protocol}`);
   }
   const method = normalizeWebPostMethod(args.method);
-  const headers = normalizeHttpHeaders(args.headers);
+  const headers = await resolveHttpAuthHeaders(args, url);
   const timeoutMs = Number(args.timeout_ms);
   const proxyCtx =
     Number.isFinite(timeoutMs) && timeoutMs > 0 ? { ...ctx, timeoutMs } : ctx;
@@ -1161,7 +1275,9 @@ export async function webPostTool(args: ToolArgs = {}, ctx) {
       headers["Content-Type"] = "application/json";
     }
   }
-  return httpProxyCall({ method, url, headers, body, bodyEncoding }, proxyCtx, timeoutOpt);
+  const result = await httpProxyCall({ method, url, headers, body, bodyEncoding }, proxyCtx, timeoutOpt);
+  if (!result.ok) throwHttpProxyFailure(result as HttpProxyFailure);
+  return result;
 }
 
 export async function webUploadTool(args: ToolArgs = {}, ctx) {
@@ -1781,32 +1897,22 @@ export async function skillManageTool(args: ToolArgs = {}, ctx) {
 export async function todoWriteTool(payload: ToolArgs | unknown[] = {}, _ctx) {
   const todosPath = workspaceStatePath(".webagent/todos.json");
   let rawTodos: unknown[] = [];
-  let sawArrayKey = false;
   if (Array.isArray(payload)) rawTodos = payload;
   else if (payload && typeof payload === "object") {
     const p = payload as ToolArgs;
     // Accept any of the array keys models commonly use, not just `todos`.
+    // (An explicit empty array clears the checklist — a valid reset.)
     const arrayKey = ["todos", "items", "tasks", "list", "steps", "checklist"].find((key) =>
       Array.isArray(p[key])
     );
     if (arrayKey) {
       rawTodos = p[arrayKey] as unknown[];
-      sawArrayKey = true;
     } else {
       const looksLikeSingleTodo = ["id", "content", "text", "title", "task", "status"].some((key) =>
         Object.prototype.hasOwnProperty.call(p, key)
       );
       if (looksLikeSingleTodo) rawTodos = [p];
     }
-  }
-  // A non-empty array that yielded nothing usable means the caller's item shape
-  // is wrong — surface it instead of silently returning count:0 (which reads as
-  // success and makes the model abandon planning).
-  if (sawArrayKey && rawTodos.length === 0) {
-    throw new Error(
-      "todo_write received an empty todo list. Pass `todos` as an array of objects like " +
-        '`{ "todos": [{ "id": "1", "text": "step", "status": "in_progress" }] }`.'
-    );
   }
   const todos = rawTodos.map((todo, index) => normalizeTodoItem(todo, index));
   // mkdir the `.webagent` parent, not just the workspace root — otherwise the

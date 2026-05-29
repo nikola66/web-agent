@@ -82,7 +82,7 @@ export function inputSuggestsMultimodal(input) {
  * zipfile (which hits JsProxy/binary errors in Pyodide).
  */
 export const ARCHIVE_INPUT_RE =
-  /(?:[\w./-]+\.(?:zip|tar|tgz|tar\.gz)\b|\b(?:unzip|extract|decompress)\b[^.!?]{0,40}\b(?:archive|zip|tarball|bundle)\b)/i;
+  /(?:[\w./-]+\.(?:zip|tar\.gz|tgz|tar)(?!\w)(?!\.\w)|\b(?:unzip|extract|decompress)\b[^.!?]{0,40}\b(?:archive|zip|tarball|bundle)\b)/i;
 
 export function inputSuggestsArchive(input) {
   return ARCHIVE_INPUT_RE.test(String(input || ""));
@@ -92,7 +92,7 @@ export function inputSuggestsArchive(input) {
  * Input carries (or references) a PDF or DOCX — the `pdf_extract` /
  * `docx_extract` case. Pre-unlocks the deferred `documents` group.
  */
-export const DOCUMENT_INPUT_RE = /[\w./-]+\.(?:pdf|docx)\b/i;
+export const DOCUMENT_INPUT_RE = /[\w./-]+\.(?:pdf|docx)(?!\w)(?!\.\w)/i;
 
 export function inputSuggestsDocument(input) {
   return DOCUMENT_INPUT_RE.test(String(input || ""));
@@ -134,6 +134,7 @@ const PYTHON_SKILL_INSTALL_RE = /\b(pip install|python3?|python\s+-m|\.py\b)\b/i
 const API_CALL_INTENT_RE = new RegExp(
   [
     "\\bgraphql\\b",
+    "\\bdirectus\\b",
     "\\brest\\s+api\\b",
     "\\bapi\\s+(call|request|endpoint)\\b",
     "\\bbearer\\b",

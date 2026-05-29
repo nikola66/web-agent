@@ -12,6 +12,7 @@ import {
   focusToolNamesForIntent,
   buildSkillInstallContextPrefix,
   buildApiCallContextPrefix,
+  isApiCallIntent,
   buildComposioSaasContextPrefix,
   isComposioSaasIntent,
   skillBulkSaveAllUrlItemsFailed,
@@ -169,6 +170,11 @@ test("focusToolNamesForIntent narrows skill install tools", () => {
     ),
     ["read_file", "extract_archive", "skill_manage"]
   );
+});
+
+test("isApiCallIntent matches directus graphql publish", () => {
+  assert.equal(isApiCallIntent("publish to directus via graphql"), true);
+  assert.equal(isApiCallIntent("list files in workspace"), false);
 });
 
 test("buildApiCallContextPrefix nudges http-api and skill discovery for graphql tasks", () => {

@@ -1,11 +1,11 @@
 ---
 name: HTTP API
-description: Use when calling REST or GraphQL APIs with web_fetch/web_post — auth headers, query params, GraphQL shape, discovery order, and reading error bodies.
+description: Use when calling REST or GraphQL APIs with web_fetch/web_post — auth headers, query params, GraphQL shape, Directus GraphQL mutations/relations, discovery order, and reading error bodies.
 version: 1.0.0
 category: bundled
 primary-tools: [web_fetch, web_post, web_upload]
 tags: [rest, graphql, api, web_fetch, web_post, web_upload, bearer, cms, headers, discovery, multipart, file upload]
-triggers: [graphql, REST API, bearer token, web_post, authenticated fetch, api call, authorization header, CMS, list collections, resource count, metadata endpoint]
+triggers: [graphql, REST API, bearer token, web_post, authenticated fetch, api call, authorization header, CMS, list collections, resource count, metadata endpoint, directus, Blog_Posts, graphql mutation, create_*_item, directus cms]
 ---
 
 ## When web_post vs web_upload (read first)
@@ -63,8 +63,9 @@ Canonical procedure for **REST GET** (`web_fetch`) and **HTTP writes** (`web_pos
 ## When to Use
 
 - Any task hitting a REST or GraphQL HTTP API (CMS, CRM, webhooks, custom backends).
+- Directus CMS work — REST `/items/…`, GraphQL `/graphql`, `Blog_Posts`, translations, publish/status updates.
 - After `web_post` / `web_fetch` returns validation, 401, or 403.
-- Imported skills that mention `requests`, curl, axios, or `python -m …` for HTTP.
+- Imported skills that mention `requests`, curl, axios, `pip install directus-skill`, or `python -m …` for HTTP.
 - Before guessing collection names, endpoints, or GraphQL root fields.
 
 ## Relation to other skills
@@ -125,7 +126,7 @@ Configure a Directus Streamable HTTP MCP endpoint (**the Web Agent page must be 
 
 If probe times out: keep the Web Agent tab open, verify the remote MCP endpoint and auth, then re-write config or restart the profile. Config may already be saved as enabled.
 
-Prefer MCP for CMS mutations when REST from the sandbox is blocked; prefer REST (`/items/…` + Bearer) when `headers` work.
+Prefer MCP for CMS mutations when REST from the sandbox is blocked; prefer REST (`/items/…` + Bearer) when `headers` work. For GraphQL naming and mutations on this host, see **## Directus GraphQL** below.
 
 ## REST updates (`web_post` + method)
 
@@ -219,6 +220,144 @@ With variables:
 | Introspection | `{ __schema { queryType { name } } }` only if docs allow |
 | Errors | 400 with `errors[]` → fix query shape; read `recovery_hint` when present |
 
+## Directus GraphQL
+
+Use when the imported skill or user task targets a **Directus** instance via GraphQL (`POST {base}/graphql`). Patterns match [directus-skill](https://github.com/nikola66/directus-skill) and the [Directus GraphQL guide](https://directus.io/blog/graphql-api).
+
+### Transport and auth
+
+```json
+{
+  "url": "https://cms.example.com/graphql",
+  "json": { "query": "query { __typename }", "variables": {} },
+  "headers": { "Authorization": "Bearer <token>" }
+}
+```
+
+Same token via `auth: { "directus_token": "<token>" }` on `web_post` / `web_fetch` (maps to Bearer). Always `response_format: "api"` on REST discovery GETs.
+
+### GraphQL basics (Directus)
+
+| Operation | Role |
+|-----------|------|
+| `query` | Read — selection set lists fields in `{ braces }` |
+| `mutation` | Write — `create_*_item`, `update_*_item`, `delete_*_item` |
+| Arguments | In parentheses: `Collection(limit: 5, filter: { … })` |
+| Variables | `$name` in query + `"variables": { "name": value }` in JSON body — use for large/HTML payloads |
+
+### Discovery order (do not skip)
+
+| Step | Call | Purpose |
+|------|------|---------|
+| 1 | `web_post` GraphQL `query { __typename }` | Health / auth |
+| 2 | `web_fetch` `GET /fields/{Collection}` with `response_format: "api"` | Field types, relation names, required fields |
+| 3 | Use **exact** GraphQL roots from step 2 | e.g. `Blog_Posts`, not `posts`, `blog_posts`, or `BlogPosts` |
+
+Optional introspection only if the token allows; otherwise REST `/fields/…` and `/collections` are authoritative.
+
+### Queries and filters
+
+Root field = **collection name as in Directus** (often PascalCase with underscores):
+
+```graphql
+query {
+  Blog_Posts(filter: { status: { _eq: "published" } }, limit: 10) {
+    id
+    status
+  }
+}
+```
+
+Common filter operators: `_eq`, `_neq`, `_in`, `_nin`, `_contains`, `_icontains`, `_null`, `_nnull`, `_gt`, `_gte`, `_lt`, `_lte`.
+
+**Count:**
+
+```graphql
+query {
+  Blog_Posts_aggregated {
+    count { id }
+  }
+}
+```
+
+### Mutations
+
+Pattern: `create_{Collection}_item`, `update_{Collection}_item(id: "…")`, `delete_{Collection}_item(id: "…")` — `{Collection}` must match the schema (e.g. `Blog_Posts` → `create_Blog_Posts_item`).
+
+```graphql
+mutation {
+  create_Blog_Posts_item(data: { status: "draft" }) {
+    id
+    status
+  }
+}
+```
+
+```graphql
+mutation {
+  update_Blog_Posts_item(id: "uuid-here", data: { status: "published" }) {
+    id
+    status
+  }
+}
+```
+
+### Relations (M2O / O2M)
+
+Link an **existing** related row with a nested object containing only `id` — not a bare UUID string, and not a full nested create unless the schema requires every non-null field:
+
+```graphql
+mutation {
+  create_Blog_Posts_Translations_item(data: {
+    languages_code: { code: "en-US" }
+    Blog_Posts_id: { id: "parent-uuid" }
+    title: "Title"
+  }) {
+    id
+  }
+}
+```
+
+Field names (`Blog_Posts_id`, `languages_code`, …) come from `GET /fields/Blog_Posts_Translations` — do not invent them.
+
+### Variables (large / HTML content)
+
+```json
+{
+  "url": "https://cms.example.com/graphql",
+  "json": {
+    "query": "mutation ($data: create_Blog_Posts_Translations_input!) { create_Blog_Posts_Translations_item(data: $data) { id } }",
+    "variables": {
+      "data": {
+        "title": "Post title",
+        "content": "<p>HTML body</p>",
+        "Blog_Posts_id": { "id": "parent-uuid" }
+      }
+    }
+  },
+  "headers": { "Authorization": "Bearer <token>" }
+}
+```
+
+### REST vs GraphQL on Directus
+
+| Prefer REST | Prefer GraphQL |
+|-------------|----------------|
+| Simple list/get/create/update one collection (`GET/POST/PATCH /items/{Collection}`) | Imported skill explicitly uses GraphQL |
+| File upload then PATCH item with file id | One mutation wiring multiple relations |
+| E2E / skill docs show REST path | Aggregates or nested writes clearer in one request |
+
+REST example (same auth):
+
+```json
+{
+  "url": "https://cms.example.com/items/Blog_Posts",
+  "response_format": "api",
+  "params": { "limit": 5, "fields": "id,status" },
+  "headers": { "Authorization": "Bearer <token>" }
+}
+```
+
 ## Connect / discover an API
 
 Generic order (exact URLs come from the **imported skill**, not from memory):
@@ -236,6 +375,9 @@ If step 2 returns **403**, the token may lack metadata scope — ask the user fo
 ## Pitfalls
 
 - Inventing GraphQL fields not in the schema.
+- Wrong Directus collection casing — `create_posts_item` vs `create_Blog_Posts_item`; GraphQL root `Blog_Posts` vs REST slug guesses.
+- Relation shape errors — bare UUID instead of `{ id: "uuid" }`; or full `create_*_input` with every field when only `id` is needed to link.
+- Inlining large HTML in the query string — use `variables` in the `web_post` JSON body.
 - `web_fetch` for POST/GraphQL (use `web_post`).
 - Putting Bearer tokens in the URL or repeating failed shell `node -e` axios attempts.
 - Treating 403 as "wrong URL" when it may mean **wrong permission** or wrong resource slug.
@@ -244,6 +386,6 @@ If step 2 returns **403**, the token may lack metadata scope — ask the user fo
 
 ## Anti-patterns
 
-- Retry loop: same bad GraphQL query 3+ times.
+- Retry loop: same bad GraphQL query 3+ times without reading `recovery_hint` or re-running `GET /fields/{Collection}`.
 - `run_shell` with `require('axios')`, `fetch(`, curl, or python `requests` when `web_fetch`/`web_post` suffice.
 - Putting API tokens in URL query strings — use headers only.

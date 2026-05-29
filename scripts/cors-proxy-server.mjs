@@ -73,10 +73,7 @@ const server = http.createServer((req, res) => {
           ? Buffer.from(await upstream.arrayBuffer()).toString("base64")
           : await upstream.text();
         res.statusCode = upstream.status;
-        res.setHeader(
-          "content-type",
-          upstream.headers.get("content-type") ?? "application/octet-stream",
-        );
+        res.setHeader("content-type", "application/json");
         const responseHeaders = {};
         upstream.headers.forEach((value, key) => {
           responseHeaders[key] = value;

@@ -168,6 +168,30 @@ function encodeIpcPayload(payload: unknown): string {
 function decodeIpcPayload<T = unknown>(payload: string): T {
   return JSON.parse(decodeURIComponent(escape(atob(String(payload || ""))))) as T;
 }
+
+async function parseProxyGateResponse(res: Response): Promise<Record<string, unknown>> {
+  const text = await res.text();
+  const trimmed = text.trim();
+  if (!trimmed) {
+    return {
+      error: res.ok
+        ? "Empty response from /api/proxy"
+        : `Proxy HTTP ${res.status}: empty body`,
+    };
+  }
+  try {
+    return JSON.parse(trimmed) as Record<string, unknown>;
+  } catch {
+    if (trimmed.startsWith("<")) {
+      return {
+        error:
+          "Proxy returned HTML instead of JSON — confirm /api/proxy is running (dev server or cors-proxy sidecar) and the request URL is correct.",
+      };
+    }
+    return { error: `Proxy response is not valid JSON: ${trimmed.slice(0, 160)}` };
+  }
+}
+
 /**
  * If every token looks like a Node CLI flag, do not pass workspace `cwd` into `shell.runCommand`.
  * With cwd set to `/nodebox/workspace/<id>`, Nodebox can mis-resolve and try to load `<cwd>/nodebox`
@@ -1224,7 +1248,7 @@ export async function startWebAgent(options: AgentStartOptions): Promise<void> {
                 binaryResponse: req.binaryResponse,
               }),
             });
-            const data = await res.json();
+            const data = await parseProxyGateResponse(res);
             if (data?.error) {
               respPayload = JSON.stringify({ error: String(data.error) });
               await agentProcess.write(
@@ -1294,7 +1318,7 @@ export async function startWebAgent(options: AgentStartOptions): Promise<void> {
                 body: req.body ?? null,
               }),
             });
-            const data = (await res.json()) as {
+            const data = (await parseProxyGateResponse(res)) as {
               error?: string;
               status?: number;
               statusText?: string;

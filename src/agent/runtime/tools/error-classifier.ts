@@ -384,6 +384,28 @@ function classifyFromMessage(message: string, statusHint: number | null): Omit<C
     };
   }
 
+  if (
+    /unexpected\s+token\s*['"]?</i.test(message) ||
+    (/is not valid json/i.test(message) && /<!doctype/i.test(message)) ||
+    /proxy returned html instead of json/i.test(message)
+  ) {
+    reason = "format_error";
+    // Persistent (wrong URL, proxy down, auth wall) — retrying repeats the same
+    // HTML. Fix the request instead of re-issuing it.
+    retryable = false;
+    shouldFallback = true;
+    error_code = "proxy_html_response";
+    return {
+      reason,
+      retryable,
+      shouldCompress,
+      shouldFallback,
+      error_code,
+      hintBase:
+        "Proxy or API returned HTML instead of JSON. Use headers.Authorization Bearer on web_fetch/web_post (or auth.directus_token), fix URL typos, and confirm /api/proxy is reachable.",
+    };
+  }
+
   if (FORMAT_RE.test(message) || statusHint === 422) {
     reason = "format_error";
     retryable = false;

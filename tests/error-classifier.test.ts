@@ -142,3 +142,19 @@ test("classifyToolError tags pyodide_webagent_http for missing webagent module",
   assert.equal(c.error_code, "pyodide_webagent_http");
   assert.match(c.recovery_hint, /webagent\.http/);
 });
+
+test("classifyToolError tags proxy HTML JSON parse failures", () => {
+  const c = classifyToolError(
+    `Unexpected token '<', "<!DOCTYPE "... is not valid JSON`
+  );
+  assert.equal(c.error_code, "proxy_html_response");
+  // Persistent failure (wrong URL / proxy down / auth wall) — not retryable.
+  assert.equal(c.retryable, false);
+  assert.match(c.recovery_hint, /Authorization|web_fetch|web_post/i);
+});
+
+test("classifyToolError tags adapter proxy HTML gate message", () => {
+  const c = classifyToolError("Proxy returned HTML instead of JSON — confirm /api/proxy is running");
+  assert.equal(c.error_code, "proxy_html_response");
+  assert.equal(c.retryable, false);
+});
