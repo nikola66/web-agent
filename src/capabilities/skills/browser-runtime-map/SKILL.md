@@ -32,6 +32,7 @@ Canonical built-in tool picker. Other skills defer here for filesystem vs HTTP v
 | Mixed multipart (fields + file) | `web_post` with `multipart` array — see **`http-api`** |
 | HTTP(S) POST/PATCH/PUT/DELETE/GraphQL | `web_post` (+ `json`, `form`, `params`, `timeout_ms`) — not for CMS file bytes |
 | OAuth-connected SaaS (Gmail, LinkedIn, Slack, …) | `skill_view` **`composio-oauth`**, then `composio_status` → `composio_action`; never claim no access without status |
+| Connect / add / configure an MCP server | Write `.webagent/mcp-servers.json` + `mcp-secrets.json` — see **`mcp-setup`** (no `/mcp` command, no `mcp_add` tool; never `web_fetch` the endpoint to "test" it) |
 | DOM click/type automation | MCP browser tools (if configured in `.webagent/mcp-servers.json`) — see **`imported-skill-compat`** |
 | JS-heavy page as markdown text | `web_fetch` (optional rendered-fetch provider when unauthenticated) |
 | Web search | `web_search` |
