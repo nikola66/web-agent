@@ -667,9 +667,21 @@ async function executePreparedToolCall(
       e?.name === "AbortError" ||
       prepared.ctx?.signal?.aborted ||
       /aborted|cancell?ed/i.test(error);
+    // Preserve structured fields a thrown error carries (e.g. HTTP failures
+    // attach recovery_hint / parsed error data / status / suggested_tool).
+    // Without this they collapse to the bare message and the classifier has to
+    // re-derive a hint it cannot reconstruct (e.g. the GraphQL relation hint,
+    // which needs the response body).
+    const extra: Record<string, unknown> = aborted ? { aborted: true } : {};
+    if (e && typeof e === "object") {
+      for (const key of ["recovery_hint", "data", "status", "suggested_tool"] as const) {
+        const val = (e as Record<string, unknown>)[key];
+        if (val !== undefined && extra[key] === undefined) extra[key] = val;
+      }
+    }
     await finishToolCallError(prepared, results, toolCatalog, {
       error,
-      resultExtra: aborted ? { aborted: true } : {},
+      resultExtra: extra,
       debugExtra: { aborted: !!aborted },
     });
   }

@@ -6,15 +6,20 @@ export function isHiddenBrowseAlias(name: string): boolean {
   return HIDDEN_BROWSE_ALIASES.has(String(name || ""));
 }
 
-export function isDeferredCatalogTool(name: string, meta: { llmVisible?: boolean } | null | undefined): boolean {
+export function isDeferredCatalogTool(
+  name: string,
+  meta: { llmVisible?: boolean } | null | undefined,
+  deferredGroupTools: Set<string> = toolsInDeferredGroups()
+): boolean {
   if (String(name || "").startsWith("mcp_")) return false;
   if (meta?.llmVisible === false) return true;
   // Group-deferred tools (archives/documents/multimodal/wiki/cron/delivery/…)
   // are NOT marked llmVisible:false — they're held back by DEFERRED_TOOL_GROUPS
   // and the active-tool filter. They must still be discoverable here, or
   // `tool_search("extract_archive")` returns nothing for a real, unlockable
-  // tool (the exact failure that stranded a zip extraction).
-  if (toolsInDeferredGroups().has(String(name || ""))) return true;
+  // tool (the exact failure that stranded a zip extraction). Caller may pass a
+  // precomputed set to avoid rebuilding it per catalog entry.
+  if (deferredGroupTools.has(String(name || ""))) return true;
   return false;
 }
 
@@ -28,9 +33,10 @@ export async function searchDeferredTools(
   const catalog =
     catalogOverride ?? (await import("./registry.js").then((m) => m.loadToolCatalog()));
   const matches: Array<{ name: string; description: string; server?: string; score: number }> = [];
+  const deferredGroupTools = toolsInDeferredGroups();
   for (const [name, meta] of Object.entries(catalog)) {
     if (activeToolNames.has(name)) continue;
-    if (!isDeferredCatalogTool(name, meta)) continue;
+    if (!isDeferredCatalogTool(name, meta, deferredGroupTools)) continue;
     const description = String(meta?.description || "");
     const haystack = `${name} ${description}`.toLowerCase();
     let score = 0;

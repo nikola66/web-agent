@@ -199,7 +199,7 @@ test("no silent no-op: every required-field tool rejects empty input", async () 
   });
 });
 
-test("todo_write accepts items/text aliases and rejects empty lists", async () => {
+test("todo_write accepts items/text aliases and clears on empty list", async () => {
   await withIsolatedWorkspace(async () => {
     const catalog = await loadToolCatalog();
     // Regression: the model passes `items` with `text`/`title`, not `todos`/`content`.
@@ -220,9 +220,10 @@ test("todo_write accepts items/text aliases and rejects empty lists", async () =
     assert.equal(saved[0].content, "Get transcript");
     assert.equal(saved[1].content, "Write article");
 
-    // An explicit but empty list is an error, not a silent count:0 success.
+    // An explicit empty list clears the checklist (valid reset), not an error.
     const empty = await runOne("todo_write", { todos: [] }, catalog);
-    assert.ok(empty?.error, "empty todo list should surface an error");
+    assert.ok(!empty?.error, empty?.error);
+    assert.equal((empty?.result as { count?: number }).count, 0);
   });
 });
 

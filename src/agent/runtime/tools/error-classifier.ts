@@ -390,7 +390,9 @@ function classifyFromMessage(message: string, statusHint: number | null): Omit<C
     /proxy returned html instead of json/i.test(message)
   ) {
     reason = "format_error";
-    retryable = true;
+    // Persistent (wrong URL, proxy down, auth wall) — retrying repeats the same
+    // HTML. Fix the request instead of re-issuing it.
+    retryable = false;
     shouldFallback = true;
     error_code = "proxy_html_response";
     return {

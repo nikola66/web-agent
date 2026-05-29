@@ -115,7 +115,7 @@ export function detectPythonLibraries(source: string): string[] {
   }
   if (/\bpip\s+install\b/.test(text)) libs.add("pip");
   if (/\bpip\s+install\b[^;\n]*\bdirectus(?:-skill)?\b/i.test(text)) libs.add("directus");
-  if (/\bnikola66\/directus-skill\b|\bdirectus-skill\b/i.test(text)) libs.add("directus");
+  if (/\bdirectus-skill\b/i.test(text)) libs.add("directus");
   if (/\bpython3?\s+-m\b/.test(text)) libs.add("python-module-cli");
   return [...libs].sort();
 }

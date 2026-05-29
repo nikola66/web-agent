@@ -116,6 +116,33 @@ test("graphqlSchemaRecoveryHint nudges CMS mutation naming on create_*_item erro
   assert.doesNotMatch(String(hint), /directus/i);
 });
 
+test("graphqlSchemaRecoveryHint ignores REST validation errors with no GraphQL signal", () => {
+  // A plain REST 422 can say "was not provided" / "of required type" — it must
+  // NOT receive GraphQL relation advice.
+  const restBody = {
+    errors: [{ message: 'Field "email" of required type "String!" was not provided.' }],
+  };
+  assert.equal(graphqlSchemaRecoveryHint(restBody, 422), undefined);
+  // A real GraphQL error (validation code present) still gets a hint.
+  const gqlBody = {
+    errors: [{ message: "x", extensions: { code: "GRAPHQL_VALIDATION_EXCEPTION" } }],
+  };
+  assert.match(String(graphqlSchemaRecoveryHint(gqlBody, 400)), /skill_view/i);
+});
+
+test("resolveHttpAuthHeaders adds Bearer from auth aliases and respects an existing header", async () => {
+  const fromAuth = await resolveHttpAuthHeaders(
+    { auth: { directus_token: "tok123" } } as never,
+    "https://api.example.com/graphql"
+  );
+  assert.equal(fromAuth.Authorization, "Bearer tok123");
+  const existing = await resolveHttpAuthHeaders(
+    { headers: { Authorization: "Bearer keep" }, auth: { token: "other" } } as never,
+    "https://api.example.com/x"
+  );
+  assert.equal(existing.Authorization, "Bearer keep");
+});
+
 test("guessedResourceRecoveryHint nudges discovery after deep-path 403", () => {
   const hint = guessedResourceRecoveryHint("https://api.example.com/v1/items/posts?limit=0", 403);
   assert.match(String(hint), /skill_view/i);

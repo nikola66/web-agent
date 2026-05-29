@@ -630,7 +630,10 @@ export function summarizeHttpErrorBody(data: unknown, status: number): string {
 export function graphqlSchemaRecoveryHint(data: unknown, status: number): string | undefined {
   if (status !== 400 && status !== 422) return undefined;
   const text = JSON.stringify(data || "");
-  const isGraphql = /graphql|Cannot query field|_input\b|of required type|was not provided/i.test(text);
+  // Require a real GraphQL signal. Bare "was not provided" / "of required type"
+  // also appear in plain REST validation errors, so they are not sufficient on
+  // their own — otherwise a REST 422 gets GraphQL relation advice.
+  const isGraphql = /graphql|Cannot query field|_input\b/i.test(text);
   if (!isGraphql) return undefined;
   // Relation input-shape error: trying to link an existing related record but
   // the create-input demands all its non-null fields. This is the loop that
@@ -1003,10 +1006,25 @@ export function shouldWebFetchUseDirectProxy(
   return looksLikeApiFetchUrl(url);
 }
 
+/**
+ * Throw an HTTP failure as an Error that still carries the structured
+ * `recovery_hint`, parsed error `data`, and `status` that httpProxyCall built.
+ * The runTools catch propagates these onto the tool result, so a thrown HTTP
+ * error keeps its GraphQL/relation recovery hint and full error body instead of
+ * collapsing to a bare message string.
+ */
+function throwHttpProxyFailure(result: HttpProxyFailure): never {
+  throw Object.assign(new Error(result.error || "HTTP request failed"), {
+    status: result.status,
+    ...(result.recovery_hint ? { recovery_hint: result.recovery_hint } : {}),
+    ...(result.data !== undefined ? { data: result.data } : {}),
+  });
+}
+
 async function webFetchReadableFromProxy(url, ctx, headers: Record<string, string> = {}) {
   const proxy = await proxyFetch(url, ctx, headers);
   if (proxy.ok === false) {
-    throw new Error(proxy.error || "HTTP request failed");
+    throwHttpProxyFailure(proxy as HttpProxyFailure);
   }
   const contentType = String(proxy.contentType || "");
   const hasJsonData = "data" in proxy;
@@ -1179,10 +1197,6 @@ export async function webFetchTool(args: ToolArgs = {}, ctx) {
 
   const rawUrls = Array.isArray(args.urls) ? args.urls : [];
   const single = typeof args.url === "string" ? args.url.trim() : "";
-  const authUrl = single || rawUrls.map((u) => String(u || "").trim()).find(Boolean) || "";
-  const headers = authUrl
-    ? await resolveHttpAuthHeaders(args, authUrl)
-    : normalizeHttpHeaders(args.headers);
   const targets = [
     ...(single ? [single] : []),
     ...rawUrls.map((u) => String(u || "").trim()).filter(Boolean),
@@ -1195,11 +1209,17 @@ export async function webFetchTool(args: ToolArgs = {}, ctx) {
     throw new Error("save_to and response_encoding apply to a single url only (not batch urls).");
   }
 
-  if (targets.length === 1) return webFetchOne(targets[0], ctx, headers, fetchOpts);
+  // Resolve auth per-target: a Bearer/MCP token is host-matched to its own url,
+  // never reused across a mixed-host batch (which would leak it to other hosts).
+  if (targets.length === 1) {
+    const headers = await resolveHttpAuthHeaders(args, targets[0]);
+    return webFetchOne(targets[0], ctx, headers, fetchOpts);
+  }
 
   const documents = await Promise.all(
     targets.map(async (url) => {
       try {
+        const headers = await resolveHttpAuthHeaders(args, url);
         return await webFetchOne(url, ctx, headers, fetchOpts);
       } catch (err) {
         return { ok: false, url, error: String(err?.message || err) };
@@ -1256,7 +1276,7 @@ export async function webPostTool(args: ToolArgs = {}, ctx) {
     }
   }
   const result = await httpProxyCall({ method, url, headers, body, bodyEncoding }, proxyCtx, timeoutOpt);
-  if (!result.ok) throw new Error((result as HttpProxyFailure).error || "HTTP request failed");
+  if (!result.ok) throwHttpProxyFailure(result as HttpProxyFailure);
   return result;
 }
 
@@ -1877,32 +1897,22 @@ export async function skillManageTool(args: ToolArgs = {}, ctx) {
 export async function todoWriteTool(payload: ToolArgs | unknown[] = {}, _ctx) {
   const todosPath = workspaceStatePath(".webagent/todos.json");
   let rawTodos: unknown[] = [];
-  let sawArrayKey = false;
   if (Array.isArray(payload)) rawTodos = payload;
   else if (payload && typeof payload === "object") {
     const p = payload as ToolArgs;
     // Accept any of the array keys models commonly use, not just `todos`.
+    // (An explicit empty array clears the checklist — a valid reset.)
     const arrayKey = ["todos", "items", "tasks", "list", "steps", "checklist"].find((key) =>
       Array.isArray(p[key])
     );
     if (arrayKey) {
       rawTodos = p[arrayKey] as unknown[];
-      sawArrayKey = true;
     } else {
       const looksLikeSingleTodo = ["id", "content", "text", "title", "task", "status"].some((key) =>
         Object.prototype.hasOwnProperty.call(p, key)
       );
       if (looksLikeSingleTodo) rawTodos = [p];
     }
-  }
-  // A non-empty array that yielded nothing usable means the caller's item shape
-  // is wrong — surface it instead of silently returning count:0 (which reads as
-  // success and makes the model abandon planning).
-  if (sawArrayKey && rawTodos.length === 0) {
-    throw new Error(
-      "todo_write received an empty todo list. Pass `todos` as an array of objects like " +
-        '`{ "todos": [{ "id": "1", "text": "step", "status": "in_progress" }] }`.'
-    );
   }
   const todos = rawTodos.map((todo, index) => normalizeTodoItem(todo, index));
   // mkdir the `.webagent` parent, not just the workspace root — otherwise the
