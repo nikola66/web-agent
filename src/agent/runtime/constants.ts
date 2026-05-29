@@ -1,13 +1,21 @@
-import nodePath from "node:path";
-
-let WS_VALUE = "/workspace";
-let ROOT_VALUE = "/workspace";
-
-if (typeof process !== "undefined" && process.cwd) {
-  WS_VALUE = process.cwd();
-  // Use process.cwd() as ROOT; path.resolve() not available at module init time
-  ROOT_VALUE = WS_VALUE;
+function ensurePosixAbsolutePath(value: string, defaultRoot = "/workspace"): string {
+  const s = String(value || "").trim().replace(/\\/g, "/");
+  if (!s) return defaultRoot;
+  if (s.startsWith("/")) return s.replace(/\/+$/, "") || "/";
+  const parts = s.split("/").filter(Boolean);
+  if (parts[0] === "workspace") return `/${parts.join("/")}`;
+  return posixResolve(defaultRoot, s);
 }
+
+function readInitialWorkspaceRoot(): string {
+  if (typeof process === "undefined") return "/workspace";
+  const fromEnv = String(process.env?.WEBAGENT_WORKSPACE_ROOT || "").trim();
+  const raw = fromEnv || (typeof process.cwd === "function" ? process.cwd() : "");
+  return ensurePosixAbsolutePath(raw || "/workspace");
+}
+
+let WS_VALUE = readInitialWorkspaceRoot();
+let ROOT_VALUE = WS_VALUE;
 
 export const WS = WS_VALUE;
 export const WORKSPACE_LABEL = "/workspace";
@@ -23,14 +31,29 @@ function envPathOverride(name: string): string {
 }
 
 export function isNodeboxRuntime(): boolean {
-  return String(process.env.WEBAGENT_RUNTIME ?? "").trim() === "nodebox";
+  return String(typeof process !== "undefined" ? process.env?.WEBAGENT_RUNTIME : "").trim() === "nodebox";
+}
+
+function isPosixAbsolute(value: string): boolean {
+  return value.startsWith("/");
+}
+
+function posixResolve(base: string, rel: string): string {
+  const parts = [...base.split("/").filter(Boolean), ...rel.split("/")];
+  const out: string[] = [];
+  for (const part of parts) {
+    if (!part || part === ".") continue;
+    if (part === "..") out.pop();
+    else out.push(part);
+  }
+  return `/${out.join("/")}`;
 }
 
 /** Resolve any root override to an absolute path so host/sandbox/module-init all agree. Relative overrides are anchored to cwd (`WS`). */
 function toAbsoluteRoot(value: string): string {
   const s = String(value || "").trim();
   if (!s) return WS;
-  return nodePath.isAbsolute(s) ? s : nodePath.resolve(WS, s);
+  return isPosixAbsolute(s) ? s : posixResolve(WS, s);
 }
 
 export function getWorkspaceRoot(): string {
@@ -47,6 +70,14 @@ export function workspaceStatePath(relativePath: string): string {
 
 export function getMemoryRoot(): string {
   return toAbsoluteRoot(envPathOverride("WEBAGENT_MEMORY_ROOT") || `${getRuntimeRoot()}/memory`);
+}
+
+export function getSkillsDir(): string {
+  return `${getWorkspaceRoot()}/.webagent/skills`;
+}
+
+export function getCapabilitiesDir(): string {
+  return `${getWorkspaceRoot()}/.webagent/capabilities`;
 }
 
 export function memoryStatePath(relativePath: string): string {
