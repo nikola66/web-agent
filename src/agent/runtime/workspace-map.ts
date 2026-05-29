@@ -72,7 +72,7 @@ export function buildWorkspaceMapBlock(): string {
     "| Tool | Required path keys | Notes |",
     "|------|-------------------|-------|",
     "| read_file, write_file, edit_file, list_dir, tree | `path` | Aliases: `file`, `filename`, `file_path` |",
-    "| write_file | `path` + `content` (both strings) | Large JSON/text: pass full `content`; if encoding fails use `skill` manage or `run_python` copy |",
+    "| write_file | `path` + `content` (both strings, one JSON object) | Up to 16 MiB; full article in `content`; split sections if larger |",
     "| grep | `pattern`; optional `root` (dir or file) | Not `query` |",
     "| browse_workspace | `action` + `path` | `list` \\| `tree` \\| `find` |",
     "| session_search | `query` | Not `pattern` |",

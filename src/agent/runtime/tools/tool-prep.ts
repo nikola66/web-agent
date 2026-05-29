@@ -11,6 +11,7 @@ import { toolPathStringFromArgs } from "./filesystem/path-hints.js";
 import { inferEmailActionArgument } from "./email-tools.js";
 import { hoistNestedToolArguments } from "./llm-arg-shape.js";
 import { normalizeSkillToolCall } from "./skill-tool-normalize.js";
+import { normalizeWriteFileArgs, parseWriteFileToolArguments } from "./write-file-args.js";
 
 export type ToolExecutionContext = ReturnType<typeof createToolContext>;
 
@@ -54,16 +55,7 @@ function applyPathArgAliases(toolName, argsObj) {
 }
 
 function applyWriteFileBodyAliases(argsObj) {
-  if (!argsObj || typeof argsObj !== "object") return argsObj;
-  if (
-    argsObj.content !== undefined ||
-    argsObj.contents !== undefined
-  ) {
-    return argsObj;
-  }
-  if (typeof argsObj.text === "string") return { ...argsObj, content: argsObj.text };
-  if (typeof argsObj.data === "string") return { ...argsObj, content: argsObj.data };
-  return argsObj;
+  return normalizeWriteFileArgs(argsObj as Record<string, unknown>);
 }
 
 function applyWebPostArgAliases(argsObj) {
@@ -134,6 +126,9 @@ export function prepareIncomingToolArguments(
 ): { schema: ReturnType<typeof resolveInputSchema>; args: Record<string, unknown>; name: string } {
   let name = String(toolName || "").trim();
   let parsed = parseToolArguments(rawArgs, name);
+  if (name === "write_file") {
+    parsed = parseWriteFileToolArguments(rawArgs, parsed);
+  }
   parsed = hoistNestedToolArguments(name, parsed) as Record<string, unknown>;
 
   if (name === "email") {
@@ -152,7 +147,7 @@ export function prepareIncomingToolArguments(
     argsForNormalize = applyWorkspaceBrowsePathArgs(name, argsForNormalize);
     argsForNormalize = applyWikiPathArgs(name, argsForNormalize);
     if (name === "write_file") {
-      argsForNormalize = applyWriteFileBodyAliases(argsForNormalize);
+      argsForNormalize = parseWriteFileToolArguments(rawArgs, applyWriteFileBodyAliases(argsForNormalize));
     }
     if (name === "web_post") {
       argsForNormalize = applyWebPostArgAliases(argsForNormalize);

@@ -20,8 +20,8 @@ test("buildMemoryLayerGuidanceBlock includes session guidance when session tools
   ]);
   assert.match(block, /session_memory_append/);
   assert.match(block, /past conversation/);
-  assert.match(block, /plain JSON with the schema keys/);
-  assert.match(block, /grep\/browse find: `pattern`/);
+  assert.match(block, /plain JSON with schema keys/);
+  assert.match(block, /session_search: `query`/);
 });
 
 test("buildMemoryLayerGuidanceBlock includes workspace browse guidance for browse_workspace", () => {

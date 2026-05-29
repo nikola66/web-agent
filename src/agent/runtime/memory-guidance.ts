@@ -39,12 +39,14 @@ export const WORKSPACE_BROWSE_GUIDANCE =
   "`grep` / browse `find` use **`pattern`**; **`query`** is only for `session_search`. " +
   WORKSPACE_LAYOUT_GUIDANCE;
 
+export const WRITE_FILE_GUIDANCE =
+  "write_file: one JSON object `{\"path\":\"projects/<slug>/file.md\",\"content\":\"...\"}` — not markdown-wrapped, not split across pseudo-fields. " +
+  "Full article body goes in `content` as one escaped string (\\n for newlines). Up to 16 MiB per call; split by section if larger.";
+
 export const TOOL_JSON_ARGS_GUIDANCE =
-  "Tool arguments must be plain JSON with the schema keys each tool declares — do not swap names " +
-  "(grep/browse find: `pattern`; session_search: `query`; read_file/write_file: `path` + `content`; " +
-  "browse_workspace: `action` + `path`; skill view/manage: `name` — not `slug`; skill manage: `action` required). " +
-  "Examples: {\"path\":\"projects/demo/out.txt\",\"content\":\"hello\"}, {\"pattern\":\"TODO\"}, " +
-  "{\"action\":\"view\",\"name\":\"http-api\"}. Do not escape property names or wrap values in extra quote layers.";
+  "Tool arguments must be plain JSON with schema keys — grep/browse: `pattern`; session_search: `query`; " +
+  "browse_workspace: `action` + `path`; skill: `name` not `slug`, manage needs `action`. " +
+  WRITE_FILE_GUIDANCE;
 
 export const SESSION_MEMORY_GUIDANCE =
   "Use `session_memory_append` for rolling investigation notes, temporary decisions, and artifact " +
@@ -101,6 +103,9 @@ export function buildMemoryLayerGuidanceBlock(toolNames: string[] = []): string 
     tools.has("session_memory_list")
   ) {
     parts.push(TOOL_JSON_ARGS_GUIDANCE);
+  }
+  if (tools.has("write_file")) {
+    parts.push(WRITE_FILE_GUIDANCE);
   }
   if (
     tools.has("browse_workspace") ||

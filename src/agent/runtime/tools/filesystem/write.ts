@@ -9,6 +9,11 @@ import {
   ensureParentDir,
 } from "../../workspace-paths.js";
 import { toolPathStringFromArgs, withPathHints } from "./path-hints.js";
+import {
+  WRITE_FILE_MAX_BYTES,
+  formatWriteFileMaxBytesHint,
+  normalizeWriteFileArgs,
+} from "../write-file-args.js";
 
 function coerceWriteContent(raw) {
   if (typeof raw === "string") return raw;
@@ -24,24 +29,25 @@ function coerceWriteContent(raw) {
 }
 
 export async function writeFileTool(args = {}, ctx) {
+  const normalized = normalizeWriteFileArgs(args as Record<string, unknown>);
   const rel =
-    typeof args.path === "string" && args.path.trim()
-      ? args.path.trim()
-      : toolPathStringFromArgs(args);
+    typeof normalized.path === "string" && normalized.path.trim()
+      ? normalized.path.trim()
+      : toolPathStringFromArgs(normalized);
   if (!rel) {
     throw new Error(
       "write_file requires `path` (string), or an alias: `filename`, `file`, `file_path`, `target`"
     );
   }
-  const raw =
-    args.contents !== undefined
-      ? args.contents
-      : args.content !== undefined
-      ? args.content
-      : args.text !== undefined
-      ? args.text
-      : args.data;
+  const raw = normalized.content;
   const contents = coerceWriteContent(raw);
+  const byteLen = Buffer.byteLength(contents, "utf8");
+  if (byteLen > WRITE_FILE_MAX_BYTES) {
+    throw new Error(
+      `write_file: content is ${byteLen} bytes (max ${WRITE_FILE_MAX_BYTES}). ` +
+        `Split into smaller write_file calls (by section) or use run_python to write the file. ${formatWriteFileMaxBytesHint()}`
+    );
+  }
   const abs = resolveWorkspacePath(ctx, rel);
   assertAllowedWorkspaceWritePath(abs);
   await ensureParentDir(abs);
@@ -52,7 +58,7 @@ export async function writeFileTool(args = {}, ctx) {
   return {
     ok: true,
     path: rel,
-    bytes: Buffer.byteLength(contents, "utf8"),
+    bytes: byteLen,
     ...(mcpReload ? { mcp_reload: mcpReload } : {}),
   };
 }
