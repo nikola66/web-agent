@@ -42,8 +42,9 @@ export function prepareIncomingToolArguments(
   args: unknown,
   toolCatalog?: Record<string, ToolCatalogEntry>,
 ): Promise<{ name: string; args: Record<string, unknown> }>;
+export function isParallelSafeToolCall(name: string, args?: Record<string, unknown>): boolean;
 export const PARALLEL_SAFE_TOOLS: ReadonlySet<string>;
-export function shouldParallelizeToolBatch(prepared: Array<{ name: string }>): boolean;
+export function shouldParallelizeToolBatch(prepared: Array<{ name: string; args?: Record<string, unknown> }>): boolean;
 export function buildOpenAiToolDefinitions(
   toolCatalog: Record<string, ToolCatalogEntry>,
 ): Promise<OpenAiToolDefinition[]>;

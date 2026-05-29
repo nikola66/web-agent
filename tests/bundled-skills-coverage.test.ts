@@ -85,7 +85,7 @@ test("every bundled capability skill is indexed and viewable on demand", async (
       assert.ok(skill, `${slug} should appear in skill_list`);
       assert.equal(skill.source, "bundled");
       assert.equal(skill.category, "bundled");
-      assert.match(skill.path, /src\/capabilities\/skills\//);
+      assert.match(skill.path, /\.webagent\/capabilities\/skills\/|src\/capabilities\/skills\//);
       assert.equal(skill.content, undefined);
       assert.ok(Array.isArray(skill.triggers) && skill.triggers.length >= 4);
 
@@ -122,7 +122,7 @@ test("every bundled capability skill is indexed and viewable on demand", async (
 
       if (slug === "web-agent-skill") {
         assert.match(viewed.content, /## Self-Evolution Loop/);
-        assert.match(viewed.content, /skill_manage/);
+        assert.match(viewed.content, /skill[^a-z]|`skill`/);
         assert.match(viewed.content, /memory_save/);
         assert.match(viewed.content, /session_memory_append/);
         assert.match(viewed.content, /cron_register/);
@@ -141,7 +141,7 @@ test("skills context index matches user message to triggers", async () => {
   const context = await buildSkillsContextBlock();
   assert.match(context, /one capability surface with built-in tools/);
   assert.match(context, /Capability router.*above picks the hub/);
-  assert.match(context, /skill_view/);
+  assert.match(context, /skill[^a-z]|`skill`/);
   assert.match(context, /systematic-debugging/);
   assert.match(context, /\| triggers:.*\bbug\b/);
 });

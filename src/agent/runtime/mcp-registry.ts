@@ -118,10 +118,11 @@ function buildHandler(tool: McpDiscoveredTool) {
   };
 }
 
-export async function discoverAndRegisterMcpTools(): Promise<{
+export async function discoverAndRegisterMcpTools(options: { unlockForSession?: boolean } = {}): Promise<{
   tools: McpDiscoveredTool[];
   status?: McpHostStatus;
 }> {
+  const { unlockForSession = false } = options;
   const { tools, status } = await mcpDiscover();
   const nextTools: Record<string, McpToolEntry> = {};
   for (const tool of tools) {
@@ -134,6 +135,9 @@ export async function discoverAndRegisterMcpTools(): Promise<{
   }
   mcpToolsCache = nextTools;
   void import("./tools/registry.js").then((m) => m.bustToolsCacheForMcp?.());
+  if (unlockForSession) {
+    void import("./turn.js").then((m) => m.unlockSessionTools?.(tools.map((t) => t.name)));
+  }
   return { tools, status };
 }
 
@@ -188,7 +192,7 @@ export async function maybeReloadMcpAfterConfigWrite(relPath: string): Promise<s
   try {
     const config = await loadMcpServersConfig();
     const env = await mcpEnvForConfigResolved(config);
-    const { tools, status } = await discoverAndRegisterMcpTools();
+    const { tools, status } = await discoverAndRegisterMcpTools({ unlockForSession: true });
     void import("./turn.js").then((m) => m.invalidateToolNamesCache?.());
     return describeMcpReload(tools, status, mcpAuthEnvWarnings(config, env)[0]);
   } catch (err) {
@@ -206,7 +210,7 @@ export async function discoverMcpOnStartup(): Promise<void> {
     for (const warning of mcpAuthEnvWarnings(config, env)) {
       console.log(dim(`MCP: ${warning}`));
     }
-    const { tools, status } = await discoverAndRegisterMcpTools();
+    const { tools, status } = await discoverAndRegisterMcpTools({ unlockForSession: true });
     console.log(dim(describeMcpReload(tools, status, mcpAuthEnvWarnings(config, env)[0])));
     void import("./turn.js").then((m) => m.invalidateToolNamesCache?.());
   } catch (err) {

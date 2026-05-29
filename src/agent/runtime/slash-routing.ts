@@ -82,7 +82,7 @@ export function findSkillBySlashToken(
 export function buildSkillInvocationUserMessage(skill: SkillListEntry, task: string): string {
   return [
     `The user invoked the installed skill "${skill.name}" (slug: ${skill.slug}).`,
-    `First call skill_view with {"name":"${skill.slug}"} to load the full SKILL.md, then use it for this task.`,
+    `First call \`skill\` with {"action":"view","name":"${skill.slug}"} to load the full SKILL.md, then use it for this task.`,
     task
       ? `Task: ${task}`
       : "Task: Use this skill for the next appropriate workflow and ask one concise clarifying question only if required.",

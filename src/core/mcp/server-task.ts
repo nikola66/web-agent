@@ -10,6 +10,7 @@ import { createMcpCorsProxyFetch } from "./cors-proxy-fetch.js";
 const DEFAULT_CONNECT_TIMEOUT = 60_000;
 const MAX_FAILURES = 3;
 const CIRCUIT_COOLDOWN_MS = 60_000;
+const MAX_TOOLS_PER_SERVER = Math.max(1, Number(process.env.WEBAGENT_MCP_TOOLS_PER_SERVER_CAP) || 30);
 
 const CREDENTIAL_PATTERN =
   /(?:ghp_[A-Za-z0-9_]{1,255}|sk-[A-Za-z0-9_]{1,255}|Bearer\s+\S+|token=[^\s&,;"']{1,255}|key=[^\s&,;"']{1,255}|API_KEY=[^\s&,;"']{1,255}|password=[^\s&,;"']{1,255}|secret=[^\s&,;"']{1,255})/gi;
@@ -25,6 +26,16 @@ export function excMessage(err: unknown): string {
   }
   const text = String(err ?? "").trim();
   return text || "Unknown error";
+}
+
+function isMcpReconnectableError(err: unknown): boolean {
+  const msg = excMessage(err).toLowerCase();
+  if (/invalid|validation|unknown tool|tool not found|bad request|\b400\b|\b401\b|\b403\b|\b404\b|\b422\b/.test(msg)) {
+    return false;
+  }
+  return /timeout|timed out|disconnect|connection|econn|network|fetch failed|socket|closed|transport|not connected|circuit open/.test(
+    msg
+  );
 }
 
 type McpClientModule = typeof import("@modelcontextprotocol/sdk/client/index.js");
@@ -146,11 +157,15 @@ export class McpServerTask {
     }
     const listed = await withTimeout(client.listTools(), this.connectTimeoutMs, `list tools for '${this.name}'`);
     this.session = { client, transport };
-    this.tools = (listed.tools || []).map((t) => ({
+    const allTools = (listed.tools || []).map((t) => ({
       name: t.name,
       description: t.description,
       inputSchema: (t.inputSchema as Record<string, unknown>) || {},
     }));
+    this.tools = allTools.slice(0, MAX_TOOLS_PER_SERVER);
+    if (allTools.length > MAX_TOOLS_PER_SERVER) {
+      this.lastError = `Registered ${MAX_TOOLS_PER_SERVER}/${allTools.length} tools (cap WEBAGENT_MCP_TOOLS_PER_SERVER_CAP)`;
+    }
     this.connected = true;
     this.lastError = "";
     this.consecutiveFailures = 0;
@@ -175,16 +190,29 @@ export class McpServerTask {
 
   async callTool(toolName: string, args: Record<string, unknown>, timeoutMs?: number): Promise<unknown> {
     if (!this.session || !this.connected) {
-      throw new Error(`MCP server '${this.name}' is not connected`);
+      await this.connect().catch((err) => {
+        throw new Error(`MCP server '${this.name}' is not connected (${excMessage(err)})`);
+      });
     }
     const wait = Math.max(5_000, timeoutMs ?? this.toolTimeoutMs);
-    const client = this.session.client;
+    const client = this.session!.client;
     const run = async () => {
-      return withTimeout(
-        client.callTool({ name: toolName, arguments: args }),
-        wait,
-        `MCP tool '${toolName}' on '${this.name}'`
-      );
+      try {
+        return await withTimeout(
+          client.callTool({ name: toolName, arguments: args }),
+          wait,
+          `MCP tool '${toolName}' on '${this.name}'`
+        );
+      } catch (err) {
+        if (!isMcpReconnectableError(err)) throw err;
+        await this.disconnect();
+        await this.connect();
+        return withTimeout(
+          this.session!.client.callTool({ name: toolName, arguments: args }),
+          wait,
+          `MCP tool '${toolName}' on '${this.name}' (after reconnect)`
+        );
+      }
     };
     const chained = this.callChain.then(run, run);
     this.callChain = chained.catch(() => {});

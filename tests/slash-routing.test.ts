@@ -68,7 +68,7 @@ test("skillSlashCommandForSurface uses underscores on telegram", () => {
   assert.equal(skillSlashCommandForSurface("task-execution", "terminal"), "/task-execution");
 });
 
-test("resolveSlashUserMessage rewrites underscore skill slash to skill_view prompt", async () => {
+test("resolveSlashUserMessage rewrites underscore skill slash to skill view prompt", async () => {
   const name = `Sync Test ${Date.now()}`;
   const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
   const underscore = slug.replace(/-/g, "_");
@@ -84,7 +84,7 @@ test("resolveSlashUserMessage rewrites underscore skill slash to skill_view prom
     const msg = await resolveSlashUserMessage(`/${underscore} do the thing`);
     assert.ok(msg);
     assert.match(msg, new RegExp(slug));
-    assert.match(msg, /skill_view/);
+    assert.match(msg, /"action"\s*:\s*"view"/);
     assert.match(msg, /do the thing/);
   } finally {
     await deleteSkill(slug).catch(() => {});

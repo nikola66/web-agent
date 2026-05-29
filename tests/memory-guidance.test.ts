@@ -51,8 +51,8 @@ test("buildMemoryLayerGuidanceBlock includes HTTP guidance with web_post and spi
   assert.doesNotMatch(block, /Nodebox has no POSIX shell or system pip/);
 });
 
-test("buildMemoryLayerGuidanceBlock includes composio guidance when skill_view enabled", () => {
-  const block = buildMemoryLayerGuidanceBlock(["skill_view", "read_file"]);
+test("buildMemoryLayerGuidanceBlock includes composio guidance when skill enabled", () => {
+  const block = buildMemoryLayerGuidanceBlock(["skill", "composio_status", "read_file"]);
   assert.match(block, /composio-oauth/);
   assert.match(block, /composio_status/);
   assert.match(block, /no access/);

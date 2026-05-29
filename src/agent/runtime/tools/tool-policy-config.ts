@@ -1,5 +1,10 @@
 import fs from "node:fs/promises";
 import { workspaceStatePath } from "../constants.js";
+import type { ToolVisibility } from "./definition.js";
+import { isDeferredOrHiddenVisibility, resolveToolVisibility, type ToolVisibilityMeta } from "./tool-visibility.js";
+import { DEFERRED_TOOL_GROUPS, TOOL_GROUPS } from "./tool-groups.js";
+
+export { DEFERRED_TOOL_GROUPS, TOOL_GROUPS } from "./tool-groups.js";
 
 export const TOOL_POLICY_REL = ".webagent/tool-policy.json";
 
@@ -8,51 +13,6 @@ export type ToolPolicyConfig = {
   deny?: string[];
   auto?: Record<string, string>;
 };
-
-export const TOOL_GROUPS: Record<string, readonly string[]> = {
-  core: [
-    "read_file",
-    "grep",
-    "browse_workspace",
-    "write_file",
-    "edit_file",
-    "multi_edit",
-    "apply_patch",
-    "run_python",
-    "run_shell",
-    "web_fetch",
-    "web_post",
-    "web_upload",
-    "web_search",
-    "skill_list",
-    "skill_view",
-    "todo_write",
-    "system_info",
-    "tool_search",
-    "tool_activate",
-  ],
-  filesystem_mutate: ["make_dir", "delete_file", "move_file", "file_diff"],
-  memory: ["memory_save", "memory_recall", "memory_search", "memory_forget"],
-  session: ["session_memory_append", "session_memory_list", "session_search"],
-  skills: ["skill_manage", "skill_bulk_save", "capability_list"],
-  wiki: ["wiki_setup", "wiki_sync", "wiki_search"],
-  composio: ["composio_connect", "composio_status", "composio_action"],
-  cron: ["cron_register", "cron_list"],
-  multimodal: ["vision_analyze", "audio_analyze", "youtube_transcribe", "image_info"],
-  documents: ["pdf_extract", "docx_extract"],
-  archives: ["extract_archive", "archive_list"],
-  delivery: ["artifact_present", "email"],
-};
-
-export const DEFERRED_TOOL_GROUPS = new Set([
-  "wiki",
-  "cron",
-  "multimodal",
-  "documents",
-  "archives",
-  "delivery",
-  "composio",
-]);
 
 export const DEFAULT_TOOL_POLICY: ToolPolicyConfig = {
   allow: [
@@ -123,35 +83,25 @@ export function resolvePolicyToolNames(
   const denied = expandPolicyEntries(policy?.deny);
   for (const name of denied) allowed.delete(name);
   allowed = applyAutoRules(allowed, policy || {}, env);
-  for (const name of allNames) {
-    if (String(name).startsWith("mcp_")) allowed.add(name);
-  }
   return [...allowed].sort();
-}
-
-export function toolsInDeferredGroups(): Set<string> {
-  const out = new Set<string>();
-  for (const group of DEFERRED_TOOL_GROUPS) {
-    for (const name of TOOL_GROUPS[group] || []) out.add(name);
-  }
-  return out;
 }
 
 export function resolveInitialActiveToolNames(
   policyNames: string[],
+  catalog: Record<string, ToolVisibilityMeta | undefined>,
   allNames: string[],
   policy: ToolPolicyConfig | null | undefined,
   env: Record<string, string | undefined>,
   unlockedNames: Iterable<string> = []
 ): string[] {
-  const deferred = toolsInDeferredGroups();
   const unlocked = new Set(unlockedNames);
   const active = new Set<string>();
   for (const name of policyNames) {
-    if (!deferred.has(name) || unlocked.has(name)) active.add(name);
+    const visibility = resolveToolVisibility(name, catalog[name]);
+    if (visibility === "active" || unlocked.has(name)) active.add(name);
   }
   for (const name of unlocked) {
-    if (canUnlockTool(name, allNames, policy, env)) active.add(name);
+    if (canUnlockTool(name, catalog, allNames, policy, env)) active.add(name);
   }
   return [...active].sort();
 }
@@ -166,6 +116,7 @@ export function isToolDeniedByPolicy(
 
 export function canUnlockTool(
   toolName: string,
+  catalog: Record<string, ToolVisibilityMeta | undefined>,
   allNames: string[],
   policy: ToolPolicyConfig | null | undefined,
   env: Record<string, string | undefined> = {}
@@ -179,9 +130,8 @@ export function canUnlockTool(
   ) {
     return false;
   }
-  if (String(toolName).startsWith("mcp_")) return true;
-  const deferred = toolsInDeferredGroups();
-  if (deferred.has(toolName)) return true;
+  const visibility = resolveToolVisibility(toolName, catalog[toolName]);
+  if (isDeferredOrHiddenVisibility(visibility)) return true;
   return resolvePolicyToolNames(allNames, policy, env).includes(toolName);
 }
 

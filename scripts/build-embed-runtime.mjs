@@ -63,9 +63,14 @@ function generateBuiltinIndex() {
 
 async function generateBrowserToolRegistry() {
   const indexPath = path.join(root, "dist/agent-runtime/tools/builtins/index.js");
+  const visPath = path.join(root, "dist/agent-runtime/tools/tool-visibility.js");
   const mod = await import(`${pathToFileURL(indexPath).href}?v=${Date.now()}`);
+  const vis = await import(`${pathToFileURL(visPath).href}?v=${Date.now()}`);
   const catalog = Object.fromEntries(
-    mod.BUILTIN_TOOL_DEFINITIONS.map(({ name, run: _run, ...entry }) => [name, entry])
+    mod.BUILTIN_TOOL_DEFINITIONS.map(({ name, run: _run, ...entry }) => [
+      name,
+      { ...entry, visibility: vis.resolveToolVisibility(name, entry) },
+    ])
   );
   const target = path.join(root, "dist/agent-runtime/tools/registry-browser.js");
   writeIfChanged(
@@ -76,6 +81,37 @@ async function generateBrowserToolRegistry() {
     path.join(root, "dist/agent-runtime/tools/registry-browser.d.ts"),
     `export const BUILTIN_TOOLS: Record<string, { emoji: string; description: string; inputSchema?: Record<string, unknown>; requiresConfirmation?: boolean; approvalSummary?: string }>;\n`
   );
+}
+
+async function buildCoreOptions() {
+  const coreRoot = path.join(root, "src/core");
+  const entryPoints = collectTsFiles(coreRoot);
+  if (!entryPoints.length) return null;
+
+  return {
+    entryPoints,
+    outdir: path.join(root, "dist/core"),
+    outbase: coreRoot,
+    bundle: false,
+    platform: "node",
+    format: "esm",
+    target: "es2022",
+    logLevel: "warning",
+    treeShaking: false,
+  };
+}
+
+function ensureCoreSymlink() {
+  const linkPath = path.join(root, "core");
+  const targetPath = path.join(root, "dist/core");
+  try {
+    const stat = fs.lstatSync(linkPath);
+    if (!stat.isSymbolicLink()) return;
+    fs.unlinkSync(linkPath);
+  } catch (err) {
+    if (err.code !== "ENOENT") throw err;
+  }
+  fs.symlinkSync(path.relative(root, targetPath), linkPath);
 }
 
 async function buildAgentRuntimeOptions() {
@@ -128,6 +164,7 @@ async function buildCapabilitiesOptions() {
 const watch = process.argv.includes("--watch");
 
 generateBuiltinIndex();
+const coreOpts = await buildCoreOptions();
 const agentOpts = await buildAgentRuntimeOptions();
 const capOpts = await buildCapabilitiesOptions();
 
@@ -138,6 +175,10 @@ if (watch) {
   console.error("[embed-runtime] watching TypeScript embed sources…");
   await new Promise(() => {});
 } else {
+  if (coreOpts) {
+    await esbuild.build(coreOpts);
+    ensureCoreSymlink();
+  }
   await esbuild.build(agentOpts);
   await generateBrowserToolRegistry();
   if (capOpts) await esbuild.build(capOpts);

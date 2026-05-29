@@ -81,8 +81,8 @@ test("adapter deploys tool-schema-sanitizer.js for registry Nodebox imports", ()
     `adapter must deploy ${sanitizerRel} (registry imports ../llm/tool-schema-sanitizer.js)`
   );
   assert.ok(fs.existsSync(path.join(distRuntime, sanitizerRel)));
-  const registrySource = fs.readFileSync(path.join(distRuntime, "tools/registry.js"), "utf8");
-  assert.match(registrySource, /tool-schema-sanitizer\.js/);
+  const loaderSource = fs.readFileSync(path.join(distRuntime, "tools/tool-loader.js"), "utf8");
+  assert.match(loaderSource, /tool-schema-sanitizer\.js/);
 });
 
 test("production Caddyfile routes subscription OAuth and LLM through sidecar", () => {

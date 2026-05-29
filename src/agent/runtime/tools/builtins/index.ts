@@ -32,25 +32,22 @@ import tool30 from "./run_shell.js";
 import tool31 from "./session_memory_append.js";
 import tool32 from "./session_memory_list.js";
 import tool33 from "./session_search.js";
-import tool34 from "./skill_bulk_save.js";
-import tool35 from "./skill_list.js";
-import tool36 from "./skill_manage.js";
-import tool37 from "./skill_view.js";
-import tool38 from "./system_info.js";
-import tool39 from "./todo_write.js";
-import tool40 from "./tool_activate.js";
-import tool41 from "./tool_search.js";
-import tool42 from "./tree.js";
-import tool43 from "./vision_analyze.js";
-import tool44 from "./web_fetch.js";
-import tool45 from "./web_post.js";
-import tool46 from "./web_search.js";
-import tool47 from "./web_upload.js";
-import tool48 from "./wiki_search.js";
-import tool49 from "./wiki_setup.js";
-import tool50 from "./wiki_sync.js";
-import tool51 from "./write_file.js";
-import tool52 from "./youtube_transcribe.js";
+import tool34 from "./skill.js";
+import tool35 from "./system_info.js";
+import tool36 from "./todo_write.js";
+import tool37 from "./tool_activate.js";
+import tool38 from "./tool_search.js";
+import tool39 from "./tree.js";
+import tool40 from "./vision_analyze.js";
+import tool41 from "./web_fetch.js";
+import tool42 from "./web_post.js";
+import tool43 from "./web_search.js";
+import tool44 from "./web_upload.js";
+import tool45 from "./wiki_search.js";
+import tool46 from "./wiki_setup.js";
+import tool47 from "./wiki_sync.js";
+import tool48 from "./write_file.js";
+import tool49 from "./youtube_transcribe.js";
 
 export const BUILTIN_TOOL_DEFINITIONS = [
   tool0,
@@ -103,7 +100,4 @@ export const BUILTIN_TOOL_DEFINITIONS = [
   tool47,
   tool48,
   tool49,
-  tool50,
-  tool51,
-  tool52,
 ] as const;

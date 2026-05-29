@@ -21,6 +21,7 @@ export const SKILL_INSTALL_INTENT_RE = new RegExp(
     "\\b(install(?:ing)?|add|import|bulk|save)\\b[^.!?]{0,60}\\bskills?\\b",
     "\\bcontinue\\s+installing\\b",
     "skill_bulk_save",
+    "\\bskill\\b[^.!?]{0,40}\\baction\\s*[:=]\\s*['\"]?bulk",
     "officialskills\\.sh",
     "skills\\.sh/",
     "skillsmp\\.com",
@@ -38,10 +39,7 @@ export const SKILL_INSTALL_FOCUSED_TOOL_NAMES = [
   "browse_workspace",
   "grep",
   "read_file",
-  "skill_bulk_save",
-  "skill_list",
-  "skill_manage",
-  "skill_view",
+  "skill",
   "web_fetch",
   "web_search",
 ];
@@ -125,7 +123,7 @@ export function buildFileHandlingContextPrefix(input) {
       "- Image → `vision_analyze` / `image_info`; audio → `audio_analyze`; YouTube URL → `youtube_transcribe`."
     );
   }
-  lines.push("Full tool picker: skill_view **`browser-runtime-map`**.");
+  lines.push("Full tool picker: `skill` (action=view) **`browser-runtime-map`**.");
   return lines.join("\n");
 }
 
@@ -171,7 +169,7 @@ export function isComposioSaasIntent(input) {
 export function buildComposioSaasContextPrefix(input) {
   if (!isComposioSaasIntent(input)) return null;
   return (
-    "[OAuth SaaS] User query may target a Composio-connected app. Call `skill_view` **`composio-oauth`**, then `composio_status` " +
+    "[OAuth SaaS] User query may target a Composio-connected app. Call `skill` (action=view) **`composio-oauth`**, then `composio_status` " +
     "(optionally `{ app: \"linkedin\" }` etc.) before answering about access. If `connected_accounts` includes the app, use `composio_action` — " +
     "do not tell the user to connect OAuth or claim 'no access' without checking status. Offer `composio_connect` only when status shows the app is missing. " +
     "If `configured: false`, tell the user to add `composio_api_key` in Settings — do not web_search or web_fetch GitHub/repo setup docs."
@@ -182,7 +180,7 @@ export function buildComposioSaasContextPrefix(input) {
 export function buildApiCallContextPrefix(input) {
   if (!isApiCallIntent(input)) return null;
   return (
-    "[HTTP API] Call skill_view **`http-api`** and any imported skill for this API before the first request. " +
+    "[HTTP API] Call `skill` (action=view) **`http-api`** and any imported skill for this API before the first request. " +
     "GET + Bearer → web_fetch `{ url, headers, response_format: \"api\" }` (never TinyFish). POST/GraphQL → web_post `{ url, body, headers }`. " +
     "Follow the skill's discovery order (health, list metadata, schema) before guessing resource names or GraphQL root fields. " +
     "On validation errors, read `recovery_hint` and fix query shape — do not retry the same malformed call."
@@ -194,20 +192,20 @@ export function buildSkillInstallContextPrefix(input) {
   if (!isSkillInstallIntent(input)) return null;
   let prefix =
     "[Skill install] Some GitHub repos are curated indexes (README + outbound links), not skill hosts. " +
-    "For uploaded/extracted skill archives: after `extract_archive`, locate the directory containing `SKILL.md`, then call `skill_manage` with `action: \"import_dir\"` and that directory path. " +
+    "For uploaded/extracted skill archives: after `extract_archive`, locate the directory containing `SKILL.md`, then call `skill` with `action: \"manage\"`, `manage_action: \"import_dir\"`, and that directory path. " +
     "Read the README, follow registry links (officialskills.sh / skills.sh / skillsmp) or source-repo URLs — " +
     "do not guess raw paths from list labels. On 404: web_fetch registry pages, resolve GitHub links, " +
     "try alternate repo layouts, web_search — pivot before declaring a blocker. " +
-    "After install, call skill_view **`imported-skill-compat`**, then skill_view the installed skill; follow the Web Agent execution section.";
+    "After install, call `skill` (action=view) **`imported-skill-compat`**, then `skill` (action=view) the installed skill; follow the Web Agent execution section.";
   if (PYTHON_SKILL_INSTALL_RE.test(String(input || ""))) {
     prefix +=
-      " After install, if the skill references Python, pip, or HTTP clients: use `run_python` for compatible Python, call skill_view **`http-api`** for REST/GraphQL, use `web_fetch`/`web_post` for simple API steps, and avoid system pip/native shell assumptions.";
+      " After install, if the skill references Python, pip, or HTTP clients: use `run_python` for compatible Python, call `skill` (action=view) **`http-api`** for REST/GraphQL, use `web_fetch`/`web_post` for simple API steps, and avoid system pip/native shell assumptions.";
   }
   return prefix;
 }
 
 export const SKILL_INSTALL_PIVOT_NUDGE =
-  "Skill install pivot: your last skill_bulk_save had all URL failures. " +
+  "Skill install pivot: your last `skill` (action=bulk) had all URL failures. " +
   "Do not stop yet. Re-read the list README for registry or source-repo links, web_fetch those pages, " +
   "resolve to real SKILL.md URLs, then retry. If still stuck, web_search for the skill on skills.sh or GitHub.";
 
@@ -224,7 +222,15 @@ export function isRegistrySkillUrl(url) {
 export function skillBulkSaveAllUrlItemsFailed(exec) {
   if (!Array.isArray(exec)) return false;
   for (const item of exec) {
-    if (String(item?.tool ?? "") !== "skill_bulk_save") continue;
+    const tool = String(item?.tool ?? "");
+    const args =
+      item?.arguments && typeof item.arguments === "object" && !Array.isArray(item.arguments)
+        ? item.arguments
+        : {};
+    const isBulk =
+      tool === "skill_bulk_save" ||
+      (tool === "skill" && String(args.action || "").toLowerCase() === "bulk");
+    if (!isBulk) continue;
     const result = item?.result;
     if (!result || typeof result !== "object") return false;
     const summary = result.summary;

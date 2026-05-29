@@ -15,6 +15,7 @@ import {
   getSkillWriteOrigin,
   markAgentCreated,
   recordSkillPatch,
+  recordSkillHubLock,
   isPinnedSkill,
   archiveSkillDirectory,
 } from "../skill-provenance.js";
@@ -27,7 +28,8 @@ import {
 } from "./skill-compat.js";
 import { preflightPythonForSkillFile } from "../tools/python-preflight.js";
 
-const SKILLS_CONTEXT_CHAR_BUDGET = 9_800;
+const SKILLS_CONTEXT_CHAR_BUDGET = 12_000;
+const CONTEXT_INDEX_PIN_SLUGS = new Set(["web-agent-skill", "browser-runtime-map", "memory-layers"]);
 const SKILL_INDEX_TRIGGERS_MAX_CHARS = 160;
 const SKILL_FILE_NAME = "SKILL.md";
 
@@ -46,7 +48,6 @@ const SKILL_SUPPORT_MAX_FILES = 64;
 const SKILL_SUPPORT_MAX_TOTAL_BYTES = 2 * 1024 * 1024;
 const SKILL_SAFE_FILE_MAX_BYTES = 512 * 1024;
 const BUNDLED_SKILLS_DIR = nodePath.join(CAPABILITIES_DIR, "skills");
-const SOURCE_BUNDLED_SKILLS_DIR = nodePath.join(WS, "src", "capabilities", "skills");
 const MAX_BULK_SKILL_ITEMS = 75;
 const BUNDLED_SKILL_PRIMARY_TOOLS: Record<string, string[]> = {};
 
@@ -350,14 +351,14 @@ async function collectSkillRecords(): Promise<SkillRecord[]> {
   };
   await walk(SKILLS_DIR, "local");
   await walk(BUNDLED_SKILLS_DIR, "bundled");
-  await walk(SOURCE_BUNDLED_SKILLS_DIR, "bundled");
+  if (!records.some((record) => record.source === "bundled")) {
+    await walk(nodePath.join(WS, "src", "capabilities", "skills"), "bundled");
+  }
   return records.sort((a, b) => a.name.localeCompare(b.name));
 }
 
 async function assertSkillWritable(record: SkillRecord | null, action: string): Promise<void> {
   if (!record) return;
-  const origin = getSkillWriteOrigin();
-  if (!origin || origin === "foreground") return;
   if (record.source === "bundled" || record.category === "bundled") {
     throw new Error(`skill ${action}: bundled skill '${record.name}' is protected.`);
   }
@@ -793,20 +794,12 @@ async function installSkillFromUrl({ url, category }) {
     content: patchedRaw,
   });
   const hubDir = nodePath.join(SKILLS_DIR, ".hub");
-  const lockPath = nodePath.join(hubDir, "lock.json");
   await fs.mkdir(hubDir, { recursive: true });
-  let lock = {};
-  try {
-    lock = JSON.parse(await fs.readFile(lockPath, "utf8"));
-  } catch {
-    lock = {};
-  }
-  lock[result.slug] = {
+  await recordSkillHubLock(result.slug, {
     source: normalizedUrl,
     installed_at: new Date().toISOString(),
     category: result.category,
-  };
-  await fs.writeFile(lockPath, JSON.stringify(lock, null, 2), "utf8");
+  });
   const postScan = scanSkillContent(patchedRaw);
   return { ...result, source: normalizedUrl, warnings: postScan.warnings };
 }
@@ -1091,8 +1084,13 @@ export async function buildSkillsContextBlock(availableToolNames: string[] = [])
       (availableToolNames || []).map((name) => String(name || "").trim()).filter(Boolean)
     );
     const skills = (await listSkills())
-      .filter((skill) => !availableTools.size || skillMatchesAvailableTools(skill, availableTools)).sort((a, b) => {
+      .filter((skill) => !availableTools.size || skillMatchesAvailableTools(skill, availableTools))
+      .sort((a, b) => {
       const bundledRank = (s) => (s.source === "bundled" || s.category === "bundled" ? 0 : 1);
+      const pinRank = (s) => (CONTEXT_INDEX_PIN_SLUGS.has(s.slug) ? 0 : 1);
+      const pa = pinRank(a);
+      const pb = pinRank(b);
+      if (pa !== pb) return pa - pb;
       const ra = bundledRank(a);
       const rb = bundledRank(b);
       if (ra !== rb) return ra - rb;
@@ -1101,7 +1099,7 @@ export async function buildSkillsContextBlock(availableToolNames: string[] = [])
     if (!skills.length) return "";
     const lines = [
       "Available skills (procedural knowledge — one capability surface with built-in tools):",
-      "The **Capability router** above picks the hub; call `skill_view` on the best match before acting. Full procedures load only via `skill_view`. `skill_manage` create/patch/import applies immediately; delete and `skill_bulk_save` each show one approval gate.",
+      "The **Capability router** above picks the hub; call `skill` (action=view) on the best match before acting. Full procedures load only via `skill` (action=view). `skill` (action=manage) create/patch/import applies immediately; delete and `skill` (action=bulk) each show one approval gate.",
     ];
     let budget = SKILLS_CONTEXT_CHAR_BUDGET;
     for (const skill of skills) {
@@ -1114,7 +1112,7 @@ export async function buildSkillsContextBlock(availableToolNames: string[] = [])
         : "";
       const line = `- ${skill.name} (slug: ${skill.slug}, category: ${skill.category}${tagText}): ${skill.description}${toolHint}${triggerText}`;
       if (line.length > budget) {
-        lines.push("- [more skills omitted from prompt; call skill_list to search]");
+        lines.push("- [more skills omitted from prompt; call skill (action=list) to search]");
         break;
       }
       lines.push(line);

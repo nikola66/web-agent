@@ -38,10 +38,7 @@ const EXPECTED_TOOLS = [
   "session_memory_append",
   "session_memory_list",
   "session_search",
-  "skill_bulk_save",
-  "skill_list",
-  "skill_manage",
-  "skill_view",
+  "skill",
   "system_info",
   "todo_write",
   "tool_activate",
@@ -87,7 +84,7 @@ test("built-in tool registry and catalog keys match", async () => {
 // nothing to check, so wrong-shaped args (e.g. todo_write's `items`) get eaten
 // silently. Every builtin must declare its properties, except genuine no-arg
 // tools listed here. Adding a new contentless-schema tool must fail this test.
-const NO_ARG_TOOLS = new Set(["cron_list", "skill_list", "system_info"]);
+const NO_ARG_TOOLS = new Set(["cron_list", "system_info"]);
 
 test("every builtin declares an input schema (no black-hole tools)", async () => {
   const registry = await import("../dist/agent-runtime/tools/registry.js");
@@ -144,16 +141,7 @@ test("source tool capabilities have manifests and handlers", async () => {
 
 test("skill catalog separates read-only vs guarded skill writes", async () => {
   const browser = await import("../dist/agent-runtime/tools/registry-browser.js");
-  const readTools = ["skill_list", "skill_view", "skill_manage"];
-  const guardedWrites = ["skill_bulk_save"];
-
-  for (const name of readTools) {
-    assert.ok(!browser.BUILTIN_TOOLS[name].requiresConfirmation, `${name} should stay read-only by default`);
-  }
-
-  for (const name of guardedWrites) {
-    assert.equal(browser.BUILTIN_TOOLS[name].requiresConfirmation, true, `${name} should require confirmation`);
-  }
+  assert.ok(!browser.BUILTIN_TOOLS.skill.requiresConfirmation, "skill tool gates bulk/delete at runtime");
 });
 
 test("composio action is read-friendly and only gates outbound/destructive calls", async () => {

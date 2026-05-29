@@ -1,8 +1,6 @@
 export type McpToolsFilter = {
   include?: string[];
   exclude?: string[];
-  resources?: boolean;
-  prompts?: boolean;
 };
 
 export type McpServerConfig = {

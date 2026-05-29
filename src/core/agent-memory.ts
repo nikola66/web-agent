@@ -36,6 +36,7 @@ const JOBS_ARCHIVE_PREFIX = "memory/jobs/";
 const CRONJOBS_PATH = ".webagent/cronjobs.json";
 const CURATOR_STATE_PATH = ".webagent/skills/.curator_state";
 const CURATOR_REPORTS_PREFIX = ".webagent/skills/.curator/reports/";
+const SKILL_MANIFEST_PATH = ".webagent/skills/manifest.json";
 const SKILL_USAGE_PATH = ".webagent/skills/.usage.json";
 
 export type MemoryReflection = {
@@ -409,9 +410,13 @@ async function loadSkillProvenanceSnapshot(
 ): Promise<SkillProvenanceSnapshot | null> {
   let raw = "";
   try {
-    raw = await readWorkspaceFileText(profileId, SKILL_USAGE_PATH, { preferLive: true });
+    raw = await readWorkspaceFileText(profileId, SKILL_MANIFEST_PATH, { preferLive: true });
   } catch {
-    return null;
+    try {
+      raw = await readWorkspaceFileText(profileId, SKILL_USAGE_PATH, { preferLive: true });
+    } catch {
+      return null;
+    }
   }
   let parsed: unknown;
   try {

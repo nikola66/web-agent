@@ -14,22 +14,28 @@ import {
   resolvePolicyToolNames,
   TOOL_GROUPS,
 } from "../src/agent/runtime/tools/tool-policy-config.ts";
+import { resolveToolVisibility } from "../src/agent/runtime/tools/tool-visibility.ts";
 
 const ALL_BUILTIN_NAMES = Object.keys(BUILTIN_TOOLS);
 const POLICY_NAMES = Object.values(TOOL_GROUPS).flat();
 
 function mockCatalog(
   names: string[],
-  extra: Record<string, { description?: string }> = {}
-): Record<string, { description?: string }> {
-  const catalog: Record<string, { description?: string }> = { ...extra };
+  extra: Record<string, { description?: string; llmVisible?: boolean }> = {}
+): Record<string, { description?: string; llmVisible?: boolean }> {
+  const catalog: Record<string, { description?: string; llmVisible?: boolean }> = { ...extra };
   for (const name of names) {
     const entry = BUILTIN_TOOLS[name as keyof typeof BUILTIN_TOOLS] as
-      | { description?: string }
+      | { description?: string; llmVisible?: boolean }
       | undefined;
     catalog[name] = {
       description: entry?.description || `${name} test description.`,
+      ...(entry?.llmVisible === false ? { llmVisible: false } : {}),
     };
+  }
+  for (const [name, meta] of Object.entries(catalog)) {
+    if (!meta) continue;
+    (meta as { visibility?: string }).visibility = resolveToolVisibility(name, meta);
   }
   return catalog;
 }
@@ -49,6 +55,7 @@ test("every builtin appears in index when policy allows all", () => {
     policyToolNames: ALL_BUILTIN_NAMES,
     activeToolNames: resolveInitialActiveToolNames(
       ALL_BUILTIN_NAMES,
+      catalog,
       ALL_BUILTIN_NAMES,
       { allow: [], deny: [] },
       {},
@@ -77,6 +84,7 @@ test("active core and deferred cron tags", () => {
   const policyNames = resolvePolicyToolNames(POLICY_NAMES, policyWithCron, {});
   const active = resolveInitialActiveToolNames(
     policyNames,
+    catalog,
     POLICY_NAMES,
     policyWithCron,
     {},
@@ -116,10 +124,11 @@ test("MCP tools appear in index under default policy without explicit allow grou
   );
   const active = resolveInitialActiveToolNames(
     policyNames,
+    catalog,
     ["read_file", mcpName],
     DEFAULT_TOOL_POLICY,
     {},
-    []
+    [mcpName]
   );
   const block = buildToolCapabilityIndexBlock({
     catalog,
@@ -144,10 +153,11 @@ test("MCP tools grouped under server header", () => {
   const policyNames = resolvePolicyToolNames(["read_file", ...mcpTools], DEFAULT_TOOL_POLICY, {});
   const active = resolveInitialActiveToolNames(
     policyNames,
+    catalog,
     ["read_file", ...mcpTools],
     DEFAULT_TOOL_POLICY,
     {},
-    []
+    mcpTools
   );
   const block = buildToolCapabilityIndexBlock({
     catalog,

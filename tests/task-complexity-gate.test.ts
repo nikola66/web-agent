@@ -165,10 +165,10 @@ test("buildSkillInstallContextPrefix nudges python runtime for python skills", (
 test("focusToolNamesForIntent narrows skill install tools", () => {
   assert.deepEqual(
     focusToolNamesForIntent(
-      ["read_file", "extract_archive", "skill_manage", "run_shell", "composio_action"],
+      ["read_file", "extract_archive", "skill", "run_shell", "composio_action"],
       "Install this skill from uploads/archive.zip"
     ),
-    ["read_file", "extract_archive", "skill_manage"]
+    ["read_file", "extract_archive", "skill"]
   );
 });
 

@@ -54,10 +54,7 @@ const SMOKE_TIERS = {
   run_shell: "local-setup",
   session_memory_append: "local",
   session_memory_list: "local",
-  skill_bulk_save: "manual",
-  skill_list: "local",
-  skill_manage: "manual",
-  skill_view: "local-setup",
+  skill: "manual",
   system_info: "local",
   todo_write: "local",
   tool_activate: "local",
@@ -162,7 +159,7 @@ test("local smoke tier tools execute without error", async (t) => {
     },
     { name: "browse_workspace", args: { action: "list", path: "." } },
     { name: "list_dir", args: { path: "." } },
-    { name: "skill_list", args: { query: "" }, check: (r) => assert.equal((r as { ok?: boolean }).ok, true) },
+    { name: "skill", args: { action: "list", query: "" }, check: (r) => assert.equal((r as { ok?: boolean }).ok, true) },
     { name: "session_memory_list", args: { limit: 5 } },
     {
       name: "session_memory_append",
@@ -466,8 +463,8 @@ test("local-setup smoke tier tools execute on an isolated workspace tree", async
     assert.ok(memoryCalls.logs.length > 0);
   });
 
-  await t.test("skill_view when skills exist", async () => {
-    const listed = await runOne("skill_list", { query: "" }, catalog);
+  await t.test("skill view when skills exist", async () => {
+    const listed = await runOne("skill", { action: "list", query: "" }, catalog);
     assert.ok(!listed?.error, listed?.error);
     const skills = (listed?.result as { skills?: Array<{ name?: string }> })?.skills || [];
     if (!skills.length) {
@@ -475,8 +472,8 @@ test("local-setup smoke tier tools execute on an isolated workspace tree", async
       return;
     }
     const name = String(skills[0]?.name || "").trim();
-    assert.ok(name, "skill_list returned unnamed skill");
-    const out = await runOne("skill_view", { name }, catalog);
+    assert.ok(name, "skill list returned unnamed skill");
+    const out = await runOne("skill", { action: "view", name }, catalog);
     assert.ok(!out?.error, out?.error);
   });
 
@@ -526,8 +523,7 @@ test("smoke tier manifest documents manual and proxy-only tools", () => {
     "composio_action",
     "composio_connect",
     "run_python",
-    "skill_bulk_save",
-    "skill_manage",
+    "skill",
   ]);
   assert.deepEqual(proxy, ["email", "vision_analyze", "web_fetch", "web_post", "web_search", "web_upload", "youtube_transcribe"]);
 });

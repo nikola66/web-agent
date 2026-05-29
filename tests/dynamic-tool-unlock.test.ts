@@ -11,8 +11,12 @@ import {
   TOOL_GROUPS,
 } from "../src/agent/runtime/tools/tool-policy-config.ts";
 import { describeDeferredTool } from "../src/agent/runtime/tools/tool-search-tools.ts";
+import { resolveToolVisibility } from "../src/agent/runtime/tools/tool-visibility.ts";
 
 const POLICY_NAMES = Object.values(TOOL_GROUPS).flat();
+const POLICY_CATALOG = Object.fromEntries(
+  POLICY_NAMES.map((name) => [name, { visibility: resolveToolVisibility(name, null) }])
+);
 
 test("skill_view primary_tools unlock deferred composio tools when configured", async () => {
   const viewed = await viewSkill({ name: "composio-oauth" });
@@ -24,6 +28,7 @@ test("skill_view primary_tools unlock deferred composio tools when configured", 
   });
   const initial = resolveInitialActiveToolNames(
     policyNames,
+    POLICY_CATALOG,
     POLICY_NAMES,
     DEFAULT_TOOL_POLICY,
     { WEBAGENT_COMPOSIO_API_KEY: "test-key" },
@@ -33,6 +38,7 @@ test("skill_view primary_tools unlock deferred composio tools when configured", 
 
   const unlocked = resolveInitialActiveToolNames(
     policyNames,
+    POLICY_CATALOG,
     POLICY_NAMES,
     DEFAULT_TOOL_POLICY,
     { WEBAGENT_COMPOSIO_API_KEY: "test-key" },
@@ -42,9 +48,9 @@ test("skill_view primary_tools unlock deferred composio tools when configured", 
 });
 
 test("canUnlockTool blocks composio tools without API key", () => {
-  assert.equal(canUnlockTool("composio_action", POLICY_NAMES, DEFAULT_TOOL_POLICY, {}), false);
+  assert.equal(canUnlockTool("composio_action", POLICY_CATALOG, POLICY_NAMES, DEFAULT_TOOL_POLICY, {}), false);
   assert.equal(
-    canUnlockTool("composio_action", POLICY_NAMES, DEFAULT_TOOL_POLICY, {
+    canUnlockTool("composio_action", POLICY_CATALOG, POLICY_NAMES, DEFAULT_TOOL_POLICY, {
       WEBAGENT_COMPOSIO_API_KEY: "test-key",
     }),
     true
@@ -69,6 +75,19 @@ test("hidden browse aliases stay executable via full tool-name normalization", a
     assert.equal(rejected.length, 0, `${name} should not be rejected`);
     assert.equal(normalized[0]?.name, name);
   }
+});
+
+test("normalizeToolCalls accepts tools added after skill-view unlock", () => {
+  const beforeUnlock = ["skill", "web_search", "web_fetch"];
+  const afterUnlock = [...beforeUnlock, "composio_action"];
+  const call = {
+    name: "composio_action",
+    arguments: { action: "GMAIL_SEND_EMAIL", params: {} },
+  };
+  const rejectedBefore = normalizeToolCalls([call], beforeUnlock).rejected;
+  assert.ok(rejectedBefore.length > 0, "deferred tool should reject before unlock");
+  const rejectedAfter = normalizeToolCalls([call], afterUnlock).rejected;
+  assert.equal(rejectedAfter.length, 0, "unlocked tool should be accepted on next round");
 });
 
 test("tool_activate can describe llm-hidden deferred aliases", async () => {

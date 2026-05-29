@@ -364,7 +364,7 @@ test("runTools aborts queued calls without invoking them", async (t) => {
   ]);
 });
 
-test("runTools leaves read-only skill tools ungated and gates skill_bulk_save batch writes", async (t) => {
+test("runTools leaves read-only skill tools ungated and gates skill bulk writes", async (t) => {
   const askCalls = [];
   const ctx = createToolContext({
     runId: "registry-test",
@@ -376,21 +376,21 @@ test("runTools leaves read-only skill tools ungated and gates skill_bulk_save ba
   });
 
   const readResults = await runTools(
-    [{ name: "skill_list", arguments: { query: "unlikely-skill-query" } }],
+    [{ name: "skill", arguments: { action: "list", query: "unlikely-skill-query" } }],
     ctx,
     {
-      skill_list: {
+      skill: {
         inputSchema: {
           type: "object",
-          properties: { query: { type: "string" } },
-          required: [],
+          properties: { action: { type: "string" }, query: { type: "string" } },
+          required: ["action"],
           additionalProperties: false,
         },
       },
     }
   );
 
-  assert.equal(readResults[0].tool, "skill_list");
+  assert.equal(readResults[0].tool, "skill");
   assert.equal(readResults[0].result.ok, true);
   assert.equal(askCalls.length, 0);
 
@@ -401,9 +401,10 @@ test("runTools leaves read-only skill tools ungated and gates skill_bulk_save ba
   const saveResults = await runTools(
     [
       {
-        name: "skill_manage",
+        name: "skill",
         arguments: {
-          action: "create",
+          action: "manage",
+          manage_action: "create",
           name: savedName,
           description: "Created without approval gate",
           content: "## Procedure\n\n1. Auto-saved.",
@@ -412,17 +413,18 @@ test("runTools leaves read-only skill tools ungated and gates skill_bulk_save ba
     ],
     ctx,
     {
-      skill_manage: {
+      skill: {
         requiresConfirmation: false,
         inputSchema: {
           type: "object",
           properties: {
             action: { type: "string" },
+            manage_action: { type: "string" },
             name: { type: "string" },
             description: { type: "string" },
             content: { type: "string" },
           },
-          required: ["action", "name", "content"],
+          required: ["action", "manage_action", "name", "content"],
           additionalProperties: false,
         },
       },
@@ -430,8 +432,8 @@ test("runTools leaves read-only skill tools ungated and gates skill_bulk_save ba
   );
 
   assert.equal(askCalls.length, 0);
-  assert.equal(saveResults[0].tool, "skill_manage");
-  assert.ok(saveResults[0].result?.ok !== false && !saveResults[0].error, "skill_manage create should succeed");
+  assert.equal(saveResults[0].tool, "skill");
+  assert.ok(saveResults[0].result?.ok !== false && !saveResults[0].error, "skill manage create should succeed");
   const loaded = await loadSkill(savedName);
   assert.ok(String(loaded).includes("Auto-saved"));
 
@@ -439,8 +441,9 @@ test("runTools leaves read-only skill tools ungated and gates skill_bulk_save ba
   const writeResults = await runTools(
     [
       {
-        name: "skill_bulk_save",
+        name: "skill",
         arguments: {
+          action: "bulk",
           items: [
             {
               name: `Denied Bulk A ${deniedSuffix}`,
@@ -458,18 +461,19 @@ test("runTools leaves read-only skill tools ungated and gates skill_bulk_save ba
     ],
     ctx,
     {
-      skill_bulk_save: {
+      skill: {
         requiresConfirmation: true,
         inputSchema: {
           type: "object",
           properties: {
+            action: { type: "string" },
             items: {
               type: "array",
               items: { type: "object", additionalProperties: true },
               minItems: 1,
             },
           },
-          required: ["items"],
+          required: ["action", "items"],
           additionalProperties: false,
         },
       },
@@ -479,7 +483,7 @@ test("runTools leaves read-only skill tools ungated and gates skill_bulk_save ba
   assert.equal(askCalls.length, 1);
   assert.deepEqual(writeResults, [
     {
-      tool: "skill_bulk_save",
+      tool: "skill",
       error: "user_denied",
       error_code: "user_denied",
       recovery_hint: "User declined this tool execution.",

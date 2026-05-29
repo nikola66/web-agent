@@ -13,11 +13,7 @@ import {
   saveSkill,
   viewSkill,
 } from "../dist/agent-runtime/memory/index.js";
-import {
-  skillBulkSaveTool,
-  skillManageTool,
-  skillViewTool,
-} from "../dist/agent-runtime/tools/remote-tools.js";
+import skillTool from "../dist/agent-runtime/tools/builtins/skill.js";
 
 const skillsRoot = nodePath.join(process.cwd(), ".webagent", "skills");
 
@@ -307,7 +303,8 @@ test("skillBulkSaveTool invokes bulk save path", async (t) => {
   t.after(async () => {
     await deleteSkill(name).catch(() => {});
   });
-  const out = await skillBulkSaveTool({
+  const out = await skillTool.run({
+    action: "bulk",
     items: [{ name, description: "via tool", content: "## Procedure\n\n1. Tool bulk." }],
   });
   assert.equal(out.summary.saved, 1);
@@ -322,10 +319,11 @@ test("skill_manage create and delete share the skill write paths", async (t) => 
     await deleteSkill(manageName).catch(() => {});
   });
 
-  const fromManage = await skillManageTool({
-    action: "create",
+  const fromManage = await skillTool.run({
+    action: "manage",
+    manage_action: "create",
     name: manageName,
-    description: "Created through skill_manage",
+    description: "Created through skill tool",
     category: "qa",
     tags: ["tool", "manage"],
     content: "## Procedure\n\n1. Save through the management tool.",
@@ -334,7 +332,7 @@ test("skill_manage create and delete share the skill write paths", async (t) => 
   assert.equal(fromManage.ok, true);
   assert.match(fromManage.path, /\.webagent\/skills\/qa\/tool-manage-/);
 
-  await skillManageTool({ action: "delete", name: fromManage.slug });
+  await skillTool.run({ action: "manage", manage_action: "delete", name: fromManage.slug });
   await assert.rejects(loadSkill(fromManage.slug), /not found/);
 });
 
@@ -405,8 +403,9 @@ test("skill_view returns compatibility_notes for imported external-tool skills",
 
 test("skill_view reads allowed support files and rejects unsafe paths", async (t) => {
   const name = `Tool View ${Date.now()}-${Math.random().toString(36).slice(2)}`;
-  const saved = await skillManageTool({
-    action: "create",
+  const saved = await skillTool.run({
+    action: "manage",
+    manage_action: "create",
     name,
     description: "Exercise support file viewing",
     category: "qa",
@@ -416,14 +415,16 @@ test("skill_view reads allowed support files and rejects unsafe paths", async (t
     await deleteSkill(saved.slug).catch(() => {});
   });
 
-  await skillManageTool({
-    action: "write_file",
+  await skillTool.run({
+    action: "manage",
+    manage_action: "write_file",
     name: saved.slug,
     file_path: "references/notes.txt",
     content: "Support note content.",
   });
 
-  const support = await skillViewTool({
+  const support = await skillTool.run({
+    action: "view",
     name: saved.slug,
     file_path: "references/notes.txt",
   });
@@ -431,7 +432,7 @@ test("skill_view reads allowed support files and rejects unsafe paths", async (t
   assert.equal(support.content, "Support note content.");
 
   await assert.rejects(
-    skillViewTool({ name: saved.slug, file_path: "../outside.txt" }),
+    skillTool.run({ action: "view", name: saved.slug, file_path: "../outside.txt" }),
     /file_path/
   );
 });
@@ -442,8 +443,9 @@ test("skill create derives metadata from full SKILL.md frontmatter", async (t) =
     await deleteSkill(slug).catch(() => {});
   });
 
-  const saved = await skillManageTool({
-    action: "create",
+  const saved = await skillTool.run({
+    action: "manage",
+    manage_action: "create",
     content: [
       "---",
       `name: ${slug}`,
@@ -463,8 +465,9 @@ test("skill create derives metadata from full SKILL.md frontmatter", async (t) =
 
 test("skill_manage write_file can infer SKILL.md target from content frontmatter", async (t) => {
   const name = `Rewrite Skill ${Date.now()}-${Math.random().toString(36).slice(2)}`;
-  const saved = await skillManageTool({
-    action: "create",
+  const saved = await skillTool.run({
+    action: "manage",
+    manage_action: "create",
     name,
     description: "Original description",
     category: "qa",
@@ -474,8 +477,9 @@ test("skill_manage write_file can infer SKILL.md target from content frontmatter
     await deleteSkill(saved.slug).catch(() => {});
   });
 
-  await skillManageTool({
-    action: "write_file",
+  await skillTool.run({
+    action: "manage",
+    manage_action: "write_file",
     content: [
       "---",
       `name: ${name}`,
@@ -489,7 +493,7 @@ test("skill_manage write_file can infer SKILL.md target from content frontmatter
     ].join("\n"),
   });
 
-  const viewed = await skillViewTool({ name: saved.slug });
+  const viewed = await skillTool.run({ action: "view", name: saved.slug });
   assert.match(viewed.content, /Rewritten description/);
   assert.match(viewed.content, /Rewritten\./);
 });
@@ -500,7 +504,8 @@ test("skill_bulk_save stores extracted archive support files", async (t) => {
     await deleteSkill(slug).catch(() => {});
   });
 
-  const result = await skillBulkSaveTool({
+  const result = await skillTool.run({
+    action: "bulk",
     items: [
       {
         content: [
@@ -524,7 +529,7 @@ test("skill_bulk_save stores extracted archive support files", async (t) => {
 
   assert.equal(result.summary.saved, 1);
   assert.equal(result.results[0].files_saved, 2);
-  const support = await skillViewTool({ name: slug, file_path: "templates/run.js" });
+  const support = await skillTool.run({ action: "view", name: slug, file_path: "templates/run.js" });
   assert.equal(support.content, "console.log('ok');\n");
 });
 
@@ -556,8 +561,9 @@ test("skill_manage import_dir installs extracted skill folder support files", as
     await fs.rm(root, { recursive: true, force: true });
   });
 
-  const result = await skillManageTool({
-    action: "import_dir",
+  const result = await skillTool.run({
+    action: "manage",
+    manage_action: "import_dir",
     path: nodePath.relative(process.cwd(), root),
     category: "qa",
   });
@@ -568,7 +574,7 @@ test("skill_manage import_dir installs extracted skill folder support files", as
     "references/directus-api.md",
     "templates/publish-5lang.py",
   ]);
-  const support = await skillViewTool({ name: slug, file_path: "references/directus-api.md" });
+  const support = await skillTool.run({ action: "view", name: slug, file_path: "references/directus-api.md" });
   assert.equal(support.content, "# API\n");
 });
 
@@ -579,8 +585,9 @@ test("invalid skill document diagnostics include heading context", async (t) => 
   });
 
   await assert.rejects(
-    skillManageTool({
-      action: "create",
+    skillTool.run({
+      action: "manage",
+      manage_action: "create",
       content: [
         "---",
         `name: ${slug}`,

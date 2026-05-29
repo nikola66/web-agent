@@ -107,6 +107,44 @@ export function summarizeToolApproval(name, args, approvalSummaryTemplate) {
   // Per-tool summarization
   const a = args && typeof args === "object" ? args : {};
 
+  if (tool === "skill") {
+    const action = String(a.action ?? "").trim();
+    const manageAction = String(a.manage_action ?? a.operation ?? "").trim();
+    if (action === "bulk") {
+      const expanded = expandSkillBulkSaveArgs(a);
+      const items = Array.isArray(expanded.items) ? expanded.items : [];
+      let nUrl = 0;
+      let nInline = 0;
+      const previews = [];
+      for (const it of items) {
+        if (it && typeof it === "object" && !Array.isArray(it)) {
+          const url = typeof it.url === "string" ? it.url.trim() : "";
+          if (url) nUrl += 1;
+          else {
+            nInline += 1;
+            const itName = String(it.name ?? "").trim();
+            if (itName && previews.length < 5) previews.push(itName);
+          }
+        }
+      }
+      let result = `skill bulk: total=${items.length}; inline=${nInline}; url=${nUrl}`;
+      if (previews.length > 0) result += `; ${previews.join(", ")}`;
+      if (nInline + nUrl > 5) result += `; +5 more`;
+      return result;
+    }
+    if (action === "manage") {
+      const name = String(a.name ?? "").trim();
+      const desc = truncateDescription(a.description);
+      const contentLen = formatContentLength(a.content);
+      const parts = [];
+      if (manageAction) parts.push(`manage_action=${manageAction}`);
+      if (name) parts.push(`name=${name}`);
+      if (desc) parts.push(`description=${desc}`);
+      if (contentLen) parts.push(`content=${contentLen}`);
+      return `skill manage: ${parts.join("; ")}`;
+    }
+  }
+
   if (tool === "skill_manage") {
     const action = String(a.action ?? "").trim();
     const name = String(a.name ?? "").trim();
@@ -219,6 +257,31 @@ function buildApprovalDetailRows(toolLabel, args, summary, toolEmoji) {
         if (subject) rows.push({ label: "📋 Subject", value: styleInlineMarkdown(subject) });
         if (!to && !subject) rows.push({ label: "⚠️", value: dim("(no recipient details)") });
       }
+      return rows;
+    }
+  }
+
+  if (tool === "skill") {
+    const action = String(flat.action ?? "").trim();
+    const manageAction = String(flat.manage_action ?? flat.operation ?? "").trim();
+    if (action === "bulk") {
+      const line = truncatePermissionText(
+        summarizeToolApproval(tool, flat) || String(summary || "").trim() || tool
+      );
+      return [
+        { label: "🔧 Tool", value: formatToolBadge(tool, em || "📦") },
+        { label: "📚 Batch", value: styleInlineMarkdown(line.replace(/^skill bulk:\s*/, "")) },
+      ];
+    }
+    if (action === "manage") {
+      const rows = [{ label: "🔧 Tool", value: formatToolBadge(tool, em || "📦") }];
+      const name = String(flat.name ?? "").trim();
+      const desc = truncatePermissionText(truncateDescription(flat.description), 80);
+      const contentLen = formatContentLength(flat.content);
+      if (manageAction) rows.push({ label: "⚙️ Action", value: cyan(manageAction) });
+      if (name) rows.push({ label: "🏷️ Name", value: bold(name) });
+      if (desc) rows.push({ label: "📝 About", value: styleInlineMarkdown(desc) });
+      if (contentLen) rows.push({ label: "📄 Content", value: dim(contentLen) });
       return rows;
     }
   }

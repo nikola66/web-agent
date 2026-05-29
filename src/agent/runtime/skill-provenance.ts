@@ -9,10 +9,16 @@ import { workspaceStatePath } from "./constants.js";
 export type SkillWriteOrigin = "foreground" | "background_review" | "curator";
 
 const USAGE_REL = ".webagent/skills/.usage.json";
+const MANIFEST_REL = ".webagent/skills/manifest.json";
+const LEGACY_HUB_LOCK_REL = ".webagent/skills/.hub/lock.json";
 const ARCHIVE_REL = ".webagent/skills/.archive";
 
 function usageFilePath(): string {
   return workspaceStatePath(USAGE_REL);
+}
+
+function manifestFilePath(): string {
+  return workspaceStatePath(MANIFEST_REL);
 }
 
 function archiveDirPath(): string {
@@ -38,7 +44,19 @@ export type SkillUsageRecord = {
   absorbed_into?: string | null;
 };
 
+export type SkillHubLock = {
+  source?: string;
+  installed_at?: string;
+  category?: string;
+};
+
+export type SkillManifestEntry = SkillUsageRecord & {
+  hubLock?: SkillHubLock;
+  source?: string;
+};
+
 type UsageStore = Record<string, SkillUsageRecord>;
+type SkillManifest = Record<string, SkillManifestEntry>;
 
 let writeOrigin: SkillWriteOrigin | null = null;
 
@@ -60,18 +78,96 @@ export async function runWithSkillWriteOrigin<T>(
 }
 
 async function loadUsageStore(): Promise<UsageStore> {
-  try {
-    const raw = await fs.readFile(usageFilePath(), "utf8");
-    const parsed = JSON.parse(raw);
-    return parsed && typeof parsed === "object" ? parsed : {};
-  } catch {
-    return {};
+  const manifest = await loadSkillManifest();
+  const out: UsageStore = {};
+  for (const [slug, entry] of Object.entries(manifest)) {
+    const { hubLock: _hubLock, source: _source, ...usage } = entry;
+    out[slug] = usage;
   }
+  return out;
 }
 
 async function saveUsageStore(store: UsageStore): Promise<void> {
+  const manifest = await loadSkillManifest();
+  for (const [slug, usage] of Object.entries(store)) {
+    manifest[slug] = { ...(manifest[slug] || {}), ...usage };
+  }
+  await saveSkillManifest(manifest);
+}
+
+async function loadSkillManifest(): Promise<SkillManifest> {
+  let manifest: SkillManifest | null = null;
+  try {
+    const raw = await fs.readFile(manifestFilePath(), "utf8");
+    const parsed = JSON.parse(raw);
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+      manifest = parsed as SkillManifest;
+    }
+  } catch {
+    /* migrate below */
+  }
+  if (manifest && Object.keys(manifest).length > 0) return manifest;
+  const migrated = await migrateLegacySkillSidecars();
+  if (Object.keys(migrated).length > 0) return migrated;
+  return manifest || {};
+}
+
+async function saveSkillManifest(manifest: SkillManifest): Promise<void> {
   await ensureSkillsDir();
-  await fs.writeFile(usageFilePath(), JSON.stringify(store, null, 2), "utf8");
+  await fs.writeFile(manifestFilePath(), JSON.stringify(manifest, null, 2), "utf8");
+}
+
+async function migrateLegacySkillSidecars(): Promise<SkillManifest> {
+  const manifest: SkillManifest = {};
+  try {
+    const usageRaw = await fs.readFile(usageFilePath(), "utf8");
+    const usage = JSON.parse(usageRaw);
+    if (usage && typeof usage === "object" && !Array.isArray(usage)) {
+      for (const [slug, record] of Object.entries(usage)) {
+        if (record && typeof record === "object") {
+          manifest[slug] = { ...(record as SkillUsageRecord) };
+        }
+      }
+    }
+  } catch {
+    /* no legacy usage */
+  }
+  try {
+    const lockRaw = await fs.readFile(workspaceStatePath(LEGACY_HUB_LOCK_REL), "utf8");
+    const lock = JSON.parse(lockRaw);
+    if (lock && typeof lock === "object" && !Array.isArray(lock)) {
+      for (const [slug, hubLock] of Object.entries(lock)) {
+        if (!hubLock || typeof hubLock !== "object") continue;
+        const lockEntry = hubLock as SkillHubLock;
+        manifest[slug] = {
+          ...(manifest[slug] || {}),
+          hubLock: lockEntry,
+          source: lockEntry.source,
+        };
+      }
+    }
+  } catch {
+    /* no legacy hub lock */
+  }
+  if (Object.keys(manifest).length) {
+    await saveSkillManifest(manifest);
+  }
+  return manifest;
+}
+
+export async function recordSkillHubLock(
+  slug: string,
+  hubLock: SkillHubLock
+): Promise<void> {
+  const key = String(slug || "").trim();
+  if (!key) throw new Error("skill hub lock: slug required.");
+  const manifest = await loadSkillManifest();
+  manifest[key] = {
+    ...(manifest[key] || {}),
+    hubLock,
+    source: hubLock.source,
+  };
+  await saveSkillManifest(manifest);
 }
 
 function nowIso(): string {

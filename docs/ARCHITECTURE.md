@@ -89,7 +89,7 @@ The same framing is used for streaming LLM responses (`ipcProxyStreamRequest` in
 
 ## Skills
 
-- Bundled procedures live under `src/capabilities/skills/<id>/SKILL.md` (compact index injected each turn; full body via `skill_view`).
+- Bundled procedures live under `src/capabilities/skills/<id>/SKILL.md` (compact index injected each turn; full body via `skill` action=view).
 - User/imported skills live under `.webagent/skills/`. Remote imports auto-append a **Web Agent execution** compatibility section via `memory/skill-compat.ts` so skills.sh hosts map to built-in tools (`web_fetch`, `web_post`, file tools, etc.).
 
 ## Build pipeline

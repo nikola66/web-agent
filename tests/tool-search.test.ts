@@ -6,9 +6,9 @@ import {
   searchDeferredTools,
 } from "../src/agent/runtime/tools/tool-search-tools.ts";
 
-test("isDeferredCatalogTool marks llmVisible false but not mcp tools", () => {
+test("isDeferredCatalogTool marks hidden and mcp tools as deferred", () => {
   assert.equal(isDeferredCatalogTool("list_dir", { llmVisible: false }), true);
-  assert.equal(isDeferredCatalogTool("mcp_github_search", {}), false);
+  assert.equal(isDeferredCatalogTool("mcp_github_search", {}), true);
   assert.equal(isDeferredCatalogTool("read_file", {}), false);
 });
 
@@ -41,21 +41,22 @@ test("searchDeferredTools empty query returns hidden browse aliases not mcp", as
   const catalog = {
     list_dir: { description: "list one dir", llmVisible: false },
     find_files: { description: "find files", llmVisible: false },
-    mcp_demo_server_items_list: { description: "[MCP:demo-server] List items.", llmVisible: false },
-    mcp_demo_server_items_read: { description: "[MCP:demo-server] Read item.", llmVisible: false },
+    mcp_demo_server_items_list: { description: "[MCP:demo-server] List items." },
+    mcp_demo_server_items_read: { description: "[MCP:demo-server] Read item." },
   };
   const matches = await searchDeferredTools("", new Set(["read_file"]), 12, catalog);
   assert.ok(matches.every((m) => isHiddenBrowseAlias(m.name)));
   assert.equal(matches.length, 2);
 });
 
-test("searchDeferredTools mcp query does not return mcp tools", async () => {
+test("searchDeferredTools mcp query finds mcp tools", async () => {
   const catalog = {
     list_dir: { description: "list", llmVisible: false },
-    mcp_hub_items_list: { description: "[MCP:hub] List.", llmVisible: false },
+    mcp_hub_items_list: { description: "[MCP:hub] List." },
   };
-  const matches = await searchDeferredTools("mcp", new Set(["read_file"]), 12, catalog);
-  assert.ok(matches.every((m) => !m.name.startsWith("mcp_")));
+  const matches = await searchDeferredTools("mcp_hub", new Set(["read_file"]), 12, catalog);
+  assert.equal(matches.length, 1);
+  assert.equal(matches[0].name, "mcp_hub_items_list");
 });
 
 test("tool_search is in core tool group policy", async () => {

@@ -95,6 +95,15 @@ const STARTUP_AWAITING_MARKER = "<<<WEBAGENT_AWAITING_RESPONSE>>>";
 
 export async function main() {
   let cfg = await resolveLlm();
+  const shutdown = async () => {
+    await shutdownMcpOnExit();
+  };
+  process.on?.("SIGINT", () => {
+    void shutdown().finally(() => process.exit(0));
+  });
+  process.on?.("SIGTERM", () => {
+    void shutdown().finally(() => process.exit(0));
+  });
   await writeWorkspaceMapFile().catch(() => {});
   await discoverMcpOnStartup();
   const toolCatalog = await loadToolCatalog();
@@ -549,4 +558,5 @@ export async function main() {
     }
   }
   rl.close();
+  await shutdownMcpOnExit();
 }

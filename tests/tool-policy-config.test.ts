@@ -8,6 +8,11 @@ import {
   resetToolPolicyCacheForTest,
   TOOL_GROUPS,
 } from "../src/agent/runtime/tools/tool-policy-config.ts";
+import { resolveToolVisibility } from "../src/agent/runtime/tools/tool-visibility.ts";
+
+function catalogForNames(names: string[]): Record<string, { visibility?: string }> {
+  return Object.fromEntries(names.map((name) => [name, { visibility: resolveToolVisibility(name, null) }]));
+}
 
 test("empty allow expands to all registered tools", () => {
   const all = ["read_file", "wiki_search", "composio_action"];
@@ -38,11 +43,13 @@ test("auto composio when configured adds composio tools to allow expansion", () 
 
 test("resolveInitialActiveToolNames unlocks deferred tools after skill_view", () => {
   const all = Object.values(TOOL_GROUPS).flat();
+  const catalog = catalogForNames(all);
   const policyNames = resolvePolicyToolNames(all, DEFAULT_TOOL_POLICY, {});
-  const initial = resolveInitialActiveToolNames(policyNames, all, DEFAULT_TOOL_POLICY, {}, []);
+  const initial = resolveInitialActiveToolNames(policyNames, catalog, all, DEFAULT_TOOL_POLICY, {}, []);
   assert.ok(!initial.includes("wiki_search"));
   const unlocked = resolveInitialActiveToolNames(
     policyNames,
+    catalog,
     all,
     DEFAULT_TOOL_POLICY,
     {},
@@ -53,14 +60,31 @@ test("resolveInitialActiveToolNames unlocks deferred tools after skill_view", ()
 
 test("canUnlockTool permits mcp deferred tools", () => {
   const all = ["tool_search", "mcp_github_create_issue"];
-  assert.equal(canUnlockTool("mcp_github_create_issue", all, DEFAULT_TOOL_POLICY, {}), true);
+  const catalog = catalogForNames(all);
+  assert.equal(canUnlockTool("mcp_github_create_issue", catalog, all, DEFAULT_TOOL_POLICY, {}), true);
 });
 
-test("default policy always includes registered mcp_* tools", () => {
+test("default policy does not auto-include mcp tools in policy allow list", () => {
   const all = [...Object.values(TOOL_GROUPS).flat(), "mcp_hub_items_list"];
   const policyNames = resolvePolicyToolNames(all, DEFAULT_TOOL_POLICY, {});
-  assert.ok(policyNames.includes("mcp_hub_items_list"));
+  assert.ok(!policyNames.includes("mcp_hub_items_list"));
   assert.ok(!policyNames.includes("wiki_search"));
+});
+
+test("session-unlocked mcp tools become active", () => {
+  const all = ["read_file", "mcp_hub_items_list"];
+  const catalog = catalogForNames(all);
+  const policyNames = resolvePolicyToolNames(all, DEFAULT_TOOL_POLICY, {});
+  const active = resolveInitialActiveToolNames(
+    policyNames,
+    catalog,
+    all,
+    DEFAULT_TOOL_POLICY,
+    {},
+    ["mcp_hub_items_list"]
+  );
+  assert.ok(active.includes("mcp_hub_items_list"));
+  assert.ok(!active.includes("wiki_search"));
 });
 
 test("resetToolPolicyCacheForTest clears cached policy", () => {

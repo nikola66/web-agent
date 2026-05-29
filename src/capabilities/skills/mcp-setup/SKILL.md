@@ -94,5 +94,33 @@ loaded and, on failure, *why*. Read that banner; do not re-fetch the endpoint.
 | `… timed out` | Endpoint slow/unreachable; raise `connect_timeout` or confirm the URL. |
 | `404` / `invalid_union jsonrpc` on connect | Wrong path — confirm the URL ends at the MCP route (e.g. `/mcp`), not the web UI. |
 
+## Tool contract
+
+| Step | Tool |
+|------|------|
+| Write server config | `write_file` on `.webagent/mcp-servers.json` |
+| Write secrets | `write_file` on `.webagent/mcp-secrets.json` |
+| Use MCP tools | `tool_search` → `tool_activate` for deferred `mcp_*`, or reload unlocks them for the session |
+
 Once connected, call the `mcp_*` tools directly. Configuring an MCP for a CMS like
 Directus does **not** replace the **`directus`** skill — use whichever the task needs.
+
+## When to Use
+
+- User asks to connect, add, or configure an MCP server (Directus hub, streamable HTTP, SSE, or stdio).
+- After writing MCP config files and reading the `mcp_reload` banner.
+
+## Pitfalls
+
+- Fetching the MCP URL with `web_fetch` to "test" it — JSON-RPC errors are normal; write config instead.
+- Expecting `mcp_*` tools in the active schema before reload/unlock — use `tool_activate` when needed.
+
+## Anti-patterns
+
+- Putting raw tokens in `mcp-servers.json`.
+- Using `web_post` to the MCP endpoint instead of registered `mcp_*` tools.
+
+## Relation to other skills
+
+- REST/GraphQL CMS work: **`http-api`** skill.
+- Imported skills referencing CallMcpTool: **`imported-skill-compat`**.

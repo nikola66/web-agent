@@ -2,7 +2,7 @@
 
 Twenty-five copy-paste scenarios for getting real work done with Web Agent. Each entry maps to bundled skills and the tools those skills expect. Prompts stay in English — paste them as-is into chat.
 
-**Surface this playbook assumes:** **49** built-in tools (skill CRUD via **`skill_manage`** plus list, view, and bulk import), **19** bundled skills. Full catalog: [README § Tooling](../README.md#tooling) · [README § Skills](../README.md#skills).
+**Surface this playbook assumes:** **49** built-in tools (skill CRUD via unified **`skill`** tool), **19** bundled skills. Full catalog: [README § Tooling](../README.md#tooling) · [README § Skills](../README.md#skills).
 
 **Filter by category:** [Research](#playbook-research) · [Memory](#playbook-memory) · [Planning](#playbook-planning) · [Automation](#playbook-automation) · [Workspace](#playbook-workspace) · [Debug](#playbook-debug) · [Multimodal](#playbook-multimodal) · [Delivery](#playbook-delivery) · [UX](#playbook-ux) · [Safety](#playbook-safety) · [Meta](#playbook-meta)
 
@@ -13,7 +13,7 @@ Twenty-five copy-paste scenarios for getting real work done with Web Agent. Each
 | Research | Find niche creators / competitors | `/open-web-research` | `web_search`, `web_fetch`, `write_file`, `artifact_present` |
 | Research | Academic paper / citation dig | `/research-pack` | `web_search`, `web_fetch`, `write_file`, `artifact_present` |
 | Research | Extract a table or JSON from a page | `/structured-extraction` | `web_fetch`, `write_file`, `artifact_present` |
-| Meta | Discover installable skills online | `/find_skills` | `web_search`, `web_fetch`, `skill_manage` |
+| Meta | Discover installable skills online | `/find_skills` | `web_search`, `web_fetch`, `skill` |
 | Memory | Save a durable preference | `/memory-layers` | `memory_save`, `memory_recall` |
 | Memory | Capture rolling session context | `/memory-layers` | `session_memory_append`, `session_memory_list` |
 | Memory | Mirror memory into Obsidian-style vault | `/memory-layers` | `wiki_setup`, `wiki_sync`, `wiki_search` |
@@ -33,7 +33,7 @@ Twenty-five copy-paste scenarios for getting real work done with Web Agent. Each
 | UX | Disambiguate a vague ask | `/clarify` | *(none)* |
 | Safety | Checkpoint before bulk delete | `/workspace-safety` | `list_dir`, `tree`, `delete_file` |
 | Safety | Pasted API key by mistake | `/artifact-delivery` | Redact in replies; `memory_save` only when user asks |
-| Meta | Improve Web Agent itself | `/web-agent-skill` | `read_file`, `grep`, `skill_manage`, `memory_save` |
+| Meta | Improve Web Agent itself | `/web-agent-skill` | `read_file`, `grep`, `skill`, `memory_save` |
 
 ---
 
@@ -115,7 +115,7 @@ Search skills.sh, SkillsMP, and Cursor marketplace — return the top 5 by insta
 
 **Bundled skills:** `/find_skills` (+ `/clarify` if query ambiguous; `/web-agent-skill` if installing)
 
-**Tools that fire:** `web_search`, `web_fetch`, `skill_manage`
+**Tools that fire:** `web_search`, `web_fetch`, `skill`
 
 </details>
 
@@ -132,7 +132,7 @@ Read how bundled skills are indexed in src/agent/runtime/memory/skills.ts and su
 
 **Bundled skills:** `/web-agent-skill` (+ `/memory-layers` for where to store lessons)
 
-**Tools that fire:** `read_file`, `grep`, `skill_manage`, `memory_save`
+**Tools that fire:** `read_file`, `grep`, `skill`, `memory_save`
 
 </details>
 
@@ -256,7 +256,7 @@ I need you to: (1) list top-level files in the workspace, (2) grep for TODO comm
 
 **Bundled skills:** `/task-execution` (+ `/chart` if ≥4 steps)
 
-**Tools that fire:** `todo_write`, `skill_view`
+**Tools that fire:** `todo_write`, `skill`
 
 </details>
 

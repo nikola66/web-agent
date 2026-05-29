@@ -20,8 +20,8 @@ export default defineTool({
   emoji: "🔓",
   toolGroup: "core",
   description:
-    "Activate a deferred policy-group or hidden-alias tool for the next agent round in this turn. " +
-    "Call `tool_search` first, then `tool_activate` with the exact tool name, then call the tool on the following round. Not for `mcp_*` (already active when configured).",
+    "Activate a deferred policy-group, MCP, or hidden-alias tool for the next agent round in this turn. " +
+    "Call `tool_search` first, then `tool_activate` with the exact tool name, then call the tool on the following round.",
   inputSchema: {
     type: "object",
     properties: {

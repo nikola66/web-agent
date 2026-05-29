@@ -1,5 +1,7 @@
 export type ToolImplementFn = (args: Record<string, unknown>, ctx: unknown) => unknown;
 
+export type ToolVisibility = "active" | "deferred" | "hidden";
+
 export type ToolDefinition = {
   name: string;
   run: ToolImplementFn;
@@ -8,7 +10,9 @@ export type ToolDefinition = {
   inputSchema: Record<string, unknown>;
   requiresConfirmation?: boolean;
   approvalSummary?: string;
+  /** @deprecated use visibility */
   llmVisible?: boolean;
+  visibility?: ToolVisibility;
   toolGroup?: string;
 };
 

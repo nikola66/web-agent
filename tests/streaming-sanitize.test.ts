@@ -221,13 +221,13 @@ test("normalizeToolCalls accepts duplicated find_find_files name", () => {
   assert.equal(normalized[0].name, "find_files");
 });
 
-test("resolveKnownToolName maps skill_save to skill_manage in review toolsets", () => {
-  const reviewTools = ["skill_list", "skill_view", "skill_manage"];
-  assert.equal(resolveKnownToolName("skill_save", reviewTools), "skill_manage");
-  assert.equal(resolveKnownToolName("skill_create", reviewTools), "skill_manage");
+test("resolveKnownToolName maps skill_save to skill in review toolsets", () => {
+  const reviewTools = ["skill", "read_file"];
+  assert.equal(resolveKnownToolName("skill_save", reviewTools), "skill");
+  assert.equal(resolveKnownToolName("skill_create", reviewTools), "skill");
 });
 
-test("normalizeToolCalls maps skill_save to skill_manage create", () => {
+test("normalizeToolCalls maps skill_save to skill manage create", () => {
   const { normalized, rejected } = normalizeToolCalls(
     [
       {
@@ -235,11 +235,12 @@ test("normalizeToolCalls maps skill_save to skill_manage create", () => {
         arguments: { name: "json-editing", content: "---\nname: JSON\n---\n\nUse 2 spaces." },
       },
     ],
-    ["skill_manage", "skill_list"]
+    ["skill", "read_file"]
   );
   assert.equal(rejected.length, 0);
-  assert.equal(normalized[0].name, "skill_manage");
-  assert.equal(normalized[0].arguments.action, "create");
+  assert.equal(normalized[0].name, "skill");
+  assert.equal(normalized[0].arguments.action, "manage");
+  assert.equal(normalized[0].arguments.manage_action, "create");
 });
 
 test("sanitizeAssistantVisibleText strips call:tool loose lines", () => {

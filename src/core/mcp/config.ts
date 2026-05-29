@@ -1,3 +1,4 @@
+import fs from "node:fs/promises";
 import type { McpServerConfig, McpServersConfig } from "./types.js";
 
 const ENV_VAR_PATTERN = /\$\{([^}]+)\}/g;
@@ -67,4 +68,21 @@ export function parseMcpServersConfig(raw: unknown): McpServersConfig {
     out[name] = value as McpServerConfig;
   }
   return out;
+}
+
+export async function loadMcpServersConfigFromPath(configPath: string): Promise<McpServersConfig> {
+  try {
+    const raw = await fs.readFile(configPath, "utf8");
+    return parseMcpServersConfig(JSON.parse(raw));
+  } catch {
+    return {};
+  }
+}
+
+export async function saveMcpServersConfigToPath(
+  configPath: string,
+  config: McpServersConfig
+): Promise<void> {
+  await fs.mkdir(configPath.replace(/\/[^/]+$/, ""), { recursive: true });
+  await fs.writeFile(configPath, `${JSON.stringify(config, null, 2)}\n`, "utf8");
 }

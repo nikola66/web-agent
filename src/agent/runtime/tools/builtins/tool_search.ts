@@ -17,8 +17,7 @@ export default defineTool({
   emoji: "🔍",
   toolGroup: "core",
   description:
-    "Search deferred tools (policy-group tools and hidden browse aliases like list_dir/find_files/tree) not in the active schema. " +
-    "`mcp_*` tools are active when configured — see ## MCP in the Tool capability index; do not use this tool to discover MCP. " +
+    "Search deferred tools (policy-group, MCP, and hidden browse aliases like list_dir/find_files/tree) not in the active schema. " +
     "Use before `tool_activate`.",
   inputSchema: {
     type: "object",

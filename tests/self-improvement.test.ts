@@ -261,7 +261,7 @@ test("applyAutomaticSkillTransitions marks stale and archived agent-created skil
     state: "active",
   };
   await fs.writeFile(
-    nodePath.join(skillsDir, ".usage.json"),
+    nodePath.join(skillsDir, "manifest.json"),
     JSON.stringify(usage, null, 2),
     "utf8"
   );
@@ -296,7 +296,7 @@ test("applyAutomaticSkillTransitions skips pinned skills", async () => {
     pinned: true,
   };
   await fs.writeFile(
-    nodePath.join(skillsDir, ".usage.json"),
+    nodePath.join(skillsDir, "manifest.json"),
     JSON.stringify(usage, null, 2),
     "utf8"
   );
@@ -308,6 +308,61 @@ test("applyAutomaticSkillTransitions skips pinned skills", async () => {
   assert.equal(out.archived.includes("pinned-skill"), false);
   const after = await provenance.listSkillUsage();
   assert.notEqual(after["pinned-skill"]?.state, "archived");
+
+  delete process.env.WEBAGENT_WORKSPACE_ROOT;
+});
+
+test("skill manifest migrates legacy usage and hub lock when manifest is empty", async () => {
+  const tmp = await fs.mkdtemp(nodePath.join(os.tmpdir(), "webagent-skill-manifest-"));
+  process.env.WEBAGENT_WORKSPACE_ROOT = tmp;
+  const provenance = await import(`../dist/agent-runtime/skill-provenance.js?v=${Date.now()}`);
+  const skillsDir = nodePath.join(tmp, ".webagent", "skills");
+  const hubDir = nodePath.join(skillsDir, ".hub");
+  await fs.mkdir(hubDir, { recursive: true });
+  await fs.writeFile(
+    nodePath.join(skillsDir, "manifest.json"),
+    JSON.stringify({}, null, 2),
+    "utf8"
+  );
+  await fs.writeFile(
+    nodePath.join(skillsDir, ".usage.json"),
+    JSON.stringify(
+      {
+        "imported-x": { created_by: "user", view_count: 2, state: "active" },
+      },
+      null,
+      2
+    ),
+    "utf8"
+  );
+  await fs.writeFile(
+    nodePath.join(hubDir, "lock.json"),
+    JSON.stringify(
+      {
+        "imported-x": {
+          source: "https://example.com/SKILL.md",
+          installed_at: "2026-01-01T00:00:00.000Z",
+          category: "imported",
+        },
+      },
+      null,
+      2
+    ),
+    "utf8"
+  );
+
+  const usage = await provenance.listSkillUsage();
+  assert.equal(usage["imported-x"]?.view_count, 2);
+  await provenance.recordSkillHubLock("imported-y", {
+    source: "https://example.com/other/SKILL.md",
+    installed_at: "2026-01-02T00:00:00.000Z",
+    category: "imported",
+  });
+  const manifestRaw = JSON.parse(
+    await fs.readFile(nodePath.join(skillsDir, "manifest.json"), "utf8")
+  );
+  assert.equal(manifestRaw["imported-x"]?.view_count, 2);
+  assert.equal(manifestRaw["imported-x"]?.hubLock?.source, "https://example.com/SKILL.md");
 
   delete process.env.WEBAGENT_WORKSPACE_ROOT;
 });

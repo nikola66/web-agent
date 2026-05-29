@@ -36,7 +36,7 @@ export const WORKSPACE_BROWSE_GUIDANCE =
 export const TOOL_JSON_ARGS_GUIDANCE =
   "Tool arguments must be plain JSON with the schema keys each tool declares — do not swap names " +
   "(grep/browse find: `pattern`; session_search: `query`; read_file/browse_workspace: `path` or `root`; " +
-  "skill_view/skill_manage: `name` — not `slug`). " +
+  "skill (action=view/manage): `name` — not `slug`). " +
   "Examples: {\"pattern\":\"TODO\"}, {\"query\":\"last outreach\"}, {\"path\":\".\"}. " +
   "Do not escape property names and do not wrap values in extra quote layers.";
 
@@ -48,7 +48,7 @@ export const SESSION_MEMORY_GUIDANCE =
 
 export const SKILLS_GUIDANCE =
   "After completing a complex task (5+ tool calls), fixing a tricky error, or discovering a " +
-  "non-trivial workflow, save the approach with `skill_manage` so you can reuse " +
+  "non-trivial workflow, save the approach with `skill` (action=manage) so you can reuse " +
   "it next time. When using a skill and finding it outdated or wrong, patch it immediately — " +
   "don't wait to be asked. Skills capture procedures; memory captures durable facts.";
 
@@ -59,12 +59,12 @@ export const HTTP_API_GUIDANCE =
   "Bytes move runtime→proxy→upstream; you see metadata (`bytes`, `path`, `file_id`) — never base64 in tool args or chat. " +
   "REST GET → `web_fetch`; binary download → `web_fetch` + `save_to`. JSON/GraphQL/PATCH → `web_post`. " +
   "CMS `/files` or single file upload → `web_upload` with `source_url` or `file_path`. Mixed form + file(s) → `web_post.multipart`. " +
-  "Python script uploads → `webagent.http.upload_file` in `run_python`. Read `skill_view` **`http-api`** before first API call. " +
-  "OAuth-connected SaaS (Gmail, LinkedIn, Slack, …) → `skill_view` **`composio-oauth`**, then `composio_status` — not raw `web_post`. " +
+  "Python script uploads → `webagent.http.upload_file` in `run_python`. Read `skill` (action=view) **`http-api`** before first API call. " +
+  "OAuth-connected SaaS (Gmail, LinkedIn, Slack, …) → `skill` (action=view) **`composio-oauth`**, then `composio_status` — not raw `web_post`. " +
   "On `ok: false` or GraphQL `errors`, fix once — do not loop shell/axios or read_file snapshot recovery for uploads.";
 
 export const COMPOSIO_SAAS_GUIDANCE =
-  "For the user's connected OAuth apps (Gmail, LinkedIn, Slack, HubSpot, …): call `skill_view` **`composio-oauth`**, then `composio_status` before answering about access. " +
+  "For the user's connected OAuth apps (Gmail, LinkedIn, Slack, HubSpot, …): call `skill` (action=view) **`composio-oauth`**, then `composio_status` before answering about access. " +
   "If `connected_accounts` includes the app, use `composio_action` — do not tell the user to connect OAuth or claim 'no access' without checking status. " +
   "Offer `composio_connect` only when status shows the app is missing from `connected_accounts`. " +
   "When `configured: false`, setup is Settings → Composio → `composio_api_key` — do not web_search or web_fetch repo/GitHub docs for setup.";
@@ -106,13 +106,13 @@ export function buildMemoryLayerGuidanceBlock(toolNames: string[] = []): string 
   ) {
     parts.push(WORKSPACE_BROWSE_GUIDANCE);
   }
-  if (tools.has("skill_manage") || tools.has("skill_bulk_save")) {
+  if (tools.has("skill")) {
     parts.push(SKILLS_GUIDANCE);
   }
   if (tools.has("web_fetch") || tools.has("web_post") || tools.has("web_upload")) {
     parts.push(HTTP_API_GUIDANCE);
   }
-  if (tools.has("skill_view")) {
+  if (tools.has("composio_status") || tools.has("composio_action") || tools.has("composio_connect")) {
     parts.push(COMPOSIO_SAAS_GUIDANCE);
   }
   if (tools.has("read_file") || tools.has("grep") || tools.has("browse_workspace") || tools.has("find_files") || tools.has("list_dir")) {

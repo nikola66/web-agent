@@ -1,4 +1,4 @@
-import { toolsInDeferredGroups } from "./tool-policy-config.js";
+import { catalogEntryIsDeferred, resolveToolVisibility, type ToolVisibilityMeta } from "./tool-visibility.js";
 
 const HIDDEN_BROWSE_ALIASES = new Set(["list_dir", "find_files", "tree"]);
 
@@ -8,40 +8,29 @@ export function isHiddenBrowseAlias(name: string): boolean {
 
 export function isDeferredCatalogTool(
   name: string,
-  meta: { llmVisible?: boolean } | null | undefined,
-  deferredGroupTools: Set<string> = toolsInDeferredGroups()
+  meta: ToolVisibilityMeta | null | undefined
 ): boolean {
-  if (String(name || "").startsWith("mcp_")) return false;
-  if (meta?.llmVisible === false) return true;
-  // Group-deferred tools (archives/documents/multimodal/wiki/cron/delivery/…)
-  // are NOT marked llmVisible:false — they're held back by DEFERRED_TOOL_GROUPS
-  // and the active-tool filter. They must still be discoverable here, or
-  // `tool_search("extract_archive")` returns nothing for a real, unlockable
-  // tool (the exact failure that stranded a zip extraction). Caller may pass a
-  // precomputed set to avoid rebuilding it per catalog entry.
-  if (deferredGroupTools.has(String(name || ""))) return true;
-  return false;
+  return catalogEntryIsDeferred(name, meta);
 }
 
 export async function searchDeferredTools(
   query: string,
   activeToolNames: Set<string>,
   limit = 12,
-  catalogOverride?: Record<string, { description?: string; llmVisible?: boolean } | undefined>
+  catalogOverride?: Record<string, ToolVisibilityMeta & { description?: string } | undefined>
 ): Promise<Array<{ name: string; description: string; server?: string }>> {
   const q = String(query || "").trim().toLowerCase();
   const catalog =
     catalogOverride ?? (await import("./registry.js").then((m) => m.loadToolCatalog()));
   const matches: Array<{ name: string; description: string; server?: string; score: number }> = [];
-  const deferredGroupTools = toolsInDeferredGroups();
   for (const [name, meta] of Object.entries(catalog)) {
     if (activeToolNames.has(name)) continue;
-    if (!isDeferredCatalogTool(name, meta, deferredGroupTools)) continue;
+    if (!isDeferredCatalogTool(name, meta)) continue;
     const description = String(meta?.description || "");
     const haystack = `${name} ${description}`.toLowerCase();
     let score = 0;
     if (!q) {
-      if (!isHiddenBrowseAlias(name)) continue;
+      if (resolveToolVisibility(name, meta) !== "hidden") continue;
       score = 1;
     } else if (name.toLowerCase().includes(q)) {
       score += 3;
