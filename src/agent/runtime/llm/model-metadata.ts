@@ -156,6 +156,7 @@ export async function fetchContextWindow(cfg, fetchWithTimeout) {
   if (!model) return null;
   if (model === "openrouter/free") return OPENROUTER_FREE_DEFAULT_CONTEXT_WINDOW;
   if (cfg.provider === "opencode" && model === "big-pickle") return 200_000;
+  if (cfg.provider === "bitnet") return 2048;
 
   const catalog = await fetchModelsCatalog(cfg, fetchWithTimeout);
   const fromCatalog = catalog.get(model);

@@ -426,7 +426,7 @@ export function ProfileEditor(props: {
                 )}
               </div>
 
-              {provider === "opencode" ? (
+              {provider === "opencode" || provider === "bitnet" ? (
                 <Field label="Provider">
                   <SearchableSelect
                     value={provider}
@@ -470,6 +470,12 @@ export function ProfileEditor(props: {
 
                 return (
                   <>
+                    {provider === "bitnet" && (
+                      <p className="text-[10px] leading-snug text-text-muted">
+                        Uses Microsoft&apos;s public BitNet demo (free). Shared capacity — rate limits possible.
+                        Tool calling is disabled on this provider.
+                      </p>
+                    )}
                     {isCustom && (
                       <Field label="Base URL (optional)">
                         <input

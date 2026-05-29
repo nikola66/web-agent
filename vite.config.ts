@@ -17,6 +17,7 @@ import {
 } from "./src/agent/runtime/privacy";
 import { appVersionPlugin } from "./vite/app-version";
 import { transformersOrtAssetsPlugin } from "./vite/transformers-ort-assets";
+import { handleBitnetHttp, isBitnetLlmPath, isBitnetProvider } from "./scripts/bitnet/router.mjs";
 import {
   handleSubscriptionHttp,
   isSubscriptionProvider,
@@ -385,6 +386,12 @@ function llmProxyGate() {
   }) => {
     server.middlewares.use((req, res, next) => {
       const pathname = requestUrlPath(req);
+      if (isBitnetLlmPath(pathname)) {
+        void handleBitnetHttp(req, res).then((handled) => {
+          if (!handled) next();
+        });
+        return;
+      }
       if (
         pathname.startsWith("/api/providers/oauth/") ||
         pathname.startsWith("/api/llm/nous/") ||
@@ -434,7 +441,7 @@ function llmProxyGate() {
 function buildLlmProxies(): Record<string, ProxyWithRouter> {
   const proxies: Record<string, ProxyWithRouter> = {};
   for (const [id, upstream] of Object.entries(PROVIDER_UPSTREAMS)) {
-    if (isSubscriptionProvider(id)) continue;
+    if (isSubscriptionProvider(id) || isBitnetProvider(id)) continue;
     const upstreamUrl = new URL(upstream);
     const basePath = upstreamUrl.pathname.replace(/\/$/, "") || "";
     const matchedPrefix = `/api/llm/${id}`;

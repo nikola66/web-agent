@@ -37,6 +37,12 @@ test("activeProfileModel uses providerModels for active provider", () => {
   assert.equal(model, "custom/model-a");
 });
 
+test("resolveProviderModelOverride ignores bitnet overrides", () => {
+  const models = storeProviderModelOverride({}, "bitnet", "custom-model", "bitnet-b1.58-2b-4t");
+  assert.deepEqual(models, {});
+  assert.equal(resolveProviderModelOverride("bitnet", models, "bitnet-b1.58-2b-4t"), "");
+});
+
 test("buildProviderModelsFromProfile migrates legacy model field", () => {
   const models = buildProviderModelsFromProfile(
     {

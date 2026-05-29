@@ -114,7 +114,9 @@ export async function resolveLlm() {
     model:
       selectedProvider.id === "opencode"
         ? selectedProvider.model || "big-pickle"
-        : modelOverride || selectedProvider.model || "",
+        : selectedProvider.id === "bitnet"
+          ? selectedProvider.model || "bitnet-b1.58-2b-4t"
+          : modelOverride || selectedProvider.model || "",
     extraHeaders: {
       ...(selectedProvider.runtime?.extraHeaders || {}),
       ...envExtraHeaders,

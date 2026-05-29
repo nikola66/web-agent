@@ -754,7 +754,8 @@ export async function agentTurn(
       let streamResult;
       let streamAborted = false;
       try {
-        streamResult = await streamOpenAI(sanitizeMessagesForLlm(conv), cfg, onDelta, streamTools, {
+        const llmTools = cfg.provider === "bitnet" ? [] : streamTools;
+        streamResult = await streamOpenAI(sanitizeMessagesForLlm(conv), cfg, onDelta, llmTools, {
           signal: turnController.signal,
         });
       } catch (error) {

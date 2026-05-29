@@ -11,7 +11,7 @@ export function resolveProviderModelOverride(
   providerModels: ProviderModelOverrides | undefined,
   defaultModel = ""
 ): string {
-  if (providerId === "opencode") return "";
+  if (providerId === "opencode" || providerId === "bitnet") return "";
   const stored = String(providerModels?.[providerId] || "").trim();
   const normalizedDefault = String(defaultModel || "").trim();
   if (!stored || (normalizedDefault && stored === normalizedDefault)) return "";
@@ -27,7 +27,7 @@ export function storeProviderModelOverride(
   const next = { ...providerModels };
   const trimmed = String(draftModel || "").trim();
   const normalizedDefault = String(defaultModel || "").trim();
-  if (providerId === "opencode" || !trimmed || (normalizedDefault && trimmed === normalizedDefault)) {
+  if (providerId === "opencode" || providerId === "bitnet" || !trimmed || (normalizedDefault && trimmed === normalizedDefault)) {
     delete next[providerId];
   } else {
     next[providerId] = trimmed;
@@ -44,7 +44,7 @@ export function buildProviderModelsFromProfile(
   const providerId = profile.provider;
   const normalizedDefault = String(defaultModel || "").trim();
   if (legacy && !models[providerId]) {
-    if (providerId !== "opencode" && legacy !== normalizedDefault) {
+    if (providerId !== "opencode" && providerId !== "bitnet" && legacy !== normalizedDefault) {
       models[providerId] = legacy;
     }
   }

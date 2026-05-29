@@ -3,7 +3,7 @@
   "name": "OpenCode (free, limited)",
   "label": "OpenCode (free, limited)",
   "isDefault": true,
-  "order": 2,
+  "order": 3,
   "kind": "openai",
   "requiresUserApiKey": false,
   "model": "big-pickle",

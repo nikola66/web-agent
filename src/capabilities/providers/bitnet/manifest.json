@@ -1,0 +1,15 @@
+{
+  "id": "bitnet",
+  "name": "BitNet (free)",
+  "label": "BitNet (free, demo)",
+  "order": 1,
+  "kind": "openai",
+  "requiresUserApiKey": false,
+  "model": "bitnet-b1.58-2b-4t",
+  "runtime": {
+    "basePath": "bitnet",
+    "fallbackBaseUrl": "https://demo-bitnet-h0h8hcfqeqhrf5gf.canadacentral-01.azurewebsites.net",
+    "builtinApiKey": "public",
+    "supportsTools": false
+  }
+}
