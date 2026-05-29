@@ -4,6 +4,7 @@
 
 import { createHash } from "node:crypto";
 import { stableStringify } from "../stream-output.js";
+import { formatWriteFileLoopRecoveryHint } from "./write-file-args.js";
 
 export const IDEMPOTENT_TOOL_NAMES = new Set([
   "read_file",
@@ -280,7 +281,10 @@ function toolFailureRecoveryHint(
       "before repeating the same failing request."
     );
   }
-  if (toolName === "edit_file" || toolName === "write_file" || toolName === "apply_patch") {
+  if (toolName === "write_file") {
+    return common + formatWriteFileLoopRecoveryHint();
+  }
+  if (toolName === "edit_file" || toolName === "apply_patch") {
     return (
       common +
       "Re-read the target file, confirm old_string/context matches exactly, try a smaller patch, " +

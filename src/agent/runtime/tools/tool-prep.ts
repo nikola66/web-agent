@@ -11,7 +11,11 @@ import { toolPathStringFromArgs } from "./filesystem/path-hints.js";
 import { inferEmailActionArgument } from "./email-tools.js";
 import { hoistNestedToolArguments } from "./llm-arg-shape.js";
 import { normalizeSkillToolCall } from "./skill-tool-normalize.js";
-import { normalizeWriteFileArgs, parseWriteFileToolArguments } from "./write-file-args.js";
+import {
+  normalizeWriteFileArgs,
+  parseEditFileToolArguments,
+  parseWriteFileToolArguments,
+} from "./write-file-args.js";
 
 export type ToolExecutionContext = ReturnType<typeof createToolContext>;
 
@@ -128,6 +132,8 @@ export function prepareIncomingToolArguments(
   let parsed = parseToolArguments(rawArgs, name);
   if (name === "write_file") {
     parsed = parseWriteFileToolArguments(rawArgs, parsed);
+  } else if (name === "edit_file") {
+    parsed = parseEditFileToolArguments(rawArgs, parsed);
   }
   parsed = hoistNestedToolArguments(name, parsed) as Record<string, unknown>;
 
@@ -148,6 +154,8 @@ export function prepareIncomingToolArguments(
     argsForNormalize = applyWikiPathArgs(name, argsForNormalize);
     if (name === "write_file") {
       argsForNormalize = parseWriteFileToolArguments(rawArgs, applyWriteFileBodyAliases(argsForNormalize));
+    } else if (name === "edit_file") {
+      argsForNormalize = parseEditFileToolArguments(rawArgs, argsForNormalize);
     }
     if (name === "web_post") {
       argsForNormalize = applyWebPostArgAliases(argsForNormalize);

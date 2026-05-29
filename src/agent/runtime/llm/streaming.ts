@@ -19,7 +19,7 @@ type LlmRequestOptions = {
 
 type ToolCallPayload = {
   name: string;
-  arguments: Record<string, unknown>;
+  arguments: Record<string, unknown> | string;
 };
 
 type JsonValueSpan = {
@@ -1273,16 +1273,20 @@ export function normalizeToolCalls(
       rejected.push({ reason: "missing_name", call: raw });
       continue;
     }
-    let args: Record<string, unknown> = {};
     const rawArgs = raw?.arguments;
+    let args: Record<string, unknown> | string = {};
     if (typeof rawArgs === "string") {
       const trimmed = rawArgs.trim();
-      args = trimmed ? parseToolArguments(trimmed, rawName) : {};
+      args = trimmed || {};
     } else if (rawArgs && typeof rawArgs === "object" && !Array.isArray(rawArgs)) {
       args = rawArgs as Record<string, unknown>;
     }
     const resolved = resolveKnownToolName(rawName, knownTools);
-    const normalizedSkill = normalizeSkillToolCall(resolved, args, rawName);
+    const normalizedSkill = normalizeSkillToolCall(
+      resolved,
+      typeof args === "string" ? parseToolArguments(args, resolved) : args,
+      rawName
+    );
     const name = normalizedSkill.name;
     args = normalizedSkill.args;
     if (!knownTools.has(name)) {
@@ -1299,23 +1303,29 @@ export function normalizeToolCalls(
         args.new = args.new_string;
       }
     }
-    if ((name === "read_file" || name === "write_file" || name === "edit_file") && !args.path) {
-      if (typeof args.file === "string") args.path = args.file;
-      else if (typeof args.file_path === "string") args.path = args.file_path;
-      else if (typeof args.filepath === "string") args.path = args.filepath;
+    if (typeof args === "object" && !Array.isArray(args)) {
+      if ((name === "read_file" || name === "write_file" || name === "edit_file") && !args.path) {
+        if (typeof args.file === "string") args.path = args.file;
+        else if (typeof args.file_path === "string") args.path = args.file_path;
+        else if (typeof args.filepath === "string") args.path = args.filepath;
+      }
+      if (name === "run_shell" && !args.command && typeof args.cmd === "string") {
+        args.command = args.cmd;
+      }
     }
-    if (name === "run_shell" && !args.command && typeof args.cmd === "string") {
-      args.command = args.cmd;
-    }
-    // Deduplicate: same tool + same serialized args within one round = duplicate emission
-    // (happens when model uses both native tool_calls and <<<TOOL>>> markers).
-    const key = `${name}:${JSON.stringify(args)}`;
+    const key =
+      typeof rawArgs === "string" && rawArgs.trim()
+        ? `${name}:${rawArgs.trim()}`
+        : `${name}:${JSON.stringify(args)}`;
     if (seenCallKeys.has(key)) {
       rejected.push({ reason: "duplicate_call", call: raw });
       continue;
     }
     seenCallKeys.add(key);
-    normalized.push({ name, arguments: args });
+    normalized.push({
+      name,
+      arguments: typeof rawArgs === "string" && rawArgs.trim() ? rawArgs.trim() : args,
+    });
   }
   return { normalized, rejected };
 }

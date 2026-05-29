@@ -448,13 +448,21 @@ export function classifyToolError(err: unknown, statusHint: number | null = null
   const message = typeof err === "string" ? err : String((err as Error)?.message || err || "");
   const parsed = classifyFromMessage(message, statusHint);
   let recovery_hint = parsed.hintBase;
-  const tail = message.replace(/\s+/g, " ").trim().slice(0, 180);
-  if (tail && tail.length > 20 && !tail.startsWith(parsed.hintBase.slice(0, 12))) {
-    recovery_hint = `${parsed.hintBase} Detail: ${tail}`;
+  const skipTail =
+    parsed.error_code === "invalid_arguments" &&
+    /missing required field\(s\)/i.test(message) &&
+    /write_file|edit_file/i.test(message);
+  if (!skipTail) {
+    const tail = message.replace(/\s+/g, " ").trim().slice(0, 180);
+    if (tail && tail.length > 20 && !tail.startsWith(parsed.hintBase.slice(0, 12))) {
+      recovery_hint = `${parsed.hintBase} Detail: ${tail}`;
+    }
   }
   const { hintBase: _h, ...rest } = parsed;
+  const maxHint =
+    parsed.error_code === "invalid_arguments" && /write_file|edit_file/i.test(message) ? 280 : 400;
   return {
     ...rest,
-    recovery_hint: recovery_hint.slice(0, 400),
+    recovery_hint: recovery_hint.slice(0, maxHint),
   };
 }

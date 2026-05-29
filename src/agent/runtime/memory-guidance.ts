@@ -40,8 +40,8 @@ export const WORKSPACE_BROWSE_GUIDANCE =
   WORKSPACE_LAYOUT_GUIDANCE;
 
 export const WRITE_FILE_GUIDANCE =
-  "write_file: one JSON object `{\"path\":\"projects/<slug>/file.md\",\"content\":\"...\"}` — not markdown-wrapped, not split across pseudo-fields. " +
-  "Full article body goes in `content` as one escaped string (\\n for newlines). Up to 16 MiB per call; split by section if larger.";
+  "write_file: native tool_calls JSON only — `{\"path\":\"projects/<slug>/file.md\",\"content\":\"...\"}` (no markdown fence around the call). " +
+  "Long articles: multiple calls with append:true per section, or run_python open(path,'w').write(body). Up to 16 MiB per call.";
 
 export const TOOL_JSON_ARGS_GUIDANCE =
   "Tool arguments must be plain JSON with schema keys — grep/browse: `pattern`; session_search: `query`; " +

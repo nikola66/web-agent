@@ -40,17 +40,30 @@ export async function writeFileTool(args = {}, ctx) {
     );
   }
   const raw = normalized.content;
-  const contents = coerceWriteContent(raw);
-  const byteLen = Buffer.byteLength(contents, "utf8");
-  if (byteLen > WRITE_FILE_MAX_BYTES) {
-    throw new Error(
-      `write_file: content is ${byteLen} bytes (max ${WRITE_FILE_MAX_BYTES}). ` +
-        `Split into smaller write_file calls (by section) or use run_python to write the file. ${formatWriteFileMaxBytesHint()}`
-    );
-  }
+  let contents = coerceWriteContent(raw);
+  const append =
+    normalized.append === true ||
+    normalized.append === "true" ||
+    normalized.mode === "append";
   const abs = resolveWorkspacePath(ctx, rel);
   assertAllowedWorkspaceWritePath(abs);
   await ensureParentDir(abs);
+  if (append) {
+    let existing = "";
+    try {
+      existing = await fs.readFile(abs, "utf8");
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException)?.code !== "ENOENT") throw err;
+    }
+    contents = `${existing}${contents}`;
+  }
+  const writtenBytes = Buffer.byteLength(contents, "utf8");
+  if (writtenBytes > WRITE_FILE_MAX_BYTES) {
+    throw new Error(
+      `write_file: content is ${writtenBytes} bytes (max ${WRITE_FILE_MAX_BYTES}). ` +
+        `Split into smaller write_file calls (append:true per section) or use run_python. ${formatWriteFileMaxBytesHint()}`
+    );
+  }
   await fs.writeFile(abs, contents, "utf8");
   const mcpReload = await import("../../mcp-registry.js")
     .then((m) => m.maybeReloadMcpAfterConfigWrite(rel))
@@ -58,7 +71,8 @@ export async function writeFileTool(args = {}, ctx) {
   return {
     ok: true,
     path: rel,
-    bytes: byteLen,
+    bytes: writtenBytes,
+    ...(append ? { append: true } : {}),
     ...(mcpReload ? { mcp_reload: mcpReload } : {}),
   };
 }

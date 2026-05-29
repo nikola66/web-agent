@@ -4,10 +4,15 @@
 
 import { WORKSPACE_LABEL } from "../constants.js";
 import {
+  formatEditFileMissingFieldsHint,
   formatWriteFileMissingFieldsHint,
+  normalizeEditFileArgs,
   normalizeWriteFileArgs,
+  parseEditFileToolArguments,
   parseWriteFileToolArguments,
+  salvageEditFileArgumentsFromRawJson,
   salvageWriteFileArgumentsFromRawJson,
+  editFileArgsMissing,
   writeFileArgsMissing,
 } from "./write-file-args.js";
 
@@ -149,7 +154,7 @@ function escapeControlCharsInJsonStrings(jsonText: string): string {
  * Hermes-style repair for raw tool argument JSON strings (truncation, trailing commas, etc.).
  * Returns canonical JSON text; last resort is "{}".
  */
-export function repairToolCallArgumentsJson(raw: unknown, _toolName?: string): string {
+export function repairToolCallArgumentsJson(raw: unknown, toolName?: string): string {
   if (raw == null) return "{}";
   if (typeof raw === "object") {
     try {
@@ -181,6 +186,26 @@ export function repairToolCallArgumentsJson(raw: unknown, _toolName?: string): s
       }
     } catch {
       /* try next stage */
+    }
+  }
+  if (toolName === "write_file") {
+    const salvaged = salvageWriteFileArgumentsFromRawJson(text);
+    if (salvaged) {
+      try {
+        return JSON.stringify(salvaged);
+      } catch {
+        /* fall through */
+      }
+    }
+  }
+  if (toolName === "edit_file") {
+    const salvaged = salvageEditFileArgumentsFromRawJson(text);
+    if (salvaged) {
+      try {
+        return JSON.stringify(salvaged);
+      } catch {
+        /* fall through */
+      }
     }
   }
   return "{}";
@@ -266,7 +291,9 @@ export function parseToolArguments(raw: unknown, toolName?: string): Record<stri
   if (raw == null) return {};
   if (typeof raw === "object" && !Array.isArray(raw)) {
     const repaired = repairMalformedToolArguments(raw as Record<string, unknown>);
-    return toolName === "write_file" ? parseWriteFileToolArguments(raw, repaired) : repaired;
+    if (toolName === "write_file") return parseWriteFileToolArguments(raw, repaired);
+    if (toolName === "edit_file") return parseEditFileToolArguments(raw, repaired);
+    return repaired;
   }
   if (typeof raw === "string") {
     const wire = repairToolCallArgumentsJson(raw, toolName);
@@ -274,9 +301,8 @@ export function parseToolArguments(raw: unknown, toolName?: string): Record<stri
       const parsed = JSON.parse(wire);
       if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
         const repaired = repairMalformedToolArguments(parsed as Record<string, unknown>);
-        if (toolName === "write_file") {
-          return parseWriteFileToolArguments(raw, repaired);
-        }
+        if (toolName === "write_file") return parseWriteFileToolArguments(raw, repaired);
+        if (toolName === "edit_file") return parseEditFileToolArguments(raw, repaired);
         return repaired;
       }
     } catch {
@@ -530,10 +556,13 @@ export function validateRequiredArguments(
     argsObj = normalizeWriteFileArgs(argsObj);
     const writeMissing = writeFileArgsMissing(argsObj);
     if (!writeMissing.length) return null;
-    let hint = ` ${formatWriteFileMissingFieldsHint(writeMissing)}`;
-    return `invalid arguments: missing required field(s) [${writeMissing.join(
-      ", "
-    )}] for ${toolName}. Provide all required fields from the tool schema.${hint}`;
+    return `invalid arguments: missing required field(s) [${writeMissing.join(", ")}] for ${toolName}. ${formatWriteFileMissingFieldsHint(writeMissing)}`;
+  }
+  if (toolName === "edit_file") {
+    argsObj = normalizeEditFileArgs(argsObj);
+    const editMissing = editFileArgsMissing(argsObj);
+    if (!editMissing.length) return null;
+    return `invalid arguments: missing required field(s) [${editMissing.join(", ")}] for ${toolName}. ${formatEditFileMissingFieldsHint()}`;
   }
   const missing = required.filter((key) => {
     if (!(key in argsObj)) return true;
