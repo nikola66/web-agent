@@ -10,7 +10,10 @@ import { createMcpCorsProxyFetch } from "./cors-proxy-fetch.js";
 const DEFAULT_CONNECT_TIMEOUT = 60_000;
 const MAX_FAILURES = 3;
 const CIRCUIT_COOLDOWN_MS = 60_000;
-const MAX_TOOLS_PER_SERVER = Math.max(1, Number(process.env.WEBAGENT_MCP_TOOLS_PER_SERVER_CAP) || 30);
+const MAX_TOOLS_PER_SERVER = Math.max(
+  1,
+  Number(typeof process !== "undefined" ? process.env?.WEBAGENT_MCP_TOOLS_PER_SERVER_CAP : undefined) || 30
+);
 
 const CREDENTIAL_PATTERN =
   /(?:ghp_[A-Za-z0-9_]{1,255}|sk-[A-Za-z0-9_]{1,255}|Bearer\s+\S+|token=[^\s&,;"']{1,255}|key=[^\s&,;"']{1,255}|API_KEY=[^\s&,;"']{1,255}|password=[^\s&,;"']{1,255}|secret=[^\s&,;"']{1,255})/gi;

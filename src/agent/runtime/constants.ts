@@ -1,5 +1,3 @@
-import nodePath from "node:path";
-
 let WS_VALUE = "/workspace";
 let ROOT_VALUE = "/workspace";
 
@@ -23,14 +21,29 @@ function envPathOverride(name: string): string {
 }
 
 export function isNodeboxRuntime(): boolean {
-  return String(process.env.WEBAGENT_RUNTIME ?? "").trim() === "nodebox";
+  return String(typeof process !== "undefined" ? process.env?.WEBAGENT_RUNTIME : "").trim() === "nodebox";
+}
+
+function isPosixAbsolute(value: string): boolean {
+  return value.startsWith("/");
+}
+
+function posixResolve(base: string, rel: string): string {
+  const parts = [...base.split("/").filter(Boolean), ...rel.split("/")];
+  const out: string[] = [];
+  for (const part of parts) {
+    if (!part || part === ".") continue;
+    if (part === "..") out.pop();
+    else out.push(part);
+  }
+  return `/${out.join("/")}`;
 }
 
 /** Resolve any root override to an absolute path so host/sandbox/module-init all agree. Relative overrides are anchored to cwd (`WS`). */
 function toAbsoluteRoot(value: string): string {
   const s = String(value || "").trim();
   if (!s) return WS;
-  return nodePath.isAbsolute(s) ? s : nodePath.resolve(WS, s);
+  return isPosixAbsolute(s) ? s : posixResolve(WS, s);
 }
 
 export function getWorkspaceRoot(): string {
