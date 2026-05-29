@@ -36,6 +36,7 @@ import {
 import {
   loadSystemPrompt,
 } from "./state/persistence.js";
+import { buildWorkspaceMapBlock } from "./workspace-map.js";
 import {
   createToolAwareStreamWriter,
   estimateMessagesTokens,
@@ -463,6 +464,7 @@ export async function agentTurn(
       });
       systemRow.content =
         sys +
+        buildWorkspaceMapBlock() +
         memoryBlock +
         toolIndexBlock +
         buildCapabilityRouterBlock(activeToolNames) +
@@ -522,6 +524,7 @@ export async function agentTurn(
       role: "system",
       content:
         sys +
+        buildWorkspaceMapBlock() +
         memoryBlock +
         toolIndexBlock +
         buildCapabilityRouterBlock(activeToolNames) +

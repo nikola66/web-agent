@@ -1,3 +1,5 @@
+import nodePath from "node:path";
+
 let WS_VALUE = "/workspace";
 let ROOT_VALUE = "/workspace";
 
@@ -24,12 +26,19 @@ export function isNodeboxRuntime(): boolean {
   return String(process.env.WEBAGENT_RUNTIME ?? "").trim() === "nodebox";
 }
 
+/** Resolve any root override to an absolute path so host/sandbox/module-init all agree. Relative overrides are anchored to cwd (`WS`). */
+function toAbsoluteRoot(value: string): string {
+  const s = String(value || "").trim();
+  if (!s) return WS;
+  return nodePath.isAbsolute(s) ? s : nodePath.resolve(WS, s);
+}
+
 export function getWorkspaceRoot(): string {
-  return envPathOverride("WEBAGENT_WORKSPACE_ROOT") || WS;
+  return toAbsoluteRoot(envPathOverride("WEBAGENT_WORKSPACE_ROOT") || WS);
 }
 
 export function getRuntimeRoot(): string {
-  return envPathOverride("WEBAGENT_RUNTIME_ROOT") || getWorkspaceRoot();
+  return toAbsoluteRoot(envPathOverride("WEBAGENT_RUNTIME_ROOT") || getWorkspaceRoot());
 }
 
 export function workspaceStatePath(relativePath: string): string {
@@ -37,7 +46,7 @@ export function workspaceStatePath(relativePath: string): string {
 }
 
 export function getMemoryRoot(): string {
-  return envPathOverride("WEBAGENT_MEMORY_ROOT") || `${getRuntimeRoot()}/memory`;
+  return toAbsoluteRoot(envPathOverride("WEBAGENT_MEMORY_ROOT") || `${getRuntimeRoot()}/memory`);
 }
 
 export function memoryStatePath(relativePath: string): string {
@@ -79,6 +88,8 @@ export const MCP_SECRETS_REL = ".webagent/mcp-secrets.json";
 export const TOOL_POLICY_REL = ".webagent/tool-policy.json";
 /** Auto-generated brief index of all policy-allowed tools (system prompt + human reference). */
 export const TOOLS_CAPABILITY_INDEX_REL = ".webagent/tools-capability-index.md";
+/** Auto-generated runtime filesystem orientation map (re-seeded each launch; system prompt + read_file reference). */
+export const WORKSPACE_MAP_REL = ".webagent/workspace-map.md";
 /** Skill documents — reusable procedure markdown files injected into system prompt. */
 export const SKILLS_DIR = `${WS}/.webagent/skills`;
 /** Conversation history checkpoints for rollback. */

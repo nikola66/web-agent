@@ -505,11 +505,16 @@ function buildEnv(profileId: string, profile: Profile, apiKeys: Record<string, s
   const activeBrowserAgent =
     BROWSER_AGENT_PROVIDERS.find((provider) => provider.id === DEFAULT_BROWSER_AGENT_PROVIDER_ID) ??
     BROWSER_AGENT_PROVIDERS[0];
+  // Absolute roots so the host, the sandbox cwd, and module-init constants all agree
+  // rather than relying on process.cwd() coincidence. Must match the spawn cwd below.
+  const profileWorkspaceRoot = `/workspace/${profileId}`;
   const env: Record<string, string> = {
     HOME: "/tmp",
     TERM: "xterm-256color",
     FORCE_COLOR: "1",
     WEBAGENT_RUNTIME: "nodebox",
+    WEBAGENT_WORKSPACE_ROOT: profileWorkspaceRoot,
+    WEBAGENT_RUNTIME_ROOT: profileWorkspaceRoot,
     WEBAGENT_APP_ORIGIN:
       typeof window !== "undefined" ? window.location.origin : "",
     WEBAGENT_PROFILE_ID: profileId,
@@ -520,7 +525,7 @@ function buildEnv(profileId: string, profile: Profile, apiKeys: Record<string, s
     WEBAGENT_BROWSER_AGENT:
       activeBrowserAgent?.id || DEFAULT_BROWSER_AGENT_PROVIDER_ID,
     WEBAGENT_LAUNCH_MODE: VITE_LAUNCH_MODE,
-    WEBAGENT_MEMORY_ROOT: "memory",
+    WEBAGENT_MEMORY_ROOT: `${profileWorkspaceRoot}/memory`,
     WEBAGENT_DEBUG_LOG: VITE_DEBUG_LOG_ENABLED ? "1" : "0",
     WEBAGENT_DEBUG_LOG_DIR: RUNTIME_DEBUG_LOG_DIR,
     ...(autoApproveTools ? { WEBAGENT_AUTO_APPROVE_TOOLS: "1" } : {}),

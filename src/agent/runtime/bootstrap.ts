@@ -65,6 +65,7 @@ import { formatHelpForSurface, runSkillsSlashCommand } from "./channel-outbound.
 import { SLASH_COMMANDS } from "./commands.js";
 import { parseLocalSlashCommand, resolveSlashUserMessage } from "./slash-routing.js";
 import { discoverMcpOnStartup, shutdownMcpOnExit } from "./mcp-registry.js";
+import { writeWorkspaceMapFile } from "./workspace-map.js";
 import {
   compactHistory,
   formatCompactionNotice,
@@ -94,6 +95,7 @@ const STARTUP_AWAITING_MARKER = "<<<WEBAGENT_AWAITING_RESPONSE>>>";
 
 export async function main() {
   let cfg = await resolveLlm();
+  await writeWorkspaceMapFile().catch(() => {});
   await discoverMcpOnStartup();
   const toolCatalog = await loadToolCatalog();
   const toolRows = buildToolRowsFromCatalog(toolCatalog);
