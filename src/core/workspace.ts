@@ -18,6 +18,8 @@ import {
 import { clearCredentials } from "./credential-vault";
 import { isAllowedUploadFile } from "@embed-runtime/tools/upload-allowlist.js";
 import { getActiveNodebox, getNodebox } from "@/runtimes/webcontainer/boot";
+import { getLiveSandboxFs } from "@/runtimes/fs";
+import { getSandboxRuntimeKind, runNodeboxShellCommand, spawnProcess } from "@/runtimes/index";
 import {
   WORKSPACE_PLANS_DIR_REL,
   WORKSPACE_WEBAGENT_USER_FILES,
@@ -427,15 +429,16 @@ function liveListWithTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
 }
 
 async function listLiveWorkspaceFiles(profileId: string): Promise<WorkspaceFileEntry[]> {
-  const emulatorOrNull = getActiveNodebox();
-  if (!emulatorOrNull) return [];
-  const emulator = emulatorOrNull;
+  const sandboxFs = await getLiveSandboxFs();
+  const emulatorOrNull = sandboxFs ? null : getActiveNodebox();
+  if (!sandboxFs && !emulatorOrNull) return [];
   const workspaceDir = `/workspace/${profileId}`;
   const results: WorkspaceFileEntry[] = [];
 
   try {
     for (const rel of workspaceBootstrapDirRels()) {
-      await emulator.fs.mkdir(`${workspaceDir}/${rel}`, { recursive: true });
+      if (sandboxFs) await sandboxFs.mkdir(`${workspaceDir}/${rel}`, { recursive: true });
+      else await emulatorOrNull!.fs.mkdir(`${workspaceDir}/${rel}`, { recursive: true });
     }
   } catch {
     /* best effort */
@@ -452,7 +455,12 @@ async function listLiveWorkspaceFiles(profileId: string): Promise<WorkspaceFileE
     if (!rel) return;
     let size = 0;
     try {
-      size = nodeboxStatSize(await emulator.fs.stat(abs));
+      if (sandboxFs) {
+        const stat = await sandboxFs.stat(abs);
+        size = stat.type === "file" ? 0 : 0;
+      } else {
+        size = nodeboxStatSize(await emulatorOrNull!.fs.stat(abs));
+      }
     } catch {
       /* best effort */
     }
@@ -462,7 +470,9 @@ async function listLiveWorkspaceFiles(profileId: string): Promise<WorkspaceFileE
   async function walk(dirPath: string): Promise<void> {
     let names: string[];
     try {
-      names = await emulator.fs.readdir(dirPath);
+      names = sandboxFs
+        ? await sandboxFs.readdir(dirPath)
+        : await emulatorOrNull!.fs.readdir(dirPath);
     } catch {
       return;
     }
@@ -471,8 +481,11 @@ async function listLiveWorkspaceFiles(profileId: string): Promise<WorkspaceFileE
       const abs = `${dirPath}/${name}`;
       let isDir = false;
       try {
-        const stat = await emulator.fs.stat(abs);
-        isDir = stat.type === "dir";
+        if (sandboxFs) {
+          isDir = (await sandboxFs.stat(abs)).type === "dir";
+        } else {
+          isDir = (await emulatorOrNull!.fs.stat(abs)).type === "dir";
+        }
       } catch {
         continue;
       }
@@ -553,8 +566,9 @@ export async function writeWorkspaceUpload(
   relativePathUnderUploads: string,
   data: Uint8Array
 ): Promise<string> {
-  const emulator = getActiveNodebox();
-  if (!emulator) throw new Error("Uploads require a running agent.");
+  const sandboxFs = await getLiveSandboxFs();
+  const emulator = sandboxFs ? null : getActiveNodebox();
+  if (!sandboxFs && !emulator) throw new Error("Uploads require a running agent.");
   const workspaceDir = `/workspace/${profileId}`;
   const normalized = normalizeWorkspaceUploadPath(relativePathUnderUploads);
   const uploadDir = `${workspaceDir}/uploads`;
@@ -563,19 +577,26 @@ export async function writeWorkspaceUpload(
   let nextName = initialName;
   let index = 1;
 
-  await emulator.fs.mkdir(workspaceDir, { recursive: true });
-  await emulator.fs.mkdir(uploadDir, { recursive: true });
+  if (sandboxFs) {
+    await sandboxFs.mkdir(workspaceDir, { recursive: true });
+    await sandboxFs.mkdir(uploadDir, { recursive: true });
+  } else {
+    await emulator!.fs.mkdir(workspaceDir, { recursive: true });
+    await emulator!.fs.mkdir(uploadDir, { recursive: true });
+  }
 
   while (true) {
     try {
-      await emulator.fs.stat(`${uploadDir}/${nextName}`);
+      if (sandboxFs) await sandboxFs.stat(`${uploadDir}/${nextName}`);
+      else await emulator!.fs.stat(`${uploadDir}/${nextName}`);
       nextName = `${stem} (${index++})${ext}`;
     } catch {
       break;
     }
   }
 
-  await emulator.fs.writeFile(`${uploadDir}/${nextName}`, data);
+  if (sandboxFs) await sandboxFs.writeFile(`${uploadDir}/${nextName}`, data);
+  else await emulator!.fs.writeFile(`${uploadDir}/${nextName}`, data);
   return `uploads/${nextName}`;
 }
 
@@ -598,8 +619,8 @@ export async function listWorkspaceFiles(
   options: WorkspaceReadOptions = {}
 ): Promise<WorkspaceFileEntry[]> {
   if (options.preferLive) {
-    const emulatorOrNull = getActiveNodebox();
-    if (emulatorOrNull) {
+    const sandboxFs = await getLiveSandboxFs();
+    if (sandboxFs || getActiveNodebox()) {
       try {
         return await liveListWithTimeout(
           listLiveWorkspaceFiles(profileId),
@@ -620,6 +641,16 @@ export async function readWorkspaceFileText(
   options: WorkspaceReadOptions = {}
 ): Promise<string> {
   if (options.preferLive) {
+    const sandboxFs = await getLiveSandboxFs();
+    if (sandboxFs) {
+      try {
+        const rel = workspacePathRelativeToProfile(profileId, relativePath);
+        const data = await sandboxFs.readFile(`/workspace/${profileId}/${rel}`);
+        return new TextDecoder().decode(data);
+      } catch {
+        /* fallback to snapshot */
+      }
+    }
     const emulator = getActiveNodebox();
     if (emulator) {
       try {
@@ -643,6 +674,16 @@ export async function readWorkspaceFileBuffer(
   options: WorkspaceReadOptions = {}
 ): Promise<ArrayBuffer> {
   if (options.preferLive) {
+    const sandboxFs = await getLiveSandboxFs();
+    if (sandboxFs) {
+      try {
+        const rel = workspacePathRelativeToProfile(profileId, relativePath);
+        const data = await sandboxFs.readFile(`/workspace/${profileId}/${rel}`);
+        return data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength) as ArrayBuffer;
+      } catch {
+        /* fallback to snapshot */
+      }
+    }
     const emulator = getActiveNodebox();
     if (emulator) {
       try {
@@ -666,6 +707,18 @@ export async function downloadWorkspaceFile(
   options: WorkspaceReadOptions = {}
 ): Promise<void> {
   if (options.preferLive) {
+    const sandboxFs = await getLiveSandboxFs();
+    if (sandboxFs) {
+      try {
+        const rel = workspacePathRelativeToProfile(profileId, relativePath);
+        const data = await sandboxFs.readFile(`/workspace/${profileId}/${rel}`);
+        const blob = new Blob([data.buffer as ArrayBuffer], { type: "application/octet-stream" });
+        triggerDownload(blob, basename(relativePath));
+        return;
+      } catch {
+        /* fallback to snapshot */
+      }
+    }
     const emulator = getActiveNodebox();
     if (emulator) {
       try {
@@ -686,20 +739,32 @@ export async function downloadWorkspaceFile(
   triggerDownload(blob, basename(relativePath));
 }
 
-/** Run a shell command in the live Nodebox workspace. */
+/** Run a shell command in the live workspace. */
 export async function runWorkspaceCommand(
   profileId: string,
   command: string
 ): Promise<WorkspaceCommandResult> {
-  const emulator = await getNodebox();
-  const workspaceDir = `/workspace/${profileId}`;
-  await emulator.fs.mkdir(workspaceDir, { recursive: true });
-  const scriptPath = await ensureWorkspaceTerminalScript(emulator, workspaceDir);
-
   const trimmed = command.trim();
   if (!trimmed) {
     throw new Error("Command cannot be empty.");
   }
+  const workspaceDir = `/workspace/${profileId}`;
+
+  if (getSandboxRuntimeKind() === "linuxontab") {
+    const fs = await getLiveSandboxFs();
+    if (!fs) throw new Error("Workspace commands require a running agent.");
+    await fs.mkdir(workspaceDir, { recursive: true });
+    const result = await runNodeboxShellCommand("sh", ["-lc", trimmed], { cwd: workspaceDir });
+    return {
+      stdout: result.stdout,
+      stderr: result.stderr,
+      exitCode: Number.isFinite(result.exitCode) ? result.exitCode : null,
+    };
+  }
+
+  const emulator = await getNodebox();
+  await emulator.fs.mkdir(workspaceDir, { recursive: true });
+  const scriptPath = await ensureWorkspaceTerminalScript(emulator, workspaceDir);
 
   const shell = emulator.shell.create();
   let output = "";
@@ -720,7 +785,6 @@ export async function runWorkspaceCommand(
   };
 }
 
-/** Start a persistent interactive shell in /workspace. */
 export async function startWorkspaceTerminalSession(
   profileId: string,
   options: {
@@ -730,8 +794,27 @@ export async function startWorkspaceTerminalSession(
     onExit?: (exitCode: number | null) => void;
   }
 ): Promise<WorkspaceTerminalSession> {
-  const emulator = await getNodebox();
   const workspaceDir = `/workspace/${profileId}`;
+
+  if (getSandboxRuntimeKind() === "linuxontab") {
+    const fs = await getLiveSandboxFs();
+    if (!fs) throw new Error("Workspace terminal requires a running agent.");
+    await fs.mkdir(workspaceDir, { recursive: true });
+    const process = await spawnProcess("sh", ["-i"], { cwd: workspaceDir });
+    process.onData((chunk) => options.onOutput(chunk));
+    void process.exit.then((code) => options.onExit?.(Number.isFinite(code) ? code : null));
+    return {
+      async write(data: string): Promise<void> {
+        await process.write(data);
+      },
+      resize(_cols: number, _rows: number): void {},
+      kill(): void {
+        void process.kill();
+      },
+    };
+  }
+
+  const emulator = await getNodebox();
   await emulator.fs.mkdir(workspaceDir, { recursive: true });
   const scriptPath = await ensureWorkspaceTerminalScript(emulator, workspaceDir);
 
@@ -772,6 +855,11 @@ export async function createWorkspace(profileId: string): Promise<void> {
 /** Destroy a profile workspace (all OPFS data for that profile) */
 export async function destroyWorkspace(profileId: string): Promise<void> {
   await clearAll(`profiles/${profileId}`);
+  const sandboxFs = await getLiveSandboxFs();
+  if (sandboxFs) {
+    await sandboxFs.rm(`/workspace/${profileId}`, { recursive: true, force: true }).catch(() => {});
+    return;
+  }
   const emulator = getActiveNodebox();
   if (emulator) {
     await emulator.fs.rm(`/workspace/${profileId}`, { recursive: true, force: true }).catch(() => {});

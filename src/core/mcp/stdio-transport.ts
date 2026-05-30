@@ -1,4 +1,4 @@
-import type { NodeboxProcess } from "@/runtimes/webcontainer/boot";
+import type { SandboxProcess } from "@/runtimes/types";
 import type { JSONRPCMessage } from "@modelcontextprotocol/sdk/types.js";
 import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
 
@@ -44,7 +44,7 @@ export type NodeboxStdioParams = {
     command: string,
     args: string[],
     options: { cwd?: string; env?: Record<string, string> }
-  ) => Promise<NodeboxProcess>;
+  ) => Promise<SandboxProcess>;
 };
 
 export class NodeboxStdioTransport implements Transport {
@@ -52,7 +52,7 @@ export class NodeboxStdioTransport implements Transport {
   onerror?: (error: Error) => void;
   onmessage?: (message: JSONRPCMessage) => void;
 
-  private _process: NodeboxProcess | null = null;
+  private _process: SandboxProcess | null = null;
   private _readBuffer = new ReadBuffer();
   private _closed = false;
 

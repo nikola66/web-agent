@@ -1,5 +1,5 @@
 import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
-import type { NodeboxProcess } from "@/runtimes/webcontainer/boot";
+import type { SandboxProcess } from "@/runtimes/types";
 import { shouldIncludeTool } from "./config.js";
 import { mcpToolRegistryName } from "./naming.js";
 import { normalizeMcpInputSchema } from "./schema-normalize.js";
@@ -68,7 +68,7 @@ export type McpSpawnFn = (
   command: string,
   args: string[],
   options: { cwd?: string; env?: Record<string, string> }
-) => Promise<NodeboxProcess>;
+) => Promise<SandboxProcess>;
 
 export type McpServerTaskDeps = {
   spawn: McpSpawnFn;

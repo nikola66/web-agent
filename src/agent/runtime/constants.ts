@@ -7,9 +7,9 @@ function ensurePosixAbsolutePath(value: string, defaultRoot = "/workspace"): str
   return posixResolve(defaultRoot, s);
 }
 
-/** Nodebox mounts workspaces at `/nodebox/workspace/<id>` while the host passes logical `/workspace/<id>`. */
+/** Nodebox/LinuxOnTab mount workspaces at `/nodebox/workspace/<id>` or logical `/workspace/<id>`. */
 function nodeboxCwdRoot(): string {
-  if (!isNodeboxRuntime()) return "";
+  if (!isBrowserSandboxRuntime()) return "";
   const cwd =
     typeof process !== "undefined" && typeof process.cwd === "function"
       ? String(process.cwd() || "").trim()
@@ -42,8 +42,20 @@ function envPathOverride(name: string): string {
   return typeof process !== "undefined" ? String(process.env?.[name] || "").trim() : "";
 }
 
+export function getRuntimeKind(): string {
+  return String(typeof process !== "undefined" ? process.env?.WEBAGENT_RUNTIME : "").trim();
+}
+
 export function isNodeboxRuntime(): boolean {
-  return String(typeof process !== "undefined" ? process.env?.WEBAGENT_RUNTIME : "").trim() === "nodebox";
+  return getRuntimeKind() === "nodebox";
+}
+
+export function isLinuxOnTabRuntime(): boolean {
+  return getRuntimeKind() === "linuxontab";
+}
+
+export function isBrowserSandboxRuntime(): boolean {
+  return isNodeboxRuntime() || isLinuxOnTabRuntime();
 }
 
 function isPosixAbsolute(value: string): boolean {

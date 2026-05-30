@@ -1,9 +1,9 @@
 /**
- * Bidirectional sync between Nodebox's ephemeral filesystem and OPFS.
+ * Bidirectional sync between sandbox ephemeral filesystem and OPFS.
  * Snapshots are keyed by profile id: profiles/{id}/snapshot/...
  */
 
-import { getNodebox } from "./boot";
+import { getSandboxFs } from "@/runtimes/fs";
 import {
   writeFile,
   readFileBuffer,
@@ -26,19 +26,19 @@ export async function hasWorkspaceSnapshot(profileId: string): Promise<boolean> 
   return exists(snapshotPrefix(profileId));
 }
 
-/** Save selected paths from Nodebox into OPFS under the profile snapshot */
+/** Save selected paths from sandbox into OPFS under the profile snapshot */
 export async function saveFilesystem(
   profileId: string,
   paths: string[],
   options: SyncOptions = {}
 ): Promise<void> {
-  const emulator = await getNodebox();
+  const fs = await getSandboxFs();
   const prefix = snapshotPrefix(profileId);
   const workspaceDir = `/workspace/${profileId}`;
 
   for (const filePath of paths) {
     try {
-      const file = await emulator.fs.readFile(filePath);
+      const file = await fs.readFile(filePath);
       const relPath = filePath.startsWith(`${workspaceDir}/`)
         ? filePath.slice(workspaceDir.length + 1)
         : filePath.replace(/^\/+/, "");
@@ -50,18 +50,18 @@ export async function saveFilesystem(
   }
 }
 
-/** Recursively export everything under /workspace/{profileId} from Nodebox to OPFS. */
+/** Recursively export everything under /workspace/{profileId} from sandbox to OPFS. */
 export async function saveWorkspaceSnapshot(
   profileId: string,
   options: SyncOptions = {}
 ): Promise<void> {
-  const emulator = await getNodebox();
+  const fs = await getSandboxFs();
   const prefix = snapshotPrefix(profileId);
   const workspaceDir = `/workspace/${profileId}`;
 
   async function exportFile(abs: string): Promise<void> {
     try {
-      const buf = await emulator.fs.readFile(abs);
+      const buf = await fs.readFile(abs);
       const relPath = abs.startsWith(`${workspaceDir}/`)
         ? abs.slice(workspaceDir.length + 1)
         : abs.replace(/^\/+/, "");
@@ -75,7 +75,7 @@ export async function saveWorkspaceSnapshot(
   async function walk(dir: string): Promise<void> {
     let names: string[];
     try {
-      names = await emulator.fs.readdir(dir);
+      names = await fs.readdir(dir);
     } catch {
       return;
     }
@@ -83,13 +83,12 @@ export async function saveWorkspaceSnapshot(
       const abs = `${dir}/${name}`;
       let isDir = false;
       try {
-        const stat = await emulator.fs.stat(abs);
+        const stat = await fs.stat(abs);
         isDir = stat.type === "dir";
       } catch {
         continue;
       }
       if (isDir) {
-        // Runtime under `.webagent/` is re-seeded on every launch; only persist user-owned paths.
         if (abs === `${workspaceDir}/.webagent`) {
           for (const sub of WORKSPACE_WEBAGENT_USER_SUBDIRS) {
             await walk(`${abs}/${sub}`);
@@ -116,7 +115,7 @@ export async function saveWorkspaceSnapshot(
   await walk(workspaceDir);
 }
 
-/** Restore a saved filesystem snapshot into Nodebox at /workspace/{profileId} */
+/** Restore a saved filesystem snapshot into sandbox at /workspace/{profileId} */
 export async function restoreFilesystem(
   profileId: string,
   options: SyncOptions = {}
@@ -126,7 +125,7 @@ export async function restoreFilesystem(
   const snapshotExists = await exists(prefix);
   if (!snapshotExists) return false;
 
-  const emulator = await getNodebox();
+  const fs = await getSandboxFs();
   const targetBase = `/workspace/${profileId}`;
 
   function normalizeSnapshotRelativePath(rawPath: string): string {
@@ -144,13 +143,13 @@ export async function restoreFilesystem(
       const targetPath = relPath ? `${targetBase}/${relPath}` : targetBase;
 
       if (entry.kind === "directory") {
-        if (relPath) await emulator.fs.mkdir(targetPath, { recursive: true });
+        if (relPath) await fs.mkdir(targetPath, { recursive: true });
         await walk(entry.path);
       } else {
         const data = await readFileBuffer(entry.path);
         const parentDir = targetPath.split("/").slice(0, -1).join("/");
-        await emulator.fs.mkdir(parentDir, { recursive: true });
-        await emulator.fs.writeFile(targetPath, new Uint8Array(data));
+        await fs.mkdir(parentDir, { recursive: true });
+        await fs.writeFile(targetPath, new Uint8Array(data));
         options.onProgress?.(targetPath);
       }
     }
@@ -160,33 +159,33 @@ export async function restoreFilesystem(
   return true;
 }
 
-/** Write a batch of files into Nodebox (used for initial seeding) */
+/** Write a batch of files into sandbox (used for initial seeding) */
 export async function mountInitialFilesystem(
   files: Record<string, string>
 ): Promise<void> {
-  const emulator = await getNodebox();
+  const fs = await getSandboxFs();
   for (const [path, contents] of Object.entries(files)) {
     const dir = path.split("/").slice(0, -1).join("/");
-    if (dir) await emulator.fs.mkdir(dir, { recursive: true });
-    await emulator.fs.writeFile(path, contents);
+    if (dir) await fs.mkdir(dir, { recursive: true });
+    await fs.writeFile(path, contents);
   }
 }
 
-/** Write a single file into Nodebox */
+/** Write a single file into sandbox */
 export async function wcWriteFile(
   path: string,
   contents: string | Uint8Array
 ): Promise<void> {
-  const emulator = await getNodebox();
+  const fs = await getSandboxFs();
   const dir = path.split("/").slice(0, -1).join("/");
-  if (dir) await emulator.fs.mkdir(dir, { recursive: true });
-  await emulator.fs.writeFile(path, contents);
+  if (dir) await fs.mkdir(dir, { recursive: true });
+  await fs.writeFile(path, contents);
 }
 
-/** Read a single file from Nodebox */
+/** Read a single file from sandbox */
 export async function wcReadFile(path: string): Promise<string> {
-  const emulator = await getNodebox();
-  const buf = await emulator.fs.readFile(path);
+  const fs = await getSandboxFs();
+  const buf = await fs.readFile(path);
   return new TextDecoder().decode(buf);
 }
 

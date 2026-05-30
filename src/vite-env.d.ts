@@ -3,6 +3,11 @@
 interface ImportMetaEnv {
   readonly VITE_APP_VERSION: string;
   readonly VITE_APP_BUILD_ID: string;
+  readonly VITE_WEBAGENT_RUNTIME?: string;
+  readonly VITE_LINUXONTAB_ASSET_BASE?: string;
+  readonly VITE_LINUXONTAB_ISO?: string;
+  readonly VITE_LINUXONTAB_MEM_MB?: string;
+  readonly VITE_LINUXONTAB_RELAY_URL?: string;
   readonly VITE_WEBAGENT_TOOL_LOOP_GUARDRAILS_WARNINGS?: string;
   readonly VITE_WEBAGENT_TOOL_LOOP_GUARDRAILS_HARD_STOP?: string;
   readonly VITE_WEBAGENT_TOOL_LOOP_EXACT_FAILURE_WARN_AFTER?: string;

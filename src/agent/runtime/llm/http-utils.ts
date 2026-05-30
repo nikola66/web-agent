@@ -1,5 +1,6 @@
 export function shouldUseNodeboxLlmProxy(endpoint: string): boolean {
-  if (String(process.env.WEBAGENT_RUNTIME || "").trim() !== "nodebox") return false;
+  const runtime = String(process.env.WEBAGENT_RUNTIME || "").trim();
+  if (runtime !== "nodebox" && runtime !== "linuxontab") return false;
   const appOrigin = String(process.env.WEBAGENT_APP_ORIGIN || "").trim().replace(/\/$/, "");
   return !!(appOrigin && String(endpoint || "").startsWith(`${appOrigin}/api/llm/`));
 }

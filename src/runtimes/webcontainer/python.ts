@@ -1,4 +1,6 @@
 import { getNodebox } from "./boot";
+import { getSandboxRuntimeKind } from "@/runtimes/config";
+import { runNodeboxShellCommand } from "@/runtimes/index";
 
 type PythonFilePayload = {
   path: string;
@@ -293,5 +295,56 @@ export function executePythonInNodebox(req: PythonRequest, workspaceRoot: string
   const task = queue.then(() => executePythonNow(req, workspaceRoot));
   queue = task.catch(() => undefined);
   return task;
+}
+
+async function executePythonInLinuxOnTab(req: PythonRequest, workspaceRoot: string) {
+  const cwd = normalizeNodeboxPath(String(req.cwd || workspaceRoot), workspaceRoot);
+  const timeoutMs =
+    typeof req.timeout_ms === "number" && Number.isFinite(req.timeout_ms) && req.timeout_ms > 0
+      ? req.timeout_ms
+      : 120_000;
+  const env =
+    req.env && typeof req.env === "object"
+      ? Object.fromEntries(Object.entries(req.env).map(([k, v]) => [k, String(v)]))
+      : undefined;
+
+  if (req.path) {
+    const scriptPath = normalizeNodeboxPath(String(req.path), workspaceRoot);
+    const args = Array.isArray(req.args) ? req.args.map(String) : [];
+    const result = await runNodeboxShellCommand("python3", [scriptPath, ...args], {
+      cwd,
+      env,
+      timeoutMs,
+    });
+    return {
+      ok: result.exitCode === 0,
+      stdout: result.stdout,
+      stderr: result.stderr,
+      exit_code: result.exitCode,
+      python_version: "native",
+    };
+  }
+
+  const code = String(req.code || "");
+  const encoded = btoa(unescape(encodeURIComponent(code)));
+  const result = await runNodeboxShellCommand(
+    "sh",
+    ["-lc", `printf '%s' '${encoded}' | base64 -d | python3 -`],
+    { cwd, env, timeoutMs }
+  );
+  return {
+    ok: result.exitCode === 0,
+    stdout: result.stdout,
+    stderr: result.stderr,
+    exit_code: result.exitCode,
+    python_version: "native",
+  };
+}
+
+export function executePythonInSandbox(req: PythonRequest, workspaceRoot: string) {
+  if (getSandboxRuntimeKind() === "linuxontab") {
+    return executePythonInLinuxOnTab(req, workspaceRoot);
+  }
+  return executePythonInNodebox(req, workspaceRoot);
 }
 

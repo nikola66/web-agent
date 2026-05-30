@@ -3,14 +3,17 @@
  */
 
 import {
-  getNodebox,
+  bootSandboxRuntime,
+  getAgentRuntimeEnvValue,
   getNodeVersion,
+  getSandboxRuntimeKind,
   runNodeboxShellCommand,
   spawnProcess,
   type NodeboxProcess,
   type SpawnPtySize,
-} from "@/runtimes/webcontainer/boot";
-import { executePythonInNodebox } from "@/runtimes/webcontainer/python";
+} from "@/runtimes/index";
+import { getSandboxFs, readSandboxFileUtf8 } from "@/runtimes/fs";
+import { executePythonInSandbox } from "@/runtimes/webcontainer/python";
 import {
   hasWorkspaceSnapshot,
   restoreFilesystem,
@@ -104,6 +107,9 @@ export interface AgentStartOptions {
 }
 
 const agentProcesses = new Map<string, NodeboxProcess>();
+const activeRuntimeKind = () => getSandboxRuntimeKind();
+const runtimeBootLabel = () =>
+  activeRuntimeKind() === "linuxontab" ? "LinuxOnTab" : "Nodebox";
 
 const DEFAULT_PTY: SpawnPtySize = { cols: 120, rows: 40 };
 const STARTUP_TIMEOUT_MS = 20_000;
@@ -242,16 +248,16 @@ function scheduleDebugFlush(profileId: string): void {
     const previous = adapterDebugFlushPromises.get(profileId) ?? Promise.resolve();
     const next = previous
       .then(async () => {
-        const emulator = await getNodebox();
-        await emulator.fs.mkdir(ADAPTER_DEBUG_LOG_DIR, { recursive: true });
+        const fs = await getSandboxFs();
+        await fs.mkdir(ADAPTER_DEBUG_LOG_DIR, { recursive: true });
         // Append-only: read-then-write was loading the full log into memory each flush.
         const chunk = batch.join("");
         let existing = "";
-        try { existing = await emulator.fs.readFile(debugPath, "utf8"); } catch { /* new file */ }
+        try { existing = await readSandboxFileUtf8(debugPath); } catch { /* new file */ }
         // Keep only the last 256KB of the debug log to prevent unbounded growth.
         const combined = existing + chunk;
         const trimmed = combined.length > 256 * 1024 ? combined.slice(-256 * 1024) : combined;
-        await emulator.fs.writeFile(debugPath, trimmed);
+        await fs.writeFile(debugPath, trimmed);
       })
       .catch(() => {
         /* best effort */
@@ -357,51 +363,63 @@ function capAgentOutputBuffer(
 function formatBootTimeoutMessage(phase: "boot" | "reboot"): string {
   const offline =
     typeof navigator !== "undefined" && navigator.onLine === false;
+  const label = runtimeBootLabel();
   const firstLine =
     phase === "boot"
-      ? "Nodebox boot timed out while downloading runtime assets."
-      : "Nodebox reboot timed out after reset.";
-  const networkHint = offline
-    ? "Browser appears offline."
-    : "Network may be slow or blocked by a firewall/content blocker.";
-  return `${firstLine} ${networkHint} Verify access to CodeSandbox/Nodebox domains and retry launch.`;
+      ? `${label} boot timed out while preparing the runtime.`
+      : `${label} reboot timed out after reset.`;
+  const networkHint =
+    activeRuntimeKind() === "linuxontab"
+      ? offline
+        ? "Browser appears offline."
+        : "Check access to linuxontab.com shell assets and WISP relay connectivity."
+      : offline
+        ? "Browser appears offline."
+        : "Network may be slow or blocked by a firewall/content blocker.";
+  const domainHint =
+    activeRuntimeKind() === "linuxontab"
+      ? "Verify linuxontab asset URLs and retry launch."
+      : "Verify access to CodeSandbox/Nodebox domains and retry launch.";
+  return `${firstLine} ${networkHint} ${domainHint}`;
+}
+
+async function sandboxFileExists(path: string): Promise<boolean> {
+  const fs = await getSandboxFs();
+  try {
+    await fs.stat(path);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 async function ensureOnboardingFiles(profileId: string): Promise<void> {
-  const emulator = await getNodebox();
+  const fs = await getSandboxFs();
   const workspaceDir = `/workspace/${profileId}`;
 
-  try {
-    await emulator.fs.readFile(`${workspaceDir}/HEARTBEAT.md`);
-  } catch {
-    await emulator.fs.writeFile(`${workspaceDir}/HEARTBEAT.md`, heartbeatSource);
+  if (!(await sandboxFileExists(`${workspaceDir}/HEARTBEAT.md`))) {
+    await fs.writeFile(`${workspaceDir}/HEARTBEAT.md`, heartbeatSource);
   }
 
-  try {
-    await emulator.fs.readFile(`${workspaceDir}/SOUL.md`);
-  } catch {
-    await emulator.fs.writeFile(`${workspaceDir}/SOUL.md`, soulSource);
+  if (!(await sandboxFileExists(`${workspaceDir}/SOUL.md`))) {
+    await fs.writeFile(`${workspaceDir}/SOUL.md`, soulSource);
   }
 
   const cronjobsPath = `${workspaceDir}/.webagent/cronjobs.json`;
-  try {
-    await emulator.fs.readFile(cronjobsPath);
-  } catch {
-    await emulator.fs.mkdir(`${workspaceDir}/.webagent`, { recursive: true });
-    await emulator.fs.writeFile(cronjobsPath, JSON.stringify({ jobs: [] }, null, 2));
+  if (!(await sandboxFileExists(cronjobsPath))) {
+    await fs.mkdir(`${workspaceDir}/.webagent`, { recursive: true });
+    await fs.writeFile(cronjobsPath, JSON.stringify({ jobs: [] }, null, 2));
   }
 
   const { workspaceBootstrapDirRels } = await import("@/core/workspace-layout");
   for (const rel of workspaceBootstrapDirRels()) {
-    await emulator.fs.mkdir(`${workspaceDir}/${rel}`, { recursive: true });
+    await fs.mkdir(`${workspaceDir}/${rel}`, { recursive: true });
   }
 
   const toolPolicyPath = `${workspaceDir}/.webagent/tool-policy.json`;
-  try {
-    await emulator.fs.readFile(toolPolicyPath);
-  } catch {
-    await emulator.fs.mkdir(`${workspaceDir}/.webagent`, { recursive: true });
-    await emulator.fs.writeFile(
+  if (!(await sandboxFileExists(toolPolicyPath))) {
+    await fs.mkdir(`${workspaceDir}/.webagent`, { recursive: true });
+    await fs.writeFile(
       toolPolicyPath,
       `${JSON.stringify(
         {
@@ -423,13 +441,13 @@ async function ensureOnboardingFiles(profileId: string): Promise<void> {
 }
 
 async function writeRuntimeSources(profileId: string): Promise<void> {
-  const emulator = await getNodebox();
+  const fs = await getSandboxFs();
   const webagentDir = `/workspace/${profileId}/.webagent`;
 
-  await emulator.fs.mkdir(webagentDir, { recursive: true });
-  await emulator.fs.mkdir(`${webagentDir}/vendor`, { recursive: true });
+  await fs.mkdir(webagentDir, { recursive: true });
+  await fs.mkdir(`${webagentDir}/vendor`, { recursive: true });
 
-  await emulator.fs.writeFile(
+  await fs.writeFile(
     `${webagentDir}/package.json`,
     JSON.stringify({ name: "@webagent/runtime", private: true, type: "module" })
   );
@@ -439,35 +457,35 @@ async function writeRuntimeSources(profileId: string): Promise<void> {
     if (!rel) continue;
     const target = `${webagentDir}/${rel}`;
     const parent = rel.split("/").slice(0, -1).join("/");
-    if (parent) await emulator.fs.mkdir(`${webagentDir}/${parent}`, { recursive: true });
-    await emulator.fs.writeFile(target, content);
+    if (parent) await fs.mkdir(`${webagentDir}/${parent}`, { recursive: true });
+    await fs.writeFile(target, content);
   }
 
-  await emulator.fs.writeFile(`${webagentDir}/vendor/sql-wasm.cjs`, sqlWasmRuntimeSource);
+  await fs.writeFile(`${webagentDir}/vendor/sql-wasm.cjs`, sqlWasmRuntimeSource);
 
   const sqlWasmResponse = await fetch(sqlWasmUrl);
   if (!sqlWasmResponse.ok) {
     throw new Error(`Failed to load sql.js wasm asset (${sqlWasmResponse.status})`);
   }
-  await emulator.fs.writeFile(
+  await fs.writeFile(
     `${webagentDir}/vendor/sql-wasm.wasm`,
     new Uint8Array(await sqlWasmResponse.arrayBuffer())
   );
 }
 
 async function writeCapabilitySources(profileId: string): Promise<void> {
-  const emulator = await getNodebox();
+  const fs = await getSandboxFs();
   const capabilitiesDir = `/workspace/${profileId}/.webagent/capabilities`;
-  await emulator.fs.rm(capabilitiesDir, { recursive: true, force: true });
-  await emulator.fs.mkdir(capabilitiesDir, { recursive: true });
+  await fs.rm(capabilitiesDir, { recursive: true, force: true });
+  await fs.mkdir(capabilitiesDir, { recursive: true });
   for (const file of CAPABILITY_RUNTIME_FILES) {
     const cleanPath = file.path.replace(/^\/+/, "");
     const target = `${capabilitiesDir}/${cleanPath}`;
     const parent = target.split("/").slice(0, -1).join("/");
-    await emulator.fs.mkdir(parent, { recursive: true });
-    await emulator.fs.writeFile(target, file.content);
+    await fs.mkdir(parent, { recursive: true });
+    await fs.writeFile(target, file.content);
   }
-  await emulator.fs.writeFile(
+  await fs.writeFile(
     `/workspace/${profileId}/.webagent/capabilities.json`,
     CAPABILITY_SUMMARY_JSON
   );
@@ -523,7 +541,7 @@ function buildEnv(profileId: string, profile: Profile, apiKeys: Record<string, s
     HOME: "/tmp",
     TERM: "xterm-256color",
     FORCE_COLOR: "1",
-    WEBAGENT_RUNTIME: "nodebox",
+    WEBAGENT_RUNTIME: getAgentRuntimeEnvValue(activeRuntimeKind()),
     WEBAGENT_WORKSPACE_ROOT: profileWorkspaceRoot,
     WEBAGENT_RUNTIME_ROOT: profileWorkspaceRoot,
     WEBAGENT_APP_ORIGIN:
@@ -692,12 +710,14 @@ export async function startWebAgent(options: AgentStartOptions): Promise<void> {
   }
 
   onStatusChange("booting");
-  onOutput("\x1b[90m▸ Booting Nodebox…\x1b[0m\n");
+  onOutput(`\x1b[90m▸ Booting ${runtimeBootLabel()}…\x1b[0m\n`);
   onOutput(
-    "\x1b[90m  (First run can take a moment while runtime assets download.)\x1b[0m\n"
+    activeRuntimeKind() === "linuxontab"
+      ? "\x1b[90m  (First run boots Alpine via v86 — this can take several minutes.)\x1b[0m\n"
+      : "\x1b[90m  (First run can take a moment while runtime assets download.)\x1b[0m\n"
   );
   try {
-    await withTimeout(getNodebox(), "Nodebox boot", BOOT_TIMEOUT_MS);
+    await withTimeout(bootSandboxRuntime(activeRuntimeKind()), `${runtimeBootLabel()} boot`, BOOT_TIMEOUT_MS);
   } catch (err) {
     if ((err as Error)?.message?.includes("timed out")) {
       onOutput(`\x1b[33m▸ ${formatBootTimeoutMessage("boot")}\x1b[0m\n`);
@@ -714,7 +734,7 @@ export async function startWebAgent(options: AgentStartOptions): Promise<void> {
     "Node runtime check"
   );
   onNodeVersion?.(nodeVersion);
-  const emulator = await getNodebox();
+  const fs = await getSandboxFs();
 
   const profileWorkspaceDir = `/workspace/${profile.id}`;
   const cleanMode = getWorkspaceCleanModeFromUrl();
@@ -728,13 +748,13 @@ export async function startWebAgent(options: AgentStartOptions): Promise<void> {
         await clearAll(`profiles/${profile.id}/snapshot`);
         let names: string[] = [];
         try {
-          names = await emulator.fs.readdir("/workspace");
+          names = await fs.readdir("/workspace");
         } catch {
           /* nothing to clear yet */
         }
         for (const name of names) {
           try {
-            await emulator.fs.rm(`/workspace/${name}`, { recursive: true, force: true });
+            await fs.rm(`/workspace/${name}`, { recursive: true, force: true });
           } catch {
             /* best-effort */
           }
@@ -779,7 +799,7 @@ export async function startWebAgent(options: AgentStartOptions): Promise<void> {
           `${profileWorkspaceDir}/memory`,
         ];
         for (const path of resetCandidates) {
-          await emulator.fs.rm(path, { recursive: true, force: true });
+          await fs.rm(path, { recursive: true, force: true });
         }
       })(),
       "Workspace reset"
@@ -794,16 +814,16 @@ export async function startWebAgent(options: AgentStartOptions): Promise<void> {
   onOutput("\x1b[90m▸ Preparing runtime files…\x1b[0m\n");
   await withTimeout(
     (async () => {
-      await emulator.fs.mkdir(profileWorkspaceDir, { recursive: true });
+      await fs.mkdir(profileWorkspaceDir, { recursive: true });
       await writeRuntimeSources(profile.id);
       await writeCapabilitySources(profile.id);
-      await emulator.fs.writeFile(`${profileWorkspaceDir}/.webagent/tools.json`, TOOL_CATALOG_JSON);
-      await emulator.fs.writeFile(`${profileWorkspaceDir}/.webagent/providers.json`, PROVIDER_CATALOG_JSON);
-      await emulator.fs.writeFile(
+      await fs.writeFile(`${profileWorkspaceDir}/.webagent/tools.json`, TOOL_CATALOG_JSON);
+      await fs.writeFile(`${profileWorkspaceDir}/.webagent/providers.json`, PROVIDER_CATALOG_JSON);
+      await fs.writeFile(
         `${profileWorkspaceDir}/.webagent/browseragent.json`,
         BROWSER_AGENT_PROVIDERS_JSON
       );
-      await emulator.fs.writeFile(`${profileWorkspaceDir}/.webagent/channels.json`, CHANNEL_CATALOG_JSON);
+      await fs.writeFile(`${profileWorkspaceDir}/.webagent/channels.json`, CHANNEL_CATALOG_JSON);
       await ensureOnboardingFiles(profile.id);
     })(),
     "Runtime preparation"
@@ -1496,7 +1516,7 @@ export async function startWebAgent(options: AgentStartOptions): Promise<void> {
               micropip_packages?: string[];
               timeout_ms?: number;
             };
-            const result = await executePythonInNodebox(req, profileWorkspaceDir);
+            const result = await executePythonInSandbox(req, profileWorkspaceDir);
             respPayload = JSON.stringify(result);
           } catch (e) {
             respPayload = JSON.stringify({

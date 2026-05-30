@@ -53,7 +53,7 @@ function resolveBuiltInBaseUrl(selectedProvider, customBaseUrl, directBaseUrl) {
     selectedProvider.runtime?.basePath || selectedProvider.id || ""
   ).trim();
   const useLocalProxy = selectedProvider.runtime?.useLocalProxy !== false;
-  if (runtimeKind === "nodebox" && appOrigin && proxyProviderId && useLocalProxy) {
+  if ((runtimeKind === "nodebox" || runtimeKind === "linuxontab") && appOrigin && proxyProviderId && useLocalProxy) {
     return `${appOrigin.replace(/\/$/, "")}${LLM_PROXY_PATH_PREFIX}/${proxyProviderId}`;
   }
 
