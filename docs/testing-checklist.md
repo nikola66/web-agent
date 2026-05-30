@@ -20,8 +20,8 @@
 From the running agent, ask it to:
 
 - [ ] `read_file` / `write_file` under `/workspace`
-- [ ] `list_dir` or `tree`
-- [ ] `grep` or `find_files`
+- [ ] `browse_workspace` (`action`: list or tree)
+- [ ] `grep` or `browse_workspace` (`action`: find)
 - [ ] `run_shell` (e.g. `echo test`)
 - [ ] `web_fetch` on a public `https://` URL
 

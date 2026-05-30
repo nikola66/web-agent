@@ -265,16 +265,16 @@ These power built-in web actions from the Settings panel:
 
 ## 工具
 
-Web Agent ships with a broad native tool belt. The built-ins cover workspace manipulation, search, memory, automation, skill management, and browser-routed remote actions.
+Web Agent ships with **50 native built-in tools** in eight groups. The surface was consolidated to one `skill` tool (`action`: list | view | manage | bulk) and one browse entry point `browse_workspace` (`action`: list | tree | find). Hidden aliases (`list_dir`, `find_files`, `tree`) remain for wire compatibility via `tool_activate`.
 
 ### Tool Groups
 
 | Group | Includes | Best for |
 | --- | --- | --- |
-| `📁 Files & Workspace` | `read_file`, `write_file`, `edit_file`, `multi_edit`, `move_file`, `delete_file`, `tree`, `list_dir`, `find_files`, `grep`, `file_diff`, `make_dir` | Building, editing, inspecting, and organizing project files |
+| `📁 Files & Workspace` | `read_file`, `write_file`, `edit_file`, `multi_edit`, `move_file`, `delete_file`, `browse_workspace`, `grep`, `file_diff`, `make_dir` | Building, editing, inspecting, and organizing project files |
 | `🧠 Memory & Recall` | `memory_save`, `memory_recall`, `memory_search`, `session_memory_append`, `session_memory_list`, `session_search` | Long-lived facts, rolling notes, and recovering prior context |
 | `📓 Knowledge wiki` | `wiki_setup`, `wiki_sync`, `wiki_search` | PARA + Obsidian-friendly vault under the workspace; project facts/session/learnings into markdown; full-text vault search |
-| `📚 Skills` | `skill_list`, `skill_view`, `skill_manage`, `skill_manage`, `skill_bulk_save`, `skill_manage`, `skill_view` | Discovering, reading, creating, importing, and maintaining skills |
+| `📚 Skills` | `skill` (list / view / manage / bulk via `action`) | Discovering, reading, creating, importing, and maintaining skills |
 | `⏱️ Automation` | `cron_register`, `cron_list`, `todo_write` | Recurring jobs, heartbeat-driven workflows, and checklists |
 | `🌐 Remote & Multimodal` | `web_search`, `web_fetch`, `vision_analyze`, `youtube_transcribe`, `email` | Research, fetching live content, image analysis, transcripts, and outbound delivery |
 | `🖥️ System & Output` | `run_shell`, `system_info`, `artifact_present`, `apply_patch` | Executing commands, checking environment state, presenting artifacts, and surgical patching |
@@ -292,10 +292,8 @@ Web Agent ships with a broad native tool belt. The built-ins cover workspace man
 | `🛠️ edit_file` | Replace a matching snippet or fully replace file contents. |
 | `✉️ email` | Send outbound email through Resend-configured delivery. |
 | `🧾 file_diff` | Show a line-oriented diff between two UTF-8 workspace files. |
-| `📌 list_dir` | Return filesystem metadata for a workspace path. |
-| `🔎 find_files` | Find files by glob-like name patterns. |
+| `📁 browse_workspace` | List, tree, or find workspace paths (`action`: list | tree | find). |
 | `🔍 grep` | Search file contents by text or regex. |
-| `📁 list_dir` | List workspace files and directories with optional recursion and filtering. |
 | `📂 make_dir` | Create directories recursively inside the workspace. |
 | `🧠 memory_recall` | Recall a saved memory fact by exact key. |
 | `💾 memory_save` | Save a durable memory fact under a stable key. |
@@ -307,16 +305,9 @@ Web Agent ships with a broad native tool belt. The built-ins cover workspace man
 | `📝 session_memory_append` | Append a lightweight note to rolling session memory. |
 | `🗂️ session_memory_list` | Read the newest entries from rolling session memory. |
 | `📇 session_search` | Search archived workspace conversations by keywords. |
-| `📚 skill_bulk_save` | Batch import or save multiple skills in one operation. |
-| `🗑️ skill_manage` | Delete a saved skill from the workspace library. |
-| `📋 skill_list` | Search and list saved skills. |
-| `🧠 skill_manage` | Create, patch, edit, delete, import, or manage reusable skills. |
-| `🔍 skill_view` | Load a raw `SKILL.md` by name for backward compatibility. |
-| `📚 skill_manage` | Save a reusable `SKILL.md` procedure immediately. |
-| `📖 skill_view` | Load a skill's full `SKILL.md` or an allowed support file. |
+| `🧩 skill` | List, view, manage, or bulk-import skills (`action`: list | view | manage | bulk). |
 | `📟 system_info` | Return a safe system snapshot including time, timezone, uptime, and memory. |
 | `✅ todo_write` | Create or update checklist-style todos. |
-| `🌲 tree` | Render a bounded directory tree view. |
 | `🖼️ vision_analyze` | Analyze an image with the configured vision model. |
 | `🌐 web_fetch` | Fetch and summarize content from a URL. |
 | `🔍 web_search` | Search the web and return ranked results. |
@@ -455,17 +446,17 @@ Default vault root: `.webagent/knowledge-vault/`. Legacy `knowledge-vault/` at w
 | 研究 | 发现细分创作者 / 竞品 | `/open-web-research` | `web_search`, `web_fetch`, `write_file`, `artifact_present` |
 | 研究 | 学术论文 / 引用检索 | `/research-pack` | `web_search`, `web_fetch`, `write_file`, `artifact_present` |
 | 研究 | 从页面提取表格或 JSON | `/structured-extraction` | `web_fetch`, `write_file`, `artifact_present` |
-| 元 | 在线发现可安装技能 | `/find_skills` | `web_search`, `web_fetch`, `skill_manage` |
+| 元 | 在线发现可安装技能 | `/find_skills` | `web_search`, `web_fetch`, `skill` (action=manage) |
 | 记忆 | 保存持久偏好 | `/memory-layers` | `memory_save`, `memory_recall` |
 | 记忆 | 记录滚动会话上下文 | `/memory-layers` | `session_memory_append`, `session_memory_list` |
 | 记忆 | 同步到 Obsidian 风格知识库 | `/memory-layers` | `wiki_setup`, `wiki_sync`, `wiki_search` |
 | 记忆 | 从旧对话中查找 | `/memory-layers` | `session_search` |
 | 规划 | 先写规格再实现 | `/plan` | `read_file`, `grep`, `write_file`, `artifact_present` |
-| 规划 | 拆解多步请求为 todos | `/task-execution` | `todo_write`, `skill_view` |
+| 规划 | 拆解多步请求为 todos | `/task-execution` | `todo_write`, `skill` (action=view) |
 | 规划 | 执行已批准的多步计划 | `/task-execution` | `todo_write`, `read_file`, `write_file`, `artifact_present` |
 | 自动化 | 标签页打开时的每日摘要 | `/heartbeat-cron` | `cron_register`, `cron_list`, `web_search`, `web_fetch` |
-| 工作区 | 新建副项目目录 | `/project-scaffold` | `make_dir`, `write_file`, `tree` |
-| 工作区 | 安全整理文件 | `/workspace-safety`, `/browser-runtime-map` | `list_dir`, `find_files`, `move_file`, `tree` |
+| 工作区 | 新建副项目目录 | `/project-scaffold` | `make_dir`, `write_file`, `browse_workspace` |
+| 工作区 | 安全整理文件 | `/workspace-safety`, `/browser-runtime-map` | `browse_workspace`, `move_file` |
 | 调试 | 假设驱动的排错 | `/systematic-debugging` | `read_file`, `grep`, `file_diff`, `run_shell` |
 | 调试 | WebContainer 中 shell / `npx` 失败 | `/browser-runtime-map` | `read_file`, `web_fetch`, `grep` |
 | 多模态 | 解读截图或图表 | `/multimodal-ingest` | `vision_analyze`, `write_file` |
@@ -474,9 +465,9 @@ Default vault root: `.webagent/knowledge-vault/`. Legacy `knowledge-vault/` at w
 | 交付 | 邮件发送交付物 | `/artifact-delivery` | `write_file`, `email`, `artifact_present` |
 | 交付 | 计划或报告的流程图 | `/chart` | `artifact_present` |
 | 体验 | 澄清模糊需求 | `/clarify` | *(none)* |
-| 安全 | 批量删除前检查点 | `/workspace-safety` | `list_dir`, `tree`, `delete_file` |
+| 安全 | 批量删除前检查点 | `/workspace-safety` | `browse_workspace`, `delete_file` |
 | 安全 | 粘贴 API 密钥 / 密钥卫生 | `/memory-layers` | *(redaction; no secret persistence)* |
-| 元 | 改进 Web Agent 本身 | `/web-agent-skill` | `read_file`, `grep`, `skill_manage`, `memory_save` |
+| 元 | 改进 Web Agent 本身 | `/web-agent-skill` | `read_file`, `grep`, `skill` (action=manage), `memory_save` |
 
 ## 快速开始
 

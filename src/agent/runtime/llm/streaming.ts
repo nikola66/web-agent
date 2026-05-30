@@ -1,20 +1,24 @@
 import { HIDDEN_STREAM_MARKERS, LLM_REQUEST_TIMEOUT_MS } from "../constants.js";
-import { ipcProxyStreamRequest, ipcProxyRequest } from "../ipc.js";
+import { ipcProxyStreamRequest } from "../ipc.js";
 import { logDebugEvent } from "../logging/debug-log.js";
 import { shouldUseNodeboxLlmProxy } from "./http-utils.js";
-import { llmChatCompletionExtras } from "./provider-config.js";
+import { llmChatCompletionExtras, reasoningPreviewEnabled } from "./provider-config.js";
+import { resolveStreamMaxTokens } from "./model-quirks.js";
 import { classifyLlmProviderError, formatClassifiedLlmError } from "./llm-error-classifier.js";
 import {
   parseToolArguments,
   repairLooseToolCallObject,
+  mergeFlatToolCallArguments,
+  repairToolCallArgumentsJson,
 } from "../tools/argument-normalization.js";
+import { parseWriteFileToolArguments, salvageWriteFileArgumentsFromRawJson } from "../tools/write-file-args.js";
 import { levenshtein } from "../utils.js";
 import { normalizeSkillToolCall, resolveLegacySkillToolName } from "../tools/skill-tool-normalize.js";
+import { StreamingThinkScrubber } from "./think-scrubber.js";
 
 type LlmRequestOptions = {
   signal?: AbortSignal;
-  max_tokens?: number;
-  maxTokens?: number;
+  onReasoningDelta?: (chunk: string) => void;
 };
 
 type ToolCallPayload = {
@@ -33,12 +37,6 @@ type HiddenStreamMarker = {
   end: string;
 };
 
-type IpcProxyResponse = {
-  error?: string;
-  status?: number;
-  body?: string;
-};
-
 type LlmProviderConfig = {
   provider?: string;
   baseUrl?: string;
@@ -47,6 +45,79 @@ type LlmProviderConfig = {
   extraHeaders?: Record<string, string>;
 };
 
+
+/** External-host tool names → web-agent built-ins (only when target is registered). */
+const CROSS_HOST_TOOL_ALIASES: Record<string, string> = {
+  read: "read_file",
+  readfile: "read_file",
+  write: "write_file",
+  writefile: "write_file",
+  createfile: "write_file",
+  edit: "edit_file",
+  strreplace: "edit_file",
+  strreplaceeditor: "edit_file",
+  searchreplace: "edit_file",
+  strreplacebasededittool: "edit_file",
+  webfetch: "web_fetch",
+  fetch: "web_fetch",
+  httpget: "web_fetch",
+  httprequest: "web_fetch",
+  geturl: "web_fetch",
+  curl: "web_fetch",
+  websearch: "web_search",
+  searchweb: "web_search",
+  glob: "find_files",
+  findfiles: "find_files",
+  listdir: "list_dir",
+  listdirectory: "list_dir",
+  ls: "list_dir",
+  grep: "grep",
+  ripgrep: "grep",
+  tree: "browse_workspace",
+  browse: "browse_workspace",
+  browseworkspace: "browse_workspace",
+  bash: "run_shell",
+  shell: "run_shell",
+  terminal: "run_shell",
+  runterminalcmd: "run_shell",
+  executecommand: "run_shell",
+  runcommand: "run_shell",
+  applypatch: "apply_patch",
+  multiedit: "multi_edit",
+  todowrite: "todo_write",
+  runpython: "run_python",
+  python: "run_python",
+  movefile: "move_file",
+  deletefile: "delete_file",
+  skillview: "skill",
+  skilllist: "skill",
+  skillmanage: "skill",
+  skillsave: "skill",
+  skillcreate: "skill",
+  skillpatch: "skill",
+  skilledit: "skill",
+  skillbulksave: "skill",
+  skillbulkimport: "skill",
+  bulkskillimport: "skill",
+  bulkimport: "skill",
+  bulkimportskills: "skill",
+};
+
+function normalizeToolAliasKey(name: string): string {
+  return String(name || "").trim().toLowerCase().replace(/[_\-\s.]/g, "");
+}
+
+function resolveCrossHostToolAlias(name: string, set: Set<string>): string | null {
+  const trimmed = String(name || "").trim();
+  if (!trimmed) return null;
+  const keys = [normalizeToolAliasKey(trimmed), normalizeToolAliasKey(trimmed.split(/[./]/).pop() || "")];
+  for (const key of keys) {
+    if (!key) continue;
+    const target = CROSS_HOST_TOOL_ALIASES[key];
+    if (target && set.has(target)) return target;
+  }
+  return null;
+}
 
 /** Map duplicated/typo tool names (`find_find_files`) to a registered built-in. */
 export function resolveKnownToolName(name: string, knownTools: Iterable<string>): string {
@@ -59,7 +130,21 @@ export function resolveKnownToolName(name: string, knownTools: Iterable<string>)
   const lower = trimmed.toLowerCase();
   if (set.has("skill")) {
     if (lower === "write_file" && !set.has("write_file")) return "skill";
-    if (["skill_save", "skill_create", "skill_patch", "skill_edit", "skill_list", "skill_view", "skill_manage", "skill_bulk_save"].includes(lower)) {
+    if (
+      [
+        "skill_save",
+        "skill_create",
+        "skill_patch",
+        "skill_edit",
+        "skill_list",
+        "skill_view",
+        "skill_manage",
+        "skill_bulk_save",
+        "skill_bulk_import",
+        "bulk_import",
+        "bulk_import_skills",
+      ].includes(lower)
+    ) {
       return "skill";
     }
   }
@@ -70,6 +155,8 @@ export function resolveKnownToolName(name: string, knownTools: Iterable<string>)
     const prefix = tool.split("_")[0];
     if (trimmed === `${prefix}_${tool}`) return tool;
   }
+  const aliased = resolveCrossHostToolAlias(trimmed, set);
+  if (aliased) return aliased;
   const close = [...set].filter(
     (tool) => trimmed.length <= tool.length + 6 && levenshtein(trimmed, tool) <= 2
   );
@@ -368,7 +455,41 @@ function toolsCapabilityHint(toolCount, status, bodyText) {
   return ` (${toolCount} tool definition(s) were sent.)`;
 }
 
-function parseOpenAiStreamPayload(payload, toolAcc, onContent) {
+type StreamToolAccEntry = { id: string; name: string; arguments: string };
+
+function nextStreamToolSlot(nextSlot: { value: number }): number {
+  return nextSlot.value++;
+}
+
+export function assembleStreamToolCalls(toolAcc: Map<number, StreamToolAccEntry>) {
+  return [...toolAcc.values()]
+    .map((call) => {
+      const name = String(call.name || "").trim();
+      if (!name) return null;
+      const repaired = repairToolCallArgumentsJson(call.arguments || "{}", name);
+      return { name, arguments: repaired };
+    })
+    .filter((call): call is { name: string; arguments: string } => call !== null);
+}
+
+function extractReasoningDeltaText(value) {
+  if (typeof value === "string" && value) return value;
+  if (value && typeof value === "object") {
+    const content = value.content ?? value.text ?? value.reasoning;
+    if (typeof content === "string" && content) return content;
+  }
+  return "";
+}
+
+function parseOpenAiStreamPayload(
+  payload,
+  toolAcc: Map<number, StreamToolAccEntry>,
+  lastIdAtIdx: Map<number, string>,
+  activeSlotByIdx: Map<number, number>,
+  nextSlot: { value: number },
+  onContent,
+  onReasoning
+) {
   const choices = Array.isArray(payload?.choices) ? payload.choices : [];
   let sawReasoning = false;
   let finishReason = null;
@@ -378,12 +499,27 @@ function parseOpenAiStreamPayload(payload, toolAcc, onContent) {
     const delta = choice?.delta || {};
     const content = delta.content;
     if (typeof content === "string" && content) onContent(content);
-    if (typeof delta.reasoning_content === "string" && delta.reasoning_content) {
+    const reasoningText =
+      extractReasoningDeltaText(delta.reasoning_content) ||
+      extractReasoningDeltaText(delta.reasoning);
+    if (reasoningText) {
       sawReasoning = true;
+      if (typeof onReasoning === "function") onReasoning(reasoningText);
     }
     const streamedCalls = Array.isArray(delta.tool_calls) ? delta.tool_calls : [];
     for (const call of streamedCalls) {
-      const idx = Number.isInteger(call?.index) ? call.index : 0;
+      const rawIdx = Number.isInteger(call?.index) ? call.index : 0;
+      const deltaId = String(call?.id || "");
+      if (!activeSlotByIdx.has(rawIdx)) activeSlotByIdx.set(rawIdx, rawIdx);
+      if (
+        deltaId &&
+        lastIdAtIdx.has(rawIdx) &&
+        lastIdAtIdx.get(rawIdx) !== deltaId
+      ) {
+        activeSlotByIdx.set(rawIdx, nextStreamToolSlot(nextSlot));
+      }
+      if (deltaId) lastIdAtIdx.set(rawIdx, deltaId);
+      const idx = activeSlotByIdx.get(rawIdx)!;
       const current = toolAcc.get(idx) || { id: "", name: "", arguments: "" };
       if (call?.id) current.id = call.id;
       if (call?.function?.name) current.name = call.function.name;
@@ -408,13 +544,14 @@ export async function streamOpenAI(
   if (cfg.apiKey) headers.Authorization = `Bearer ${cfg.apiKey}`;
   const toolList = Array.isArray(tools) ? tools : [];
   const requestExtras = llmChatCompletionExtras(cfg.provider, { stream: true });
+  const maxTokens = resolveStreamMaxTokens(cfg);
   const withToolsBody =
     toolList.length > 0
       ? {
           model: cfg.model,
           messages,
           stream: true,
-          max_tokens: 8192,
+          max_tokens: maxTokens,
           tools: toolList,
           tool_choice: "auto",
           ...requestExtras,
@@ -423,7 +560,7 @@ export async function streamOpenAI(
           model: cfg.model,
           messages,
           stream: true,
-          max_tokens: 8192,
+          max_tokens: maxTokens,
           ...requestExtras,
         };
   const endpoint = `${cfg.baseUrl}/chat/completions`;
@@ -442,15 +579,34 @@ export async function streamOpenAI(
   const fullParts: string[] = [];
   let sawReasoning = false;
   let finishReason = null;
-  const toolAcc = new Map();
+  const toolAcc = new Map<number, StreamToolAccEntry>();
+  const lastIdAtIdx = new Map<number, string>();
+  const activeSlotByIdx = new Map<number, number>();
+  const nextSlot = { value: 1 };
+  const onReasoningDelta = typeof options.onReasoningDelta === "function" ? options.onReasoningDelta : null;
+  const thinkScrubber = new StreamingThinkScrubber({
+    onReasoningDelta: onReasoningDelta || undefined,
+  });
   const onContent = (content) => {
     fullParts.push(content);
-    onDelta(content);
+    const visible = thinkScrubber.feed(content);
+    if (visible) onDelta(visible);
+  };
+  const onReasoning = (chunk) => {
+    if (onReasoningDelta) onReasoningDelta(chunk);
   };
   const parseData = (data) => {
     if (data === "[DONE]") return;
     try {
-      const parsed = parseOpenAiStreamPayload(JSON.parse(data), toolAcc, onContent);
+      const parsed = parseOpenAiStreamPayload(
+        JSON.parse(data),
+        toolAcc,
+        lastIdAtIdx,
+        activeSlotByIdx,
+        nextSlot,
+        onContent,
+        onReasoning
+      );
       sawReasoning = sawReasoning || parsed.sawReasoning;
       if (parsed.finishReason) finishReason = parsed.finishReason;
     } catch {
@@ -495,6 +651,10 @@ export async function streamOpenAI(
         sawReasoning = false;
         finishReason = null;
         toolAcc.clear();
+        lastIdAtIdx.clear();
+        activeSlotByIdx.clear();
+        nextSlot.value = 1;
+        thinkScrubber.reset();
         buf = "";
         await ipcProxyStreamRequest(
           { method: "POST", url: endpoint, headers, body: serializedBody },
@@ -575,22 +735,28 @@ export async function streamOpenAI(
     }
   }
   /* eslint-enable no-await-in-loop */
+  const finishStreamAssembly = () => {
+    const tail = thinkScrubber.flush();
+    if (tail) onDelta(tail);
+    return {
+      text: fullParts.join(""),
+      toolCalls: assembleStreamToolCalls(toolAcc),
+      sawReasoning,
+      finishReason,
+    };
+  };
   if (useIpcStream) {
-    const fullText = fullParts.join("");
-    const toolCalls = [...toolAcc.values()].map((call) => ({
-      name: call.name,
-      arguments: call.arguments || "{}",
-    }));
+    const assembled = finishStreamAssembly();
     await logDebugEvent("llm_stream_complete", {
       provider: cfg.provider,
       durationMs: Date.now() - startedAt,
-      outputChars: fullText.length,
-      toolCalls: toolCalls.length,
-      sawReasoning,
-      finishReason,
+      outputChars: assembled.text.length,
+      toolCalls: assembled.toolCalls.length,
+      sawReasoning: assembled.sawReasoning,
+      finishReason: assembled.finishReason,
       transport: "ipc_stream",
     });
-    return { text: fullText, toolCalls, sawReasoning, finishReason };
+    return assembled;
   }
   if (!res.body) {
     throw new Error(`${cfg.provider} stream response missing body`);
@@ -665,187 +831,129 @@ export async function streamOpenAI(
   } finally {
     options.signal?.removeEventListener?.("abort", abortStream);
   }
-  const fullText = fullParts.join("");
-  const toolCalls = [...toolAcc.values()].map((call) => ({
-    name: call.name,
-    arguments: call.arguments || "{}",
-  }));
+  const assembled = finishStreamAssembly();
   await logDebugEvent("llm_stream_complete", {
     provider: cfg.provider,
     durationMs: Date.now() - startedAt,
-    outputChars: fullText.length,
-    toolCalls: toolCalls.length,
-    sawReasoning,
-    finishReason,
+    outputChars: assembled.text.length,
+    toolCalls: assembled.toolCalls.length,
+    sawReasoning: assembled.sawReasoning,
+    finishReason: assembled.finishReason,
   });
-  return { text: fullText, toolCalls, sawReasoning, finishReason };
+  return assembled;
 }
 
-function completionMessageText(payload) {
-  const choice = payload?.choices?.[0];
-  const msg = choice?.message || choice;
-  if (!msg || typeof msg !== "object") return "";
-  let text = "";
-  if (typeof msg.content === "string") text = msg.content;
-  else if (Array.isArray(msg.content)) {
-    for (const part of msg.content) {
-      if (typeof part === "string") text += part;
-      else if (part && typeof part === "object") {
-        if (typeof part.text === "string") text += part.text;
-        else if (part.type === "text" && typeof part.text === "string") text += part.text;
-      }
-    }
+/** DeepSeek DSML uses fullwidth ｜ (U+FF5C); some gateways mirror ASCII |. */
+const DSML_PIPE = "[|｜]";
+const DSML_OPEN = `<${DSML_PIPE}DSML${DSML_PIPE}`;
+const DSML_CLOSE = `<\\/${DSML_PIPE}DSML${DSML_PIPE}`;
+
+function parseDsmlInvokeInner(name: string, inner: string): ToolCallPayload | null {
+  const toolName = String(name || "").trim();
+  if (!toolName) return null;
+  const args: Record<string, unknown> = {};
+  const paramRe = new RegExp(
+    `${DSML_OPEN}parameter\\s+name="([^"]+)"[^>]*>([\\s\\S]*?)${DSML_CLOSE}parameter>`,
+    "gi"
+  );
+  let m;
+  while ((m = paramRe.exec(inner))) {
+    const key = String(m[1] || "").trim();
+    if (key) args[key] = String(m[2] || "").trim();
   }
-  if (!String(text).trim()) {
-    if (typeof msg.reasoning_content === "string" && msg.reasoning_content.trim()) text = msg.reasoning_content;
-    else if (typeof msg.reasoning === "string" && msg.reasoning.trim()) text = msg.reasoning;
-  }
-  return String(text || "").trim();
+  return { name: toolName, arguments: args };
 }
 
-function parseIpcProxyCompletionPayload(raw, provider) {
-  if (!raw || typeof raw !== "object") {
-    throw new Error(`${provider || "LLM"} chat completion: empty proxy response`);
+export function extractDsmlToolCallPayloads(text: string) {
+  const tools: ToolCallPayload[] = [];
+  const input = String(text || "");
+  const blockRe = new RegExp(`${DSML_OPEN}tool_calls>([\\s\\S]*?)${DSML_CLOSE}tool_calls>`, "gi");
+  const invokeRe = new RegExp(
+    `${DSML_OPEN}invoke\\s+name="([^"]+)"[^>]*>([\\s\\S]*?)${DSML_CLOSE}invoke>`,
+    "gi"
+  );
+  let blockMatch;
+  while ((blockMatch = blockRe.exec(input))) {
+    const block = blockMatch[1];
+    invokeRe.lastIndex = 0;
+    let invokeMatch;
+    while ((invokeMatch = invokeRe.exec(block))) {
+      const call = parseDsmlInvokeInner(invokeMatch[1], invokeMatch[2]);
+      if (call) tools.push(call);
+    }
   }
-  if (raw.error != null) throw new Error(String(raw.error));
-  const status = Number(raw.status);
-  const bodyStr = String(raw.body ?? "");
-  if (!Number.isFinite(status) || status < 200 || status >= 300) {
-    throw new Error(formatProviderError(provider, status, bodyStr));
+  if (tools.length === 0) {
+    invokeRe.lastIndex = 0;
+    let invokeMatch;
+    while ((invokeMatch = invokeRe.exec(input))) {
+      const call = parseDsmlInvokeInner(invokeMatch[1], invokeMatch[2]);
+      if (call) tools.push(call);
+    }
   }
-  try {
-    return JSON.parse(bodyStr);
-  } catch {
-    throw new Error(`${provider || "LLM"} chat completion: invalid JSON body`);
-  }
+  let visible = input.replace(blockRe, "");
+  visible = visible.replace(invokeRe, "");
+  visible = visible.replace(
+    new RegExp(`${DSML_OPEN}parameter\\s+[^>]*>[\\s\\S]*?${DSML_CLOSE}parameter>`, "gi"),
+    ""
+  );
+  return { tools, visible: visible.trimEnd() };
 }
 
-export async function completeOpenAiChat(
-  messages: unknown,
-  cfg: LlmProviderConfig,
-  options: LlmRequestOptions = {}
-) {
-  if (options.signal?.aborted) {
-    throw new Error(`${cfg.provider || "LLM"} chat completion aborted`);
-  }
-  if (!cfg?.baseUrl || !cfg?.model) {
-    throw new Error("missing LLM provider configuration");
-  }
-  const headers = sanitizeHeadersForFetch({
-    "Content-Type": "application/json",
-    ...(cfg.extraHeaders || {}),
-  });
-  if (cfg.apiKey) headers.Authorization = `Bearer ${cfg.apiKey}`;
-  const maxTokens = Math.max(16, Number(options?.max_tokens ?? options?.maxTokens) || 384);
-  const body = JSON.stringify({
-    model: cfg.model,
-    messages,
-    stream: false,
-    max_tokens: maxTokens,
-    ...llmChatCompletionExtras(cfg.provider),
-  });
-  const endpoint = `${cfg.baseUrl}/chat/completions`;
-  const label = `${cfg.provider || "LLM"} chat completion`;
-  const maxAttempts = getLlmInitialHttpMaxAttempts();
+export function stripDsmlToolMarkup(text: string): string {
+  return extractDsmlToolCallPayloads(text).visible;
+}
 
-  let lastErr: unknown = null;
-  for (let attempt = 0; attempt < maxAttempts; attempt++) {
-    if (options.signal?.aborted) {
-      throw new Error(`${cfg.provider || "LLM"} chat completion aborted`);
-    }
-    if (attempt > 0) {
-      const delayMs = computeRetryDelay(attempt - 1);
-      await logDebugEvent("llm_completion_http_retry_backoff", {
-        provider: cfg.provider,
-        attempt,
-        delayMs,
-      }).catch(() => {});
-      await sleepMs(delayMs);
-    }
-    try {
-      if (shouldUseNodeboxLlmProxy(endpoint)) {
-        const raw = (await ipcProxyRequest({
-          method: "POST",
-          url: endpoint,
-          headers,
-          body,
-        })) as IpcProxyResponse;
-        if (raw?.error) {
-          throw new Error(String(raw.error));
-        }
-        const st = Number(raw.status);
-        const bodyStr = String(raw.body ?? "");
-        if (!Number.isFinite(st) || st < 200 || st >= 300) {
-          const msg = formatProviderError(cfg.provider, st, bodyStr);
-          const hint = toolsCapabilityHint(0, st, bodyStr);
-          if (
-            TRANSIENT_LLM_HTTP_STATUSES.has(st) &&
-            attempt < maxAttempts - 1 &&
-            !looksLikeToolParameterRejection(st, bodyStr)
-          ) {
-            await logDebugEvent("llm_completion_ipc_transient", {
-              provider: cfg.provider,
-              status: st,
-              attempt,
-            }).catch(() => {});
-            lastErr = new Error(`${msg}${hint}`);
-            continue;
-          }
-          throw new Error(`${msg}${hint}`);
-        }
-        const payload = parseIpcProxyCompletionPayload(raw, cfg.provider);
-        return completionMessageText(payload);
-      }
-
-      const res = await fetchWithTimeout(
-        endpoint,
-        { method: "POST", headers, body, signal: options.signal },
-        LLM_REQUEST_TIMEOUT_MS,
-        label
-      );
-      if (!res.ok) {
-        const errText = await res.text().catch(() => "");
-        const msg = formatProviderError(cfg.provider, res.status, errText);
-        const hint = toolsCapabilityHint(0, res.status, errText);
-        if (
-          TRANSIENT_LLM_HTTP_STATUSES.has(res.status) &&
-          attempt < maxAttempts - 1 &&
-          !looksLikeToolParameterRejection(res.status, errText)
-        ) {
-          await logDebugEvent("llm_completion_http_transient", {
-            provider: cfg.provider,
-            status: res.status,
-            attempt,
-          }).catch(() => {});
-          lastErr = new Error(`${msg}${hint}`);
-          continue;
-        }
-        throw new Error(`${msg}${hint}`);
-      }
-      let payload;
-      try {
-        payload = await res.json();
-      } catch {
-        throw new Error(`${label}: malformed JSON response`);
-      }
-      return completionMessageText(payload);
-    } catch (err) {
-      if (options.signal?.aborted) {
-        throw new Error(`${cfg.provider || "LLM"} chat completion aborted`);
-      }
-      lastErr = err;
-      const canRetry = attempt < maxAttempts - 1 && retryableNodeOrFetchError(err, options.signal);
-      await logDebugEvent("llm_completion_throw", {
-        provider: cfg.provider,
-        attempt,
-        error: String(err?.message || err),
-        willRetry: canRetry,
-      }).catch(() => {});
-      if (canRetry) continue;
-      throw err;
-    }
+export function looksLikeUnparsedPlainToolHints(text: string): boolean {
+  const lines = String(text || "")
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean);
+  for (let i = 0; i < lines.length; i++) {
+    if (PLAIN_TOOL_NAME_RE.test(lines[i])) return true;
+    if (TRAILING_PLAIN_TOOL_LINE_RE.test(lines[i])) return true;
   }
-  throw lastErr instanceof Error ? lastErr : new Error(String(lastErr || `${label} failed after retries`));
+  return false;
+}
+
+const UNPARSED_DSML_TOOL_MARKUP_RE = new RegExp(`${DSML_OPEN}(?:tool_calls|invoke|parameter)`, "i");
+
+export function looksLikeUnparsedToolMarkup(text: string): boolean {
+  const raw = String(text || "");
+  if (UNPARSED_DSML_TOOL_MARKUP_RE.test(raw)) return true;
+  if (/<[^>\n]*[|｜][^>\n]*DSML[^>\n]*>/i.test(raw)) return true;
+  if (/<invoke\b[\s\S]*?<\/invoke>/i.test(raw)) return true;
+  if (/<parameter\b[\s\S]*?<\/parameter>/i.test(raw)) return true;
+  if (/<function>\s*[\s\S]*?<\/function>/i.test(raw)) return true;
+  if (/<function_name>/i.test(raw)) return true;
+  if (looksLikeUnparsedPlainToolHints(raw)) return true;
+  return false;
+}
+
+export function stripPlainToolHintLines(text: string): string {
+  const lines = String(text || "").split("\n");
+  const out: string[] = [];
+  for (let i = 0; i < lines.length; i++) {
+    const trimmed = lines[i].trim();
+    if (PLAIN_TOOL_NAME_RE.test(trimmed)) {
+      const next = (lines[i + 1] ?? "").trim();
+      if (next && (next === "." || /^[a-z0-9_./~-]+$/i.test(next))) {
+        i++;
+      }
+      continue;
+    }
+    if (TRAILING_PLAIN_TOOL_LINE_RE.test(trimmed)) continue;
+    if (/^\.\s*$/.test(trimmed)) continue;
+    out.push(lines[i]);
+  }
+  return out.join("\n").trim();
+}
+
+export function stripMarkupForContinuationHeuristics(text: string): string {
+  let out = stripDsmlToolMarkup(String(text || ""));
+  out = stripPlainToolHintLines(out);
+  out = stripXmlToolArtifacts(out);
+  out = stripModelControlTokens(out);
+  return out.trim();
 }
 
 export function stripXmlToolArtifacts(text) {
@@ -860,6 +968,7 @@ export function stripXmlToolArtifacts(text) {
     /<StartToolCall>[\s\S]*?<\/StartToolCall>/gi,
     /<minimax:tool_call>[\s\S]*?<\/minimax:tool_call>/gi,
     /<longcat_tool_call>[\s\S]*?<\/longcat_tool_call>/gi,
+    /<function>[\s\S]*?<\/function>/gi,
     /<invoke\b[\s\S]*?<\/invoke>/gi,
   ];
   let out = String(text);
@@ -891,28 +1000,105 @@ function lineLooksLikePseudoToolCall(line, exactNameRe) {
  * Whole-line shell-like tool hints (`list_dir .`, `web_search foo`).
  * Multi-arg tools such as cron_register are not supported here — use provider tool_calls or <<<TOOL>>> JSON.
  */
+const PLAIN_TOOL_NAME_RE =
+  /^(tree|list_dir|read_file|write_file|browse_workspace|grep|find_files|web_search|web_fetch|make_dir|delete_file|run_shell|memory_search)$/i;
+
+const TRAILING_PLAIN_TOOL_LINE_RE =
+  /^\s*(.+?)\s+(read_file|write_file|tree|list_dir|browse_workspace|grep|find_files)\s*$/i;
+
+function mergeSplitPlainToolCommandLines(text: string): string {
+  const lines = String(text || "").split("\n");
+  const out: string[] = [];
+  for (let i = 0; i < lines.length; i++) {
+    const cur = lines[i].trim();
+    const next = (lines[i + 1] ?? "").trim();
+    if (
+      PLAIN_TOOL_NAME_RE.test(cur) &&
+      next &&
+      (next === "." || /^[a-z0-9_./~-]+$/i.test(next))
+    ) {
+      out.push(`${cur} ${next}`);
+      i++;
+      continue;
+    }
+    out.push(lines[i]);
+  }
+  return out.join("\n");
+}
+
+function resolvePlainToolPayload(
+  name: string,
+  arg: string,
+  names: Set<string>
+): ToolCallPayload | null {
+  const lower = String(name || "").trim().toLowerCase();
+  const pathArg = String(arg || "").trim() || ".";
+  if (lower === "tree") {
+    if (names.has("tree")) return { name: "tree", arguments: { path: pathArg } };
+    if (names.has("browse_workspace")) {
+      return { name: "browse_workspace", arguments: { action: "tree", path: pathArg } };
+    }
+    return null;
+  }
+  if (lower === "list_dir") {
+    if (names.has("list_dir")) return { name: "list_dir", arguments: { path: pathArg } };
+    if (names.has("browse_workspace")) {
+      return { name: "browse_workspace", arguments: { action: "list", path: pathArg } };
+    }
+    return null;
+  }
+  if (lower === "find_files") {
+    if (names.has("find_files")) return { name: "find_files", arguments: { pattern: pathArg } };
+    if (names.has("browse_workspace")) {
+      return { name: "browse_workspace", arguments: { action: "find", path: ".", pattern: pathArg } };
+    }
+    return null;
+  }
+  if (!names.has(lower) && !names.has(name)) return null;
+  const resolved = names.has(name) ? name : lower;
+  if (/^(read_file|list_dir|make_dir|delete_file)$/i.test(resolved)) {
+    return { name: resolved, arguments: { path: pathArg } };
+  }
+  if (resolved === "run_shell") return { name: resolved, arguments: { command: pathArg } };
+  if (resolved === "web_search" || resolved === "memory_search") {
+    return { name: resolved, arguments: { query: pathArg } };
+  }
+  if (resolved === "web_fetch") return { name: resolved, arguments: { url: pathArg } };
+  if (resolved === "browse_workspace") {
+    return { name: "browse_workspace", arguments: { action: "list", path: pathArg } };
+  }
+  return null;
+}
+
+function parseTrailingPlainToolLine(line: string, names: Set<string>): ToolCallPayload | null {
+  const m = String(line || "").match(TRAILING_PLAIN_TOOL_LINE_RE);
+  if (!m) return null;
+  const hint = String(m[1] || "").trim();
+  const tool = String(m[2] || "").trim().toLowerCase();
+  if (/[/\\]|\.[a-z0-9]{1,8}$/i.test(hint)) {
+    return resolvePlainToolPayload(tool, hint, names);
+  }
+  if (tool === "read_file" && names.has("browse_workspace")) {
+    const token = hint.split(/\s+/).find((w) => w.length > 3) || hint;
+    return {
+      name: "browse_workspace",
+      arguments: { action: "find", path: ".", pattern: `*${token}*` },
+    };
+  }
+  return null;
+}
+
 function parsePlainToolCommandLine(line: string, toolNames?: string[]): ToolCallPayload | null {
   const names = new Set(Array.isArray(toolNames) ? toolNames : []);
+  const trailing = parseTrailingPlainToolLine(line, names);
+  if (trailing) return trailing;
   const match = String(line || "").match(/^\s*([a-z][a-z0-9_]{1,48})\s+(.+?)\s*$/i);
   if (!match) return null;
   const name = match[1];
-  if (!names.has(name)) return null;
   let arg = match[2].trim();
   if (!arg || /^[`'"]?$/.test(arg)) return null;
   arg = arg.replace(/^['"`]|['"`]$/g, "");
-  if (/^(read_file|list_dir|tree|make_dir|delete_file)$/i.test(name)) {
-    return { name, arguments: { path: arg } };
-  }
-  if (name === "run_shell") {
-    return { name, arguments: { command: arg } };
-  }
-  if (name === "web_search" || name === "memory_search") {
-    return { name, arguments: { query: arg } };
-  }
-  if (name === "web_fetch") {
-    return { name, arguments: { url: arg } };
-  }
-  return null;
+  return resolvePlainToolPayload(name, arg, names);
 }
 
 function findJsonValueSpans(text: string): JsonValueSpan[] {
@@ -1064,7 +1250,8 @@ export function stripJsonToolCallPayloads(text, toolNames) {
 export function extractPlainToolCommandLines(text: string, toolNames?: string[]) {
   const tools: ToolCallPayload[] = [];
   const visibleLines: string[] = [];
-  for (const line of String(text || "").split("\n")) {
+  const merged = mergeSplitPlainToolCommandLines(text);
+  for (const line of merged.split("\n")) {
     const parsed = parsePlainToolCommandLine(line, toolNames);
     if (parsed) tools.push(parsed);
     else visibleLines.push(line);
@@ -1102,7 +1289,7 @@ export function extractLooseCallToolLines(text: string, toolNames?: string[]) {
 export function stripModelControlTokens(text) {
   if (!text) return "";
   return String(text)
-    .replace(/<[^>\n]*\|[^>\n]*>/g, "")
+    .replace(/<[^>\n]*[|｜][^>\n]*>/g, "")
     .trim();
 }
 
@@ -1127,13 +1314,47 @@ export function extractClarifyMarkers(text: string) {
   return { blocks, visible };
 }
 
+/** Remove truncated <<<TOOL>>> / <<<CLARIFY>>> marker bytes models emit without <<<END>>>. */
+export function stripOrphanToolMarkerArtifacts(text: string): string {
+  let out = String(text || "");
+  out = out.replace(/<<<\s*TOOL\s*>>>[\s\S]*$/gi, "");
+  out = out.replace(/<<<\s*CLARIFY\s*>>>[\s\S]*$/gi, "");
+  out = out.replace(/^\s*<<<\s*TOOL\s*>>>[^\n]*$/gim, "");
+  return out.trimEnd();
+}
+
+function salvageOrphanMarkerToolPayload(payload: string): Record<string, unknown> | null {
+  const raw = String(payload || "").trim();
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw);
+  } catch {
+    /* fall through */
+  }
+  const name = raw.match(/"name"\s*:\s*"([^"]+)"/)?.[1]?.trim();
+  if (!name) return null;
+  const argsMatch = raw.match(/"arguments"\s*:\s*(\{[\s\S]*)/);
+  if (argsMatch) {
+    try {
+      const repaired = repairToolCallArgumentsJson(argsMatch[1], name);
+      return { name, arguments: parseToolArguments(repaired, name) };
+    } catch {
+      /* fall through */
+    }
+  }
+  return { name, arguments: {} };
+}
+
 /** @param knownToolNames — adds exact-name matches; generic `name{"k":…}` lines strip even when [] */
 export function sanitizeAssistantVisibleText(text: string, knownToolNames?: string[]) {
-  const withoutMarkers = String(text || "")
-    .replace(/<<<\s*TOOL\s*>>>[\s\S]*?<<<\s*END\s*>>>/gi, "")
-    .replace(/<<<\s*CLARIFY\s*>>>[\s\S]*?<<<\s*END\s*>>>/gi, "")
-    .trim();
-  let out = stripXmlToolArtifacts(withoutMarkers).trim();
+  const withoutMarkers = stripOrphanToolMarkerArtifacts(
+    String(text || "")
+      .replace(/<<<\s*TOOL\s*>>>[\s\S]*?<<<\s*END\s*>>>/gi, "")
+      .replace(/<<<\s*CLARIFY\s*>>>[\s\S]*?<<<\s*END\s*>>>/gi, "")
+      .trim()
+  );
+  let out = stripDsmlToolMarkup(withoutMarkers).trim();
+  out = stripXmlToolArtifacts(out).trim();
   const names = Array.isArray(knownToolNames) ? knownToolNames : [];
   out = stripJsonToolCallPayloads(out, names).trim();
   out = extractLooseCallToolLines(out, names).visible.trim();
@@ -1153,6 +1374,12 @@ export function extractMarkerTools(text: string) {
     try {
       tools.push(JSON.parse(payload));
     } catch {
+      const salvaged = salvageWriteFileArgumentsFromRawJson(payload);
+      const explicitName = payload.match(/"name"\s*:\s*"([^"]+)"/)?.[1];
+      if (salvaged && (!explicitName || explicitName === "write_file")) {
+        tools.push({ name: explicitName || "write_file", arguments: salvaged });
+        continue;
+      }
       try {
         const repaired = payload
           .replace(/[“”]/g, '"')
@@ -1175,8 +1402,25 @@ export function extractMarkerTools(text: string) {
       }
     }
   }
-  const visible = text.replace(re, "").trimEnd();
+  for (const orphan of extractOrphanMarkerTools(text)) {
+    if (orphan?.name) tools.push(orphan);
+  }
+  const visible = stripOrphanToolMarkerArtifacts(text.replace(re, "").trimEnd());
   return { tools, visible };
+}
+
+function extractOrphanMarkerTools(text: string) {
+  const re = /<<<\s*TOOL\s*>>>\s*([\s\S]*?)(?=<<<\s*TOOL\s*>>>|$)/gi;
+  const tools: Array<Record<string, unknown>> = [];
+  let m;
+  const raw = String(text || "");
+  while ((m = re.exec(raw))) {
+    const segment = String(m[1] || "");
+    if (/<<<\s*END\s*>>>/i.test(segment)) continue;
+    const salvaged = salvageOrphanMarkerToolPayload(segment);
+    if (salvaged?.name) tools.push(salvaged);
+  }
+  return tools;
 }
 
 function parseLongcatToolCallPayload(payload) {
@@ -1247,8 +1491,39 @@ export function extractToolCallTagPayloads(text: string) {
   return { tools, visible };
 }
 
-export function extractJsonToolCallsFromText(text: string, toolNames?: string[]) {
-  return extractJsonToolCallPayloads(text, toolNames).tools;
+function parseFunctionXmlBlock(inner: string): ToolCallPayload | null {
+  const block = String(inner || "");
+  const name =
+    block.match(/<function_name>\s*([\s\S]*?)\s*<\/function_name>/i)?.[1]?.trim() || "";
+  if (!name) return null;
+  const argsRaw =
+    block.match(
+      /<function_(?:arguments|parameters)>\s*([\s\S]*?)\s*<\/function_(?:arguments|parameters)>/i
+    )?.[1]?.trim() || "";
+  let args: Record<string, unknown> = {};
+  if (argsRaw) {
+    try {
+      const parsed = JSON.parse(argsRaw);
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+        args = parsed as Record<string, unknown>;
+      }
+    } catch {
+      /* malformed function args */
+    }
+  }
+  return { name, arguments: args };
+}
+
+export function extractFunctionXmlToolCallPayloads(text: string) {
+  const re = /<function>\s*([\s\S]*?)\s*<\/function>/gi;
+  const tools: ToolCallPayload[] = [];
+  let m;
+  while ((m = re.exec(String(text || "")))) {
+    const parsed = parseFunctionXmlBlock(m[1]);
+    if (parsed?.name) tools.push(parsed);
+  }
+  const visible = String(text || "").replace(re, "").trimEnd();
+  return { tools, visible };
 }
 
 export function normalizeToolCalls(
@@ -1275,11 +1550,19 @@ export function normalizeToolCalls(
     }
     let args: Record<string, unknown> = {};
     const rawArgs = raw?.arguments;
+    let rawArgsWire = "";
     if (typeof rawArgs === "string") {
       const trimmed = rawArgs.trim();
+      rawArgsWire = trimmed;
       args = trimmed ? parseToolArguments(trimmed, rawName) : {};
     } else if (rawArgs && typeof rawArgs === "object" && !Array.isArray(rawArgs)) {
       args = rawArgs as Record<string, unknown>;
+    }
+    args = mergeFlatToolCallArguments(raw, args);
+    if (rawName === "write_file") {
+      const salvageWire =
+        rawArgsWire || (Object.keys(args).length ? JSON.stringify({ ...raw, ...args }) : "");
+      args = parseWriteFileToolArguments(salvageWire, args);
     }
     const resolved = resolveKnownToolName(rawName, knownTools);
     const normalizedSkill = normalizeSkillToolCall(resolved, args, rawName);
@@ -1303,6 +1586,12 @@ export function normalizeToolCalls(
       if (typeof args.file === "string") args.path = args.file;
       else if (typeof args.file_path === "string") args.path = args.file_path;
       else if (typeof args.filepath === "string") args.path = args.filepath;
+      else if (typeof args.target_file === "string") args.path = args.target_file;
+    }
+    if (name === "web_fetch" && !args.url) {
+      if (typeof args.link === "string") args.url = args.link;
+      else if (typeof args.href === "string") args.url = args.href;
+      else if (typeof args.uri === "string") args.url = args.uri;
     }
     if (name === "run_shell" && !args.command && typeof args.cmd === "string") {
       args.command = args.cmd;
@@ -1332,6 +1621,19 @@ function longestToolPrefixSuffix(input) {
     }
   }
   return longest;
+}
+
+export function liveMirrorVisibleGap(streamed: string, final: string): string {
+  const s = String(streamed || "").trimEnd();
+  const f = String(final || "").trimEnd();
+  if (!f || f.length <= s.length) return "";
+  if (!s) return f;
+  if (f.startsWith(s)) return f.slice(s.length);
+  let i = 0;
+  const limit = Math.min(s.length, f.length);
+  while (i < limit && s.charCodeAt(i) === f.charCodeAt(i)) i += 1;
+  if (i >= s.length) return f.slice(i);
+  return "";
 }
 
 export function createToolAwareStreamWriter(writeChunk: (chunk: string) => void) {
@@ -1392,11 +1694,7 @@ export function createToolAwareStreamWriter(writeChunk: (chunk: string) => void)
       }
     },
     flush() {
-      if (insideToolBlock && (insideHiddenAccum.length > 0 || buffer.length > 0)) {
-        writeChunk(insideHiddenAccum + buffer);
-      } else if (!insideToolBlock && buffer.length > 0) {
-        writeChunk(buffer);
-      }
+      if (!insideToolBlock && buffer.length > 0) writeChunk(buffer);
       buffer = "";
       insideToolBlock = null;
       insideHiddenAccum = "";

@@ -18,7 +18,7 @@ Maintainer scope only — not everyday user tasks. Do **not** embed the full too
 | Installed capability folders | `capability_list` |
 | Read bundled skill bodies | `skill` (action=list, action=view) |
 | Patch / install skills | `skill` (action=manage, action=bulk) |
-| Inspect repo files | `read_file`, `grep`, `list_dir` — see **`browser-runtime-map`** |
+| Inspect repo files | `read_file`, `grep`, `browse_workspace` — see **`browser-runtime-map`** |
 | Facts / session / wiki | **`memory-layers`** |
 | Deliverables / artifacts | **`artifact-delivery`**, **`chart`** |
 | Cron / heartbeat jobs | `cron_list`, `cron_register` — **`heartbeat-cron`** |

@@ -21,7 +21,7 @@ Curated prompts for smoke and regression runs. Paste into the chat as-is; tweak 
 8. Create `/workspace/demo/config.json` with `{\"env\":\"smoke\",\"version\":1}`, then prettify/normalize indentation and overwrite the same path.
 9. Find every file under `/workspace/src` whose name ends in `.tsx`—count how many matched and list five paths maximum.
 10. Grep recursively in `/workspace` for `FIXME` or `TODO`—show filename:line for up to eight hits.
-11. Create directories `/workspace/move-test/a/` and `/workspace/move-test/b/`, write `orig.md` inside `a/`, move it to `b/`, then confirm with `list_dir`.
+11. Create directories `/workspace/move-test/a/` and `/workspace/move-test/b/`, write `orig.md` inside `a/`, move it to `b/`, then confirm with `browse_workspace` (`action`: list).
 
 ---
 
@@ -32,7 +32,7 @@ Curated prompts for smoke and regression runs. Paste into the chat as-is; tweak 
 14. `read_file` the repository `README.md` (or `/workspace/README.md`) and summarize the first bullet list under the title in ≤3 sentences (no verbatim dump of the whole file).
 15. `write_file`: append a line `# smoke-append` to an existing markdown under `/workspace` you choose (not gitignored)—then show tail context after read-back.
 16. `web_fetch`: fetch `https://example.com` headers/body excerpt only (first ~800 chars)—note redirect if any—and do not rely on speculative content beyond what returned.
-17. `list_dir` on `/workspace` then `grep` one directory you chose for `"use strict"` string only in `.ts`/`.tsx` files—combine results in a short bullet summary.
+17. `browse_workspace` (`action`: list) on `/workspace` then `grep` one directory you chose for `"use strict"` string only in `.ts`/`.tsx` files—combine results in a short bullet summary.
 
 ---
 

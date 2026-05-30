@@ -53,7 +53,7 @@ export function memoryInternalBrowseBlockedMessage(
     return (
       `${tool} on \`${rel}\` will not help recover API data. \`memory/snapshots/\` holds oversized tool-result spill files only. ` +
       "When compact tool output shows `result_ref`, call read_file once on that exact path (content is auto-unwrapped). " +
-      "If missing or nested, rerun `web_fetch`/`web_post` — do not list or find_files under memory/snapshots."
+      "If missing or nested, rerun `web_fetch`/`web_post` — do not browse or grep under memory/snapshots."
     );
   }
   if (raw === MEMORY_RUNS_REL || raw.startsWith(`${MEMORY_RUNS_REL}/`)) {

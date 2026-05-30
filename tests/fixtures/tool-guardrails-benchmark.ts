@@ -52,9 +52,9 @@ const REALISTIC_PROMPTS = [
   "Find YouTubers in UAE posting about openclaw; search then fetch top URLs.",
   "Research Hermes Agent tool guardrails and summarize how warn-first works.",
   "Discover competitors to web-agent; run several web_search queries before concluding.",
-  "Install the open-web-research skill from a remote SKILL.md URL via skill_bulk_save.",
-  "Call skill_view with project-scaffold before creating a new demo app tree.",
-  "Save a procedural skill after completing this migration with skill_manage.",
+  "Install the open-web-research skill from a remote SKILL.md URL via skill (action=bulk).",
+  "Call skill (action=view) with project-scaffold before creating a new demo app tree.",
+  "Save a procedural skill after completing this migration with skill (action=manage).",
   "Refactor loop guard out: delete model assets, port Hermes guardrails, update docs, run tests.",
   "Create projects/demo-app/, add index.html with write_file, then run npm test.",
   "Run wiki_setup, wiki_sync, wiki_search, then present a summary artifact.",
@@ -75,7 +75,7 @@ const REALISTIC_PROMPTS = [
   "Present the final report with artifact_present instead of dumping the full body.",
   "Use todo_write with one in_progress item before a multi-step refactor.",
   "Bulk-save three skills from GitHub raw SKILL.md URLs in one confirmation batch.",
-  "Delete an obsolete skill with skill_manage action delete after user confirmation.",
+  "Delete an obsolete skill with skill (action=manage, manage_action=delete) after user confirmation.",
   "Move generated outputs from tmp/ into projects/export/ with move_file.",
   "Create work/scratch-{date}/ before ad-hoc spike files.",
   "Run web_search for niche keywords, then web_fetch at least two result URLs.",
@@ -107,14 +107,14 @@ const REALISTIC_PROMPTS = [
   "write_file succeeded with lint noise — do not treat lint as tool failure.",
   "apply_patch landed but LSP diagnostics show type errors — still success.",
   "grep for loop-guard references and remove stale imports across the repo.",
-  "tree the projects/ directory and summarize depth and file counts.",
-  "find_files matching **/*.test.ts under tests/ and list newest five.",
+  "browse_workspace with action=tree on projects/ and summarize depth and file counts.",
+  "browse_workspace with action=find matching **/*.test.ts under tests/ and list newest five.",
   "session_search prior turns for 'guardrails pivot' before answering.",
   "session_memory_list facts saved this session and append one more note.",
   "system_info to check runtime before recommending run_shell vs dedicated tools.",
   "vision_analyze the screenshot the user attached in uploads/.",
   "audio_analyze the voice note and continue the task from transcription.",
-  "skill_list available skills and recommend one for open-web research.",
+  "skill with action=list for available skills and recommend one for open-web research.",
   "skill_recall triggers related to wiki or vault setup.",
   "wiki_search PARA folders for prior notes on tool loop detection.",
   "cron_list scheduled jobs and disable obsolete entries if any.",
@@ -123,7 +123,7 @@ const REALISTIC_PROMPTS = [
   "delete_file the obsolete loop-guard-worker stub if it still exists anywhere.",
   "make_dir projects/benchmark-spike/ before generating large fixture files.",
   "run_shell node -e 'console.log(1)' in Nodebox — no POSIX shell features.",
-  "web_fetch a GitHub raw URL for a skill SKILL.md then skill_manage create.",
+  "web_fetch a GitHub raw URL for a skill SKILL.md then skill (action=manage, manage_action=create).",
   "Stop retrying the same failing web_fetch URL — change strategy or report blocker.",
   "Use absolute paths when read_file fails on relative paths from wrong cwd.",
   "Narrow grep pattern instead of repeating identical search across repo root.",
@@ -152,7 +152,7 @@ const PROMPT_TEMPLATES = [
   (i: number) => `Create projects/${["demo", "spike", "audit", "bench"][i % 4]}-${i}/ and scaffold ${["index.html", "README.md", "package.json"][i % 3]}.`,
   (i: number) => `Read ${["docs/ARCHITECTURE.md", "docs/agent-notes.md", "README.md"][i % 3]} and update the tool guardrails section.`,
   (i: number) => `Run grep for '${["loop-guard", "LoopGuard", "tool-failure-streak", "prefetchClassifier"][i % 4]}' under src/ and clean stale hits.`,
-  (i: number) => `Install skill from https://example.com/skills/${i}/SKILL.md using skill_manage import_url.`,
+  (i: number) => `Install skill from https://example.com/skills/${i}/SKILL.md using skill (action=manage, manage_action=import_url).`,
   (i: number) => `Execute plan step ${(i % 5) + 1}: ${["list_dir", "read_file", "apply_patch", "run_shell test", "artifact_present"][i % 5]}.`,
   (i: number) => `Memory task: ${["save", "recall", "search", "append"][i % 4]} user preference about ${["timezone", "test runner", "model", "language"][i % 4]}.`,
   (i: number) => `Wiki ${["setup", "sync", "search"][i % 3]} for knowledge about tool loop guardrails case ${i}.`,
@@ -349,7 +349,7 @@ export function buildToolGuardrailsBenchmarkCases(): BenchmarkCase[] {
       "read_file",
       "grep",
       "web_search",
-      "skill_view",
+      "skill",
       "list_dir",
       "find_files",
       "wiki_search",
@@ -362,8 +362,8 @@ export function buildToolGuardrailsBenchmarkCases(): BenchmarkCase[] {
           ? { pattern: "guardrail", path: "src" }
           : tool === "web_search"
             ? { query: `benchmark query ${i}` }
-            : tool === "skill_view"
-              ? { name: "open-web-research" }
+            : tool === "skill"
+              ? { action: "view", name: "open-web-research" }
               : tool === "list_dir"
                 ? { path: `projects/run-${i}` }
                 : tool === "find_files"
@@ -482,13 +482,13 @@ export function buildToolGuardrailsBenchmarkCases(): BenchmarkCase[] {
   }
 
   const workflowTools = [
-    ["skill_view", "web_search", "web_fetch", "write_file"],
-    ["list_dir", "read_file", "grep", "apply_patch"],
+    ["skill", "web_search", "web_fetch", "write_file"],
+    ["browse_workspace", "read_file", "grep", "apply_patch"],
     ["todo_write", "make_dir", "write_file", "run_shell"],
     ["wiki_setup", "wiki_sync", "wiki_search", "artifact_present"],
     ["memory_search", "memory_recall", "memory_save"],
-    ["find_files", "read_file", "file_diff", "write_file"],
-    ["skill_list", "skill_view", "skill_manage"],
+    ["browse_workspace", "read_file", "file_diff", "write_file"],
+    ["skill", "web_search", "web_fetch"],
     ["web_search", "web_fetch", "youtube_transcribe", "write_file"],
     ["cron_list", "cron_register", "read_file"],
     ["system_info", "grep", "read_file", "apply_patch"],

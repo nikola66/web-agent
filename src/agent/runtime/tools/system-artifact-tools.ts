@@ -98,7 +98,7 @@ export async function fileDiffTool(args = {}, ctx) {
     rawA = await fs.readFile(absA, "utf8");
   } catch (err) {
     if (err?.code === "ENOENT") {
-      throw new Error(`Path not found: ${pathA}. Confirm path via list_dir before retrying.`);
+      throw new Error(`Path not found: ${pathA}. Confirm path via browse_workspace (action=list) before retrying.`);
     }
     throw err;
   }
@@ -106,7 +106,7 @@ export async function fileDiffTool(args = {}, ctx) {
     rawB = await fs.readFile(absB, "utf8");
   } catch (err) {
     if (err?.code === "ENOENT") {
-      throw new Error(`Path not found: ${pathB}. Confirm path via list_dir before retrying.`);
+      throw new Error(`Path not found: ${pathB}. Confirm path via browse_workspace (action=list) before retrying.`);
     }
     throw err;
   }
@@ -132,7 +132,7 @@ export async function fileStatTool(args = {}, ctx) {
     st = await fs.stat(abs);
   } catch (err) {
     if (err?.code === "ENOENT") {
-      throw new Error(`Path not found: ${rel}. Use list_dir to confirm exact path and casing.`);
+      throw new Error(`Path not found: ${rel}. Use browse_workspace (action=list) to confirm exact path and casing.`);
     }
     throw err;
   }
@@ -174,7 +174,7 @@ export async function artifactPresentTool(args = {}, ctx) {
       st = await fs.stat(abs);
     } catch (err) {
       if (err?.code === "ENOENT") {
-        throw new Error(`Path not found: ${pathArg}. Confirm path via list_dir before retrying.`);
+        throw new Error(`Path not found: ${pathArg}. Confirm path via browse_workspace (action=list) before retrying.`);
       }
       throw err;
     }

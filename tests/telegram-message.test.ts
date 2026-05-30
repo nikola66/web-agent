@@ -1,11 +1,11 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { sendTelegramMessage } from "../dist/agent-runtime/channels/telegram.js";
+import { sendTelegramMessage, sendTelegramPreviewMessage, editTelegramMessage } from "../dist/agent-runtime/channels/telegram.js";
 
-function okResponse() {
+function okResponse(result = {}) {
   return {
-    json: async () => ({ ok: true, result: {} }),
+    json: async () => ({ ok: true, result }),
   };
 }
 
@@ -155,4 +155,44 @@ test("sendTelegramMessage ignores empty messages", async () => {
   }
 
   assert.equal(calls, 0);
+});
+
+test("sendTelegramPreviewMessage returns message_id from Telegram API", async () => {
+  const originalFetch = globalThis.fetch;
+  const calls = [];
+  globalThis.fetch = async (url, opts) => {
+    calls.push({ url: String(url), body: JSON.parse(opts.body) });
+    return okResponse({ message_id: 42 });
+  };
+
+  try {
+    const messageId = await sendTelegramPreviewMessage("token", "chat-prev", "_💭 thinking_");
+    assert.equal(messageId, 42);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+
+  assert.equal(calls.length, 1);
+  assert.match(String(calls[0].url), /sendMessage$/);
+  assert.equal(calls[0].body.chat_id, "chat-prev");
+});
+
+test("editTelegramMessage uses editMessageText API", async () => {
+  const originalFetch = globalThis.fetch;
+  const calls = [];
+  globalThis.fetch = async (url, opts) => {
+    calls.push({ url: String(url), body: JSON.parse(opts.body) });
+    return okResponse({ message_id: 42 });
+  };
+
+  try {
+    await editTelegramMessage("token", "chat-prev", 42, "_💭 updated thought_");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+
+  assert.equal(calls.length, 1);
+  assert.match(String(calls[0].url), /editMessageText$/);
+  assert.equal(calls[0].body.message_id, 42);
+  assert.equal(calls[0].body.chat_id, "chat-prev");
 });

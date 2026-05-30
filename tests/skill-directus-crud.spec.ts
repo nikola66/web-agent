@@ -128,16 +128,17 @@ test.describe.serial("directus skill install and CMS CRUD (live)", () => {
       "01-skill-install",
       [
         `Download, install, and adapt this skill for Web Agent / Pyodide compatibility: ${SKILL_REPO_URL}`,
-        "Use skill_manage import_url or skill_bulk_save — do not create a new skill from scratch.",
-        "After saving, call skill_view on the installed skill and skill_view imported-skill-compat.",
+        "Use skill with action=manage (import_url) or action=bulk — do not create a new skill from scratch.",
+        "After saving, call skill with action=view on the installed skill and on imported-skill-compat.",
         "Adapt the procedure so CMS work uses web_fetch/web_post with Bearer auth (http-api), not pip install directus-skill or from directus import.",
         "When the skill is installed and you have confirmed the compat mapping, reply exactly DIRECTUS_SKILL_READY_TOKEN.",
       ].join(" "),
       420_000
     );
 
-    expect(countToolCalls(install.combined, "skill_manage") + countToolCalls(install.combined, "skill_bulk_save")).toBeGreaterThan(0);
-    expect(countToolCalls(install.combined, "skill_view")).toBeGreaterThan(0);
+    expect(countToolCalls(install.combined, "skill")).toBeGreaterThan(0);
+    expect(install.combined).toMatch(/"action"\s*:\s*"(?:manage|bulk)"/);
+    expect(install.combined).toMatch(/"action"\s*:\s*"view"/);
     expect(install.combined).toMatch(/DIRECTUS_SKILL_READY_TOKEN/);
 
     const crud = await sendPromptAndCapture(
@@ -146,7 +147,7 @@ test.describe.serial("directus skill install and CMS CRUD (live)", () => {
       [
         `Directus URL: ${TESTING_DIRECTUS_URL}`,
         `Directus Token: ${TESTING_DIRECTUS_TOKEN}`,
-        "Using the installed directus skill and skill_view http-api, run full CRUD on the Blog_Posts collection (hub uses Blog_Posts + Blog_Posts_Translations).",
+        "Using the installed directus skill and skill with action=view on http-api, run full CRUD on the Blog_Posts collection (hub uses Blog_Posts + Blog_Posts_Translations).",
         "1) If discovery is slow, use Blog_Posts with author and category ids from a prior successful list call.",
         `2) CREATE a draft post titled "${CRUD_MARKER}" with minimal required fields.`,
         `3) UPDATE that record (e.g. append _UPDATED to title or change status).`,

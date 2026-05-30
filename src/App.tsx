@@ -5,6 +5,7 @@ import { Terminal } from "./ui/components/Terminal";
 import { ChatInput } from "./ui/components/ChatInput";
 import { ArtifactOfferBar } from "./ui/components/ArtifactOfferBar";
 import { ClarifyOfferBar } from "./ui/components/ClarifyOfferBar";
+import { ReasoningPreviewBar } from "./ui/components/ReasoningPreviewBar";
 import { ErrorBoundary } from "./ui/components/ErrorBoundary";
 import { useBrowserMetadata } from "./ui/use-browser-metadata";
 import { useActiveProfileRuntime } from "./ui/stores/runtime-store";
@@ -235,6 +236,7 @@ export function App() {
         </ErrorBoundary>
         <ArtifactOfferBar />
         <ClarifyOfferBar />
+        <ReasoningPreviewBar />
         <ChatInput />
         {sidebarOpen && (
           <button

@@ -75,8 +75,8 @@ When the user picks a skill:
 
 1. `skill` (action=view) **`web-agent-skill`** — remote install rules (HTTPS + `skill` action=manage/bulk, never shell `git clone`).
 2. Install with `/skills install <https-url-to-SKILL.md>` or `skill` (action=manage, manage_action=import_url). If the skill ships **Python/shell scripts** under `scripts/` or package dirs, prefer `skill` (action=manage, manage_action=import_dir) on a cloned folder so support files are saved.
-3. `skill_view` **`imported-skill-compat`**, then `skill_view` the installed slug — follow the Web Agent execution section, `compatibility_notes`, and `script_warnings`.
-4. Confirm with `skill_list`.
+3. `skill` (action=view) **`imported-skill-compat`**, then `skill` (action=view) the installed slug — follow the Web Agent execution section, `compatibility_notes`, and `script_warnings`.
+4. Confirm with `skill` (action=list).
 
 ## Pitfalls
 

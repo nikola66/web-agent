@@ -8,12 +8,12 @@ import {
   resolveFindSkillsUserMessage,
 } from "../dist/agent-runtime/find-skills-slash.js";
 
-test("buildFindSkillsModeUserPrompt includes query, skill_view, and top-5 contract", () => {
+test("buildFindSkillsModeUserPrompt includes query, skill view, and top-5 contract", () => {
   const p = buildFindSkillsModeUserPrompt("pdf extraction");
   assert.match(p, /find-skills mode/i);
   assert.match(p, /\/find_skills/);
   assert.match(p, /pdf extraction/);
-  assert.match(p, /skill_view.*find-skills/);
+  assert.match(p, /skill.*find-skills/i);
   assert.match(p, /exactly \*\*5\*\*/);
   assert.match(p, /skills\.sh/);
   assert.match(p, /only these 3/);
@@ -38,7 +38,7 @@ test("rewriteFindSkillsIntentUserMessage matches natural-language skill discover
   assert.ok(p);
   assert.match(p!, /find-skills mode/i);
   assert.match(p!, /SEO auditing/i);
-  assert.match(p!, /skill_view.*find-skills/);
+  assert.match(p!, /skill.*find-skills/i);
 });
 
 test("rewriteFindSkillsIntentUserMessage rejects unrelated asks", () => {

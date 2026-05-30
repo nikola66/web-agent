@@ -13,7 +13,7 @@ export default defineTool({
   toolGroup: "composio",
   description:
     "Execute one curated Composio OAuth action after `composio_status` confirms a connected account. Reads run normally; send/post/delete/publish may require approval. " +
-    "Never tell the user an app is unavailable without calling `composio_status` first. Call `skill_view` **`composio-oauth`** for action ids (e.g. LinkedIn → `linkedin_get_my_info`); `composio_status.allowed_actions` is authoritative. " +
+    "Never tell the user an app is unavailable without calling `composio_status` first. Call `skill` (action=view) **`composio-oauth`** for action ids (e.g. LinkedIn → `linkedin_get_my_info`); `composio_status.allowed_actions` is authoritative. " +
     "Example: " +
     JSON.stringify(EXAMPLES[0]),
   inputSchema: {

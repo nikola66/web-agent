@@ -31,7 +31,7 @@ Canonical built-in tool picker. Other skills defer here for filesystem vs HTTP v
 | Binary download to workspace | `web_fetch` with `save_to` (metadata-only; then `web_upload.file_path`) |
 | Mixed multipart (fields + file) | `web_post` with `multipart` array — see **`http-api`** |
 | HTTP(S) POST/PATCH/PUT/DELETE/GraphQL | `web_post` (+ `json`, `form`, `params`, `timeout_ms`) — not for CMS file bytes |
-| OAuth-connected SaaS (Gmail, LinkedIn, Slack, …) | `skill_view` **`composio-oauth`**, then `composio_status` → `composio_action`; never claim no access without status |
+| OAuth-connected SaaS (Gmail, LinkedIn, Slack, …) | `skill` (action=view) **`composio-oauth`**, then `composio_status` → `composio_action`; never claim no access without status |
 | Connect / add / configure an MCP server | Write `.webagent/mcp-servers.json` + `mcp-secrets.json` — see **`mcp-setup`** (no `/mcp` command, no `mcp_add` tool; never `web_fetch` the endpoint to "test" it) |
 | DOM click/type automation | MCP browser tools (if configured in `.webagent/mcp-servers.json`) — see **`imported-skill-compat`** |
 | JS-heavy page as markdown text | `web_fetch` (optional rendered-fetch provider when unauthenticated) |
@@ -42,12 +42,12 @@ Canonical built-in tool picker. Other skills defer here for filesystem vs HTTP v
 | **Create ZIP** (no `create_archive` tool) | **`run_python`** + stdlib **`zipfile`** → `work/<slug>/bundle.zip`, then **`artifact_present`** |
 | **Extract / inspect ZIP** | **`extract_archive`** / **`archive_list`** (read-only) |
 | Image / audio / video | `vision_analyze`, `audio_analyze`, `youtube_transcribe` — **`multimodal-ingest`** |
-| Memory / skills / wiki | see **`memory-layers`** (`memory_*`, `session_*`, `skill_list`, `skill_view`, `skill_manage`, `skill_bulk_save`, `wiki_*`) |
+| Memory / skills / wiki | see **`memory-layers`** (`memory_*`, `session_*`, `skill`, `wiki_*`) |
 | Skill has Python scripts | `run_python` first for stdlib/Pyodide-compatible scripts |
 | Skill has bash scripts | Dedicated tools, or a small `node …`/`python3 …` script when a tool does not exist |
 | One-off shell (last resort) | `run_shell` — Nodebox: **`node …`**, `python3 …` via Pyodide, plus simple read-only probes (`date`, `pwd`, `echo`, `wc -l`) |
 
-**Non-negotiable:** No `curl`/`npx`/`git clone` when a row above fits. Nodebox has **no** POSIX shell. Skill installs: `skill_bulk_save` / `skill_manage`, never shell.
+**Non-negotiable:** No `curl`/`npx`/`git clone` when a row above fits. Nodebox has **no** POSIX shell. Skill installs: `skill` (action=bulk / action=manage), never shell.
 
 ## When to Use
 
@@ -75,13 +75,13 @@ Three layers:
 ## Procedure
 
 1. Match the need to the table above before calling `run_shell`.
-2. **HTTP decision:** GET/binary download → `web_fetch` (+ `save_to` for files); JSON/GraphQL writes → `web_post`; CMS `/files` → `web_upload`; mixed form+file → `web_post.multipart`. Call `skill_view` **`http-api`** before first API call. Never `run_shell` + axios for one-off HTTP. Never base64 bytes in tool args.
+2. **HTTP decision:** GET/binary download → `web_fetch` (+ `save_to` for files); JSON/GraphQL writes → `web_post`; CMS `/files` → `web_upload`; mixed form+file → `web_post.multipart`. Call `skill` (action=view) **`http-api`** before first API call. Never `run_shell` + axios for one-off HTTP. Never base64 bytes in tool args.
 3. On Nodebox, use `web_fetch`/`web_post` instead of curl; dedicated file tools instead of shell file ops.
 3. For cron, use `cron_register` — not host crontab or shell wrappers.
 
 ## Python in Pyodide — what works vs. what doesn't
 
-Full agent contract and checklist: **`skill_view` `pyodide-runtime`**. Capability manifest: `src/runtimes/webcontainer/pyodide-capabilities.json`.
+Full agent contract and checklist: **`skill` (action=view) `pyodide-runtime`**. Capability manifest: `src/runtimes/webcontainer/pyodide-capabilities.json`.
 
 | Python pattern | Status | Alternative |
 |---|---|---|
@@ -153,7 +153,7 @@ Do **not** use `run_shell` + `zip`/`tar` CLI, invent `create_archive`, or fall b
 
 - Treating POSIX tutorials as literal in Nodebox.
 - Treating Pyodide as full host CPython — use `run_python` for compatible scripts; rewrite subprocess, system pip, native sockets, or unsupported wheel steps.
-- Using `run_shell` for skill installs — use HTTPS URL + `skill_manage` / `skill_bulk_save`.
+- Using `run_shell` for skill installs — use HTTPS URL + `skill` (action=manage / action=bulk).
 - Invoking deploy CLIs (`vercel`, `gh`, `netlify`) when the service has a documented REST API.
 
 ## Anti-patterns

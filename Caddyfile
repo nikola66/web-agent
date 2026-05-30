@@ -82,13 +82,6 @@
 		}
 	}
 
-	# BitNet demo translation proxy (OpenAI chat/completions -> /completion SSE).
-	handle /api/llm/bitnet* {
-		reverse_proxy http://{$WEBAGENT_CORS_PROXY_HOST:127.0.0.1}:{$WEBAGENT_CORS_PROXY_PORT:8799} {
-			flush_interval -1
-		}
-	}
-
 	# Subscription LLM proxy (Nous passthrough, Codex Responses adapter).
 	handle /api/llm/nous* {
 		reverse_proxy http://{$WEBAGENT_CORS_PROXY_HOST:127.0.0.1}:{$WEBAGENT_CORS_PROXY_PORT:8799} {

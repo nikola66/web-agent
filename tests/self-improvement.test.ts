@@ -32,7 +32,7 @@ test("evaluateBackgroundReviewTrigger fires skill review after iteration thresho
     usedPlanningGate: false,
     estimatedStepsOverSix: false,
     finalVisibleText: "Done.",
-    availableToolNames: ["skill_manage", "read_file"],
+    availableToolNames: ["skill", "read_file"],
   });
   assert.equal(result.shouldReviewSkills, true);
   assert.equal(result.kind, "skill");
@@ -50,7 +50,7 @@ test("evaluateBackgroundReviewTrigger skips skill review when foreground already
     usedPlanningGate: false,
     estimatedStepsOverSix: false,
     finalVisibleText: "Done.",
-    availableToolNames: ["skill_manage"],
+    availableToolNames: ["skill"],
   });
   assert.equal(result.shouldReviewSkills, false);
   assert.equal(result.kind, null);
@@ -86,7 +86,7 @@ test("evaluateBackgroundReviewTrigger skips aborted turns", () => {
     usedPlanningGate: false,
     estimatedStepsOverSix: true,
     finalVisibleText: "Stopped.",
-    availableToolNames: ["skill_manage"],
+    availableToolNames: ["skill"],
   });
   assert.equal(result.kind, null);
 });
@@ -104,14 +104,14 @@ test("noteForegroundSkillWrite resets skill iteration counter", () => {
     usedPlanningGate: false,
     estimatedStepsOverSix: false,
     finalVisibleText: "Done.",
-    availableToolNames: ["skill_manage"],
+    availableToolNames: ["skill"],
   });
   assert.equal(result.shouldReviewSkills, false);
 });
 
 test("summarizeBackgroundReviewActions extracts skill and memory updates", () => {
   const lines = summarizeBackgroundReviewActions([
-    { tool: "skill_manage", status: "ok", result: { action: "create", name: "deploy-checklist", slug: "deploy-checklist" } },
+    { tool: "skill", status: "ok", result: { action: "create", name: "deploy-checklist", slug: "deploy-checklist" } },
     { tool: "memory_save", status: "ok", result: { key: "timezone" } },
     { tool: "read_file", status: "ok", result: { ok: true } },
   ]);
@@ -120,9 +120,9 @@ test("summarizeBackgroundReviewActions extracts skill and memory updates", () =>
 
 test("summarizeBackgroundReviewActionsDetailed counts created vs patched", () => {
   const summary = summarizeBackgroundReviewActionsDetailed([
-    { tool: "skill_manage", status: "ok", result: { action: "create", name: "a", slug: "a" } },
-    { tool: "skill_manage", status: "ok", result: { action: "create", name: "b", slug: "b" } },
-    { tool: "skill_manage", status: "ok", result: { action: "patch", name: "c", slug: "c" } },
+    { tool: "skill", status: "ok", result: { action: "create", name: "a", slug: "a" } },
+    { tool: "skill", status: "ok", result: { action: "create", name: "b", slug: "b" } },
+    { tool: "skill", status: "ok", result: { action: "patch", name: "c", slug: "c" } },
     { tool: "memory_save", status: "ok", result: { key: "k" } },
   ]);
   assert.equal(summary.skillsCreated, 2);
@@ -142,7 +142,7 @@ test("evaluateBackgroundReviewTrigger skips simple skill review before iteration
     usedTodoWrite: true,
     toolCallCount: 3,
     finalVisibleText: "Lead list is empty.",
-    availableToolNames: ["skill_manage", "skill_view", "read_file"],
+    availableToolNames: ["skill", "read_file"],
   });
   assert.equal(result.shouldReviewSkills, false);
   assert.equal(result.kind, null);
@@ -156,7 +156,7 @@ test("evaluateBackgroundReviewTrigger fires at interval without todo or complexi
     aborted: false,
     skillMutatingCalled: false,
     finalVisibleText: "Done.",
-    availableToolNames: ["skill_manage"],
+    availableToolNames: ["skill"],
   });
   assert.equal(result.shouldReviewSkills, true);
   assert.equal(result.kind, "skill");
@@ -171,7 +171,7 @@ test("hermes parity: skill review also fires on complex turns", () => {
     usedTodoWrite: true,
     toolCallCount: 12,
     finalVisibleText: "Implemented and verified.",
-    availableToolNames: ["skill_manage", "memory_save", "read_file"],
+    availableToolNames: ["skill", "memory_save", "read_file"],
   };
 
   resetSelfImproveCounters();

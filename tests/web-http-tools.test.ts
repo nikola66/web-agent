@@ -84,7 +84,7 @@ test("graphqlSchemaRecoveryHint points to skill discovery", () => {
   assert.match(summarizeHttpErrorBody(data, 400), /GraphQL validation/i);
   const hint = graphqlSchemaRecoveryHint(data, 400);
   assert.match(String(hint), /http-api/);
-  assert.match(String(hint), /skill_view/i);
+  assert.match(String(hint), /skill/i);
   assert.doesNotMatch(String(hint), /directus/i);
 });
 
@@ -127,7 +127,7 @@ test("graphqlSchemaRecoveryHint ignores REST validation errors with no GraphQL s
   const gqlBody = {
     errors: [{ message: "x", extensions: { code: "GRAPHQL_VALIDATION_EXCEPTION" } }],
   };
-  assert.match(String(graphqlSchemaRecoveryHint(gqlBody, 400)), /skill_view/i);
+  assert.match(String(graphqlSchemaRecoveryHint(gqlBody, 400)), /skill/i);
 });
 
 test("resolveHttpAuthHeaders adds Bearer from auth aliases and respects an existing header", async () => {
@@ -145,7 +145,7 @@ test("resolveHttpAuthHeaders adds Bearer from auth aliases and respects an exist
 
 test("guessedResourceRecoveryHint nudges discovery after deep-path 403", () => {
   const hint = guessedResourceRecoveryHint("https://api.example.com/v1/items/posts?limit=0", 403);
-  assert.match(String(hint), /skill_view/i);
+  assert.match(String(hint), /skill/i);
   assert.match(String(hint), /discovery/i);
   assert.doesNotMatch(String(hint), /directus/i);
 });

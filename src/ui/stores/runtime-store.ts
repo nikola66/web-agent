@@ -32,6 +32,8 @@ export interface ProfileRuntimeState {
   } | null;
   /** <<<CLARIFY>>> skill marker — structured question + option buttons. */
   clarifyOffer: { question: string; options: string[]; openEnded: boolean } | null;
+  /** Ephemeral model reasoning preview while the agent is thinking. */
+  reasoningPreview: { text: string; updatedAt: number } | null;
   /** Recent background review / curator summaries for this profile. */
   selfImprovementFeed: Array<{
     at: string;
@@ -56,6 +58,7 @@ const EMPTY_PROFILE_RUNTIME: ProfileRuntimeState = {
   pendingToolConfirm: false,
   artifactOffer: null,
   clarifyOffer: null,
+  reasoningPreview: null,
   selfImprovementFeed: [],
   workspaceFilesRevision: 0,
 };
@@ -96,6 +99,10 @@ export interface RuntimeState {
   setClarifyOffer: (
     profileId: string,
     payload: ProfileRuntimeState["clarifyOffer"],
+  ) => void;
+  setReasoningPreview: (
+    profileId: string,
+    payload: ProfileRuntimeState["reasoningPreview"],
   ) => void;
   pushSelfImprovementSummary: (
     profileId: string,
@@ -317,6 +324,16 @@ export const useRuntimeStore = create<RuntimeState>()((set, get) => ({
         profileRuntime: {
           ...s.profileRuntime,
           [profileId]: { ...prev, clarifyOffer: payload },
+        },
+      };
+    }),
+  setReasoningPreview: (profileId, payload) =>
+    set((s) => {
+      const prev = getProfileRuntime(s.profileRuntime, profileId);
+      return {
+        profileRuntime: {
+          ...s.profileRuntime,
+          [profileId]: { ...prev, reasoningPreview: payload },
         },
       };
     }),

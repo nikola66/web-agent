@@ -12,6 +12,8 @@ import { toolPathStringFromArgs, withPathHints } from "./path-hints.js";
 import {
   WRITE_FILE_MAX_BYTES,
   formatWriteFileMaxBytesHint,
+  formatWriteFileIncompleteContentHint,
+  looksLikeIncompleteMarkdownWrite,
   normalizeWriteFileArgs,
 } from "../write-file-args.js";
 
@@ -41,24 +43,44 @@ export async function writeFileTool(args = {}, ctx) {
   }
   const raw = normalized.content;
   const contents = coerceWriteContent(raw);
+  const append = normalized.append === true;
   const byteLen = Buffer.byteLength(contents, "utf8");
   if (byteLen > WRITE_FILE_MAX_BYTES) {
     throw new Error(
       `write_file: content is ${byteLen} bytes (max ${WRITE_FILE_MAX_BYTES}). ` +
-        `Split into smaller write_file calls (by section) or use run_python to write the file. ${formatWriteFileMaxBytesHint()}`
+        `Split into smaller write_file calls (by section, use append:true after the first) or use run_python to write the file. ${formatWriteFileMaxBytesHint()}`
     );
+  }
+  if (!append && looksLikeIncompleteMarkdownWrite(contents, rel)) {
+    throw new Error(`${formatWriteFileIncompleteContentHint()} ${formatWriteFileMaxBytesHint()}`);
   }
   const abs = resolveWorkspacePath(ctx, rel);
   assertAllowedWorkspaceWritePath(abs);
   await ensureParentDir(abs);
-  await fs.writeFile(abs, contents, "utf8");
+  let writtenBytes = byteLen;
+  if (append) {
+    const existing = await fs.readFile(abs, "utf8").catch(() => "");
+    const existingBytes = Buffer.byteLength(existing, "utf8");
+    const totalBytes = existingBytes + byteLen;
+    if (totalBytes > WRITE_FILE_MAX_BYTES) {
+      throw new Error(
+        `write_file: append would reach ${totalBytes} bytes (max ${WRITE_FILE_MAX_BYTES}). ` +
+          `Write a smaller section or replace the file. ${formatWriteFileMaxBytesHint()}`
+      );
+    }
+    await fs.writeFile(abs, existing + contents, "utf8");
+    writtenBytes = totalBytes;
+  } else {
+    await fs.writeFile(abs, contents, "utf8");
+  }
   const mcpReload = await import("../../mcp-registry.js")
     .then((m) => m.maybeReloadMcpAfterConfigWrite(rel))
     .catch(() => null);
   return {
     ok: true,
     path: rel,
-    bytes: byteLen,
+    bytes: writtenBytes,
+    ...(append ? { appended: byteLen } : {}),
     ...(mcpReload ? { mcp_reload: mcpReload } : {}),
   };
 }

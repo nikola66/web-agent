@@ -229,9 +229,9 @@ export function buildWebAgentExecutionAppendix(analysis: SkillCompatAnalysis): s
     "| POST / GraphQL / PATCH / PUT / DELETE | `web_post` — optional `method`; not for CMS file bytes — **`http-api`** |",
     "| CMS file upload (`/files`, featured image) | `web_upload` with `source_url` or `file_path` — never base64 — **`http-api`** |",
     "| Mixed multipart (fields + file) | `web_post` `{ multipart: [{ name, text? }, { name, file_path?|source_url? }] }` — **`http-api`** |",
-    "| Read / Glob / Grep | `read_file` / `list_dir` / `find_files` / `grep` |",
-    "| Skill / Read skill | `skill_view` `{ name }` |",
-    "| Bash / curl / npx | `skill_view` **`browser-runtime-map`** — Nodebox has no POSIX shell |",
+    "| Read / Glob / Grep | `read_file` / `browse_workspace` (action=find) / `grep` |",
+    "| Skill / Read skill | `skill` `{ \"action\": \"view\", \"name\": \"<slug>\" }` |",
+    "| Bash / curl / npx | `skill` (action=view) **`browser-runtime-map`** — Nodebox has no POSIX shell |",
     "| Python / `.py` | `run_python` for Pyodide-compatible scripts |",
     "| pip / native Python deps | Unsupported as system installs — use Pyodide packages if available or replace the native dependency step |",
   ];
@@ -264,7 +264,7 @@ export function buildWebAgentExecutionAppendix(analysis: SkillCompatAnalysis): s
   }
   if (analysis.python_libraries.includes("directus")) {
     lines.push(
-      "| Directus Python SDK (`directus`, `directus-skill`, `pip install directus-skill`, [nikola66/directus-skill](https://github.com/nikola66/directus-skill)) | `skill_view` **`http-api`** (§ Directus GraphQL): `web_fetch`/`web_post` with Bearer — REST `/items/…` or `POST /graphql`; no Pyodide SDK |"
+      "| Directus Python SDK (`directus`, `directus-skill`, `pip install directus-skill`, [nikola66/directus-skill](https://github.com/nikola66/directus-skill)) | `skill` (action=view) **`http-api`** (§ Directus GraphQL): `web_fetch`/`web_post` with Bearer — REST `/items/…` or `POST /graphql`; no Pyodide SDK |"
     );
   }
   if (/\bwp-json\b|\bWordPress REST\b|\bwp_publisher\b/i.test(analysis.flags.join(" ") + analysis.python_libraries.join(" "))) {
@@ -278,8 +278,8 @@ export function buildWebAgentExecutionAppendix(analysis: SkillCompatAnalysis): s
     "",
     `Compatibility tier: **${analysis.tier}**.`,
     "",
-    "Call `skill_view` **`browser-runtime-map`** before the first tool fan-out.",
-    "After install from skills.sh, also read `skill_view` **`imported-skill-compat`**.",
+    "Call `skill` (action=view) **`browser-runtime-map`** before the first tool fan-out.",
+    "After install from skills.sh, also read `skill` (action=view) **`imported-skill-compat`**.",
     ""
   );
 
@@ -309,7 +309,7 @@ export function compatScanWarnings(analysis: SkillCompatAnalysis): string[] {
   const warnings: string[] = [];
   if (analysis.uses_agent_browser || analysis.uses_playwright) {
     warnings.push(
-      "references browser automation (agent-browser/Playwright) — unavailable in Web Agent; see skill_view imported-skill-compat"
+      "references browser automation (agent-browser/Playwright) — unavailable in Web Agent; see skill (action=view) imported-skill-compat"
     );
   }
   if (analysis.uses_bash) {
@@ -337,7 +337,7 @@ export function compatScanWarnings(analysis: SkillCompatAnalysis): string[] {
     warnings.push("references MCP tools — configure `.webagent/mcp-servers.json` (and secrets); tools register automatically at startup");
   }
   if (analysis.uses_npx) {
-    warnings.push("references npx — use skill_manage import_url / skill_bulk_save instead of CLI install");
+    warnings.push("references npx — use skill (action=manage, manage_action=import_url) / skill (action=bulk) instead of CLI install");
   }
   if (analysis.uses_deploy_cli) {
     warnings.push("references deploy/infra CLI (vercel/netlify/gh/fly/railway/heroku) — use that service's REST API via web_fetch/web_post instead");

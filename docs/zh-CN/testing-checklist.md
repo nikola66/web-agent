@@ -22,8 +22,8 @@
 在运行中的代理里要求其：
 
 - [ ] 在 `/workspace` 下 `read_file` / `write_file`
-- [ ] `list_dir` 或 `tree`
-- [ ] `grep` 或 `find_files`
+- [ ] `browse_workspace`（`action`: list 或 tree）
+- [ ] `grep` 或 `browse_workspace`（`action`: find）
 - [ ] `run_shell`（如 `echo test`）
 - [ ] 对公开 `https://` URL 使用 `web_fetch`
 

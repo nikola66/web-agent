@@ -7,6 +7,8 @@ import {
   inputSuggestsArchive,
   inputSuggestsDocument,
   buildFileHandlingContextPrefix,
+  isSkillInstallIntent,
+  buildSkillInstallContextPrefix,
 } from "../dist/agent-runtime/turn-sequencing.js";
 
 const BENCHMARK_PROMPT =
@@ -61,4 +63,16 @@ test("buildFileHandlingContextPrefix routes each file type to its tool", () => {
 
   // Plain-text task → no prefix.
   assert.equal(buildFileHandlingContextPrefix("Fix the typo in README.md"), null);
+});
+
+test("isSkillInstallIntent detects GitHub skill collection repos", () => {
+  assert.equal(isSkillInstallIntent("https://github.com/coreyhaines31/marketingskills"), true);
+  assert.equal(isSkillInstallIntent("https://github.com/foo/bar-skills"), true);
+});
+
+test("buildSkillInstallContextPrefix routes GitHub repo archives through extract_archive", () => {
+  const prefix = buildSkillInstallContextPrefix("https://github.com/coreyhaines31/marketingskills");
+  assert.ok(prefix);
+  assert.match(prefix!, /extract_archive/);
+  assert.match(prefix!, /import_dir/);
 });

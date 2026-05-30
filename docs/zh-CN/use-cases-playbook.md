@@ -15,17 +15,17 @@
 | 研究 | 发现细分创作者 / 竞品 | `/open-web-research` | `web_search`, `web_fetch`, `write_file`, `artifact_present` |
 | 研究 | 学术论文 / 引用检索 | `/research-pack` | `web_search`, `web_fetch`, `write_file`, `artifact_present` |
 | 研究 | 从页面提取表格或 JSON | `/structured-extraction` | `web_fetch`, `write_file`, `artifact_present` |
-| 元 | 在线发现可安装技能 | `/find_skills` | `web_search`, `web_fetch`, `skill_manage` |
+| 元 | 在线发现可安装技能 | `/find_skills` | `web_search`, `web_fetch`, `skill` (action=manage) |
 | 记忆 | 保存持久偏好 | `/memory-layers` | `memory_save`, `memory_recall` |
 | 记忆 | 记录滚动会话上下文 | `/memory-layers` | `session_memory_append`, `session_memory_list` |
 | 记忆 | 同步到 Obsidian 风格知识库 | `/memory-layers` | `wiki_setup`, `wiki_sync`, `wiki_search` |
 | 记忆 | 从旧对话中查找 | `/memory-layers` | `session_search` |
 | 规划 | 先写规格再实现（暂不执行） | `/plan` | `read_file`, `grep`, `write_file`, `artifact_present` |
-| 规划 | 拆解多步请求为 todos | `/task-execution` | `todo_write`, `skill_view` |
+| 规划 | 拆解多步请求为 todos | `/task-execution` | `todo_write`, `skill` (action=view) |
 | 规划 | 执行已批准的多步计划 | `/task-execution` | `todo_write`, `read_file`, `write_file`, `artifact_present` |
 | 自动化 | 标签页打开时的每日摘要 | `/heartbeat-cron` | `cron_register`, `cron_list`, `web_search`, `web_fetch` |
-| 工作区 | 新建副项目目录 | `/project-scaffold` | `make_dir`, `write_file`, `tree` |
-| 工作区 | 安全整理文件 | `/workspace-safety`, `/browser-runtime-map` | `list_dir`, `find_files`, `move_file`, `tree` |
+| 工作区 | 新建副项目目录 | `/project-scaffold` | `make_dir`, `write_file`, `browse_workspace` |
+| 工作区 | 安全整理文件 | `/workspace-safety`, `/browser-runtime-map` | `browse_workspace`, `move_file` |
 | 调试 | 假设驱动的排错 | `/systematic-debugging` | `read_file`, `grep`, `file_diff`, `run_shell` |
 | 调试 | Shell / `npx` failed in WebContainer | `/browser-runtime-map` | `read_file`, `web_fetch`, `grep` |
 | 多模态 | 解读截图或图表 | `/multimodal-ingest` | `vision_analyze`, `write_file` |
@@ -34,9 +34,9 @@
 | 交付 | 邮件发送交付物 | `/artifact-delivery` | `write_file`, `email`, `artifact_present` |
 | 交付 | 计划或报告的流程图 | `/chart` | `artifact_present` |
 | 体验 | 澄清模糊需求 | `/clarify` | *(none)* |
-| 安全 | 批量删除前检查点 | `/workspace-safety` | `list_dir`, `tree`, `delete_file` |
+| 安全 | 批量删除前检查点 | `/workspace-safety` | `browse_workspace`, `delete_file` |
 | 安全 | 粘贴 API 密钥 / 密钥卫生 | `/memory-layers` | *(redaction; no secret persistence)* |
-| 元 | 改进 Web Agent 本身 | `/web-agent-skill` | `read_file`, `grep`, `skill_manage`, `memory_save` |
+| 元 | 改进 Web Agent 本身 | `/web-agent-skill` | `read_file`, `grep`, `skill` (action=manage), `memory_save` |
 
 ---
 
@@ -118,7 +118,7 @@ Search skills.sh, SkillsMP, and Cursor marketplace — return the top 5 by insta
 
 **Bundled 技能：** `/find_skills` (+ `/clarify` if query ambiguous; `/web-agent-skill` if installing)
 
-**会触发的工具：** `web_search`, `web_fetch`, `skill_manage`
+**会触发的工具：** `web_search`, `web_fetch`, `skill` (action=manage)
 
 </details>
 
@@ -135,7 +135,7 @@ Read how bundled skills are indexed in src/agent/runtime/memory/skills.ts and su
 
 **Bundled 技能：** `/web-agent-skill` (+ `/memory-layers` for where to store lessons)
 
-**会触发的工具：** `read_file`, `grep`, `skill_manage`, `memory_save`
+**会触发的工具：** `read_file`, `grep`, `skill` (action=manage), `memory_save`
 
 </details>
 
@@ -259,7 +259,7 @@ I need you to: (1) list top-level files in the workspace, (2) grep for TODO comm
 
 **Bundled 技能：** `/task-execution` (+ `/chart` if ≥4 steps; `/task-execution` after approval)
 
-**会触发的工具：** `todo_write`, `skill_view`
+**会触发的工具：** `todo_write`, `skill` (action=view)
 
 </details>
 
@@ -322,7 +322,7 @@ Create projects/expense-tracker/ with a minimal README, package.json stub, and s
 
 **Bundled 技能：** `/project-scaffold`
 
-**会触发的工具：** `make_dir`, `write_file`, `tree`
+**会触发的工具：** `make_dir`, `write_file`, `browse_workspace`
 
 </details>
 
@@ -339,7 +339,7 @@ List everything under uploads/ and work/. Propose a safe reorganization (moves o
 
 **Bundled 技能：** `/workspace-safety`, `/browser-runtime-map`
 
-**会触发的工具：** `list_dir`, `find_files`, `move_file`, `tree`
+**会触发的工具：** `browse_workspace`, `move_file`
 
 </details>
 
@@ -529,7 +529,7 @@ I want to delete everything under work/scratch/. List what's there with sizes, c
 
 **Bundled 技能：** `/workspace-safety`
 
-**会触发的工具：** `list_dir`, `tree`, `delete_file`
+**会触发的工具：** `browse_workspace`, `delete_file`
 
 </details>
 

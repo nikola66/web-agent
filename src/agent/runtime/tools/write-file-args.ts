@@ -114,10 +114,32 @@ export function parseWriteFileToolArguments(
   parsed: Record<string, unknown>
 ): Record<string, unknown> {
   let args = normalizeWriteFileArgs(parsed);
-  if (!writeFileArgsMissing(args).length) return args;
-  if (typeof raw === "string") {
-    const salvaged = salvageWriteFileArgumentsFromRawJson(raw);
-    if (salvaged) args = normalizeWriteFileArgs({ ...args, ...salvaged });
+  const wire =
+    typeof raw === "string"
+      ? raw
+      : raw && typeof raw === "object"
+        ? JSON.stringify(raw)
+        : "";
+  if (wire) {
+    const salvaged = salvageWriteFileArgumentsFromRawJson(wire);
+    if (salvaged) {
+      if (writeFileArgsMissing(args).length) {
+        args = normalizeWriteFileArgs({ ...salvaged, ...args });
+      }
+      const salvagedContent = salvaged.content;
+      const parsedContent = args.content;
+      const samePath =
+        String(salvaged.path ?? "").trim() ===
+        String(args.path ?? args.file ?? salvaged.path ?? "").trim();
+      if (
+        samePath &&
+        typeof salvagedContent === "string" &&
+        (typeof parsedContent !== "string" || salvagedContent.length > parsedContent.length)
+      ) {
+        args.content = salvagedContent;
+        if (!args.path && salvaged.path) args.path = salvaged.path;
+      }
+    }
   }
   return args;
 }
@@ -127,20 +149,59 @@ export function formatWriteFileMaxBytesHint(): string {
   return `Max ${mib} MiB per write_file (WEBAGENT_WRITE_FILE_MAX_BYTES).`;
 }
 
+const INCOMPLETE_MARKDOWN_MIN_BYTES = 1024;
+
+export function looksLikeIncompleteMarkdownWrite(content: string, path = ""): boolean {
+  const text = String(content ?? "");
+  if (!text.trim()) return false;
+
+  if (text.startsWith("---")) {
+    const afterOpen = text.slice(3);
+    const closeIdx = afterOpen.search(/\n---(?:\n|$)/);
+    if (closeIdx < 0) return true;
+  }
+
+  const lines = text.split("\n");
+  const lastLine = lines[lines.length - 1] ?? "";
+  if (/:\s*"[^"]*$/.test(lastLine)) return true;
+
+  const relPath = String(path ?? "").trim().toLowerCase();
+  const looksArticleDraftPath =
+    /(?:^|\/)(?:work|projects)\/[^/]*(?:article|blog|post|draft)/i.test(relPath) ||
+    /(?:^|\/)work\/[^/]+-article\//i.test(relPath);
+  if (
+    looksArticleDraftPath &&
+    relPath.endsWith(".md") &&
+    Buffer.byteLength(text, "utf8") < INCOMPLETE_MARKDOWN_MIN_BYTES
+  ) {
+    if (text.startsWith("---") && !/\n---\n[\s\S]+\S/.test(text)) return true;
+  }
+
+  return false;
+}
+
+export function formatWriteFileIncompleteContentHint(): string {
+  return (
+    "write_file: content looks truncated (unclosed frontmatter / incomplete body). " +
+    "Retry with the rest of the content using append:true, or split into section writes."
+  );
+}
+
 export function formatWriteFileMissingFieldsHint(missing: string[]): string {
   const max = formatWriteFileMaxBytesHint();
   if (missing.includes("path") && missing.includes("content")) {
     return (
       `Emit one JSON object (no markdown code fence around the tool call): ` +
-      `{"path":"projects/<slug>/article.md","content":"# Title\\n\\n..."}. ` +
-      `Aliases map to content/path automatically. ${max}`
+      `{"path":"projects/<slug>/article.md","content":"# Title\\n\\n..."} ` +
+      `(path and content may be top-level beside "name", not only under "arguments"). ` +
+      `For long articles use multiple calls with "append":true after the first. ${max}`
     );
   }
   if (missing.includes("content")) {
     return `Add string field "content" with the full file body in the same JSON object as "path". ${max}`;
   }
   if (missing.includes("path")) {
-    return `Add string field "path" (workspace-relative), e.g. "projects/blog/bitnet.md". ${max}`;
+    return `Add string field "path" (workspace-relative), e.g. "projects/blog/article.md". ${max}`;
   }
   return max;
 }

@@ -29,12 +29,7 @@ const MEMORY_TOOLS = new Set([
   "session_memory_append",
   "session_memory_list",
 ]);
-const SKILL_TOOLS = new Set([
-  "skill_manage",
-  "skill_list",
-  "skill_view",
-  "skill_bulk_save",
-]);
+const SKILL_TOOLS = new Set(["skill"]);
 
 let itersSinceSkill = 0;
 let turnsSinceMemory = 0;
@@ -157,14 +152,14 @@ export const MEMORY_REVIEW_PROMPT =
   "- Investigation trail, temporary decisions, artifact pointers → `session_memory_append`\n" +
   "- Do NOT save task progress, PR/issue numbers, or stale-in-a-week artifacts to `memory_save`; " +
   "use `session_search` to recall those from archives.\n" +
-  "- Repeatable workflows → skills (`skill_manage` create/patch), not memory facts.\n\n" +
+  "- Repeatable workflows → skills (`skill` (action=manage) create/patch), not memory facts.\n\n" +
   "If something stands out, save it with the appropriate tool. " +
   "If nothing is worth saving, reply 'Nothing to save.' and stop.";
 
 export const SKILL_REVIEW_PROMPT =
-  "Tools available in this pass (use these exact names only): `skill_list`, " +
-  "`skill_view`, `skill_manage` (with `action`: create | patch | edit | write_file). " +
-  "There is no `skill_save`, `skill_create`, or standalone `write_file` tool.\n\n" +
+  "Tools available in this pass (use these exact names only): `skill` with `action`: list | view | manage | bulk. " +
+  "For manage, set `manage_action`: create | patch | edit | write_file | import_url | import_dir | delete. " +
+  "There is no standalone `write_file` tool for skill bodies.\n\n" +
   "Review the conversation above and update the skill library. Be " +
   "ACTIVE — most sessions produce at least one skill update, even if " +
   "small. A pass that does nothing is a missed learning opportunity, " +
@@ -193,10 +188,10 @@ export const SKILL_REVIEW_PROMPT =
   "pick one when a signal above fired:\n" +
   "  1. UPDATE A CURRENTLY-LOADED SKILL. Look back through the " +
   "conversation for skills the user loaded via /skill-name or you " +
-  "read via skill_view. If any of them covers the territory of the " +
+  "read via `skill` (action=view). If any of them covers the territory of the " +
   "new learning, PATCH that one first. It is the skill that was in " +
   "play, so it's the right one to extend.\n" +
-  "  2. UPDATE AN EXISTING UMBRELLA (via skill_list + skill_view). " +
+  "  2. UPDATE AN EXISTING UMBRELLA (via `skill` (action=list) + `skill` (action=view)). " +
   "If no loaded skill fits but an existing class-level skill does, " +
   "patch it. Add a subsection, a pitfall, or broaden a trigger.\n" +
   "  3. ADD A SUPPORT FILE under an existing umbrella. Skills can be " +
@@ -215,7 +210,7 @@ export const SKILL_REVIEW_PROMPT =
   "the skill can invoke directly (verification scripts, fixture " +
   "generators, deterministic probes, anything the agent should run " +
   "rather than hand-type each time).\n" +
-  "     Add support files via skill_manage action=write_file with " +
+  "     Add support files via skill (action=manage, manage_action=write_file with " +
   "file_path starting 'references/', 'templates/', or 'scripts/'. " +
   "The umbrella's SKILL.md should gain a one-line pointer to any " +
   "new support file so future agents know it exists.\n" +
@@ -236,7 +231,7 @@ export const SKILL_REVIEW_PROMPT =
   "reply — the background curator handles consolidation at scale.\n\n" +
   "Protected skills (DO NOT edit these):\n" +
   "  • Bundled skills (shipped with Web Agent, e.g. 'web-agent-skill', category bundled).\n" +
-  "  • URL-imported skills (installed via skill_manage / skill_bulk_save import).\n" +
+  "  • URL-imported skills (installed via skill (action=manage / action=bulk) import).\n" +
   "  • Pinned skills (marked in .webagent/skills/.usage.json).\n" +
   "If the only skills that need updating are protected, say\n" +
   "'Nothing to save.' and stop.\n\n" +
@@ -267,8 +262,8 @@ export const SKILL_REVIEW_PROMPT =
 
 export const COMBINED_REVIEW_PROMPT =
   "Tools available in this pass (exact names only): memory_save, memory_forget, session_memory_append, " +
-  "memory_search, memory_recall, session_memory_list, skill_list, skill_view, skill_manage " +
-  "(action: create | patch | edit | write_file). No skill_save/skill_create/standalone write_file.\n\n" +
+  "memory_search, memory_recall, session_memory_list, `skill` (action: list | view | manage | bulk; " +
+  "manage uses manage_action: create | patch | edit | write_file). No standalone write_file for skill bodies.\n\n" +
   "Review the conversation above and update two things:\n\n" +
   "**Memory**: who the user is. Did the user reveal persona, " +
   "desires, preferences, personal details, or expectations about " +
@@ -293,13 +288,13 @@ export const COMBINED_REVIEW_PROMPT =
   "missing, or outdated — patch it now.\n\n" +
   "Preference order for skills — pick the earliest that fits:\n" +
   "  1. UPDATE A CURRENTLY-LOADED SKILL. Check what skills were " +
-  "loaded via /skill-name or skill_view in the conversation. If one " +
+  "loaded via /skill-name or `skill` (action=view) in the conversation. If one " +
   "of them covers the learning, PATCH it first. It was in play; " +
   "it's the right place.\n" +
-  "  2. UPDATE AN EXISTING UMBRELLA (skill_list + skill_view to " +
+  "  2. UPDATE AN EXISTING UMBRELLA (`skill` (action=list) + `skill` (action=view) to " +
   "find the right one). Patch it.\n" +
   "  3. ADD A SUPPORT FILE under an existing umbrella via " +
-  "skill_manage action=write_file. Three kinds: " +
+  "skill (action=manage, manage_action=write_file. Three kinds: " +
   "`references/<topic>.md` for session-specific detail OR condensed " +
   "knowledge banks (quoted research, API docs excerpts, domain " +
   "notes) written concise and task-focused; `templates/<name>.<ext>` " +
@@ -322,7 +317,7 @@ export const COMBINED_REVIEW_PROMPT =
   "background curator handles consolidation.\n\n" +
   "Protected skills (DO NOT edit these):\n" +
   "  • Bundled skills (shipped with Web Agent, e.g. 'web-agent-skill', category bundled).\n" +
-  "  • URL-imported skills (installed via skill_manage / skill_bulk_save import).\n" +
+  "  • URL-imported skills (installed via skill (action=manage / action=bulk) import).\n" +
   "  • Pinned skills (marked in .webagent/skills/.usage.json).\n" +
   "If the only skills that need updating are protected, say\n" +
   "'Nothing to save.' and stop.\n\n" +
@@ -388,11 +383,14 @@ export function summarizeBackgroundReviewActionsDetailed(
     if (item.status !== "ok" || item.error) continue;
     const tool = String(item.tool || "");
     const result = item.result && typeof item.result === "object" ? (item.result as Record<string, unknown>) : {};
-    if (tool === "skill_manage" && result.action === "create") {
+    if (tool === "skill" && (result.action === "create" || result.manage_action === "create")) {
       const name = String(result.name || result.slug || "skill");
       lines.push(`Skill '${name}' created`);
       skillsCreated += 1;
-    } else if (tool === "skill_manage" && ["patch", "edit", "write_file"].includes(String(result.action || ""))) {
+    } else if (
+      tool === "skill" &&
+      ["patch", "edit", "write_file"].includes(String(result.action || result.manage_action || ""))
+    ) {
       lines.push(`Skill '${String(result.name || result.slug || "skill")}' updated`);
       skillsPatched += 1;
     } else if (tool === "memory_save") {

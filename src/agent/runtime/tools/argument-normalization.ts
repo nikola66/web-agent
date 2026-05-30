@@ -183,6 +183,16 @@ export function repairToolCallArgumentsJson(raw: unknown, _toolName?: string): s
       /* try next stage */
     }
   }
+  if (_toolName === "write_file") {
+    const salvaged = salvageWriteFileArgumentsFromRawJson(text);
+    if (salvaged) {
+      try {
+        return JSON.stringify(salvaged);
+      } catch {
+        /* fall through */
+      }
+    }
+  }
   return "{}";
 }
 
@@ -375,6 +385,30 @@ export function repairMalformedToolArguments(
     repaired[cleanKey] = normalizeArgumentStringValue(value);
   }
   return repaired;
+}
+
+const TOOL_CALL_META_KEYS = new Set([
+  "name",
+  "tool",
+  "id",
+  "type",
+  "index",
+  "function",
+  "tool_call_id",
+  "call_id",
+]);
+
+export function mergeFlatToolCallArguments(
+  raw: Record<string, unknown>,
+  args: Record<string, unknown>
+): Record<string, unknown> {
+  const merged = { ...args };
+  for (const [key, value] of Object.entries(raw)) {
+    if (TOOL_CALL_META_KEYS.has(key) || key === "arguments") continue;
+    if (value === undefined) continue;
+    if (!(key in merged)) merged[key] = value;
+  }
+  return merged;
 }
 
 const WORKSPACE_BROWSE_PATH_TOOLS = new Set([

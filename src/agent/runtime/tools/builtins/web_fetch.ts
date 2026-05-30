@@ -15,7 +15,7 @@ export default defineTool({
   run: webFetchTool,
   emoji: "🌐",
   description:
-    "GET http(s) URL(s) — public pages or authenticated REST reads. `response_format`: `markdown` (default) uses TinyFish for readable page text; `api` uses direct proxy for JSON/REST/GraphQL (also auto-selected for `/items/`, `/graphql`, `/api/`, `api.*` hosts, or any `headers`). Binary download → `save_to` workspace path (metadata only; no inline bytes). Pass `headers` with Bearer for CMS/API auth (skill_view **`http-api`**). Not for OAuth SaaS — use `composio_*`. Prefer over run_shell for HTTP GET. Batch up to 5 URLs via `urls`. Examples: " +
+    "GET http(s) URL(s) — public pages or authenticated REST reads. `response_format`: `markdown` (default) uses TinyFish for readable page text; `api` uses direct proxy for JSON/REST/GraphQL (also auto-selected for `/items/`, `/graphql`, `/api/`, `api.*` hosts, or any `headers`). Binary download → `save_to` workspace path (metadata only; no inline bytes). Pass `headers` with Bearer for CMS/API auth (`skill` (action=view) **`http-api`**). Not for OAuth SaaS — use `composio_*`. Prefer over run_shell for HTTP GET. Batch up to 5 URLs via `urls`. Examples: " +
     JSON.stringify(WEB_FETCH_EXAMPLES[0]) +
     " | " +
     JSON.stringify(WEB_FETCH_EXAMPLES[1]),

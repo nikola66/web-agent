@@ -57,7 +57,7 @@ Canonical procedure for **REST GET** (`web_fetch`) and **HTTP writes** (`web_pos
 | CMS / featured image / file to `/files` | `web_upload` with `source_url` or `file_path` — **never base64 in tool args** |
 | Reusable Python skill script | `import webagent.http as http` inside `run_python`; files → `http.upload_file` |
 | Legacy `urllib.request` in imported `.py` | Works (proxy-patched); prefer `webagent.http` for new code |
-| OAuth SaaS with Composio connector | `skill_view` **`composio-oauth`**, then `composio_status` — use `composio_action` when connected; not raw `web_post` |
+| OAuth SaaS with Composio connector | `skill` (action=view) **`composio-oauth`**, then `composio_status` — use `composio_action` when connected; not raw `web_post` |
 | `requests` / `httpx` in Pyodide | Avoid — may JsProxy-fail; use agent tools or `webagent.http` |
 
 ## When to Use
@@ -72,11 +72,11 @@ Canonical procedure for **REST GET** (`web_fetch`) and **HTTP writes** (`web_pos
 
 - Tool picker (shell vs HTTP): **`browser-runtime-map`**. MCP integrations: `.webagent/mcp-servers.json` (+ secrets); `mcp_*` tools register at profile startup and appear as **active** under ## MCP in the **Tool capability index** — call them directly (not via `tool_search` / `tool_activate`).
 - Python scripts: **`run_python`** when Pyodide-compatible. Stored credentials: **`memory-layers`** (`memory_recall`).
-- **Imported skills own endpoints** — call `skill_view` on the imported skill first; use this skill for generic REST/GraphQL mechanics.
+- **Imported skills own endpoints** — call `skill` (action=view) on the imported skill first; use this skill for generic REST/GraphQL mechanics.
 
 ## Procedure
 
-1. **Imported skill** — `skill_view` on the skill that documents this API (discovery order, auth, paths).
+1. **Imported skill** — `skill` (action=view) on the skill that documents this API (discovery order, auth, paths).
 2. **Pick verb** — GET → `web_fetch`; POST/GraphQL → `web_post`; PATCH/PUT/DELETE/HEAD/OPTIONS → `web_post` with `method`.
 3. **Auth** — pass `headers: { "Authorization": "Bearer <token>" }` (or header name from docs). Same token can go on every call; do not embed in URL.
 4. **Discovery** — follow the skill's order: health/ping → list metadata/schema → data queries. Do not guess resource slugs or GraphQL root fields.
@@ -382,7 +382,7 @@ If step 2 returns **403**, the token may lack metadata scope — ask the user fo
 - Putting Bearer tokens in the URL or repeating failed shell `node -e` axios attempts.
 - Treating 403 as "wrong URL" when it may mean **wrong permission** or wrong resource slug.
 - Ignoring structured error payloads — they tell you exactly which field failed validation.
-- Skipping `skill_view` on the imported skill and guessing endpoints from product folklore.
+- Skipping `skill` (action=view) on the imported skill and guessing endpoints from product folklore.
 
 ## Anti-patterns
 

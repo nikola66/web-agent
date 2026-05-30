@@ -47,11 +47,16 @@ import {
   extractLooseCallToolLines,
   extractPlainToolCommandLines,
   extractLongcatToolCallPayloads,
+  extractDsmlToolCallPayloads,
+  extractFunctionXmlToolCallPayloads,
   extractToolCallTagPayloads,
+  liveMirrorVisibleGap,
   normalizeToolCalls,
   sanitizeAssistantVisibleText,
   streamOpenAI,
 } from "./llm/streaming.js";
+import { reasoningPreviewSupportedForModel } from "./llm/model-quirks.js";
+import { reasoningPreviewEnabled } from "./llm/provider-config.js";
 import {
   bold,
   cyan,
@@ -64,6 +69,9 @@ import { isDebugLogEnabled, logDebugEvent } from "./logging/debug-log.js";
 import { createReflectionFromRun, derivePromotableLearning } from "./reflection.js";
 import {
   estimateTaskComplexity,
+  detectMultistepTaskPattern,
+  buildSuggestedTodoChecklist,
+  buildMultiStepGateHint,
   isPlanningModePrompt,
   extractExactResponseTokens,
   repairExactResponseText,
@@ -113,6 +121,9 @@ import {
   buildEmptyRecoveryUserMessage,
   buildEmptyResponseRecoveryUserMessage,
   buildSyntheticEmptyAssistantMessage,
+  buildThinkingPrefillAssistantMessage,
+  shouldContinueThinkingPrefill,
+  MAX_THINKING_PREFILL_CONTINUATIONS,
   cronJobIdsFromListResult,
   cronRegisterJobIdFromArgs,
   looksLikeFalseManualCronPromise,
@@ -120,6 +131,10 @@ import {
   shouldContinueEmptyAfterTools,
   shouldContinueEmptyResponse,
   shouldContinueIncompleteTodosAsync,
+  shouldContinueIncompletePublishDeliverable,
+  shouldContinueContentShareDeliverable,
+  shouldContinueUnparsedToolMarkup,
+  buildContentShareContinuationNudge,
   shouldContinueIntermediateAck,
   shouldContinuePostToolStall,
   shouldContinuePreToolPromiseStall,
@@ -127,8 +142,12 @@ import {
   shouldContinueApiDiscoveryStall,
   shouldContinueFindSkillsDelivery,
   shouldContinueTruncation,
+  partitionToolsForTruncatedContentDeferral,
+  truncatedWriteDeferMessage,
+  resolveTurnStopReason,
+  isFindSkillsModeUserMessage,
 } from "./turn-continuation.js";
-import { dropTrailingEmptyResponseScaffolding, sanitizeMessagesForLlm } from "./message-sanitizer.js";
+import { dropTrailingEmptyResponseScaffolding, popTrailingInternalScaffolding, sanitizeMessagesForLlm } from "./message-sanitizer.js";
 import {
   getCompactionThresholdTokens,
   maybeCompactHistory,
@@ -138,13 +157,14 @@ import { errorMessage } from "./utils.js";
 import { WS } from "./constants.js";
 import {
   createAssistantTranscriptEvent,
+  createReasoningPreviewTranscriptEvent,
   createSystemLineTranscriptEvent,
   formatSkippedToolsTranscript,
+  shortenReasoningPreview,
 } from "./transcript.js";
 import { emitTranscriptEvent } from "./transcript-delivery.js";
 import {
   summarizeToolExecutions,
-  writeStdoutSmoothed,
   createRunId,
   toolExecutionKey,
 } from "./stream-output.js";
@@ -158,6 +178,64 @@ import {
 } from "./background-review.js";
 
 const MAX_AGENT_ROUNDS = Math.max(1, Number(typeof process !== "undefined" ? process.env?.WEBAGENT_MAX_AGENT_ROUNDS : undefined) || 90);
+const MAX_TODO_GATE_CONTINUATIONS = 2;
+const REASONING_PREVIEW_START = "<<<WEBAGENT_REASONING_PREVIEW>>>";
+const REASONING_PREVIEW_END = "<<<END_WEBAGENT_REASONING_PREVIEW>>>";
+const REASONING_PREVIEW_THROTTLE_MS = 200;
+
+function createReasoningPreviewController(opts: {
+  turnMeta: Record<string, unknown>;
+  mirrorTerminal: boolean;
+  round: number;
+  enabled?: boolean;
+}) {
+  let acc = "";
+  let lastEmitAt = 0;
+  let cleared = false;
+  const enabled = opts.enabled !== false;
+
+  const emit = async (text: string, done = false) => {
+    if (!enabled || (cleared && !done)) return;
+    const preview = shortenReasoningPreview(text);
+    await emitTranscriptEvent(
+      opts.turnMeta,
+      createReasoningPreviewTranscriptEvent({
+        text: preview,
+        done,
+        round: opts.round,
+      })
+    );
+    if (opts.mirrorTerminal) {
+      const payload = JSON.stringify({ text: preview, done });
+      process.stdout.write(`${REASONING_PREVIEW_START}${payload}${REASONING_PREVIEW_END}`);
+    }
+  };
+
+  const scheduleEmit = () => {
+    const now = Date.now();
+    if (now - lastEmitAt < REASONING_PREVIEW_THROTTLE_MS) return;
+    lastEmitAt = now;
+    void emit(acc);
+  };
+
+  return {
+    onReasoningDelta(chunk: string) {
+      if (!enabled || cleared || !chunk) return;
+      acc += chunk;
+      scheduleEmit();
+    },
+    clear() {
+      if (cleared) return;
+      cleared = true;
+      void emit("", true);
+    },
+    flush() {
+      if (cleared) return;
+      lastEmitAt = Date.now();
+      void emit(acc, true);
+    },
+  };
+}
 
 function resolveMaxAgentRounds(turnMeta: Record<string, unknown>): number {
   const custom = Number(turnMeta?.maxAgentRounds);
@@ -174,6 +252,7 @@ function filterToolNames(allNames: string[], turnMeta: Record<string, unknown>):
 
 function emitTurnStopLine(message: string): void {
   if (!isDebugLogEnabled()) return;
+  if (message === "completed") return;
   process.stdout.write(dim(`▸ stopped: ${message}\n\n`));
 }
 
@@ -204,7 +283,7 @@ const STATIC_TOOL_DISCIPLINE =
   "\n\nTools: prefer native tool calls and respect each tool's schema (especially `required` fields). For files/URLs/shell/external/memory data, use tools first, then answer. Never copy terminal status lines (e.g. lines starting with ✓ or parenthetical summaries) into tool arguments—use real paths, URLs, and queries only. When the user asks for a sequence (for example, testing tools one by one), continue step-by-step without waiting for another user nudge: after you announce a step, immediately emit the corresponding tool call. No fake <tool_call> markup. Text fallback: <<<TOOL>>>{\"name\":\"read_file\",\"arguments\":{\"path\":\"relative/path\"}}<<<END>>>. Memory example: <<<TOOL>>>{\"name\":\"memory_save\",\"arguments\":{\"key\":\"user_timezone\",\"value\":\"America/New_York\"}}<<<END>>> — never call memory_save without both `key` and `value`. Tool results (compact JSON batches): each entry may contain `result` (inlined payload — use this first) or `result_ref` (spill under `memory/snapshots/` — read_file that exact path once; auto-unwrapped). Never list/grep/find_files under `memory/snapshots/` or `memory/runs/` for API data — `memory/runs/` is agent logs only. If spill files are stale/nested/missing, rerun the originating tool (`web_fetch`, `web_post`, etc.) or `session_search` for chat context — not run_shell head/tail on memory paths." +
   "\n\nExact text discipline: when the user asks for an exact string, token, filename, identifier, code symbol, JSON key, or command output, copy it byte-for-byte. Preserve underscores, hyphens, slashes, capitalization, digits, punctuation, and spacing. Never normalize or prettify exact tokens such as FOO_BAR_TOKEN." +
   "\n\nTopic discipline: when the user's latest message changes the subject or starts a new request, treat that as the active task. Do not continue earlier plans, files, or tools from older turns unless the user explicitly asks you to resume them." +
-  "\n\nSkill discipline: skills are procedural knowledge, separate from memory facts. The **Tool capability index** lists every tool (active and deferred), including ## MCP sections for configured `mcp_*` servers. Follow the **Capability router** below for task routing; call `skill` (action=view) on the listed hub before detailed work. MCP: servers in `.webagent/mcp-servers.json` are discovered at startup; `mcp_*` tools are deferred—unlock via post-reload session unlock or `tool_activate` after `mcp_reload` (`list_dir`/`find_files`/`tree` are not MCP). Memory layer boundaries are in **Memory layers**; saving or installing skills: `skill` (action=view) **`web-agent-skill`**. Prefer GitHub-flavored Markdown pipe tables in assistant-visible text." +
+  "\n\nSkill discipline: skills are procedural knowledge, separate from memory facts. The **Tool capability index** lists every tool (active and deferred), including ## MCP sections for configured `mcp_*` servers. Follow the **Capability router** below for task routing; call `skill` (action=view) on the listed hub before detailed work. MCP: servers in `.webagent/mcp-servers.json` are discovered at startup; `mcp_*` tools are deferred—unlock via post-reload session unlock or `tool_activate` after `mcp_reload`. Memory layer boundaries are in **Memory layers**; saving or installing skills: `skill` (action=view) **`web-agent-skill`**. Prefer GitHub-flavored Markdown pipe tables in assistant-visible text." +
   "\n\nCron discipline: heartbeat jobs in `.webagent/cronjobs.json` run only on heartbeat ticks while the tab is open (`everyMinutes` + `lastRunAt`); there is no manual cron run tool. `cron_register` refresh reschedules—it does not execute the job unless a heartbeat tick is due at that moment. If the user wants work now, run the job step tools in this chat (or invoke the relevant skill)—never claim to \"run the cron manually\". Before explaining cron timing or where output goes, call `cron_list` or `skill` (action=view) **`heartbeat-cron`** and cite `outputDestination`, `nextEligibleAtMs`, and `schedulingNote` from tool output. Delivery: Silent (logs only), Web UI (`delivery: terminal`), Web UI + Telegram (`terminal` + `notifyChannel`), Email (`delivery: email` + `deliveryEmailTo`)." +
   "\n\nArchive discipline: `extract_archive` / `archive_list` are read-only. There is no `create_archive` tool. To bundle files into a `.zip`, use `run_python` with stdlib `zipfile`, write to `work/<slug>/` or `projects/<slug>/`, verify with `archive_list`, deliver with `artifact_present`. Do not invent `create_archive`, use shell `zip`, or substitute a `.txt` concat unless the user explicitly accepts non-zip delivery.";
 
@@ -242,12 +321,8 @@ export function unlockSessionTools(names: Iterable<string>): void {
   }
 }
 
-export function clearSessionUnlockedToolsForTest(): void {
-  sessionUnlockedTools.clear();
-}
-
 /** Serialize terminal turns and inbound channel turns (Telegram, etc.). */
-export function createTurnMutex() {
+function createTurnMutex() {
   let tail = Promise.resolve();
   let busy = false;
   return {
@@ -406,7 +481,9 @@ export async function agentTurn(
   if (!turnMeta?.textOnly) {
     const groupsToSeed: string[] = [];
     if (inputSuggestsMultimodal(fileSignalBlob)) groupsToSeed.push("multimodal");
-    if (inputSuggestsArchive(fileSignalBlob)) groupsToSeed.push("archives");
+    if (inputSuggestsArchive(fileSignalBlob) || isSkillInstallIntent(originalUserInput)) {
+      groupsToSeed.push("archives");
+    }
     if (inputSuggestsDocument(fileSignalBlob)) groupsToSeed.push("documents");
     for (const group of groupsToSeed) {
       for (const name of TOOL_GROUPS[group] || []) {
@@ -500,7 +577,7 @@ export async function agentTurn(
 
   const applyFindSkillsDeliveryLock = async () => {
     if (findSkillsDeliveryContinuations <= 0) return;
-    if (!/find-skills mode/i.test(originalUserInput)) return;
+    if (!isFindSkillsModeUserMessage(originalUserInput)) return;
     const locked = activeToolNames.filter((n) => n !== "web_search" && n !== "web_fetch");
     if (locked.length === activeToolNames.length) return;
     activeToolNames = locked;
@@ -616,23 +693,48 @@ export async function agentTurn(
     noteUserTurnStarted();
   }
   let injectedPlanningGate = false;
-  if (
+  let usedTodoWriteInTurn = false;
+  const multistepPattern = detectMultistepTaskPattern(originalUserInput);
+  const suggestedTodos = buildSuggestedTodoChecklist(originalUserInput);
+  const shouldInjectGate =
     !turnMeta?.textOnly &&
     originalUserInput &&
     !isPlanningModePrompt(originalUserInput) &&
-    !isExecutionContinuationIntent(originalUserInput)
+    !isExecutionContinuationIntent(originalUserInput) &&
+    (complexityEstimate.tier === "todo" ||
+      complexityEstimate.tier === "plan" ||
+      multistepPattern === "research_write_publish");
+
+  if (
+    !turnMeta?.textOnly &&
+    !turnMeta?.backgroundReview &&
+    multistepPattern === "research_write_publish" &&
+    suggestedTodos?.length
   ) {
-    if (complexityEstimate.tier === "todo") {
-      const hint =
-        "[Gate] Multi-step task: call `todo_write` first with a minimal checklist (exactly one item `in_progress`), then execute.";
-      for (let i = conv.length - 1; i >= 0; i--) {
-        const row = conv[i] as ChatTurnMsg;
-        if (row.role === "user") {
-          const cur = typeof row.content === "string" ? row.content : "";
-          conv[i] = { ...row, content: `${hint}\n\n${cur}` };
-          injectedPlanningGate = true;
-          break;
-        }
+    try {
+      const { todoWriteTool } = await import("./tools/remote-tools.js");
+      await todoWriteTool({ todos: suggestedTodos }, turnCtx);
+      usedTodoWriteInTurn = true;
+      await logDebugEvent("turn_multistep_todo_seeded", {
+        pattern: multistepPattern,
+        count: suggestedTodos.length,
+      });
+    } catch (err) {
+      await logDebugEvent("turn_multistep_todo_seed_failed", {
+        error: errorMessage(err),
+      });
+    }
+  }
+
+  if (shouldInjectGate) {
+    const hint = buildMultiStepGateHint(originalUserInput, { preSeeded: usedTodoWriteInTurn });
+    for (let i = conv.length - 1; i >= 0; i--) {
+      const row = conv[i] as ChatTurnMsg;
+      if (row.role === "user") {
+        const cur = typeof row.content === "string" ? row.content : "";
+        conv[i] = { ...row, content: `${hint}\n\n${cur}` };
+        injectedPlanningGate = true;
+        break;
       }
     }
   }
@@ -662,7 +764,6 @@ export async function agentTurn(
     conv.push({ role: "user", content: fileHandlingPrefix });
   }
 
-  let usedTodoWriteInTurn = false;
   let skillMutatingCalledInTurn = false;
   let intermediateAckContinuations = 0;
   let emptyAfterToolsContinuations = 0;
@@ -675,7 +776,13 @@ export async function agentTurn(
   let preToolPromiseContinuations = 0;
   let cronVerifyContinuations = 0;
   let incompleteTodoContinuations = 0;
+  let incompletePublishContinuations = 0;
+  let contentShareContinuations = 0;
+  let unparsedMarkupContinuations = 0;
+  let thinkingPrefillContinuations = 0;
+  let todoGateContinuations = 0;
   let allToolsRejectedContinuations = 0;
+  let activeReasoningPreview: ReturnType<typeof createReasoningPreviewController> | null = null;
   const pendingCronRegisterIds = new Set<string>();
   let continuationRecoveriesFired = 0;
   let skillInstallPivotNudgeFired = false;
@@ -743,20 +850,39 @@ export async function agentTurn(
       });
       const accChunks: string[] = [];
       let streamedVisible = "";
+      let liveMirrorStarted = false;
+      activeReasoningPreview = createReasoningPreviewController({
+        turnMeta,
+        mirrorTerminal,
+        round,
+        enabled: reasoningPreviewEnabled() && reasoningPreviewSupportedForModel(cfg),
+      });
       const streamWriter = createToolAwareStreamWriter((chunk) => {
         if (!chunk) return;
         streamedVisible += chunk;
+        if (!mirrorTerminal || quietTurn) return;
+        if (!liveMirrorStarted) {
+          liveMirrorStarted = true;
+          if (!turnHeaderPrinted) {
+            turnHeaderPrinted = true;
+            process.stdout.write(`${bold(cyan(agentName))}\n`);
+          } else if (round > 1) {
+            process.stdout.write("\n");
+          }
+        }
+        process.stdout.write(chunk);
       });
       const onDelta = (c) => {
+        if (String(c || "").trim()) activeReasoningPreview?.clear();
         accChunks.push(c);
         streamWriter.push(c);
       };
       let streamResult;
       let streamAborted = false;
       try {
-        const llmTools = cfg.provider === "bitnet" ? [] : streamTools;
-        streamResult = await streamOpenAI(sanitizeMessagesForLlm(conv), cfg, onDelta, llmTools, {
+        streamResult = await streamOpenAI(sanitizeMessagesForLlm(conv), cfg, onDelta, streamTools, {
           signal: turnController.signal,
+          onReasoningDelta: activeReasoningPreview.onReasoningDelta,
         });
       } catch (error) {
         if (!turnController.signal.aborted) throw error;
@@ -768,6 +894,7 @@ export async function agentTurn(
         });
       }
       if (streamAborted) {
+        activeReasoningPreview?.clear();
         await logTurnStopReason("stream_aborted", { round, continuationRecoveriesFired });
         emitTurnStopLine("stream_aborted");
         break;
@@ -780,17 +907,23 @@ export async function agentTurn(
       }
       const clarifyEmitted = clarifyParsed.blocks.length > 0;
       const bodyForTools = clarifyParsed.visible;
+      const nativeStreamTools = streamResult?.toolCalls || [];
       const markerParsed = extractMarkerTools(bodyForTools);
       const longcatParsed = extractLongcatToolCallPayloads(markerParsed.visible);
       const toolCallTagParsed = extractToolCallTagPayloads(longcatParsed.visible);
+      const functionXmlParsed = extractFunctionXmlToolCallPayloads(toolCallTagParsed.visible);
+      const dsmlParsed = extractDsmlToolCallPayloads(functionXmlParsed.visible);
       const nativeOrMarkerCount =
-        (streamResult?.toolCalls?.length || 0) +
+        nativeStreamTools.length +
         markerParsed.tools.length +
         longcatParsed.tools.length +
-        toolCallTagParsed.tools.length;
-      const jsonFallbackParsed = nativeOrMarkerCount === 0
-        ? extractJsonToolCallPayloads(toolCallTagParsed.visible, activeToolNames)
-        : { tools: [], visible: toolCallTagParsed.visible };
+        toolCallTagParsed.tools.length +
+        functionXmlParsed.tools.length +
+        dsmlParsed.tools.length;
+      const jsonFallbackParsed =
+        nativeOrMarkerCount === 0
+          ? extractJsonToolCallPayloads(dsmlParsed.visible, activeToolNames)
+          : { tools: [], visible: dsmlParsed.visible };
       const jsonFallbackCalls = jsonFallbackParsed.tools;
       const looseCallParsed =
         nativeOrMarkerCount === 0 && jsonFallbackCalls.length === 0
@@ -803,14 +936,20 @@ export async function agentTurn(
           ? extractPlainToolCommandLines(looseCallParsed.visible, activeToolNames)
           : { tools: [], visible: looseCallParsed.visible };
       const rawToolCalls = [
-        ...(streamResult?.toolCalls || []),
+        ...nativeStreamTools,
         ...markerParsed.tools,
         ...longcatParsed.tools,
         ...toolCallTagParsed.tools,
+        ...functionXmlParsed.tools,
+        ...dsmlParsed.tools,
         ...jsonFallbackCalls,
         ...looseCallParsed.tools,
         ...plainCommandParsed.tools,
       ];
+      const visibleSource = plainCommandParsed.visible;
+      if (nativeStreamTools.length > 0 || rawToolCalls.length > 0) {
+        activeReasoningPreview?.clear();
+      }
       let { normalized: tools, rejected } = normalizeToolCalls(rawToolCalls, activeToolNames);
       if (clarifyEmitted) tools = [];
       const duplicateSuccessfulTools: typeof tools = [];
@@ -828,13 +967,12 @@ export async function agentTurn(
         rejectedReasons: rejected.map((entry) => entry.reason),
         skippedAlreadySuccessfulToolCalls: duplicateSuccessfulTools.length,
       });
-      let visible = sanitizeAssistantVisibleText(plainCommandParsed.visible, activeToolNames);
-      if (!visible.trim() && streamedVisible.trim()) {
-        visible = sanitizeAssistantVisibleText(streamedVisible, activeToolNames);
-      }
+      const rawVisible = visibleSource.trim() ? visibleSource : streamedVisible;
+      let visible = sanitizeAssistantVisibleText(rawVisible, activeToolNames);
       visible = normalizeLatexInlineSymbols(repairExactResponseText(originalUserInput, visible));
       const reasoningOnlyNoVisible =
         !visible.trim() && !!streamResult?.sawReasoning && !tools.length;
+      if (visible.trim()) thinkingPrefillContinuations = 0;
       if ((visible.trim() || clarifyEmitted) && !quietTurn) {
         run.final_visible_assistant_text = visible;
         const rendered = visible.trim() ? renderMarkdownToAnsi(visible) : "";
@@ -852,7 +990,13 @@ export async function agentTurn(
         if (rendered) {
           const block = prefixBlock(rendered, branchBelowName);
           if (mirrorTerminal) {
-            await writeStdoutSmoothed(`${block}\n\n`);
+            if (liveMirrorStarted) {
+              const gap = liveMirrorVisibleGap(streamedVisible, visible);
+              if (gap) process.stdout.write(gap);
+              process.stdout.write("\n\n");
+            } else {
+              process.stdout.write(`${block}\n\n`);
+            }
           }
           await emitTranscriptEvent(
             turnMeta,
@@ -872,10 +1016,13 @@ export async function agentTurn(
             renderedAnsi: rendered,
           });
         } else if (clarifyEmitted && mirrorTerminal) {
-          await writeStdoutSmoothed(
+          process.stdout.write(
             `${prefixBlock(dim("Choose an option in the panel above the input."), branchBelowName)}\n\n`
           );
         }
+      }
+      if (visible.trim() || tools.length > 0) {
+        popTrailingInternalScaffolding(conv);
       }
       conv.push({ role: "assistant", content: visible });
 
@@ -922,7 +1069,9 @@ export async function agentTurn(
         // nudge so the model retries with the correct built-in tool names instead of
         // stopping with post_tool_no_continue.
         const allUnknown = tools.length === 0 && rejected.every((r) => r.reason === "unknown_tool");
-        if (allUnknown && allToolsRejectedContinuations < 2) {
+        const findSkillsMode = isFindSkillsModeUserMessage(originalUserInput);
+        const maxAllToolsRejected = findSkillsMode ? 5 : 2;
+        if (allUnknown && allToolsRejectedContinuations < maxAllToolsRejected) {
           allToolsRejectedContinuations++;
           continuationRecoveriesFired++;
           const rejectedNames = rejected.map((r) => {
@@ -935,7 +1084,10 @@ export async function agentTurn(
           conv.push(buildSyntheticEmptyAssistantMessage());
           conv.push({
             role: "user",
-            content: buildContinuationNudge("all_tools_rejected", { rejectedToolNames: rejectedNames }),
+            content: buildContinuationNudge("all_tools_rejected", {
+              rejectedToolNames: rejectedNames,
+              findSkillsMode,
+            }),
           });
           await logDebugEvent("turn_all_tools_rejected_continuation", {
             round,
@@ -984,6 +1136,26 @@ export async function agentTurn(
           });
           continue;
         }
+        if (
+          shouldContinueThinkingPrefill(
+            visible,
+            !!streamResult?.sawReasoning,
+            tools.length,
+            thinkingPrefillContinuations
+          )
+        ) {
+          thinkingPrefillContinuations++;
+          continuationRecoveriesFired++;
+          if (conv.length && (conv[conv.length - 1] as ChatTurnMsg).role === "assistant") {
+            conv.pop();
+          }
+          conv.push(buildThinkingPrefillAssistantMessage());
+          await logDebugEvent("turn_thinking_prefill_continuation", {
+            round,
+            count: thinkingPrefillContinuations,
+          });
+          continue;
+        }
         if (shouldContinueEmptyResponse(visible, emptyResponseContinuations)) {
           emptyResponseContinuations++;
           continuationRecoveriesFired++;
@@ -995,6 +1167,21 @@ export async function agentTurn(
           await logDebugEvent("turn_empty_response_continuation", {
             round,
             count: emptyResponseContinuations,
+          });
+          continue;
+        }
+        if (
+          shouldContinueUnparsedToolMarkup(combined, tools.length, unparsedMarkupContinuations)
+        ) {
+          unparsedMarkupContinuations++;
+          continuationRecoveriesFired++;
+          conv.push({
+            role: "user",
+            content: buildContinuationNudge("unparsed_tool_markup"),
+          });
+          await logDebugEvent("turn_unparsed_tool_markup_continuation", {
+            round,
+            count: unparsedMarkupContinuations,
           });
           continue;
         }
@@ -1028,8 +1215,29 @@ export async function agentTurn(
           continue;
         }
         if (
-          shouldContinuePostToolStall(visible, executedToolsInTurn, postToolStallContinuations)
+          shouldContinueContentShareDeliverable(
+            originalUserInput,
+            run.tool_calls,
+            executedToolsInTurn,
+            visible,
+            contentShareContinuations,
+            lastToolExecutions
+          )
         ) {
+          contentShareContinuations++;
+          continuationRecoveriesFired++;
+          conv.push({
+            role: "user",
+            content: buildContentShareContinuationNudge(contentShareContinuations, lastToolExecutions),
+          });
+          await logDebugEvent("turn_content_share_continuation", {
+            round,
+            count: contentShareContinuations,
+            visiblePreview: String(visible || "").slice(0, 200),
+          });
+          continue;
+        }
+        if (shouldContinuePostToolStall(visible, executedToolsInTurn, postToolStallContinuations)) {
           postToolStallContinuations++;
           continuationRecoveriesFired++;
           conv.push({
@@ -1148,24 +1356,62 @@ export async function agentTurn(
           });
           continue;
         }
-        let stopReason = executedToolsInTurn ? "post_tool_no_continue" : "no_tools_no_continue";
-        if (stopReason === "no_tools_no_continue" && reasoningOnlyNoVisible) {
-          stopReason = "reasoning_only_no_visible";
-          visible = REASONING_ONLY_NO_VISIBLE_MSG;
-          run.final_visible_assistant_text = visible;
-          if (conv.length && (conv[conv.length - 1] as ChatTurnMsg).role === "assistant") {
-            conv[conv.length - 1] = { role: "assistant", content: visible };
-          }
-          if (!quietTurn && visible.trim()) {
-            if (mirrorTerminal) {
-              if (!turnHeaderPrinted) {
-                process.stdout.write(`${bold(cyan(agentName))}\n`);
-                turnHeaderPrinted = true;
-              } else {
-                process.stdout.write("\n");
+        if (
+          shouldContinueIncompletePublishDeliverable(
+            originalUserInput,
+            run.tool_calls,
+            executedToolsInTurn,
+            visible,
+            incompletePublishContinuations
+          )
+        ) {
+          incompletePublishContinuations++;
+          continuationRecoveriesFired++;
+          conv.push({
+            role: "user",
+            content: buildContinuationNudge("incomplete_publish"),
+          });
+          await logDebugEvent("turn_incomplete_publish_continuation", {
+            round,
+            count: incompletePublishContinuations,
+            toolCalls: run.tool_calls.length,
+          });
+          continue;
+        }
+        let stopReason = resolveTurnStopReason(visible, executedToolsInTurn);
+        const deliveredVisible = String(run.final_visible_assistant_text || "").trim();
+        const reasoningStopEligible =
+          (stopReason === "no_tools_no_continue" || stopReason === "post_tool_no_continue") &&
+          reasoningOnlyNoVisible &&
+          thinkingPrefillContinuations >= MAX_THINKING_PREFILL_CONTINUATIONS;
+        if (reasoningStopEligible) {
+          if (deliveredVisible && deliveredVisible !== REASONING_ONLY_NO_VISIBLE_MSG) {
+            stopReason = "completed";
+            if (
+              conv.length &&
+              (conv[conv.length - 1] as ChatTurnMsg).role === "assistant" &&
+              !String(visible || "").trim()
+            ) {
+              conv[conv.length - 1] = { role: "assistant", content: deliveredVisible };
+            }
+          } else {
+            stopReason = "reasoning_only_no_visible";
+            visible = REASONING_ONLY_NO_VISIBLE_MSG;
+            run.final_visible_assistant_text = visible;
+            if (conv.length && (conv[conv.length - 1] as ChatTurnMsg).role === "assistant") {
+              conv[conv.length - 1] = { role: "assistant", content: visible };
+            }
+            if (!quietTurn && visible.trim()) {
+              if (mirrorTerminal) {
+                if (!turnHeaderPrinted) {
+                  process.stdout.write(`${bold(cyan(agentName))}\n`);
+                  turnHeaderPrinted = true;
+                } else {
+                  process.stdout.write("\n");
+                }
+                const rendered = renderMarkdownToAnsi(visible);
+                process.stdout.write(`${prefixBlock(rendered, false)}\n\n`);
               }
-              const rendered = renderMarkdownToAnsi(visible);
-              await writeStdoutSmoothed(`${prefixBlock(rendered, false)}\n\n`);
             }
           }
         }
@@ -1183,17 +1429,79 @@ export async function agentTurn(
       }
 
       if (turnController.signal.aborted) {
+        activeReasoningPreview?.clear();
         run.errors.push("turn aborted");
         await logDebugEvent("turn_aborted_before_tools", { round, toolCount: tools.length });
         await logTurnStopReason("turn_aborted_before_tools", { round, continuationRecoveriesFired });
         break;
       }
 
+      if (
+        injectedPlanningGate &&
+        !usedTodoWriteInTurn &&
+        tools.length > 0 &&
+        todoGateContinuations < MAX_TODO_GATE_CONTINUATIONS &&
+        !tools.every((t) => String(t.name || "") === "todo_write")
+      ) {
+        todoGateContinuations++;
+        continuationRecoveriesFired++;
+        if (conv.length && (conv[conv.length - 1] as ChatTurnMsg).role === "assistant") {
+          conv.pop();
+        }
+        conv.push(buildSyntheticEmptyAssistantMessage());
+        conv.push({
+          role: "user",
+          content:
+            buildMultiStepGateHint(originalUserInput) +
+            " Do not call web_search, web_fetch, write_file, or other tools until todo_write succeeds.",
+        });
+        await logDebugEvent("turn_todo_gate_continuation", {
+          round,
+          count: todoGateContinuations,
+          blockedTools: tools.map((t) => t.name),
+        });
+        continue;
+      }
+
+      const truncatedWritePartition = partitionToolsForTruncatedContentDeferral(
+        streamResult?.finishReason,
+        tools,
+        truncationContinuations
+      );
+      const deferTruncatedWrites = truncatedWritePartition.defer.length > 0;
+      if (deferTruncatedWrites) {
+        truncationContinuations++;
+        continuationRecoveriesFired++;
+      }
+      const deferredToolKeys = new Set(
+        truncatedWritePartition.defer.map((tool) => toolExecutionKey(tool))
+      );
+
       const runnableTools: typeof tools = [];
       const exec: Array<Record<string, unknown>> = [];
       let guardrailHalt = false;
+      const deferMessage = truncatedWriteDeferMessage();
+
+      activeReasoningPreview?.clear();
 
       for (const tool of tools) {
+        if (deferTruncatedWrites && deferredToolKeys.has(toolExecutionKey(tool))) {
+          exec.push({
+            tool: tool.name,
+            error: deferMessage,
+            result: JSON.stringify({ error: deferMessage, deferred: true, reason: "truncated_content" }),
+          });
+          await logDebugEvent("turn_truncated_write_deferred", {
+            round,
+            count: truncationContinuations,
+            finishReason: streamResult?.finishReason,
+            tool: tool.name,
+          });
+          if (mirrorTerminal) {
+            process.stdout.write(dim(`▸ deferred ${tool.name}: output token limit truncated arguments\n`));
+          }
+          continue;
+        }
         const args =
           tool.arguments && typeof tool.arguments === "object" && !Array.isArray(tool.arguments)
             ? (tool.arguments as Record<string, unknown>)
@@ -1380,25 +1688,6 @@ export async function agentTurn(
         });
       }
       if (
-        shouldContinueFindSkillsDelivery(
-          originalUserInput,
-          "",
-          true,
-          webDiscoveryCallsInTurn,
-          findSkillsDeliveryContinuations
-        )
-      ) {
-        findSkillsDeliveryContinuations++;
-        continuationRecoveriesFired++;
-        conv.push({ role: "user", content: buildContinuationNudge("find_skills_delivery") });
-        await applyFindSkillsDeliveryLock();
-        await logDebugEvent("turn_find_skills_delivery_midturn", {
-          round,
-          count: findSkillsDeliveryContinuations,
-          webDiscoveryCalls: webDiscoveryCallsInTurn,
-        });
-      }
-      if (
         !skillInstallPivotNudgeFired &&
         skillInstallIntent &&
         skillBulkSaveAllUrlItemsFailed(exec) &&
@@ -1457,7 +1746,7 @@ export async function agentTurn(
             conv.push({ role: "assistant", content: graceVisible });
             const rendered = renderMarkdownToAnsi(graceVisible);
             if (rendered && mirrorTerminal) {
-              await writeStdoutSmoothed(`${prefixBlock(rendered, false)}\n\n`);
+              process.stdout.write(`${prefixBlock(rendered, false)}\n\n`);
             }
             await emitTranscriptEvent(
               turnMeta,
@@ -1522,6 +1811,7 @@ export async function agentTurn(
     await persistCompletedRun(run).catch(() => {});
     throw error;
   } finally {
+    activeReasoningPreview?.clear();
     if (currentTurnController === turnController) currentTurnController = null;
   }
 }

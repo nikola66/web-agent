@@ -14,7 +14,7 @@ triggers: [new app, create project, demo, starter, spike, sandbox, test harness,
 |------|------|
 | Create tree root | `make_dir` under `projects/<slug>/` or `work/<slug>/` |
 | Add files | `write_file`, `apply_patch` |
-| Verify layout | `list_dir`, `tree` |
+| Verify layout | `browse_workspace` (action=list / action=tree) |
 | Smoke test / run | `run_shell` (host) or project entrypoint — see **`browser-runtime-map`** |
 | ZIP bundle output | `run_python` + `zipfile` — no `create_archive` tool; see **`browser-runtime-map`** |
 | Folder diagram in README | Mermaid via **`chart`** |
@@ -41,7 +41,7 @@ triggers: [new app, create project, demo, starter, spike, sandbox, test harness,
 1. **`projects/<kebab-purpose>/`** — durable mini-project / deliverable the user may keep.
 2. **`work/<kebab-purpose>/`** — exploratory or throwaway work.
 
-If unsure or the user did not name a folder, call `skill_view` with name **`project-scaffold`** (this document), then proceed.
+If unsure or the user did not name a folder, call `skill` (action=view) with name **`project-scaffold`** (this document), then proceed.
 
 Then:
 

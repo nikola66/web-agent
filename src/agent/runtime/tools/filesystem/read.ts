@@ -75,7 +75,7 @@ export function binaryReadRecovery(rel: string): string | null {
   if (!path) return null;
   for (const { re, hint } of BINARY_READ_TOOL_HINTS) {
     if (re.test(path)) {
-      return `'${rel}' is a binary file — ${hint}. See skill_view \`browser-runtime-map\` for the full tool picker.`;
+      return `'${rel}' is a binary file — ${hint}. See skill (action=view) on browser-runtime-map for the full tool picker.`;
     }
   }
   return null;

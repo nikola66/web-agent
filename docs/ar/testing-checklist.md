@@ -22,8 +22,8 @@
 اطلب من الوكيل قيد التشغيل:
 
 - [ ] `read_file` / `write_file` تحت `/workspace`
-- [ ] `list_dir` أو `tree`
-- [ ] `grep` أو `find_files`
+- [ ] `browse_workspace` (`action`: list أو tree)
+- [ ] `grep` أو `browse_workspace` (`action`: find)
 - [ ] `run_shell` (مثل `echo test`)
 - [ ] `web_fetch` على `https://` عام
 

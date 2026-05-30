@@ -15,17 +15,17 @@ Veinticinco escenarios para copiar y pegar y hacer trabajo real con Web Agent. C
 | Investigación | Encontrar creadores / competidores de nicho | `/open-web-research` | `web_search`, `web_fetch`, `write_file`, `artifact_present` |
 | Investigación | Búsqueda de papers / citas | `/research-pack` | `web_search`, `web_fetch`, `write_file`, `artifact_present` |
 | Investigación | Extraer tabla o JSON de una página | `/structured-extraction` | `web_fetch`, `write_file`, `artifact_present` |
-| Meta | Descubrir skills instalables online | `/find_skills` | `web_search`, `web_fetch`, `skill_manage` |
+| Meta | Descubrir skills instalables online | `/find_skills` | `web_search`, `web_fetch`, `skill` (action=manage) |
 | Memoria | Guardar preferencia durable | `/memory-layers` | `memory_save`, `memory_recall` |
 | Memoria | Capturar contexto de sesión | `/memory-layers` | `session_memory_append`, `session_memory_list` |
 | Memoria | Espejar memoria en vault estilo Obsidian | `/memory-layers` | `wiki_setup`, `wiki_sync`, `wiki_search` |
 | Memoria | Buscar en un chat antiguo | `/memory-layers` | `session_search` |
 | Planificación | Plan spec-first (sin ejecutar aún) | `/plan` | `read_file`, `grep`, `write_file`, `artifact_present` |
-| Planificación | Descomponer petición en todos | `/task-execution` | `todo_write`, `skill_view` |
+| Planificación | Descomponer petición en todos | `/task-execution` | `todo_write`, `skill` (action=view) |
 | Planificación | Ejecutar plan multi-paso aprobado | `/task-execution` | `todo_write`, `read_file`, `write_file`, `artifact_present` |
 | Automatización | Digest diario con pestaña abierta | `/heartbeat-cron` | `cron_register`, `cron_list`, `web_search`, `web_fetch` |
-| Workspace | Arrancar carpeta de side project | `/project-scaffold` | `make_dir`, `write_file`, `tree` |
-| Workspace | Reorganizar archivos con seguridad | `/workspace-safety`, `/browser-runtime-map` | `list_dir`, `find_files`, `move_file`, `tree` |
+| Workspace | Arrancar carpeta de side project | `/project-scaffold` | `make_dir`, `write_file`, `browse_workspace` |
+| Workspace | Reorganizar archivos con seguridad | `/workspace-safety`, `/browser-runtime-map` | `browse_workspace`, `move_file` |
 | Depuración | Caza de bugs por hipótesis | `/systematic-debugging` | `read_file`, `grep`, `file_diff`, `run_shell` |
 | Depuración | Shell / `npx` failed in WebContainer | `/browser-runtime-map` | `read_file`, `web_fetch`, `grep` |
 | Multimodal | Leer captura o diagrama | `/multimodal-ingest` | `vision_analyze`, `write_file` |
@@ -34,9 +34,9 @@ Veinticinco escenarios para copiar y pegar y hacer trabajo real con Web Agent. C
 | Entrega | Enviar entregable por email | `/artifact-delivery` | `write_file`, `email`, `artifact_present` |
 | Entrega | Diagrama de flujo para plan o informe | `/chart` | `artifact_present` |
 | UX | Desambiguar petición vaga | `/clarify` | *(none)* |
-| Seguridad | Checkpoint antes de borrado masivo | `/workspace-safety` | `list_dir`, `tree`, `delete_file` |
+| Seguridad | Checkpoint antes de borrado masivo | `/workspace-safety` | `browse_workspace`, `delete_file` |
 | Seguridad | API key pegada / higiene de secretos | `/memory-layers` | *(redaction; no secret persistence)* |
-| Meta | Mejorar Web Agent en sí | `/web-agent-skill` | `read_file`, `grep`, `skill_manage`, `memory_save` |
+| Meta | Mejorar Web Agent en sí | `/web-agent-skill` | `read_file`, `grep`, `skill` (action=manage), `memory_save` |
 
 ---
 
@@ -118,7 +118,7 @@ Search skills.sh, SkillsMP, and Cursor marketplace — return the top 5 by insta
 
 **Bundled skills:** `/find_skills` (+ `/clarify` if query ambiguous; `/web-agent-skill` if installing)
 
-**Herramientas que se activan:** `web_search`, `web_fetch`, `skill_manage`
+**Herramientas que se activan:** `web_search`, `web_fetch`, `skill` (action=manage)
 
 </details>
 
@@ -135,7 +135,7 @@ Read how bundled skills are indexed in src/agent/runtime/memory/skills.ts and su
 
 **Bundled skills:** `/web-agent-skill` (+ `/memory-layers` for where to store lessons)
 
-**Herramientas que se activan:** `read_file`, `grep`, `skill_manage`, `memory_save`
+**Herramientas que se activan:** `read_file`, `grep`, `skill` (action=manage), `memory_save`
 
 </details>
 
@@ -259,7 +259,7 @@ I need you to: (1) list top-level files in the workspace, (2) grep for TODO comm
 
 **Bundled skills:** `/task-execution` (+ `/chart` if ≥4 steps; `/task-execution` after approval)
 
-**Herramientas que se activan:** `todo_write`, `skill_view`
+**Herramientas que se activan:** `todo_write`, `skill` (action=view)
 
 </details>
 
@@ -322,7 +322,7 @@ Create projects/expense-tracker/ with a minimal README, package.json stub, and s
 
 **Bundled skills:** `/project-scaffold`
 
-**Herramientas que se activan:** `make_dir`, `write_file`, `tree`
+**Herramientas que se activan:** `make_dir`, `write_file`, `browse_workspace`
 
 </details>
 
@@ -339,7 +339,7 @@ List everything under uploads/ and work/. Propose a safe reorganization (moves o
 
 **Bundled skills:** `/workspace-safety`, `/browser-runtime-map`
 
-**Herramientas que se activan:** `list_dir`, `find_files`, `move_file`, `tree`
+**Herramientas que se activan:** `browse_workspace`, `move_file`
 
 </details>
 
@@ -529,7 +529,7 @@ I want to delete everything under work/scratch/. List what's there with sizes, c
 
 **Bundled skills:** `/workspace-safety`
 
-**Herramientas que se activan:** `list_dir`, `tree`, `delete_file`
+**Herramientas que se activan:** `browse_workspace`, `delete_file`
 
 </details>
 

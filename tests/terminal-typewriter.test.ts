@@ -8,6 +8,8 @@ import {
   UNITS_WHILE_DRAINING,
   UNITS_WHILE_STREAMING,
   computeTypewriterDrainBudget,
+  enqueueTerminalTypewriter,
+  flushTerminalTypewriter,
 } from "../src/core/terminal-typewriter.ts";
 
 test("computeTypewriterDrainBudget keeps a slow cadence while bytes are still arriving", () => {
@@ -24,4 +26,13 @@ test("computeTypewriterDrainBudget catch-up stays capped and never dumps the who
   const budget = computeTypewriterDrainBudget(20_000, CATCH_UP_IDLE_MS + 1);
   assert.ok(budget <= UNITS_CATCH_UP_MAX);
   assert.ok(budget > UNITS_WHILE_DRAINING);
+});
+
+test("flushTerminalTypewriter drains pending split mid-escape sequence", () => {
+  const writes: string[] = [];
+  const fakeTerm = { write: (chunk: string) => writes.push(chunk) } as import("@xterm/xterm").Terminal;
+  const resolve = () => fakeTerm;
+  enqueueTerminalTypewriter("p1", "Summary \x1b[38", resolve);
+  flushTerminalTypewriter("p1", resolve);
+  assert.equal(writes.join(""), "Summary \x1b[38");
 });

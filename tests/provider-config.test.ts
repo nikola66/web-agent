@@ -4,9 +4,21 @@ import fs from "node:fs/promises";
 import path from "node:path";
 
 test("reasoningDisableExtras uses OpenRouter reasoning object only", async () => {
-  const { reasoningDisableExtras } = await import("../dist/agent-runtime/llm/provider-config.js");
-  assert.deepEqual(reasoningDisableExtras("openrouter"), { reasoning: { enabled: false } });
-  assert.deepEqual(reasoningDisableExtras("ollama"), {});
+  const { reasoningDisableExtras, reasoningPreviewEnabled } = await import(
+    "../dist/agent-runtime/llm/provider-config.js"
+  );
+  const prev = process.env.WEBAGENT_REASONING_PREVIEW;
+  process.env.WEBAGENT_REASONING_PREVIEW = "0";
+  try {
+    assert.equal(reasoningPreviewEnabled(), false);
+    assert.deepEqual(reasoningDisableExtras("openrouter"), { reasoning: { enabled: false } });
+    assert.deepEqual(reasoningDisableExtras("ollama"), {});
+  } finally {
+    if (prev === undefined) delete process.env.WEBAGENT_REASONING_PREVIEW;
+    else process.env.WEBAGENT_REASONING_PREVIEW = prev;
+  }
+  assert.equal(reasoningPreviewEnabled(), true);
+  assert.deepEqual(reasoningDisableExtras("openrouter"), {});
   assert.deepEqual(reasoningDisableExtras("nous"), {});
   assert.deepEqual(reasoningDisableExtras("custom"), {});
 });
@@ -136,92 +148,9 @@ test("resolveLlm ignores model override for OpenCode Big Pickle", async () => {
   }
 });
 
-test("resolveLlm routes BitNet through the app LLM proxy in nodebox", async () => {
-  const providers = await Promise.all(
-    (await fs.readdir(path.join(process.cwd(), "src/capabilities/providers"))).map(
-      async (dir) =>
-        JSON.parse(
-          await fs.readFile(
-            path.join(process.cwd(), "src/capabilities/providers", dir, "manifest.json"),
-            "utf8"
-          )
-        )
-    )
-  );
-
-  await fs.mkdir(".webagent", { recursive: true });
-  await fs.writeFile(".webagent/providers.json", JSON.stringify(providers, null, 2));
-
-  const previous = {
-    provider: process.env.WEBAGENT_PROVIDER,
-    runtime: process.env.WEBAGENT_RUNTIME,
-    origin: process.env.WEBAGENT_APP_ORIGIN,
-  };
-
-  process.env.WEBAGENT_PROVIDER = "bitnet";
-  process.env.WEBAGENT_RUNTIME = "nodebox";
-  process.env.WEBAGENT_APP_ORIGIN = "http://localhost:5173";
-
-  try {
-    const { resolveLlm } = await import("../dist/agent-runtime/llm/provider-config.js");
-    const cfg = await resolveLlm();
-    assert.ok(cfg);
-    assert.equal(cfg.provider, "bitnet");
-    assert.equal(cfg.apiKey, "public");
-    assert.equal(cfg.baseUrl, "http://localhost:5173/api/llm/bitnet");
-    assert.equal(cfg.model, "bitnet-b1.58-2b-4t");
-  } finally {
-    process.env.WEBAGENT_PROVIDER = previous.provider;
-    process.env.WEBAGENT_RUNTIME = previous.runtime;
-    process.env.WEBAGENT_APP_ORIGIN = previous.origin;
-  }
-});
-
-test("resolveLlm ignores model override for BitNet", async () => {
-  const providers = await Promise.all(
-    (await fs.readdir(path.join(process.cwd(), "src/capabilities/providers"))).map(
-      async (dir) =>
-        JSON.parse(
-          await fs.readFile(
-            path.join(process.cwd(), "src/capabilities/providers", dir, "manifest.json"),
-            "utf8"
-          )
-        )
-    )
-  );
-
-  await fs.mkdir(".webagent", { recursive: true });
-  await fs.writeFile(".webagent/providers.json", JSON.stringify(providers, null, 2));
-
-  const previous = {
-    provider: process.env.WEBAGENT_PROVIDER,
-    model: process.env.WEBAGENT_MODEL,
-    runtime: process.env.WEBAGENT_RUNTIME,
-    origin: process.env.WEBAGENT_APP_ORIGIN,
-  };
-
-  process.env.WEBAGENT_PROVIDER = "bitnet";
-  process.env.WEBAGENT_MODEL = "other-model";
-  process.env.WEBAGENT_RUNTIME = "nodebox";
-  process.env.WEBAGENT_APP_ORIGIN = "http://localhost:5173";
-
-  try {
-    const { resolveLlm } = await import("../dist/agent-runtime/llm/provider-config.js");
-    const cfg = await resolveLlm();
-    assert.ok(cfg);
-    assert.equal(cfg.model, "bitnet-b1.58-2b-4t");
-  } finally {
-    process.env.WEBAGENT_PROVIDER = previous.provider;
-    process.env.WEBAGENT_MODEL = previous.model;
-    process.env.WEBAGENT_RUNTIME = previous.runtime;
-    process.env.WEBAGENT_APP_ORIGIN = previous.origin;
-  }
-});
-
 test("llmChatCompletionExtras adds stream_options except for subscription providers", async () => {
   const { llmChatCompletionExtras } = await import("../dist/agent-runtime/llm/provider-config.js");
   assert.deepEqual(llmChatCompletionExtras("openrouter", { stream: true }), {
-    reasoning: { enabled: false },
     stream_options: { include_usage: true },
   });
   assert.deepEqual(llmChatCompletionExtras("nous", { stream: true }), {});
@@ -229,6 +158,18 @@ test("llmChatCompletionExtras adds stream_options except for subscription provid
   assert.deepEqual(llmChatCompletionExtras("opencode", { stream: true }), {
     stream_options: { include_usage: true },
   });
+
+  const prev = process.env.WEBAGENT_REASONING_PREVIEW;
+  process.env.WEBAGENT_REASONING_PREVIEW = "0";
+  try {
+    assert.deepEqual(llmChatCompletionExtras("openrouter", { stream: true }), {
+      reasoning: { enabled: false },
+      stream_options: { include_usage: true },
+    });
+  } finally {
+    if (prev === undefined) delete process.env.WEBAGENT_REASONING_PREVIEW;
+    else process.env.WEBAGENT_REASONING_PREVIEW = prev;
+  }
 });
 
 test("resolveLlm keeps direct upstream URLs outside nodebox", async () => {

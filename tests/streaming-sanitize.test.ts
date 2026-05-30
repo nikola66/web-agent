@@ -2,6 +2,10 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 import {
+  DSML_TOOLCALLS_END_MARKER,
+  DSML_TOOLCALLS_START_MARKER,
+} from "../dist/agent-runtime/constants.js";
+import {
   createToolAwareStreamWriter,
   estimateMessageTokens,
   extractClarifyMarkers,
@@ -9,9 +13,15 @@ import {
   extractPlainToolCommandLines,
   extractJsonToolCallPayloads,
   extractLongcatToolCallPayloads,
+  extractDsmlToolCallPayloads,
+  extractFunctionXmlToolCallPayloads,
+  extractMarkerTools,
+  looksLikeUnparsedPlainToolHints,
+  looksLikeUnparsedToolMarkup,
   normalizeToolCalls,
   resolveKnownToolName,
   sanitizeAssistantVisibleText,
+  stripMarkupForContinuationHeuristics,
   stripPseudoToolCallLines,
   stripReasoningPlaceholderLines,
 } from "../dist/agent-runtime/llm/streaming.js";
@@ -132,6 +142,47 @@ Done.`;
   assert.ok(!parsed.visible.includes("list_dir projects"));
 });
 
+test("extractPlainToolCommandLines merges split tree and path lines", () => {
+  const raw = `Let me look into what was being worked on.
+
+tree
+.
+
+Done.`;
+  const parsed = extractPlainToolCommandLines(raw, ["browse_workspace"]);
+  assert.deepEqual(parsed.tools, [{ name: "browse_workspace", arguments: { action: "tree", path: "." } }]);
+  assert.match(parsed.visible, /look into what was being worked on/i);
+  assert.doesNotMatch(parsed.visible, /^\s*tree\s*$/m);
+});
+
+test("extractPlainToolCommandLines maps tree to browse_workspace when tree is hidden", () => {
+  const parsed = extractPlainToolCommandLines("tree .", ["browse_workspace", "read_file"]);
+  assert.deepEqual(parsed.tools, [
+    { name: "browse_workspace", arguments: { action: "tree", path: "." } },
+  ]);
+});
+
+test("extractPlainToolCommandLines parses trailing read_file hint as browse find", () => {
+  const parsed = extractPlainToolCommandLines("article draft content read_file", ["browse_workspace"]);
+  assert.equal(parsed.tools.length, 1);
+  assert.equal(parsed.tools[0].name, "browse_workspace");
+  assert.equal(parsed.tools[0].arguments.action, "find");
+  assert.match(String(parsed.tools[0].arguments.pattern), /article/i);
+});
+
+test("looksLikeUnparsedPlainToolHints detects transcript-style tool lines", () => {
+  const raw = `Let me look into what was being worked on.
+
+tree
+.
+
+article draft content read_file
+
+tree
+.`;
+  assert.equal(looksLikeUnparsedPlainToolHints(raw), true);
+});
+
 test("sanitizeAssistantVisibleText strips whole-line plain tool commands", () => {
   assert.equal(
     sanitizeAssistantVisibleText("list_dir projects/live-quality-fastapi", ["list_dir"]),
@@ -164,13 +215,13 @@ test("sanitizeAssistantVisibleText strips reasoning placeholder lines", () => {
   );
 });
 
-test("createToolAwareStreamWriter flush surfaces tail when stream ends inside <<<TOOL>>> block", () => {
+test("createToolAwareStreamWriter flush drops tail when stream ends inside <<<TOOL>>> block", () => {
   const chunks = [];
   const w = createToolAwareStreamWriter((c) => chunks.push(c));
   w.push("before ");
   w.push('<<<TOOL>>>{"name":"read_file"');
   w.flush();
-  assert.equal(chunks.join(""), 'before {"name":"read_file"');
+  assert.equal(chunks.join(""), "before ");
 });
 
 test("extractClarifyMarkers pulls host blocks and strips them from visible text", () => {
@@ -196,6 +247,32 @@ Trailing.`;
 
 test("resolveKnownToolName maps find_find_files to find_files", () => {
   assert.equal(resolveKnownToolName("find_find_files", ["find_files", "list_dir"]), "find_files");
+});
+
+test("resolveKnownToolName maps cross-host Claude/Codex tool names", () => {
+  const tools = ["read_file", "web_fetch", "web_search", "run_shell", "find_files", "skill"];
+  assert.equal(resolveKnownToolName("Read", tools), "read_file");
+  assert.equal(resolveKnownToolName("WebFetch", tools), "web_fetch");
+  assert.equal(resolveKnownToolName("Bash", tools), "run_shell");
+  assert.equal(resolveKnownToolName("Glob", tools), "find_files");
+  assert.equal(resolveKnownToolName("skill_view", tools), "skill");
+  assert.equal(resolveKnownToolName("functions.web_fetch", tools), "web_fetch");
+});
+
+test("normalizeToolCalls remaps cross-host names and argument aliases", () => {
+  const { normalized, rejected } = normalizeToolCalls(
+    [
+      { name: "Read", arguments: { target_file: "README.md" } },
+      { name: "WebFetch", arguments: { link: "https://example.com" } },
+    ],
+    ["read_file", "web_fetch"],
+  );
+  assert.equal(rejected.length, 0);
+  assert.equal(normalized.length, 2);
+  assert.equal(normalized[0].name, "read_file");
+  assert.equal(normalized[0].arguments.path, "README.md");
+  assert.equal(normalized[1].name, "web_fetch");
+  assert.equal(normalized[1].arguments.url, "https://example.com");
 });
 
 test("extractLooseCallToolLines parses call:tool wire with name= typos", () => {
@@ -243,6 +320,29 @@ test("normalizeToolCalls maps skill_save to skill manage create", () => {
   assert.equal(normalized[0].arguments.manage_action, "create");
 });
 
+test("resolveKnownToolName maps bulk import aliases to skill", () => {
+  const tools = ["skill", "read_file"];
+  assert.equal(resolveKnownToolName("bulk_import", tools), "skill");
+  assert.equal(resolveKnownToolName("skill_bulk_import", tools), "skill");
+  assert.equal(resolveKnownToolName("BulkImport", tools), "skill");
+});
+
+test("normalizeToolCalls maps bulk_import to skill bulk", () => {
+  const { normalized, rejected } = normalizeToolCalls(
+    [
+      {
+        name: "bulk_import",
+        arguments: { urls: ["https://example.com/a/SKILL.md", "https://example.com/b/SKILL.md"] },
+      },
+    ],
+    ["skill", "read_file"]
+  );
+  assert.equal(rejected.length, 0);
+  assert.equal(normalized[0].name, "skill");
+  assert.equal(normalized[0].arguments.action, "bulk");
+  assert.equal(normalized[0].arguments.items?.length, 2);
+});
+
 test("sanitizeAssistantVisibleText strips call:tool loose lines", () => {
   const raw = `Intro
 call:tool{"name="find_find_files"arguments={"patterns":["x"]}}
@@ -263,6 +363,42 @@ test("normalizeToolCalls rejects duplicate same-turn tool calls with identical a
   assert.equal(normalized.length, 2);
   assert.equal(rejected.length, 1);
   assert.equal(rejected[0].reason, "duplicate_call");
+});
+
+test("normalizeToolCalls merges flat path/content beside name for write_file", () => {
+  const article = "# BitNet\n\n".repeat(20);
+  const { normalized, rejected } = normalizeToolCalls(
+    [{ name: "write_file", path: "projects/blog/bitnet.md", content: article }],
+    ["write_file"]
+  );
+  assert.equal(rejected.length, 0);
+  assert.equal(normalized[0].name, "write_file");
+  assert.equal(normalized[0].arguments.path, "projects/blog/bitnet.md");
+  assert.ok(String(normalized[0].arguments.content).includes("# BitNet"));
+});
+
+test("extractMarkerTools salvages broken write_file marker JSON", () => {
+  const body = "## Section\n\n".repeat(30);
+  const payload = `{"path":"projects/demo/article.md","content":${JSON.stringify(body)}}`;
+  const broken = payload.slice(0, -3);
+  const raw = `Intro\n<<<TOOL>>>${broken}<<<END>>>\nOutro`;
+  const parsed = extractMarkerTools(raw);
+  assert.equal(parsed.tools.length, 1);
+  assert.equal(parsed.tools[0].name, "write_file");
+  const args = parsed.tools[0].arguments as Record<string, unknown>;
+  assert.equal(args.path, "projects/demo/article.md");
+  assert.ok(String(args.content).includes("## Section"));
+});
+
+test("normalizeToolCalls merges flat path/code beside name for run_python", () => {
+  const { normalized, rejected } = normalizeToolCalls(
+    [{ name: "run_python", path: "work/publish.py", code: "print('ok')" }],
+    ["run_python"]
+  );
+  assert.equal(rejected.length, 0);
+  assert.equal(normalized[0].name, "run_python");
+  assert.equal(normalized[0].arguments.path, "work/publish.py");
+  assert.equal(normalized[0].arguments.code, "print('ok')");
 });
 
 test("extractLongcatToolCallPayloads parses plain tool names and arg key/value pairs", () => {
@@ -333,4 +469,118 @@ test("extractLongcatToolCallPayloads handles inline tags without newlines", () =
   const parsed = extractLongcatToolCallPayloads(raw);
   assert.deepEqual(parsed.tools, [{ name: "list_dir", arguments: {} }]);
   assert.equal(parsed.visible, "Go.Done.");
+});
+
+const DSML_TRANSCRIPT = `<｜DSML｜tool_calls>
+<｜DSML｜invoke name="browse_workspace">
+<｜DSML｜parameter name="action" string="true">find</｜DSML｜parameter>
+<｜DSML｜parameter name="path" string="true">.</｜DSML｜parameter>
+<｜DSML｜parameter name="pattern" string="true">publish*</｜DSML｜parameter>
+</｜DSML｜invoke>
+<｜DSML｜invoke name="browse_workspace">
+<｜DSML｜parameter name="action" string="true">find</｜DSML｜parameter>
+<｜DSML｜parameter name="path" string="true">.</｜DSML｜parameter>
+<｜DSML｜parameter name="pattern" string="true">bitnet*</｜DSML｜parameter>
+</｜DSML｜invoke>
+</｜DSML｜tool_calls>`;
+
+test("extractDsmlToolCallPayloads parses transcript browse_workspace calls", () => {
+  const raw = `Let me start by finding where everything lives.\n\n${DSML_TRANSCRIPT}`;
+  const parsed = extractDsmlToolCallPayloads(raw);
+  assert.equal(parsed.tools.length, 2);
+  assert.equal(parsed.tools[0].name, "browse_workspace");
+  assert.equal(parsed.tools[0].arguments.action, "find");
+  assert.equal(parsed.tools[0].arguments.pattern, "publish*");
+  assert.equal(parsed.tools[1].arguments.pattern, "bitnet*");
+  assert.equal(parsed.visible, "Let me start by finding where everything lives.");
+  assert.doesNotMatch(parsed.visible, /DSML/);
+});
+
+test("sanitizeAssistantVisibleText strips DSML tool markup", () => {
+  const raw = `Intro.\n${DSML_TRANSCRIPT}\nOutro.`;
+  assert.equal(sanitizeAssistantVisibleText(raw), "Intro.\n\nOutro.");
+});
+
+test("looksLikeUnparsedToolMarkup detects DSML in raw combined text", () => {
+  assert.equal(looksLikeUnparsedToolMarkup(DSML_TRANSCRIPT), true);
+  assert.equal(looksLikeUnparsedToolMarkup("Let me read the article."), false);
+});
+
+test("stripMarkupForContinuationHeuristics removes DSML before tail heuristics", () => {
+  const raw = `Let me start by finding where everything lives.\n\n${DSML_TRANSCRIPT}`;
+  const cleaned = stripMarkupForContinuationHeuristics(raw);
+  assert.doesNotMatch(cleaned, /DSML/);
+  assert.match(cleaned, /finding where everything lives/i);
+});
+
+test("createToolAwareStreamWriter hides DSML tool_calls blocks during stream", () => {
+  const chunks: string[] = [];
+  const w = createToolAwareStreamWriter((c) => chunks.push(c));
+  w.push("Intro ");
+  w.push(DSML_TOOLCALLS_START_MARKER);
+  w.push("<｜DSML｜invoke name=\"read_file\">");
+  w.push("</｜DSML｜invoke>");
+  w.push(DSML_TOOLCALLS_END_MARKER);
+  w.push(" Outro.");
+  w.flush();
+  assert.equal(chunks.join(""), "Intro  Outro.");
+});
+
+test("extractFunctionXmlToolCallPayloads parses Hermes-style function blocks", () => {
+  const raw = `Intro.
+
+<function>
+<function_name>read_file</function_name>
+<function_arguments>{"path": "memory/runs/run.json"}</function_arguments>
+</function>
+
+<function>
+<function_name>grep</function_name>
+<function_parameters>{"pattern": "todo", "root": "."}</function_parameters>
+</function>
+
+Outro.`;
+  const parsed = extractFunctionXmlToolCallPayloads(raw);
+  assert.equal(parsed.tools.length, 2);
+  assert.equal(parsed.tools[0]?.name, "read_file");
+  assert.deepEqual(parsed.tools[0]?.arguments, { path: "memory/runs/run.json" });
+  assert.equal(parsed.tools[1]?.name, "grep");
+  assert.deepEqual(parsed.tools[1]?.arguments, { pattern: "todo", root: "." });
+  assert.match(parsed.visible, /Intro\./);
+  assert.match(parsed.visible, /Outro\./);
+  assert.doesNotMatch(parsed.visible, /<function>/i);
+  assert.equal(sanitizeAssistantVisibleText(raw), parsed.visible);
+});
+
+test("createToolAwareStreamWriter hides function XML blocks during stream", () => {
+  const chunks: string[] = [];
+  const w = createToolAwareStreamWriter((c) => chunks.push(c));
+  w.push("Intro ");
+  w.push('<function><function_name>read_file</function_name>');
+  w.push('<function_arguments>{"path":"x.md"}</function_arguments></function>');
+  w.push(" Outro.");
+  w.flush();
+  assert.equal(chunks.join(""), "Intro  Outro.");
+});
+
+test("createToolAwareStreamWriter drops incomplete function blocks on flush", () => {
+  const chunks: string[] = [];
+  const w = createToolAwareStreamWriter((c) => chunks.push(c));
+  w.push("Intro ");
+  w.push("<function><function_name>grep</function_name>");
+  w.flush();
+  assert.equal(chunks.join(""), "Intro ");
+});
+
+test("stripOrphanToolMarkerArtifacts removes truncated <<<TOOL>>> fragments", () => {
+  const raw = 'Intro.\n<<<TOOL>>>{"name":"todo_write"';
+  assert.equal(sanitizeAssistantVisibleText(raw), "Intro.");
+});
+
+test("extractMarkerTools salvages orphan <<<TOOL>>> marker without END", () => {
+  const raw = 'Plan.\n<<<TOOL>>>{"name":"todo_write","arguments":{"path":"","count":0}}';
+  const parsed = extractMarkerTools(raw);
+  assert.equal(parsed.tools.length, 1);
+  assert.equal(parsed.tools[0]?.name, "todo_write");
+  assert.doesNotMatch(parsed.visible, /<<<TOOL>>>/);
 });

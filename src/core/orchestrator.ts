@@ -30,7 +30,6 @@ import { buildToolRowsFromCatalog, renderHelpView } from "@/agent/runtime/slash-
 import { encodeUserInputLineForAgent } from "@/agent/runtime/user-input-framing";
 import {
   disposeTypewriter,
-  enqueueTerminalTypewriter,
   flushTerminalTypewriter,
 } from "./terminal-typewriter";
 import {
@@ -155,7 +154,16 @@ function write(data: string): void {
 
 function writeToProfile(profileId: string, data: string): void {
   appendBrowserTranscript(profileId, data, "agent");
-  enqueueTerminalTypewriter(profileId, data, getTerminal);
+  flushTerminalTypewriter(profileId, getTerminal);
+  const term = getTerminal(profileId);
+  term?.write(data);
+  const rt = useRuntimeStore.getState().profileRuntime[profileId];
+  if (rt?.awaitingResponse) {
+    snapXtermViewportToLatest(term);
+  }
+  if (/\bstopped:\s*\S+/i.test(data)) {
+    flushTerminalTypewriter(profileId, getTerminal);
+  }
   pushAgentVoiceChunk(profileId, data, isVoiceEnabled);
 }
 
@@ -228,7 +236,9 @@ async function onAgentPromptReady(profileId: string): Promise<void> {
     const state = getOrCreateAgentState(profileId);
     state.agentReadyForInput = true;
     const rt = useRuntimeStore.getState();
+    rt.setAwaitingResponse(profileId, false);
     rt.setPendingToolConfirm(profileId, false);
+    rt.setReasoningPreview(profileId, null);
     await dispatchQueuedInputIfReady(profileId);
   } finally {
     promptReadyInFlight.delete(profileId);
@@ -255,6 +265,7 @@ export async function submitUserInput(raw: string): Promise<void> {
     await writeToWebAgent(targetProfileId, "/stop\n");
     write("\r\n\x1b[33m▸ Interrupt requested\x1b[0m\r\n");
     useRuntimeStore.getState().setAwaitingResponse(targetProfileId, false);
+    useRuntimeStore.getState().setReasoningPreview(targetProfileId, null);
     return;
   }
 
@@ -415,6 +426,7 @@ export async function startAgent(profileId?: string): Promise<void> {
     rt.setPendingToolConfirm(profile.id, false);
     rt.setArtifactOffer(profile.id, null);
     rt.setClarifyOffer(profile.id, null);
+    rt.setReasoningPreview(profile.id, null);
     rt.setOnboardingActive(profile.id, false);
     agentState.agentReadyForInput = false;
     if (!runningProfileIds.has(profile.id) && runningProfileIds.size >= MAX_CONCURRENT_AGENTS) {
@@ -494,6 +506,14 @@ export async function startAgent(profileId?: string): Promise<void> {
         onClarifyOffer: (pid, payload) => {
           useRuntimeStore.getState().setClarifyOffer(pid, payload);
         },
+        onReasoningPreview: (pid, payload) => {
+          const rt = useRuntimeStore.getState();
+          if (payload.done || !payload.text) {
+            rt.setReasoningPreview(pid, null);
+            return;
+          }
+          rt.setReasoningPreview(pid, { text: payload.text, updatedAt: Date.now() });
+        },
         onSelfImprovementSummary: (pid, payload) => {
           useRuntimeStore.getState().pushSelfImprovementSummary(pid, payload);
         },
@@ -534,6 +554,7 @@ export async function startAgent(profileId?: string): Promise<void> {
             s.setPendingToolConfirm(profile.id, false);
             s.setArtifactOffer(profile.id, null);
             s.setClarifyOffer(profile.id, null);
+            s.setReasoningPreview(profile.id, null);
             s.setOnboardingActive(profile.id, false);
             runningProfileIds.delete(profile.id);
             agentState.agentReadyForInput = false;
@@ -547,6 +568,7 @@ export async function startAgent(profileId?: string): Promise<void> {
             s.setPendingToolConfirm(profile.id, false);
             s.setArtifactOffer(profile.id, null);
             s.setClarifyOffer(profile.id, null);
+            s.setReasoningPreview(profile.id, null);
             runningProfileIds.delete(profile.id);
             setAgentVoiceNarration(profile.id, false);
           }
@@ -564,6 +586,7 @@ export async function startAgent(profileId?: string): Promise<void> {
       rt.setPendingToolConfirm(profile.id, false);
       rt.setArtifactOffer(profile.id, null);
       rt.setClarifyOffer(profile.id, null);
+      rt.setReasoningPreview(profile.id, null);
       rt.setProfileRunning(profile.id, false);
       rt.setOnboardingActive(profile.id, false);
       runningProfileIds.delete(profile.id);
@@ -596,6 +619,7 @@ async function _stopAgentUnsafe(profileId: string): Promise<void> {
   rt.setPendingToolConfirm(id, false);
   rt.setArtifactOffer(id, null);
   rt.setClarifyOffer(id, null);
+  rt.setReasoningPreview(id, null);
   state.agentReadyForInput = false;
   state.onboardingActive = false;
   state.onboardingField = "agent";

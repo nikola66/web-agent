@@ -3,9 +3,10 @@ import assert from "node:assert/strict";
 
 import { formatApprovalTerminalBlock, summarizeToolApproval } from "../dist/agent-runtime/tools/tool-policy.js";
 
-test("summarizeToolApproval skill_manage create omits raw content body", () => {
-  const summary = summarizeToolApproval("skill_manage", {
-    action: "create",
+test("summarizeToolApproval skill manage create omits raw content body", () => {
+  const summary = summarizeToolApproval("skill", {
+    action: "manage",
+    manage_action: "create",
     name: "my-skill",
     description: "Short desc",
     content: "x".repeat(50_000),
@@ -17,9 +18,10 @@ test("summarizeToolApproval skill_manage create omits raw content body", () => {
   assert.ok(summary.length < 300);
 });
 
-test("summarizeToolApproval skill_manage truncates long description in summary", () => {
-  const summary = summarizeToolApproval("skill_manage", {
-    action: "create",
+test("summarizeToolApproval skill manage truncates long description in summary", () => {
+  const summary = summarizeToolApproval("skill", {
+    action: "manage",
+    manage_action: "create",
     name: "n",
     description: `${"word ".repeat(80)}end`,
     content: "a",
@@ -28,33 +30,35 @@ test("summarizeToolApproval skill_manage truncates long description in summary",
   assert.ok(summary.endsWith("content=1 chars"));
 });
 
-test("summarizeToolApproval skill_manage delete is one line", () => {
+test("summarizeToolApproval skill manage delete is one line", () => {
   assert.equal(
-    summarizeToolApproval("skill_manage", { action: "delete", name: "foo-bar" }),
-    "skill_manage: action=delete; name=foo-bar"
+    summarizeToolApproval("skill", { action: "manage", manage_action: "delete", name: "foo-bar" }),
+    "skill manage: manage_action=delete; name=foo-bar"
   );
 });
 
-test("summarizeToolApproval skill_manage reports string field lengths", () => {
-  const summary = summarizeToolApproval("skill_manage", {
-    action: "create",
+test("summarizeToolApproval skill manage reports string field lengths", () => {
+  const summary = summarizeToolApproval("skill", {
+    action: "manage",
+    manage_action: "create",
     name: "s",
     content: "y".repeat(1000),
   });
-  assert.match(summary, /action=create/);
+  assert.match(summary, /manage_action=create/);
   assert.match(summary, /name=s/);
   assert.match(summary, /content=1000 chars/);
   assert.equal(summary.includes("yyy"), false);
 });
 
-test("summarizeToolApproval skill_bulk_save omits item bodies and URLs stay short", () => {
-  const summary = summarizeToolApproval("skill_bulk_save", {
+test("summarizeToolApproval skill bulk omits item bodies and URLs stay short", () => {
+  const summary = summarizeToolApproval("skill", {
+    action: "bulk",
     items: [
       { name: "alpha", content: "x".repeat(10_000) },
       { url: "https://raw.githubusercontent.com/foo/bar/main/skills/x/SKILL.md" },
     ],
   });
-  assert.match(summary, /skill_bulk_save/);
+  assert.match(summary, /skill bulk/);
   assert.match(summary, /total=2/);
   assert.match(summary, /inline=1/);
   assert.match(summary, /url=1/);
@@ -62,8 +66,9 @@ test("summarizeToolApproval skill_bulk_save omits item bodies and URLs stay shor
   assert.ok(summary.length < 800);
 });
 
-test("summarizeToolApproval skill_bulk_save expands top-level url for counts", () => {
-  const summary = summarizeToolApproval("skill_bulk_save", {
+test("summarizeToolApproval skill bulk expands top-level url for counts", () => {
+  const summary = summarizeToolApproval("skill", {
+    action: "bulk",
     url: "https://example.com/r/SKILL.md",
     category: "imported",
   });
@@ -72,52 +77,54 @@ test("summarizeToolApproval skill_bulk_save expands top-level url for counts", (
   assert.match(summary, /url=1/);
 });
 
-test("summarizeToolApproval skill_bulk_save truncates many item previews", () => {
+test("summarizeToolApproval skill bulk truncates many item previews", () => {
   const items = [];
   for (let i = 0; i < 20; i += 1) {
     items.push({ name: `skill-${i}`, content: "## Procedure\n\n1. x" });
   }
-  const summary = summarizeToolApproval("skill_bulk_save", { items });
+  const summary = summarizeToolApproval("skill", { action: "bulk", items });
   assert.match(summary, /total=20/);
   assert.match(summary, /\+5 more/);
 });
 
-test("formatApprovalTerminalBlock skill_bulk_save is one summary line plus approve/deny", () => {
+test("formatApprovalTerminalBlock skill bulk is one summary line plus approve/deny", () => {
   const longUrl = `https://example.com/${"path/".repeat(20)}SKILL.md`;
   const items = [
     { name: "n1", content: "SECRET_BODY".repeat(500) },
     { url: longUrl },
   ];
-  const summary = summarizeToolApproval("skill_bulk_save", { items });
+  const summary = summarizeToolApproval("skill", { action: "bulk", items });
   const block = formatApprovalTerminalBlock({
-    toolLabel: "skill_bulk_save",
+    toolLabel: "skill",
     summary,
-    args: { items },
+    args: { action: "bulk", items },
   });
-  assert.match(block, /skill_bulk_save/);
+  assert.match(block, /total=2/);
   assert.match(block, /total=2/);
   assert.equal(block.includes("SECRET_BODY"), false);
   assert.equal(block.includes("Total items"), false);
 });
 
-test("formatApprovalTerminalBlock skill_manage create is compact", () => {
+test("formatApprovalTerminalBlock skill manage create is compact", () => {
   const block = formatApprovalTerminalBlock({
-    toolLabel: "skill_manage",
-    summary: summarizeToolApproval("skill_manage", {
-      action: "create",
+    toolLabel: "skill",
+    summary: summarizeToolApproval("skill", {
+      action: "manage",
+      manage_action: "create",
       name: "blog-seo-audit",
       description: "Conduct a comprehensive SEO audit for the blog.",
       content: "x".repeat(4882),
     }),
     args: {
-      action: "create",
+      action: "manage",
+      manage_action: "create",
       name: "blog-seo-audit",
       description: "Conduct a comprehensive SEO audit for the blog.",
       content: "x".repeat(4882),
     },
   });
   assert.match(block, /Permission required/i);
-  assert.match(block, /skill_manage/);
+  assert.match(block, /skill/);
   assert.match(block, /blog-seo-audit/);
   assert.ok(/4(,?)882/.test(block));
   assert.match(block, /\d+ chars/);

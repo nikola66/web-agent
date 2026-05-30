@@ -13,7 +13,7 @@ triggers: [bug, error, fails, flaky, crash, regression, test failure, doesn't wo
 | Step | Tool |
 |------|------|
 | Read suspect code | `read_file` |
-| Find call sites / symbols | `grep`, `find_files` |
+| Find call sites / symbols | `grep`, `browse_workspace` (action=find) |
 | Compare versions | `file_diff` |
 | External API semantics | `web_fetch` |
 | Isolated repro / verify | `run_shell` (narrow) — **`browser-runtime-map`** |

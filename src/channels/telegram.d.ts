@@ -2,6 +2,22 @@ export declare function loadTelegramAllowedUserId(): Promise<string | null>;
 export declare function saveTelegramAllowedUserId(userId: string): Promise<void>;
 export declare function registerTelegramCommands(token: string): Promise<void>;
 export declare function sendTelegramMessage(token: string, chatId: string, text: string): Promise<void>;
+export declare function sendTelegramPreviewMessage(
+  token: string,
+  chatId: string,
+  text: string
+): Promise<number | null>;
+export declare function editTelegramMessage(
+  token: string,
+  chatId: string,
+  messageId: number,
+  text: string
+): Promise<void>;
+export declare function deleteTelegramMessage(
+  token: string,
+  chatId: string,
+  messageId: number
+): Promise<void>;
 export declare function sendTelegramDocument(token: string, chatId: string, doc: unknown): Promise<void>;
 export declare function startTelegramTyping(
   token: string,

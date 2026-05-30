@@ -3,6 +3,10 @@ import assert from "node:assert/strict";
 
 import {
   estimateTaskComplexity,
+  detectMultistepTaskPattern,
+  buildSuggestedTodoChecklist,
+  buildMultiStepGateHint,
+  slugFromArticleTopic,
   isPlanningModePrompt,
   extractPlanningGoalFromPrompt,
   isExplicitPlanExecutionRequest,
@@ -65,6 +69,30 @@ test("estimateTaskComplexity plan tier when repeat-until specifies deliverables"
     "Repeat until you have 5 markdown articles saved in the output folder."
   );
   assert.equal(r.tier, "plan");
+});
+
+test("estimateTaskComplexity todo tier for research write publish blog chain", () => {
+  const r = estimateTaskComplexity(
+    "Search adn create a ewew article for me about Microsoft's bitNet and publish it on our blog"
+  );
+  assert.equal(r.tier, "todo");
+  assert.ok(r.estimatedSteps >= 4);
+});
+
+test("detectMultistepTaskPattern and checklist for BitNet blog publish ask", () => {
+  const user =
+    "Search adn create a ewew article for me about Microsoft's bitNet and publish it on our blog";
+  assert.equal(detectMultistepTaskPattern(user), "research_write_publish");
+  assert.equal(slugFromArticleTopic(user), "bitnet");
+  const todos = buildSuggestedTodoChecklist(user);
+  assert.ok(todos);
+  assert.equal(todos![0].status, "in_progress");
+  assert.match(todos![0].text, /Research/i);
+  assert.match(todos![1].text, /work\/bitnet-article\//);
+  assert.match(todos![2].text, /Publish via CMS/i);
+  assert.match(todos![3].text, /Confirm live URL/i);
+  assert.match(buildMultiStepGateHint(user, { preSeeded: true }), /Checklist is in todos/i);
+  assert.match(buildMultiStepGateHint(user), /todo_write/);
 });
 
 test("estimateTaskComplexity stays simple for tiny two-action asks", () => {
@@ -143,6 +171,7 @@ test("isSkillInstallIntent detects install and registry mentions", () => {
   assert.equal(isSkillInstallIntent("Install skills from this awesome list"), true);
   assert.equal(isSkillInstallIntent("Continue installing them"), true);
   assert.equal(isSkillInstallIntent("https://officialskills.sh/foo/bar"), true);
+  assert.equal(isSkillInstallIntent("https://github.com/coreyhaines31/marketingskills"), true);
   assert.equal(isSkillInstallIntent("What is the weather"), false);
 });
 
@@ -153,6 +182,14 @@ test("buildSkillInstallContextPrefix warns about curated indexes", () => {
   assert.match(prefix!, /do not guess raw paths/i);
   assert.match(prefix!, /imported-skill-compat/);
   assert.doesNotMatch(prefix!, /VoltAgent/i);
+});
+
+test("buildSkillInstallContextPrefix routes repo archives through extract_archive and import_dir", () => {
+  const prefix = buildSkillInstallContextPrefix("https://github.com/coreyhaines31/marketingskills");
+  assert.ok(prefix);
+  assert.match(prefix!, /extract_archive/);
+  assert.match(prefix!, /import_dir/);
+  assert.match(prefix!, /never run_python zipfile/i);
 });
 
 test("buildSkillInstallContextPrefix nudges python runtime for python skills", () => {
@@ -169,6 +206,16 @@ test("focusToolNamesForIntent narrows skill install tools", () => {
       "Install this skill from uploads/archive.zip"
     ),
     ["read_file", "extract_archive", "skill"]
+  );
+});
+
+test("focusToolNamesForIntent narrows GitHub skill repo URLs", () => {
+  assert.deepEqual(
+    focusToolNamesForIntent(
+      ["read_file", "extract_archive", "archive_list", "skill", "web_fetch", "run_shell"],
+      "https://github.com/coreyhaines31/marketingskills"
+    ),
+    ["read_file", "extract_archive", "archive_list", "skill", "web_fetch"]
   );
 });
 

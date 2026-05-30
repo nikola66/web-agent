@@ -7,7 +7,7 @@ export default defineTool({
   emoji: "🗜️",
   description:
     "Extract a ZIP, TAR, or TAR.GZ archive into a workspace directory. " +
-    "**Read-only counterpart:** to CREATE a `.zip`, there is no `create_archive` tool — use `run_python` with stdlib `zipfile` (see `skill_view` **`browser-runtime-map`**). " +
+    "**Read-only counterpart:** to CREATE a `.zip`, there is no `create_archive` tool — use `run_python` with stdlib `zipfile` (see `skill` (action=view) **`browser-runtime-map`**). " +
     "Strongly prefer `archive_path` (workspace-relative). Aliases accepted: `path`, `file`, `file_path`, `zip`, `archive`. " +
     "If you call this with no path at all, the tool auto-picks the NEWEST archive in `.webagent/telegram-inbox/` " +
     "and sets `autoPickedFromInbox: true` in the result — fine when the user just sent a single file, " +

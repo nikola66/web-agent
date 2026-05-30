@@ -3,6 +3,8 @@
  * assistant turns, merge adjacent user messages. Operates on per-call copies only.
  */
 
+import { TOOL_RESULTS_COMPACT_PREFIX } from "./memory/snapshots.js";
+
 const VALID_API_ROLES = new Set(["system", "user", "assistant", "tool"]);
 const STUB_TOOL_RESULT = "[Result unavailable — see context summary above]";
 
@@ -197,7 +199,7 @@ export function repairMessageSequence(messages: ChatMsg[]): ChatMsg[] {
 }
 
 function isToolResultsUserMessage(content: unknown): boolean {
-  return typeof content === "string" && content.startsWith("Tool results (compact JSON)");
+  return typeof content === "string" && content.startsWith(TOOL_RESULTS_COMPACT_PREFIX);
 }
 
 function isEmptyRecoverySynthetic(msg: ChatMsg | undefined): boolean {
@@ -205,15 +207,33 @@ function isEmptyRecoverySynthetic(msg: ChatMsg | undefined): boolean {
   return Boolean((msg as { _empty_recovery_synthetic?: boolean })._empty_recovery_synthetic);
 }
 
+function isThinkingPrefill(msg: ChatMsg | undefined): boolean {
+  if (!msg || typeof msg !== "object") return false;
+  return Boolean((msg as { _thinking_prefill?: boolean })._thinking_prefill);
+}
+
+function isInternalTurnScaffolding(msg: ChatMsg | undefined): boolean {
+  return isEmptyRecoverySynthetic(msg) || isThinkingPrefill(msg);
+}
+
+/** Pop trailing thinking-prefill / empty-recovery scaffolding before a final assistant message. */
+export function popTrailingInternalScaffolding(messages: ChatMsg[]): void {
+  popTrailingInternalScaffoldingFrom(messages);
+}
+
+function popTrailingInternalScaffoldingFrom(messages: ChatMsg[]): boolean {
+  let dropped = false;
+  while (messages.length && isInternalTurnScaffolding(messages[messages.length - 1])) {
+    messages.pop();
+    dropped = true;
+  }
+  return dropped;
+}
+
 /** Port of Hermes run_agent._drop_trailing_empty_response_scaffolding */
 export function dropTrailingEmptyResponseScaffolding(messages: ChatMsg[]): ChatMsg[] {
   const out = [...messages];
-  let droppedScaffolding = false;
-
-  while (out.length && isEmptyRecoverySynthetic(out[out.length - 1])) {
-    out.pop();
-    droppedScaffolding = true;
-  }
+  const droppedScaffolding = popTrailingInternalScaffoldingFrom(out);
 
   if (!droppedScaffolding) return out;
 

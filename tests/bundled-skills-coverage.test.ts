@@ -82,7 +82,7 @@ test("every bundled capability skill is indexed and viewable on demand", async (
 
       const listed = await listSkills({ query: slug });
       const skill = listed.find((item) => item.slug === slug);
-      assert.ok(skill, `${slug} should appear in skill_list`);
+      assert.ok(skill, `${slug} should appear in skill (action=list)`);
       assert.equal(skill.source, "bundled");
       assert.equal(skill.category, "bundled");
       assert.match(skill.path, /\.webagent\/capabilities\/skills\/|src\/capabilities\/skills\//);

@@ -100,6 +100,21 @@
   animation-delay: 320ms;
 }
 
+.webagent-reasoning-preview-text {
+  color: color-mix(in srgb, var(--color-text-muted) 72%, transparent);
+  animation: webagent-reasoning-preview-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes webagent-reasoning-preview-pulse {
+  0%,
+  100% {
+    opacity: 0.45;
+  }
+  50% {
+    opacity: 0.82;
+  }
+}
+
 @keyframes webagent-voice-bar {
   0%,
   100% {

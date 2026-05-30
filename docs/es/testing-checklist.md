@@ -22,8 +22,8 @@
 Pide al agente en ejecución:
 
 - [ ] `read_file` / `write_file` bajo `/workspace`
-- [ ] `list_dir` o `tree`
-- [ ] `grep` o `find_files`
+- [ ] `browse_workspace` (`action`: list o tree)
+- [ ] `grep` o `browse_workspace` (`action`: find)
 - [ ] `run_shell` (p. ej. `echo test`)
 - [ ] `web_fetch` en URL pública `https://`
 

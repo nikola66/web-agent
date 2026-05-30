@@ -647,7 +647,7 @@ export function graphqlSchemaRecoveryHint(data: unknown, status: number): string
       "GraphQL mutation input-shape error. To LINK an existing related record (author, category, etc.), pass the relation as a nested object with only its id — e.g. `author: { id: \"1\" }` — not a bare id, and not the full create object with all fields. " +
       "If a `create_*_input` still demands every non-null field, the relation field actually accepts the lighter input that only needs `id`. " +
       "Put large or HTML field values in GraphQL `variables` (web_post `json: { query, variables }`) rather than inlining them in the query string, to avoid JSON-escaping corruption. " +
-      "See skill_view on the relevant imported skill and **`http-api`** for the exact shape.";
+      "See `skill` (action=view) on the relevant imported skill and **`http-api`** for the exact shape.";
     if (cmsMutationNaming) {
       hint +=
         " CMS GraphQL mutations use `create_{ExactCollection}_item` / `update_{ExactCollection}_item` — collection name and casing must match the schema (e.g. `Blog_Posts`, not `posts`). Re-fetch `GET /fields/{Collection}` with `response_format: \"api\"` before retrying.";
@@ -656,7 +656,7 @@ export function graphqlSchemaRecoveryHint(data: unknown, status: number): string
   }
   let hint =
     "GraphQL root fields must match that API's schema — do not assume generic names. " +
-    "Call skill_view on the relevant imported skill (and **`http-api`**) for discovery endpoints and query shape, " +
+    "Call `skill` (action=view) on the relevant imported skill (and **`http-api`**) for discovery endpoints and query shape, " +
     "then fix field names from the error.";
   if (cmsMutationNaming) {
     hint +=
@@ -679,8 +679,8 @@ export function guessedResourceRecoveryHint(url: string, status: number): string
   if (segments < 2) return undefined;
   return (
     "403/404 on a specific resource path often means wrong slug/id or missing permission — not a dead host. " +
-    "Use skill_view on the relevant imported skill for discovery (list/metadata/health) before guessing resource names. " +
-    "See skill_view **`http-api`**."
+    "Use `skill` (action=view) on the relevant imported skill for discovery (list/metadata/health) before guessing resource names. " +
+    "See `skill` (action=view) **`http-api`**."
   );
 }
 
@@ -1832,7 +1832,7 @@ export async function skillBulkSaveTool(args: ToolArgs = {}, ctx) {
   const items = Array.isArray(normalized?.items) ? normalized.items : null;
   if (!items || items.length === 0) {
     throw new Error(
-      "`items` is required for skill_bulk_save (non-empty array). You can pass top-level `url` or `urls` for HTTPS SKILL.md installs, or `items`: [{ url } | { name, content }, ...]."
+      "`items` is required for skill bulk (action=bulk) (non-empty array). You can pass top-level `url` or `urls` for HTTPS SKILL.md installs, or `items`: [{ url } | { name, content }, ...]."
     );
   }
   const result = await memory.bulkSaveSkills(items);
@@ -1866,7 +1866,7 @@ export async function skillViewTool(args: ToolArgs = {}, ctx) {
         : "";
   if (!nameRaw) {
     throw new Error(
-      '`name` is required for skill_view. Use {"name":"<skill-slug>"} — not `slug`.'
+      '`name` is required for skill view (action=view). Use {"name":"<skill-slug>"} — not `slug`.'
     );
   }
   const result = await memory.viewSkill({
@@ -1882,7 +1882,7 @@ export async function skillViewTool(args: ToolArgs = {}, ctx) {
 export async function skillManageTool(args: ToolArgs = {}, ctx) {
   const memory = memoryServices(ctx);
   const action = typeof args?.action === "string" ? args.action.trim() : "";
-  if (!action) throw new Error("`action` is required for skill_manage.");
+  if (!action) throw new Error("`manage_action` is required when action=manage.");
   const result = await memory.manageSkill({ ...args, action });
   await logDebugEvent("skill_manage", {
     action,

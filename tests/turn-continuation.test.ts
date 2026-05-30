@@ -21,8 +21,25 @@ import {
   shouldContinueTruncation,
   shouldContinuePostToolStall,
   shouldContinuePreToolPromiseStall,
+  shouldDeferTruncatedContentToolExecution,
+  partitionToolsForTruncatedContentDeferral,
+  isDeferrableTruncatedContentTool,
+  resolveTurnStopReason,
   shouldContinueCronVerification,
   shouldContinueIncompleteTodos,
+  shouldContinueIncompletePublishDeliverable,
+  shouldContinueContentShareDeliverable,
+  shouldContinueUnparsedToolMarkup,
+  buildContentShareContinuationNudge,
+  userRequestedContentShare,
+  contentShareDeliverableSatisfied,
+  visibleContainsReadFileContent,
+  userRequestedArticlePublish,
+  articleDraftWrittenInTurn,
+  publishDeliverableCompleted,
+  MAX_INCOMPLETE_PUBLISH_CONTINUATIONS,
+  MAX_CONTENT_SHARE_CONTINUATIONS,
+  MAX_UNPARSED_TOOL_MARKUP_CONTINUATIONS,
   userRequestedStructuredTodos,
   cronRegisterJobIdFromArgs,
   cronJobIdsFromListResult,
@@ -518,6 +535,40 @@ test("shouldContinueIncompleteTodos nudges when todos remain open", () => {
   );
 });
 
+test("shouldContinueIncompleteTodos continues despite faux completion when todos remain open", () => {
+  const msg = "Refactor auth, update docs, migrate DB, and notify customers.";
+  const stats = { total: 4, completed: 1, open: 3 };
+  assert.equal(
+    shouldContinueIncompleteTodos(msg, true, 0, stats, "Auth refactor done. Task complete."),
+    true
+  );
+  assert.equal(
+    shouldContinueIncompleteTodos(msg, true, 0, stats, "All set — ready for your review."),
+    true
+  );
+});
+
+test("shouldContinueIncompleteTodos continues for open todos without structured-todo phrasing", () => {
+  const msg = "Refactor auth, update docs, migrate DB, and notify customers.";
+  assert.equal(
+    shouldContinueIncompleteTodos(msg, true, 0, { total: 4, completed: 1, open: 3 }),
+    true
+  );
+});
+
+test("shouldContinueIncompleteTodos stops when assistant asks user for input", () => {
+  assert.equal(
+    shouldContinueIncompleteTodos(
+      "Use todo_write with 12 items.",
+      true,
+      0,
+      { total: 12, completed: 2, open: 10 },
+      "Which collection slug should I use for the blog post?"
+    ),
+    false
+  );
+});
+
 test("buildContinuationNudge incomplete_todos mentions open count", () => {
   const nudge = buildContinuationNudge("incomplete_todos", { openTodos: 8, totalTodos: 12 });
   assert.match(nudge, /8 of 12/i);
@@ -558,6 +609,61 @@ test("looksLikeTruncatedResponse and shouldContinueTruncation detect length fini
   assert.equal(shouldContinueTruncation("length", 0), true);
   assert.equal(shouldContinueTruncation("length", MAX_TRUNCATION_CONTINUATIONS), false);
   assert.match(buildContinuationNudge("truncation"), /continue exactly where you left off/i);
+});
+
+test("resolveTurnStopReason labels normal chat and deliverables as completed", () => {
+  assert.equal(resolveTurnStopReason("Hey hey! What's up?", false), "completed");
+  assert.equal(
+    resolveTurnStopReason(
+      "Pretty clean slate. Want to start something — build a project, explore a skill, or just chat?",
+      true
+    ),
+    "completed"
+  );
+  assert.equal(
+    resolveTurnStopReason("Let me fetch the best skill pages before I deliver the final table.", true),
+    "post_tool_no_continue"
+  );
+  assert.equal(resolveTurnStopReason("", false), "no_tools_no_continue");
+});
+
+test("shouldDeferTruncatedContentToolExecution blocks write_file on length finish", () => {
+  const truncatedFrontmatter = `---
+title: "BitNet"
+published_at: "2026-05-29T20`;
+  const tools = [
+    {
+      name: "write_file",
+      arguments: { path: "work/article.md", content: truncatedFrontmatter },
+    },
+  ];
+  assert.equal(isDeferrableTruncatedContentTool(tools[0]!), true);
+  assert.equal(shouldDeferTruncatedContentToolExecution("length", tools, 0), true);
+  assert.equal(shouldDeferTruncatedContentToolExecution("stop", tools, 0), false);
+  assert.equal(
+    shouldDeferTruncatedContentToolExecution("length", tools, MAX_TRUNCATION_CONTINUATIONS),
+    false
+  );
+  assert.match(
+    buildContinuationNudge("truncation", { truncatedWriteFile: true }),
+    /append.*true/i
+  );
+});
+
+test("partitionToolsForTruncatedContentDeferral runs reads while deferring truncated writes", () => {
+  const tools = [
+    { name: "read_file", arguments: { path: "work/article.md" } },
+    { name: "write_file", arguments: { path: "work/article.md", content: "---\ntitle: x" } },
+  ];
+  const { defer, run } = partitionToolsForTruncatedContentDeferral("length", tools, 0);
+  assert.equal(defer.length, 1);
+  assert.equal(defer[0]?.name, "write_file");
+  assert.equal(run.length, 1);
+  assert.equal(run[0]?.name, "read_file");
+  assert.deepEqual(partitionToolsForTruncatedContentDeferral("stop", tools, 0), {
+    defer: [],
+    run: tools,
+  });
 });
 
 test("looksLikePostToolStall detects Executing now after long blueprint text", () => {
@@ -613,4 +719,233 @@ test("shouldContinueFindSkillsDelivery respects cap", () => {
   const user = "find-skills mode";
   assert.equal(shouldContinueFindSkillsDelivery(user, "", true, 2, 0), true);
   assert.equal(shouldContinueFindSkillsDelivery(user, "", true, 2, 3), false);
+});
+
+test("userRequestedArticlePublish detects research write and publish blog ask", () => {
+  const user =
+    "Search adn create a ewew article for me about Microsoft's bitNet and publish it on our blog";
+  assert.equal(userRequestedArticlePublish(user), true);
+  assert.equal(userRequestedArticlePublish("write an article about rust"), false);
+  assert.equal(userRequestedArticlePublish("publish the readme on our blog"), false);
+});
+
+test("shouldContinueIncompletePublishDeliverable nudges after draft without publish", () => {
+  const user =
+    "Search and create an article about BitNet and publish it on our blog";
+  const toolCalls = [
+    { name: "web_search" },
+    { name: "web_fetch" },
+    { name: "write_file" },
+    { name: "read_file" },
+  ];
+  const visible = "Let me check what's on disk and build this article properly.";
+  assert.equal(
+    shouldContinueIncompletePublishDeliverable(user, toolCalls, true, visible, 0),
+    true
+  );
+  assert.equal(
+    shouldContinueIncompletePublishDeliverable(
+      user,
+      [...toolCalls, { name: "web_post" }],
+      true,
+      visible,
+      0
+    ),
+    false
+  );
+  assert.equal(
+    shouldContinueIncompletePublishDeliverable(
+      user,
+      toolCalls,
+      true,
+      visible,
+      MAX_INCOMPLETE_PUBLISH_CONTINUATIONS
+    ),
+    false
+  );
+});
+
+test("shouldContinueIncompletePublishDeliverable continues despite draft-ready completion phrasing", () => {
+  const user =
+    "Search and create an article about BitNet and publish it on our blog";
+  const toolCalls = [{ name: "web_search" }, { name: "write_file" }];
+  assert.equal(
+    shouldContinueIncompletePublishDeliverable(
+      user,
+      toolCalls,
+      true,
+      "The draft is ready for your review. All set.",
+      0
+    ),
+    true
+  );
+  assert.equal(
+    shouldContinueIncompletePublishDeliverable(
+      user,
+      toolCalls,
+      true,
+      "Which Directus collection slug should I publish to?",
+      0
+    ),
+    false
+  );
+});
+
+test("looksLikePostToolStall detects let me write article promises", () => {
+  assert.equal(
+    looksLikePostToolStall("Let me write the full article with the body content included.", true),
+    true
+  );
+});
+
+test("looksLikePostToolStall detects let me grab article promises", () => {
+  assert.equal(
+    looksLikePostToolStall(
+      "Let me grab the full article content so we can see what's there and what's missing.",
+      true
+    ),
+    true
+  );
+});
+
+test("userRequestedContentShare detects share for review ask", () => {
+  assert.equal(userRequestedContentShare("share the article to see for review"), true);
+  assert.equal(userRequestedContentShare("Show me this Bitnet article for approval"), true);
+  assert.equal(userRequestedContentShare("can you show me the article in markdown?"), true);
+  assert.equal(userRequestedContentShare("continue working on article"), false);
+});
+
+test("shouldContinueContentShareDeliverable nudges after read_file without pasted draft", () => {
+  const user = "share the article to see for review";
+  const toolCalls = [{ name: "read_file" }];
+  const visible = "Let me grab the full article content so we can see what's there and what's missing.";
+  assert.equal(shouldContinueContentShareDeliverable(user, toolCalls, true, visible, 0), true);
+  assert.equal(
+    shouldContinueContentShareDeliverable(
+      user,
+      toolCalls,
+      true,
+      `# BitNet B1.58\n\n${"Body paragraph. ".repeat(80)}`,
+      0
+    ),
+    false
+  );
+  assert.equal(
+    shouldContinueContentShareDeliverable(user, toolCalls, true, visible, MAX_CONTENT_SHARE_CONTINUATIONS),
+    false
+  );
+});
+
+test("contentShareDeliverableSatisfied detects pasted markdown draft", () => {
+  const draft = `# Title\n\n${"Section text. ".repeat(60)}`;
+  assert.equal(contentShareDeliverableSatisfied(draft), true);
+  assert.equal(contentShareDeliverableSatisfied("Here is a short summary."), false);
+});
+
+test("contentShareDeliverableSatisfied rejects long promise-only ramble", () => {
+  const ramble =
+    ("Hey! Good to see you again. You asked me to share it for review, so let me grab the article. ".repeat(30)) +
+    "Let me present it properly.";
+  assert.ok(ramble.length >= 1500);
+  assert.equal(contentShareDeliverableSatisfied(ramble), false);
+});
+
+test("contentShareDeliverableSatisfied accepts visible containing read_file body", () => {
+  const articleBody = `# BitNet B1.58\n\n${"Quantized inference enables edge deployment. ".repeat(20)}`;
+  const executions = [
+    {
+      tool: "read_file",
+      result: { ok: true, path: "work/bitnet-article/bitnet-b1-58-2b4t.md", content: articleBody },
+    },
+  ];
+  assert.equal(contentShareDeliverableSatisfied("Here is the draft:\n\n" + articleBody, executions), true);
+  assert.equal(visibleContainsReadFileContent(articleBody.slice(0, 120), articleBody), true);
+});
+
+test("contentShareDeliverableSatisfied rejects title-only echo after read_file", () => {
+  const articleBody = `# BitNet B1.58\n\n${"Quantized inference enables edge deployment. ".repeat(20)}`;
+  const executions = [
+    {
+      tool: "read_file",
+      result: { ok: true, path: "work/bitnet-article/bitnet-b1-58-2b4t.md", content: articleBody },
+    },
+  ];
+  const preamble =
+    "Let me grab the full content properly — the read_file only showed\n\n# BitNet B1.58";
+  assert.equal(contentShareDeliverableSatisfied(preamble, executions), false);
+});
+
+test("shouldContinueContentShareDeliverable nudges past faux completion without pasted body", () => {
+  const user = "can you show me the article in markdown?";
+  const toolCalls = [{ name: "read_file" }];
+  const visible = "Here is the article for your review.";
+  const executions = [
+    {
+      tool: "read_file",
+      result: {
+        ok: true,
+        path: "work/bitnet-article/bitnet-b1-58-2b4t.md",
+        content: `# BitNet B1.58\n\n${"Body. ".repeat(120)}`,
+      },
+    },
+  ];
+  assert.equal(
+    shouldContinueContentShareDeliverable(user, toolCalls, true, visible, 0, executions),
+    true
+  );
+});
+
+test("shouldContinueContentShareDeliverable when read_file only in lastToolExecutions", () => {
+  const user = "can you show me the article in markdown?";
+  const visible = "Let me grab the full content properly — the read_file only showed";
+  const executions = [
+    {
+      tool: "read_file",
+      result: {
+        ok: true,
+        path: "work/bitnet-article/bitnet-b1-58-2b4t.md",
+        content: `# BitNet B1.58\n\n${"Body. ".repeat(120)}`,
+      },
+    },
+  ];
+  assert.equal(shouldContinueContentShareDeliverable(user, [], true, visible, 0, executions), true);
+});
+
+test("looksLikePreToolPromiseStall detects promise before DSML tail is stripped", () => {
+  const dsml = `<｜DSML｜tool_calls><｜DSML｜invoke name="browse_workspace"><｜DSML｜parameter name="action" string="true">find</｜DSML｜parameter></｜DSML｜invoke></｜DSML｜tool_calls>`;
+  const text = `Let me start by finding where everything lives.\n\n${dsml}`;
+  assert.equal(looksLikePreToolPromiseStall(text, NO_TOOLS, false), true);
+});
+
+test("looksLikePreToolPromiseStall detects promise before plain tool hint tail", () => {
+  const raw = `Let me look into what was being worked on.
+
+tree
+.
+
+article draft content read_file`;
+  assert.equal(looksLikePreToolPromiseStall(raw, NO_TOOLS, false), true);
+});
+
+test("shouldContinueUnparsedToolMarkup fires when DSML present and no tools parsed", () => {
+  const dsml = `<｜DSML｜tool_calls><｜DSML｜invoke name="read_file"></｜DSML｜invoke></｜DSML｜tool_calls>`;
+  assert.equal(shouldContinueUnparsedToolMarkup(dsml, 0, 0), true);
+  assert.equal(shouldContinueUnparsedToolMarkup(dsml, 0, MAX_UNPARSED_TOOL_MARKUP_CONTINUATIONS), false);
+  assert.equal(shouldContinueUnparsedToolMarkup(dsml, 1, 0), false);
+});
+
+test("buildContentShareContinuationNudge includes path on final attempt", () => {
+  const executions = [
+    {
+      tool: "read_file",
+      result: {
+        ok: true,
+        path: "work/bitnet-article/bitnet-b1-58-2b4t.md",
+        content: `# Title\n\n${"Body. ".repeat(80)}`,
+      },
+    },
+  ];
+  const nudge = buildContentShareContinuationNudge(MAX_CONTENT_SHARE_CONTINUATIONS, executions);
+  assert.match(nudge, /work\/bitnet-article\/bitnet-b1-58-2b4t\.md/);
+  assert.match(nudge, /Do not call read_file again/i);
 });

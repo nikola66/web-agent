@@ -74,7 +74,7 @@ The runtime injects a **compact index** each turn (`description` + optional `tri
 
 - Start `description` with **Use when the user …** and real phrases users type.
 - Add `triggers: […]` with 6–12 short match phrases (see `CAPABILITIES.md`).
-- Keep `## When to Use` bullets aligned with triggers; procedures stay in the body for `skill_view`.
+- Keep `## When to Use` bullets aligned with triggers; procedures stay in the body for `skill` (action=view).
 
 ## Tools & skills surface
 
@@ -82,8 +82,8 @@ Contributors should keep docs and runtime signaling aligned with the consolidate
 
 | Layer | Count | Where |
 | --- | --- | --- |
-| Built-in tools | **49** | `src/agent/runtime/tools/builtins/` — regenerated catalog via `npm run build:embed-runtime` |
-| Skill tools (model-facing) | **4** | `skill_list`, `skill_view`, `skill_manage`, `skill_bulk_save` — create/patch/delete/import under **`skill_manage`** |
+| Built-in tools | **50** | `src/agent/runtime/tools/builtins/` — regenerated catalog via `npm run build:embed-runtime` |
+| Skill tool (model-facing) | **1** | `skill` with `action`: `list` \| `view` \| `manage` \| `bulk` — create/patch/delete/import under **`action=manage`** |
 | Bundled skills | **19** | `src/capabilities/skills/` — hub skills include `memory-layers`, `browser-runtime-map`, `http-api`, `imported-skill-compat`, `artifact-delivery`, `web-agent-skill` |
 
 **Skill body template** (enforced in `tests/bundled-skills-coverage.test.ts`): `## Tool contract (read first)` · `## When to Use` · `## Relation to other skills` · procedure section · `## Pitfalls` · `## Anti-patterns`. See [CAPABILITIES.md](../CAPABILITIES.md).

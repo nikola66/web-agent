@@ -6,6 +6,9 @@ import {
   saveTelegramAllowedUserId,
   sendTelegramDocument,
   sendTelegramMessage,
+  sendTelegramPreviewMessage,
+  editTelegramMessage,
+  deleteTelegramMessage,
   startTelegramTyping,
 } from "../../../channels/telegram.js";
 
@@ -32,6 +35,9 @@ export function start(deps: {
     cfg,
     abortTurn,
     sendReply: (chatId, text) => sendTelegramMessage(token, chatId, text),
+    sendPreview: (chatId, text) => sendTelegramPreviewMessage(token, chatId, text),
+    editPreview: (chatId, messageId, text) => editTelegramMessage(token, chatId, messageId, text),
+    deletePreview: (chatId, messageId) => deleteTelegramMessage(token, chatId, messageId),
     sendDocument: (chatId, doc) => sendTelegramDocument(token, chatId, doc),
     startTyping: (chatId) => startTelegramTyping(token, chatId, { signal }),
   });

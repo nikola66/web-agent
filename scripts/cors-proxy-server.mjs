@@ -4,10 +4,8 @@
  * - POST /api/edge-tts — free Edge TTS synthesis (matches vite.config.ts edgeTtsGate)
  * - /api/providers/oauth/* — subscription OAuth (Nous, OpenAI Codex)
  * - /api/llm/nous/*, /api/llm/openai-codex/* — subscription LLM proxy
- * - /api/llm/bitnet/* — BitNet demo translation proxy
  */
 import http from "node:http";
-import { handleBitnetHttp, isBitnetLlmPath } from "./bitnet/router.mjs";
 import { EDGE_TTS_PATH, handleEdgeTtsHttp, isEdgeTtsPath, requestPathname } from "./edge-tts-handler.mjs";
 import {
   PROXY_MAX_REQUEST_BYTES,
@@ -33,15 +31,6 @@ const server = http.createServer((req, res) => {
     const pathname = requestPathname(req.url);
     if (isEdgeTtsPath(pathname)) {
       void handleEdgeTtsHttp(req, res, { pathname });
-      return;
-    }
-    if (isBitnetLlmPath(req.url)) {
-      void handleBitnetHttp(req, res).then((handled) => {
-        if (!handled) {
-          res.statusCode = 404;
-          res.end();
-        }
-      });
       return;
     }
     if (isSubscriptionOAuthPath(req.url) || isSubscriptionLlmPath(req.url)) {
@@ -140,6 +129,6 @@ const server = http.createServer((req, res) => {
 
 server.listen(port, host, () => {
   console.error(
-    `[cors-proxy-server] listening on http://${host}:${port} (${PROXY_PATH}, ${EDGE_TTS_PATH}, BitNet/subscription OAuth/LLM)`,
+    `[cors-proxy-server] listening on http://${host}:${port} (${PROXY_PATH}, ${EDGE_TTS_PATH}, subscription OAuth/LLM)`,
   );
 });

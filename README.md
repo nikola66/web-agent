@@ -24,7 +24,7 @@
 
 Web Agent is an open-source AI agent that runs directly in the browser on top of WebContainers. There is nothing to install to use it: no Docker, no VPS, no VM, no Mac mini, no Hostinger box, no local Python stack. Open the app, launch a profile, and start working.
 
-It is designed to feel simple for end users and capable for power users: isolated profiles, browser-local persistence, **49 built-in tools**, **19 bundled skills**, sessions, reflections, learnings, cron jobs, **planning mode** (`/plan`), a **PARA + Obsidian-style knowledge vault** (`wiki_*` tools and `/wiki_*` slash commands), and a self-improving runtime that stays on the user’s machine. For copy-paste scenarios mapped to skills and tools, start with the **[Personal Helper Playbook](docs/use-cases-playbook.md)**.
+It is designed to feel simple for end users and capable for power users: isolated profiles, browser-local persistence, **50 built-in tools**, **19 bundled skills**, sessions, reflections, learnings, cron jobs, **planning mode** (`/plan`), a **PARA + Obsidian-style knowledge vault** (`wiki_*` tools and `/wiki_*` slash commands), and a self-improving runtime that stays on the user’s machine. For copy-paste scenarios mapped to skills and tools, start with the **[Personal Helper Playbook](docs/use-cases-playbook.md)**.
 
 ## Contents
 
@@ -85,7 +85,7 @@ Web Agent is not just a chat box. It is a browser-native agent runtime with thre
 
 | Layer | Count | Notes |
 | --- | --- | --- |
-| Built-in tools | **49** | Eight groups below; skill CRUD consolidated into **`skill_manage`** (plus list, view, bulk import) |
+| Built-in tools | **49** | Eight groups below; skill CRUD consolidated into **`skill` (action=manage)** (plus list, view, bulk import) |
 | Bundled skills | **19** | Hub skills route related workflows; workflow skills cover research, planning, delivery, and ops |
 | Playbook scenarios | **25** | Full prompts in **[docs/use-cases-playbook.md](docs/use-cases-playbook.md)** |
 
@@ -278,16 +278,16 @@ These power built-in web actions from the Settings panel:
 
 ## Tooling
 
-Web Agent ships with **49 native built-in tools** in eight groups. The surface was consolidated so models see four skill tools (`skill_list`, `skill_view`, `skill_manage`, `skill_bulk_save`) instead of seven overlapping names; `list_dir` lists one directory level while `find_files` searches by glob pattern.
+Web Agent ships with **50 native built-in tools** in eight groups. The surface was consolidated to one `skill` tool (`action`: list | view | manage | bulk) and one browse entry point `browse_workspace` (`action`: list | tree | find). Hidden aliases (`list_dir`, `find_files`, `tree`) remain for wire compatibility via `tool_activate`.
 
 ### Tool Groups
 
 | Group | Includes | Best for |
 | --- | --- | --- |
-| `📁 Files & Workspace` | `read_file`, `write_file`, `edit_file`, `multi_edit`, `move_file`, `delete_file`, `tree`, `list_dir`, `find_files`, `grep`, `file_diff`, `make_dir` | Building, editing, inspecting, and organizing project files |
+| `📁 Files & Workspace` | `read_file`, `write_file`, `edit_file`, `multi_edit`, `move_file`, `delete_file`, `browse_workspace`, `grep`, `file_diff`, `make_dir` | Building, editing, inspecting, and organizing project files |
 | `🧠 Memory & Recall` | `memory_save`, `memory_forget`, `memory_recall`, `memory_search`, `session_memory_append`, `session_memory_list`, `session_search` | Long-lived facts, stale fact cleanup, rolling notes, and recovering prior context |
 | `📓 Knowledge wiki` | `wiki_setup`, `wiki_sync`, `wiki_search` | PARA + Obsidian-friendly vault under the workspace; project facts/session/learnings into markdown; full-text vault search |
-| `📚 Skills` | `skill_list`, `skill_view`, `skill_manage`, `skill_bulk_save` | Discovering, reading, creating, importing, and maintaining skills |
+| `📚 Skills` | `skill` (list / view / manage / bulk via `action`) | Discovering, reading, creating, importing, and maintaining skills |
 | `⏱️ Automation` | `cron_register`, `cron_list`, `todo_write` | Recurring jobs, heartbeat-driven workflows, and checklists |
 | `🔌 App Integrations` | `composio_status`, `composio_connect`, `composio_action` | Connecting marketing apps and running allowlisted external actions through Composio |
 | `🌐 Remote & Multimodal` | `web_search`, `web_fetch`, `web_post`, `vision_analyze`, `youtube_transcribe`, `email` | Research, fetching live content, authenticated POST/GraphQL, image analysis, transcripts, and outbound delivery |
@@ -300,6 +300,7 @@ Web Agent ships with **49 native built-in tools** in eight groups. The surface w
 | --- | --- |
 | `🩹 apply_patch` | Apply unified patch operations for surgical file changes. |
 | `🪄 artifact_present` | Present markdown to the browser host with view or download affordances. |
+| `📁 browse_workspace` | List, tree, or find workspace paths (`action`: list | tree | find). |
 | `🧩 composio_action` | Execute one curated, approval-gated Composio marketing action. |
 | `🔐 composio_connect` | Create a hosted Composio auth link for an app. |
 | `🔌 composio_status` | Check Composio setup, connected accounts, and the curated action allowlist. |
@@ -309,9 +310,7 @@ Web Agent ships with **49 native built-in tools** in eight groups. The surface w
 | `🛠️ edit_file` | Replace a matching snippet or fully replace file contents. |
 | `✉️ email` | Send outbound email through Resend-configured delivery. |
 | `🧾 file_diff` | Show a line-oriented diff between two UTF-8 workspace files. |
-| `🔎 find_files` | Find files by glob-like name patterns. |
 | `🔍 grep` | Search file contents by text or regex. |
-| `📁 list_dir` | List workspace files and directories with optional recursion and filtering. |
 | `📂 make_dir` | Create directories recursively inside the workspace. |
 | `🧹 memory_forget` | Delete a stale or wrong saved memory fact by exact key. |
 | `💭 memory_recall` | Recall a saved memory fact by exact key. |
@@ -325,13 +324,9 @@ Web Agent ships with **49 native built-in tools** in eight groups. The surface w
 | `📝 session_memory_append` | Append a lightweight note to rolling session memory. |
 | `🗂️ session_memory_list` | Read the newest entries from rolling session memory. |
 | `📇 session_search` | Search archived workspace conversations by keywords. |
-| `📚 skill_bulk_save` | Batch import or save multiple skills in one operation. |
-| `📋 skill_list` | Search and list saved skills. |
-| `🧩 skill_manage` | Create, patch, edit, delete, import, or manage reusable skills. |
-| `📖 skill_view` | Load a skill's full `SKILL.md` or an allowed support file. |
+| `🧩 skill` | List, view, manage, or bulk-import skills (`action`: list | view | manage | bulk). |
 | `📟 system_info` | Return a safe system snapshot including time, timezone, uptime, and memory. |
 | `✅ todo_write` | Create or update checklist-style todos. |
-| `🌲 tree` | Render a bounded directory tree view. |
 | `🖼️ vision_analyze` | Analyze an image with the configured vision model. |
 | `🌐 web_fetch` | GET http(s) URL(s), optional auth headers for REST reads. |
 | `📮 web_post` | POST http(s) with headers and body (GraphQL, REST writes). |
@@ -493,7 +488,7 @@ Twenty-five personal-helper scenarios with copy-paste prompts, bundled skills, a
 | Research | Find niche creators / competitors | `/open-web-research` | `web_search`, `web_fetch`, `write_file`, `artifact_present` |
 | Research | Academic paper / citation dig | `/research-pack` | `web_search`, `web_fetch`, `write_file`, `artifact_present` |
 | Research | Extract a table or JSON from a page | `/structured-extraction` | `web_fetch`, `write_file`, `artifact_present` |
-| Meta | Discover installable skills online | `/find_skills` | `web_search`, `web_fetch`, `skill_manage` |
+| Meta | Discover installable skills online | `/find_skills` | `web_search`, `web_fetch`, `skill` (action=manage) |
 | Memory | Save a durable preference | `/memory-layers` | `memory_save`, `memory_recall` |
 | Memory | Capture rolling session context | `/memory-layers` | `session_memory_append`, `session_memory_list` |
 | Memory | Mirror memory into Obsidian-style vault | `/memory-layers` | `wiki_setup`, `wiki_sync`, `wiki_search` |
@@ -501,8 +496,8 @@ Twenty-five personal-helper scenarios with copy-paste prompts, bundled skills, a
 | Planning | Spec-first feature plan (no execution yet) | `/plan` | `read_file`, `grep`, `write_file`, `artifact_present` |
 | Planning | Plan and execute multi-step work | `/task-execution` | `todo_write`, `write_file`, `artifact_present` |
 | Automation | Daily digest while tab is open | `/heartbeat-cron` | `cron_register`, `cron_list`, `web_search`, `web_fetch` |
-| Workspace | Bootstrap a new side project folder | `/project-scaffold` | `make_dir`, `write_file`, `tree` |
-| Workspace | Reorganize files safely | `/workspace-safety`, `/browser-runtime-map` | `list_dir`, `find_files`, `move_file`, `tree` |
+| Workspace | Bootstrap a new side project folder | `/project-scaffold` | `make_dir`, `write_file`, `browse_workspace` |
+| Workspace | Reorganize files safely | `/workspace-safety`, `/browser-runtime-map` | `browse_workspace`, `move_file` |
 | Debug | Hypothesis-first bug hunt | `/systematic-debugging` | `read_file`, `grep`, `file_diff`, `run_shell` |
 | Debug | Shell / `npx` failed in WebContainer | `/browser-runtime-map` | `read_file`, `web_fetch`, `grep` |
 | Multimodal | Read a screenshot or diagram | `/multimodal-ingest` | `vision_analyze`, `write_file` |
@@ -511,9 +506,9 @@ Twenty-five personal-helper scenarios with copy-paste prompts, bundled skills, a
 | Delivery | Email a deliverable | `/artifact-delivery` | `write_file`, `email`, `artifact_present` |
 | Delivery | Flowchart for a plan or report | `/chart` | `artifact_present` |
 | UX | Disambiguate a vague ask | `/clarify` | *(none)* |
-| Safety | Checkpoint before bulk delete | `/workspace-safety` | `list_dir`, `delete_file` |
+| Safety | Checkpoint before bulk delete | `/workspace-safety` | `browse_workspace`, `delete_file` |
 | Safety | Pasted API key by mistake | `/artifact-delivery` | Redact in replies; save to memory only when user asks |
-| Meta | Improve Web Agent itself | `/web-agent-skill` | `read_file`, `grep`, `skill_manage`, `memory_save` |
+| Meta | Improve Web Agent itself | `/web-agent-skill` | `read_file`, `grep`, `skill` (action=manage), `memory_save` |
 
 ## Quick Start
 

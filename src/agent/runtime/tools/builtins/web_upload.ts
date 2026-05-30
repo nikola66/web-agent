@@ -24,7 +24,7 @@ export default defineTool({
   run: webUploadTool,
   emoji: "📤",
   description:
-    "Upload one file via multipart/form-data — runtime reads `source_url` or workspace `file_path` and POSTs to `upload_url`. Primary path for CMS /files (Directus, etc.). Not for JSON/GraphQL REST writes — use `web_post`. Mixed form fields + file(s) → `web_post.multipart`. Model sees metadata (bytes, path) only — never pass base64 in args. Procedure: skill_view **`http-api`**. Examples: " +
+    "Upload one file via multipart/form-data — runtime reads `source_url` or workspace `file_path` and POSTs to `upload_url`. Primary path for CMS /files (Directus, etc.). Not for JSON/GraphQL REST writes — use `web_post`. Mixed form fields + file(s) → `web_post.multipart`. Model sees metadata (bytes, path) only — never pass base64 in args. Procedure: `skill` (action=view) **`http-api`**. Examples: " +
     JSON.stringify(WEB_UPLOAD_EXAMPLES[0]) +
     " | " +
     JSON.stringify(WEB_UPLOAD_EXAMPLES[1]),

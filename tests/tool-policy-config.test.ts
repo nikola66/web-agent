@@ -41,7 +41,7 @@ test("auto composio when configured adds composio tools to allow expansion", () 
   assert.ok(withKey.includes("composio_action"));
 });
 
-test("resolveInitialActiveToolNames unlocks deferred tools after skill_view", () => {
+test("resolveInitialActiveToolNames unlocks deferred tools after skill (action=view)", () => {
   const all = Object.values(TOOL_GROUPS).flat();
   const catalog = catalogForNames(all);
   const policyNames = resolvePolicyToolNames(all, DEFAULT_TOOL_POLICY, {});

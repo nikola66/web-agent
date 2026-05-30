@@ -21,8 +21,8 @@ Twenty-five copy-paste scenarios for getting real work done with Web Agent. Each
 | Planning | Spec-first feature plan (no execution yet) | `/plan` | `read_file`, `grep`, `write_file`, `artifact_present` |
 | Planning | Plan and execute multi-step work | `/task-execution` | `todo_write`, `write_file`, `artifact_present` |
 | Automation | Daily digest while tab is open | `/heartbeat-cron` | `cron_register`, `cron_list`, `web_search`, `web_fetch` |
-| Workspace | Bootstrap a new side project folder | `/project-scaffold` | `make_dir`, `write_file`, `tree` |
-| Workspace | Reorganize files safely | `/workspace-safety`, `/browser-runtime-map` | `list_dir`, `find_files`, `move_file`, `tree` |
+| Workspace | Bootstrap a new side project folder | `/project-scaffold` | `make_dir`, `write_file`, `browse_workspace` |
+| Workspace | Reorganize files safely | `/workspace-safety`, `/browser-runtime-map` | `browse_workspace`, `move_file` |
 | Debug | Hypothesis-first bug hunt | `/systematic-debugging` | `read_file`, `grep`, `file_diff`, `run_shell` |
 | Debug | Shell / `npx` failed in WebContainer | `/browser-runtime-map` | `read_file`, `web_fetch`, `grep` |
 | Multimodal | Read a screenshot or diagram | `/multimodal-ingest` | `vision_analyze`, `write_file` |
@@ -31,7 +31,7 @@ Twenty-five copy-paste scenarios for getting real work done with Web Agent. Each
 | Delivery | Email a deliverable | `/artifact-delivery` | `write_file`, `email`, `artifact_present` |
 | Delivery | Flowchart for a plan or report | `/chart` | `artifact_present` |
 | UX | Disambiguate a vague ask | `/clarify` | *(none)* |
-| Safety | Checkpoint before bulk delete | `/workspace-safety` | `list_dir`, `tree`, `delete_file` |
+| Safety | Checkpoint before bulk delete | `/workspace-safety` | `browse_workspace`, `delete_file` |
 | Safety | Pasted API key by mistake | `/artifact-delivery` | Redact in replies; `memory_save` only when user asks |
 | Meta | Improve Web Agent itself | `/web-agent-skill` | `read_file`, `grep`, `skill`, `memory_save` |
 
@@ -319,7 +319,7 @@ Create projects/expense-tracker/ with a minimal README, package.json stub, and s
 
 **Bundled skills:** `/project-scaffold`
 
-**Tools that fire:** `make_dir`, `write_file`, `tree`
+**Tools that fire:** `make_dir`, `write_file`, `browse_workspace`
 
 </details>
 
@@ -336,7 +336,7 @@ List everything under uploads/ and work/. Propose a safe reorganization (moves o
 
 **Bundled skills:** `/workspace-safety`, `/browser-runtime-map`
 
-**Tools that fire:** `list_dir`, `find_files`, `move_file`, `tree`
+**Tools that fire:** `browse_workspace`, `move_file`
 
 </details>
 
@@ -526,7 +526,7 @@ I want to delete everything under work/scratch/. List what's there with sizes, c
 
 **Bundled skills:** `/workspace-safety`
 
-**Tools that fire:** `list_dir`, `tree`, `delete_file`
+**Tools that fire:** `browse_workspace`, `delete_file`
 
 </details>
 

@@ -3,7 +3,7 @@ name: Imported Skill Compat
 description: Use when the user or agent installs a skill from skills.sh or GitHub — map WebFetch, Bash, Python, Playwright, and MCP references to Web Agent built-ins.
 version: 1.0.0
 category: bundled
-primary-tools: [skill_view, run_python, web_fetch, web_post]
+primary-tools: [skill, run_python, web_fetch, web_post]
 tags: [skills, import, compatibility, skills.sh, webfetch, bash, python, playwright, mcp]
 triggers: [imported skill, skills.sh install, skill compat, WebFetch, agent-browser, playwright skill, remote skill mapping, after skill install]
 ---
@@ -14,8 +14,8 @@ triggers: [imported skill, skills.sh install, skill compat, WebFetch, agent-brow
 |------------------------|-----------|
 | WebFetch / fetch URL | `web_fetch` `{ url, headers? }` |
 | POST / GraphQL | `web_post` — **`http-api`** |
-| Read / Glob / Grep | `read_file` / `browse_workspace` / `grep` |
-| Skill / Read skill | `skill_view` `{ name }` |
+| Read / Glob / Grep | `read_file` / `browse_workspace` (action=find) / `grep` |
+| Skill / Read skill | `skill` `{ "action": "view", "name": "<slug>" }` |
 | Bash / curl / npx | **`browser-runtime-map`** — Nodebox has no POSIX shell |
 | Python / `.py` | `run_python` for Pyodide-compatible scripts |
 | Python HTTP (`urllib`, `requests`) | `webagent.http` inside `run_python`, or `web_fetch`/`web_post` for REST/CMS — **`http-api`** |
@@ -24,7 +24,7 @@ triggers: [imported skill, skills.sh install, skill compat, WebFetch, agent-brow
 | MCP / CallMcpTool | `.webagent/mcp-servers.json` + `.webagent/mcp-secrets.json`; `write_file` on those paths returns `mcp_reload`; call registered `mcp_*` from ## MCP — not `web_post` to the MCP URL |
 | Rendered-fetch provider (JS-heavy pages) | `web_fetch` only — not DOM automation; optional backend for markdown text |
 
-**Non-negotiable:** After any remote install (`skill_manage import_url`, `skill_bulk_save`, `/skills install`), call `skill_view` on the installed slug and follow its **Web Agent execution (auto-appended)** section before tool fan-out. Check `script_warnings` in the `skill_view` result for per-file Pyodide preflight notes.
+**Non-negotiable:** After any remote install (`skill` action=manage import_url, `skill` action=bulk, `/skills install`), call `skill` (action=view) on the installed slug and follow its **Web Agent execution (auto-appended)** section before tool fan-out. Check `script_warnings` in the `skill` (action=view) result for per-file Pyodide preflight notes.
 
 ## When to Use
 
@@ -36,10 +36,10 @@ triggers: [imported skill, skills.sh install, skill compat, WebFetch, agent-brow
 
 ## Procedure
 
-1. `skill_view` this skill (**`imported-skill-compat`**) — refresh the mapping table.
-2. `skill_view` `{ installed-slug }` — read the auto-appended **Web Agent execution** block, `compatibility_notes`, and **`script_warnings`** in the tool result.
-3. `skill_view` **`browser-runtime-map`** before the first filesystem/HTTP/shell choice.
-4. If tier is **limited** (Python/Bash/MCP): use `run_python` for compatible Python and `skill_view` **`http-api`** for API calls as needed.
+1. `skill` (action=view) this skill (**`imported-skill-compat`**) — refresh the mapping table.
+2. `skill` (action=view) `{ "name": "<installed-slug>" }` — read the auto-appended **Web Agent execution** block, `compatibility_notes`, and **`script_warnings`** in the tool result.
+3. `skill` (action=view) **`browser-runtime-map`** before the first filesystem/HTTP/shell choice.
+4. If tier is **limited** (Python/Bash/MCP): use `run_python` for compatible Python and `skill` (action=view) **`http-api`** for API calls as needed.
 5. If tier is **unsupported** (Playwright/agent-browser): do not retry `npx` or browser automation — substitute `web_fetch`, `read_file`, and source inspection.
 
 ## Compatibility tiers
@@ -60,7 +60,7 @@ Remote imports auto-append a **Web Agent execution (auto-appended)** section to 
 ## Pitfalls
 
 - Retrying `npx`, Playwright, or MCP tools after the compat appendix says they are unavailable.
-- Skipping `skill_view` on the installed slug and missing the auto-appended execution section.
+- Skipping `skill` (action=view) on the installed slug and missing the auto-appended execution section.
 
 ## Anti-patterns
 

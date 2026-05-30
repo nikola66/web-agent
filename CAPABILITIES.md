@@ -1,6 +1,6 @@
 # Modular Capabilities
 
-Web Agent ships **49 built-in tools** and **19 bundled skills** under `src/capabilities/`. Add a capability folder, rebuild, and the host copies it into `.webagent/capabilities/` for the runtime to scan.
+Web Agent ships **50 built-in tools** and **19 bundled skills** under `src/capabilities/`. Add a capability folder, rebuild, and the host copies it into `.webagent/capabilities/` for the runtime to scan.
 
 ## Built-In Tools
 
@@ -65,9 +65,9 @@ Create `src/capabilities/skills/<skill_id>/SKILL.md`.
 
 Bundled skills use the same `SKILL.md` validation as user-created skills. In the **sandbox**, user skills live in `.webagent/skills/<category>/<slug>/` and take precedence over bundled copies under `.webagent/capabilities/skills/`. Install imports with `skill` action=manage `import_dir` — do not copy into `capabilities/skills/`. Host contributors edit `src/capabilities/skills/<skill_id>/SKILL.md`.
 
-**Discovery surface:** Each turn injects a compact index built from frontmatter only (`name`, `description`, optional `triggers`, `tags`) — not the full `SKILL.md` body. Write `description` and `triggers` so they match how users phrase requests; load procedures with `skill_view`.
+**Discovery surface:** Each turn injects a compact index built from frontmatter only (`name`, `description`, optional `triggers`, `tags`) — not the full `SKILL.md` body. Write `description` and `triggers` so they match how users phrase requests; load procedures with `skill` (action=view).
 
-**Remote imports:** Skills installed via `skill_manage import_url` or `skill_bulk_save` auto-append a **Web Agent execution** section (see `src/agent/runtime/memory/skill-compat.ts`) mapping `WebFetch`, Bash, Python (`run_python`), Playwright, and MCP references to built-in tools. Bundled skills are not patched. After install, agents should `skill_view` **`imported-skill-compat`** then the installed slug.
+**Remote imports:** Skills installed via `skill` (action=manage, manage_action=import_url) or `skill` (action=bulk) auto-append a **Web Agent execution** section (see `src/agent/runtime/memory/skill-compat.ts`) mapping `WebFetch`, Bash, Python (`run_python`), Playwright, and MCP references to built-in tools. Bundled skills are not patched. After install, agents should `skill` (action=view) **`imported-skill-compat`** then the installed slug.
 
 Optional frontmatter:
 

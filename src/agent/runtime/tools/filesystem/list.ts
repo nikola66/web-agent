@@ -74,7 +74,7 @@ export async function listDirTool(
     await walk(abs);
   } catch (err) {
     if (err?.code === "ENOENT") {
-      throw new Error(`Path not found: ${relPath}. Confirm path via list_dir before retrying.`);
+      throw new Error(`Path not found: ${relPath}. Confirm path via browse_workspace (action=list) before retrying.`);
     }
     throw err;
   }
@@ -150,7 +150,7 @@ export async function findFilesTool(rawArgs = {}, ctx) {
     await walk(abs);
   } catch (err) {
     if (err?.code === "ENOENT") {
-      throw new Error(`Path not found: ${resolvedRoot}. Confirm path via list_dir before retrying.`);
+      throw new Error(`Path not found: ${resolvedRoot}. Confirm path via browse_workspace (action=list) before retrying.`);
     }
     throw err;
   }

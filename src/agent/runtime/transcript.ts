@@ -3,6 +3,16 @@ import { stripAnsi } from "./utils.js";
 
 export type ChannelTranscriptStyle = "terminal" | "telegram";
 
+export function shortenReasoningPreview(text: string, maxChars = 180): string {
+  const normalized = String(text || "")
+    .replace(/\r\n/g, "\n")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!normalized) return "";
+  if (normalized.length <= maxChars) return normalized;
+  return `…${normalized.slice(-(maxChars - 1))}`;
+}
+
 function normalizeToolEmoji(emoji: string) {
   return String(emoji || "").replace(/([\p{Extended_Pictographic}])\s+(\uFE0F)/gu, "$1$2");
 }
@@ -167,6 +177,26 @@ export function createSystemLineTranscriptEvent({
   };
 }
 
+export type ReasoningPreviewTranscriptEventInput = {
+  round?: number;
+  text?: string;
+  done?: boolean;
+};
+
+export function createReasoningPreviewTranscriptEvent({
+  round,
+  text,
+  done = false,
+}: ReasoningPreviewTranscriptEventInput = {}) {
+  return {
+    type: "reasoning_preview",
+    critical: false,
+    round,
+    text,
+    done,
+  };
+}
+
 export type SystemLineTranscriptEventInput = {
   round?: number;
   text?: string;
@@ -214,6 +244,15 @@ export function formatTranscriptEventForChannel(
   if (kind === "system_line") {
     if (style === "telegram") return "";
     return String(event.text || "").trimEnd();
+  }
+  if (kind === "reasoning_preview") {
+    const preview = shortenReasoningPreview(
+      String(event?.text ?? ""),
+      style === "telegram" ? 480 : 180
+    );
+    if (!preview) return "";
+    if (style === "telegram") return `_💭 ${preview}_`;
+    return `💭 ${preview}`;
   }
   return "";
 }

@@ -158,7 +158,7 @@ export async function treeTool(
     await walk(abs, 0, "");
   } catch (err: unknown) {
     if (err && typeof err === "object" && "code" in err && (err as { code?: string }).code === "ENOENT") {
-      throw new Error(`Path not found: ${relPath}. Confirm path via list_dir before retrying.`);
+      throw new Error(`Path not found: ${relPath}. Confirm path via browse_workspace (action=list) before retrying.`);
     }
     throw err;
   }

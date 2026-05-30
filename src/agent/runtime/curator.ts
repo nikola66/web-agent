@@ -115,7 +115,7 @@ const CURATOR_REVIEW_PROMPT =
   "Rules:\n" +
   "- Only patch/create/archive agent-created local skills (never bundled skills).\n" +
   "- Prefer merging narrow skills into class-level umbrella skills via patch/create.\n" +
-  "- Archive redundant siblings with skill_manage delete only when absorbed_into is recorded in your reply.\n" +
+  "- Archive redundant siblings with skill (action=manage, manage_action=delete only when absorbed_into is recorded in your reply.\n" +
   "- Never hard-delete pinned skills.\n\n" +
   "Candidate skills:\n";
 

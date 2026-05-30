@@ -10,14 +10,14 @@ export default defineTool({
     "Do not read `memory/runs/*.json` (agent logs) or browse `memory/snapshots/`. " +
     "When tool output has `list_digest`, use it — do not read_file the spill. " +
     "Otherwise read the exact `result_ref` once (auto-unwrapped). HTML spills need Authorization on a fresh web_fetch, not JSON.parse. " +
-    "Run `list_dir({\"path\":\".\"})`, `tree`, or `find_files` before guessing paths. Returns { ok, path, bytes, content }.",
+    "Run `browse_workspace` (action=list/tree/find) before guessing paths. Returns { ok, path, bytes, content }.",
   inputSchema: {
     type: "object",
     properties: {
       path: {
         type: "string",
         description:
-          "Workspace-relative file path confirmed via list_dir/tree/find_files (e.g. package.json, projects/foo/README.md).",
+          "Workspace-relative file path confirmed via browse_workspace (e.g. package.json, projects/foo/README.md).",
       },
     },
     required: ["path"],

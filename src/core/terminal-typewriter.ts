@@ -138,7 +138,16 @@ function drainStep(
 
   while (stepsBudget > 0 && s.pending.length > 0) {
     const peeled = peelNextAtomicUnit(s.pending);
-    if (peeled.kind === "wait") break;
+    if (peeled.kind === "wait") {
+      // Chunk ended mid-escape; after idle, force one byte so later output is not blocked forever.
+      if (idleMs > CATCH_UP_IDLE_MS) {
+        term.write(s.pending[0]);
+        s.pending = s.pending.slice(1);
+        stepsBudget -= 1;
+        continue;
+      }
+      break;
+    }
     if (!peeled.unit) break;
     term.write(peeled.unit);
     s.pending = peeled.rest;

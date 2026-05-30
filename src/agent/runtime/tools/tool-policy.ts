@@ -155,7 +155,7 @@ export function summarizeToolApproval(name, args, approvalSummaryTemplate) {
     if (name) parts.push(`name=${name}`);
     if (desc) parts.push(`description=${desc}`);
     if (contentLen) parts.push(`content=${contentLen}`);
-    return `skill_manage: ${parts.join("; ")}`;
+    return `skill: ${parts.join("; ")}`;
   }
 
   if (tool === "skill_bulk_save") {
@@ -178,7 +178,7 @@ export function summarizeToolApproval(name, args, approvalSummaryTemplate) {
         }
       }
     }
-    let result = `skill_bulk_save: total=${items.length}; inline=${nInline}; url=${nUrl}`;
+    let result = `skill: total=${items.length}; inline=${nInline}; url=${nUrl}`;
     if (previews.length > 0) {
       result += `; ${previews.join(", ")}`;
     }

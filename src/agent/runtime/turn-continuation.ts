@@ -4,12 +4,19 @@
  */
 
 import fs from "node:fs/promises";
+import { stripMarkupForContinuationHeuristics, looksLikeUnparsedToolMarkup } from "./llm/streaming.js";
 import { workspaceStatePath } from "./constants.js";
-import { isApiCallIntent } from "./turn-sequencing.js";
+import { isApiCallIntent, detectMultistepTaskPattern } from "./turn-sequencing.js";
+import { TOOL_RESULTS_COMPACT_PREFIX } from "./memory/snapshots.js";
+
+export const MAX_INCOMPLETE_PUBLISH_CONTINUATIONS = 3;
+export const MAX_CONTENT_SHARE_CONTINUATIONS = 5;
+export const MAX_UNPARSED_TOOL_MARKUP_CONTINUATIONS = 2;
 
 export const MAX_INTERMEDIATE_ACK_CONTINUATIONS = 2;
 export const MAX_EMPTY_AFTER_TOOLS_CONTINUATIONS = 1;
 export const MAX_EMPTY_RESPONSE_CONTINUATIONS = 2;
+export const MAX_THINKING_PREFILL_CONTINUATIONS = 2;
 export const MAX_TRUNCATION_CONTINUATIONS = 2;
 export const MAX_POST_TOOL_STALL_CONTINUATIONS = 5;
 export const MAX_SNAPSHOT_READ_STALL_CONTINUATIONS = 2;
@@ -240,12 +247,12 @@ const TASK_COMPLETION_RES: RegExp[] = [
 ];
 
 function tailSentences(text: string, count = 3): string {
-  const parts = String(text || "")
-    .trim()
+  const stripped = stripMarkupForContinuationHeuristics(text);
+  const parts = stripped
     .split(/(?<=[.!?])\s+/)
     .map((s) => s.trim())
     .filter(Boolean);
-  if (!parts.length) return String(text || "").trim().toLowerCase();
+  if (!parts.length) return stripped.toLowerCase();
   return parts.slice(-count).join(" ").toLowerCase();
 }
 
@@ -359,6 +366,8 @@ const ACTION_MARKERS = [
   "begin",
   "pull",
   "fetch",
+  "grab",
+  "get",
   "gather",
   "collect",
   "investigate",
@@ -368,6 +377,12 @@ const ACTION_MARKERS = [
   "build",
   "create",
   "draft",
+  "write",
+  "publish",
+  "post",
+  "share",
+  "show",
+  "present",
   "query",
   "browse",
   "scrape",
@@ -420,7 +435,7 @@ const WORKSPACE_MARKERS = [
 type ConvMsg = { role?: string; content?: unknown };
 
 function isToolResultsUserMessage(content: unknown): boolean {
-  return typeof content === "string" && content.startsWith("Tool results (compact JSON)");
+  return typeof content === "string" && content.startsWith(TOOL_RESULTS_COMPACT_PREFIX);
 }
 
 /** Hermes: no intermediate-ack once tool results exist in the live conversation. */
@@ -472,7 +487,7 @@ export function looksLikeEmptyAfterTools(visible: string, executedToolsInTurn: b
 }
 
 function looksLikeActionPromiseStall(visible: string): boolean {
-  const text = String(visible || "").trim();
+  const text = stripMarkupForContinuationHeuristics(String(visible || ""));
   if (!text) return false;
   const low = text.toLowerCase();
   const tailCommit = tailHasStrongToolCommitment(text);
@@ -577,7 +592,7 @@ export function looksLikeApiDiscoveryStall(
   if (status !== 403 && status !== 404) return false;
   if (httpResourcePathDepth(String(r.url || "")) < 2) return false;
   const low = String(visible || "").toLowerCase();
-  if (/\bskill_view\b/.test(low) && /\bdiscover|list|metadata|schema|health|ping\b/.test(low)) {
+  if (/\bskill\b.*\baction\b.*\bview\b/.test(low) && /\bdiscover|list|metadata|schema|health|ping\b/.test(low)) {
     return false;
   }
   if (/\bweb_fetch\b/.test(low) && /\blist|metadata|discover|schema\b/.test(low)) return false;
@@ -613,7 +628,7 @@ export function looksLikeFindSkillsDeliveryStall(
   webDiscoveryCalls: number
 ): boolean {
   if (!executedToolsInTurn) return false;
-  if (!/find-skills mode/i.test(String(userMessage || ""))) return false;
+  if (!isFindSkillsModeUserMessage(userMessage)) return false;
   if (webDiscoveryCalls < 2) return false;
   const vis = String(visible || "").trim();
   if (/\|\s*#\s*\|/i.test(vis) && /\|\s*Skill/i.test(vis)) return false;
@@ -622,8 +637,94 @@ export function looksLikeFindSkillsDeliveryStall(
   return webDiscoveryCalls >= 2;
 }
 
+export function isFindSkillsModeUserMessage(userMessage: string): boolean {
+  return /find-skills mode/i.test(String(userMessage || ""));
+}
+
+/** Label normal turn endings vs genuine continuation stalls. */
+export function resolveTurnStopReason(
+  visible: string,
+  executedToolsInTurn: boolean
+): "completed" | "no_tools_no_continue" | "post_tool_no_continue" {
+  const text = String(visible || "").trim();
+  if (!text) {
+    return executedToolsInTurn ? "post_tool_no_continue" : "no_tools_no_continue";
+  }
+  if (shouldSuppressContinuationNudge(text)) return "completed";
+  if (!executedToolsInTurn) return "completed";
+  if (!looksLikePostToolStall(text, true)) return "completed";
+  return "post_tool_no_continue";
+}
+
 export function looksLikeTruncatedResponse(finishReason: string | null | undefined): boolean {
   return String(finishReason || "").trim().toLowerCase() === "length";
+}
+
+export type TurnToolCallLike = {
+  name?: string;
+  arguments?: Record<string, unknown> | null;
+};
+
+export function hasLargeContentMutationTool(tools: TurnToolCallLike[]): boolean {
+  for (const tool of tools) {
+    if (isDeferrableTruncatedContentTool(tool)) return true;
+  }
+  return false;
+}
+
+export function isDeferrableTruncatedContentTool(tool: TurnToolCallLike): boolean {
+  const name = String(tool?.name || "").trim();
+  if (name === "write_file") return true;
+  if (name === "edit_file" || name === "apply_patch") {
+    const args =
+      tool?.arguments && typeof tool.arguments === "object" && !Array.isArray(tool.arguments)
+        ? tool.arguments
+        : {};
+    const content =
+      args.content ?? args.new_content ?? args.contents ?? args.text ?? args.patch ?? args.body;
+    return typeof content === "string" && content.length > 0;
+  }
+  return false;
+}
+
+export function truncatedWriteDeferMessage(): string {
+  return buildContinuationNudge("truncation", { truncatedWriteFile: true });
+}
+
+export function shouldDeferTruncatedContentTool(
+  finishReason: string | null | undefined,
+  tool: TurnToolCallLike,
+  truncationContinuations: number
+): boolean {
+  if (!isDeferrableTruncatedContentTool(tool)) return false;
+  return shouldDeferTruncatedContentToolExecution(finishReason, [tool], truncationContinuations);
+}
+
+export function partitionToolsForTruncatedContentDeferral(
+  finishReason: string | null | undefined,
+  tools: TurnToolCallLike[],
+  truncationContinuations: number
+): { defer: TurnToolCallLike[]; run: TurnToolCallLike[] } {
+  if (!shouldDeferTruncatedContentToolExecution(finishReason, tools, truncationContinuations)) {
+    return { defer: [], run: tools };
+  }
+  const defer: TurnToolCallLike[] = [];
+  const run: TurnToolCallLike[] = [];
+  for (const tool of tools) {
+    if (isDeferrableTruncatedContentTool(tool)) defer.push(tool);
+    else run.push(tool);
+  }
+  return { defer, run };
+}
+
+export function shouldDeferTruncatedContentToolExecution(
+  finishReason: string | null | undefined,
+  tools: TurnToolCallLike[],
+  truncationContinuations: number
+): boolean {
+  if (truncationContinuations >= MAX_TRUNCATION_CONTINUATIONS) return false;
+  if (!looksLikeTruncatedResponse(finishReason)) return false;
+  return hasLargeContentMutationTool(tools);
 }
 
 export type ContinuationNudgeKind =
@@ -637,6 +738,9 @@ export type ContinuationNudgeKind =
   | "pre_tool_promise"
   | "cron_verify"
   | "incomplete_todos"
+  | "incomplete_publish"
+  | "content_share"
+  | "unparsed_tool_markup"
   | "all_tools_rejected"
   | "find_skills_delivery";
 
@@ -698,13 +802,10 @@ export function shouldContinueIncompleteTodos(
   visible = ""
 ): boolean {
   if (incompleteTodoContinuations >= MAX_INCOMPLETE_TODO_CONTINUATIONS) return false;
-  if (!executedToolsInTurn || !userRequestedStructuredTodos(userMessage)) return false;
-  if (stats.total < 2) return false;
-  if (stats.open <= 0) return false;
+  if (!executedToolsInTurn) return false;
+  if (stats.total < 2 || stats.open <= 0) return false;
   if (userRequiredFinalLineSatisfied(userMessage, visible)) return false;
-  if (matchesTaskCompletionOrFinalState(String(visible || "")) && !tailPromisesFurtherAction(visible)) {
-    return false;
-  }
+  if (matchesUserInputRequest(String(visible || ""))) return false;
   return true;
 }
 
@@ -738,6 +839,10 @@ export function buildContinuationNudge(
     totalTodos?: number;
     rejectedToolNames?: string[];
     continuationCount?: number;
+    readPath?: string;
+    finalAttempt?: boolean;
+    truncatedWriteFile?: boolean;
+    findSkillsMode?: boolean;
   }
 ): string {
   const repeatedStall =
@@ -755,6 +860,13 @@ export function buildContinuationNudge(
     );
   }
   if (kind === "truncation") {
+    if (extra?.truncatedWriteFile) {
+      return (
+        "Your last tool call was cut off by the output token limit before the full file body was sent. " +
+        "Continue the `content` string exactly where it cut off. " +
+        "If the file is long, finish this chunk then call write_file again with `\"append\": true` on the same path."
+      );
+    }
     return "Continue exactly where you left off.";
   }
   if (kind === "post_tool_stall") {
@@ -779,7 +891,7 @@ export function buildContinuationNudge(
   if (kind === "api_discovery_stall") {
     return (
       "Before asking the user for a resource slug or id, follow the imported skill's discovery procedure " +
-      "(health, list metadata, schema — see skill_view on that skill and **`http-api`**). " +
+      "(health, list metadata, schema — see `skill` (action=view) on that skill and **`http-api`**). " +
       "Do not guess resource paths until discovery returns or proves metadata is forbidden."
     );
   }
@@ -808,6 +920,35 @@ export function buildContinuationNudge(
       "then send the user's requested final line."
     );
   }
+  if (kind === "incomplete_publish") {
+    return (
+      "The user asked you to publish on the blog. Read the draft from disk (work/ or projects/), " +
+      "finish any missing sections, load the blog/CMS skill if needed (`skill` (action=view)), then publish via " +
+      "web_post or the skill's CMS tool. Do not stop with only a draft on disk — publish or report a " +
+      "specific blocker (missing API token, wrong collection, etc.)."
+    );
+  }
+  if (kind === "content_share") {
+    if (extra?.finalAttempt && extra?.readPath) {
+      return (
+        "The user still has not seen the draft. Paste the full markdown from read_file " +
+        `(\`${extra.readPath}\`) into your reply now — include headings and body. ` +
+        "Do not call read_file again or send another status message."
+      );
+    }
+    return (
+      "The user asked to see or review the content. Paste the full draft from read_file into your reply " +
+      "(markdown headings and body), or call artifact_present with the workspace path. " +
+      "Do not stop after only reading the file or promising to share it."
+    );
+  }
+  if (kind === "unparsed_tool_markup") {
+    return (
+      "Your last message contained tool markup or plain tool-name lines that were not executed. " +
+      "Retry now using native tool_calls, <<<TOOL>>> JSON, or browse_workspace/read_file with proper JSON arguments — " +
+      "do not emit DSML/XML tags or bare tool names like `tree .` in visible text."
+    );
+  }
   if (kind === "find_skills_delivery") {
     return (
       "You completed find-skills web_search/web_fetch but have not delivered the final answer. " +
@@ -821,12 +962,16 @@ export function buildContinuationNudge(
     const nameList = Array.isArray(names) && names.length
       ? ` (${names.slice(0, 6).join(", ")})`
       : "";
+    const findSkillsHint = extra?.findSkillsMode
+      ? " In find-skills mode use only `web_search` (site: queries) and `web_fetch` (URLs from results) — no other tool names."
+      : "";
     return (
       `The tool call(s)${nameList} you just attempted are not available in this environment. ` +
       "These are likely tool names from a different agent host (Claude Code, Cursor, Composio, etc.) that do not exist here. " +
       "Use only the tools available in this Web Agent: write_file, read_file, edit_file, run_python, run_shell, " +
-      "web_fetch, web_post, web_search, grep, find_files, list_dir, skill_view, skill_manage, artifact_present, and similar built-ins. " +
-      "Continue the task now using the correct tools."
+      "web_fetch, web_post, web_search, grep, browse_workspace, skill, artifact_present, and similar built-ins. " +
+      "Continue the task now using the correct tools." +
+      findSkillsHint
     );
   }
   return (
@@ -840,6 +985,14 @@ export function buildSyntheticEmptyAssistantMessage(): ConvMsg & { _empty_recove
     role: "assistant",
     content: SYNTHETIC_EMPTY_ASSISTANT_CONTENT,
     _empty_recovery_synthetic: true,
+  };
+}
+
+export function buildThinkingPrefillAssistantMessage(): ConvMsg & { _thinking_prefill: true } {
+  return {
+    role: "assistant",
+    content: "",
+    _thinking_prefill: true,
   };
 }
 
@@ -890,6 +1043,18 @@ export function shouldContinueEmptyResponse(
 ): boolean {
   if (emptyResponseContinuations >= MAX_EMPTY_RESPONSE_CONTINUATIONS) return false;
   return looksLikeEmptyResponse(visible);
+}
+
+export function shouldContinueThinkingPrefill(
+  visible: string,
+  sawReasoning: boolean,
+  toolsLength: number,
+  thinkingPrefillContinuations: number
+): boolean {
+  if (thinkingPrefillContinuations >= MAX_THINKING_PREFILL_CONTINUATIONS) return false;
+  if (toolsLength > 0) return false;
+  if (String(visible || "").trim()) return false;
+  return !!sawReasoning;
 }
 
 export function shouldContinueTruncation(
@@ -957,6 +1122,195 @@ export function shouldContinueCronVerification(
 ): boolean {
   if (cronVerifyContinuations >= MAX_CRON_VERIFY_CONTINUATIONS) return false;
   return pendingCronRegisterIds.size > 0;
+}
+
+type TurnToolCallRef = { name?: string };
+
+const PUBLISH_DELIVERABLE_TOOLS = new Set([
+  "web_post",
+  "web_upload",
+  "composio_action",
+  "artifact_present",
+]);
+
+export function userRequestedArticlePublish(userMessage: string): boolean {
+  return detectMultistepTaskPattern(userMessage) === "research_write_publish";
+}
+
+export function publishDeliverableCompleted(toolCalls: TurnToolCallRef[]): boolean {
+  return toolCalls.some((t) => PUBLISH_DELIVERABLE_TOOLS.has(String(t?.name || "").trim()));
+}
+
+export function articleDraftWrittenInTurn(toolCalls: TurnToolCallRef[]): boolean {
+  return toolCalls.some((t) => {
+    const name = String(t?.name || "").trim();
+    return name === "write_file" || name === "edit_file" || name === "apply_patch";
+  });
+}
+
+export function shouldContinueIncompletePublishDeliverable(
+  userMessage: string,
+  toolCalls: TurnToolCallRef[],
+  executedToolsInTurn: boolean,
+  visible: string,
+  incompletePublishContinuations: number
+): boolean {
+  if (incompletePublishContinuations >= MAX_INCOMPLETE_PUBLISH_CONTINUATIONS) return false;
+  if (!executedToolsInTurn || !userRequestedArticlePublish(userMessage)) return false;
+  if (publishDeliverableCompleted(toolCalls)) return false;
+  if (!articleDraftWrittenInTurn(toolCalls)) return false;
+  if (matchesUserInputRequest(String(visible || ""))) return false;
+  return true;
+}
+
+export function userRequestedContentShare(userMessage: string): boolean {
+  const low = String(userMessage || "").trim().toLowerCase();
+  if (!low) return false;
+  if (
+    /\b(?:share|show|paste|display|send)\b.{0,50}\b(?:article|draft|content|markdown|file|body|text)\b/.test(
+      low
+    )
+  ) {
+    return true;
+  }
+  if (/\bshow me\b.{0,50}\b(?:this|the|your)\b.{0,40}\b(?:article|draft|post|content)\b/.test(low)) {
+    return true;
+  }
+  if (/\bshow me\b.{0,40}\bfor approval\b/.test(low)) return true;
+  if (/\bshow\b.{0,50}\b(?:article|draft|content)\b.{0,40}\b(?:in\s+)?markdown\b/.test(low)) {
+    return true;
+  }
+  if (/\b(?:share|show)\b.{0,40}\b(?:for|to)\s+(?:review|see|read|check|approval)\b/.test(low)) {
+    return true;
+  }
+  if (/\bfor review\b/.test(low) && /\b(?:article|draft|content|file|bitnet)\b/.test(low)) return true;
+  if (
+    /\b(?:see|review|read)\b.{0,40}\b(?:article|draft|content|file)\b/.test(low) &&
+    /\b(?:share|show|let me see|want to see|for review|for approval)\b/.test(low)
+  ) {
+    return true;
+  }
+  return false;
+}
+
+export function contentShareDeliverableCompleted(toolCalls: TurnToolCallRef[]): boolean {
+  return toolCalls.some((t) => String(t?.name || "").trim() === "artifact_present");
+}
+
+type ReadFileExecution = {
+  tool?: string;
+  error?: unknown;
+  result?: { ok?: boolean; content?: string; path?: string };
+};
+
+export function articleContentAccessedInTurn(
+  toolCalls: TurnToolCallRef[],
+  lastExecutions: ReadFileExecution[] = []
+): boolean {
+  if (
+    toolCalls.some((t) => {
+      const name = String(t?.name || "").trim();
+      return name === "read_file" || name === "write_file" || name === "edit_file" || name === "apply_patch";
+    })
+  ) {
+    return true;
+  }
+  return lastSubstantialReadFileContent(lastExecutions) !== null;
+}
+
+export function lastSubstantialReadFileContent(
+  lastExecutions: ReadFileExecution[]
+): { path: string; content: string } | null {
+  for (let i = lastExecutions.length - 1; i >= 0; i--) {
+    const item = lastExecutions[i];
+    if (item?.tool !== "read_file" || item?.error) continue;
+    const r = item.result;
+    if (!r || r.ok === false) continue;
+    const content = String(r?.content ?? "").trim();
+    if (content.length < 200) continue;
+    const path = String(r?.path ?? "").trim();
+    return { path, content };
+  }
+  return null;
+}
+
+export function visibleContainsReadFileContent(
+  visible: string,
+  content: string,
+  alreadyStripped = false
+): boolean {
+  const vis = alreadyStripped ? visible.trim() : stripMarkupForContinuationHeuristics(visible).trim();
+  const body = String(content || "").trim();
+  if (!vis || !body) return false;
+  const probeLen = Math.min(400, body.length);
+  const probe = body.slice(0, probeLen).trim();
+  if (probe.length >= 80 && vis.includes(probe.slice(0, 80))) return true;
+  const heading = body.match(/^#{1,3}\s+.+$/m)?.[0];
+  if (heading && vis.includes(heading)) {
+    const tail = vis.slice(vis.indexOf(heading) + heading.length).trim();
+    if (tail.length >= 200) return true;
+  }
+  return false;
+}
+
+export function contentShareDeliverableSatisfied(
+  visible: string,
+  lastExecutions: ReadFileExecution[] = []
+): boolean {
+  const vis = stripMarkupForContinuationHeuristics(String(visible || "")).trim();
+  if (!vis) return false;
+  const read = lastSubstantialReadFileContent(lastExecutions);
+  if (read && visibleContainsReadFileContent(vis, read.content, true)) return true;
+  if (
+    /\b(?:here(?:'s| is)|below is|full (?:article|draft)|complete draft)\b/i.test(vis) &&
+    /^#{1,3}\s+/m.test(vis) &&
+    vis.length >= 400
+  ) {
+    return true;
+  }
+  const headingCount = (vis.match(/^#{1,3}\s+/gm) || []).length;
+  if (headingCount >= 2 && vis.length >= 400) return true;
+  if (headingCount >= 1 && vis.length >= 800) return true;
+  if (/```[\s\S]{500,}```/.test(vis)) return true;
+  return false;
+}
+
+export function buildContentShareContinuationNudge(
+  continuationCount: number,
+  lastExecutions: ReadFileExecution[] = []
+): string {
+  const read = lastSubstantialReadFileContent(lastExecutions);
+  const finalAttempt = continuationCount >= MAX_CONTENT_SHARE_CONTINUATIONS - 1;
+  return buildContinuationNudge("content_share", {
+    finalAttempt,
+    readPath: read?.path,
+  });
+}
+
+export function shouldContinueContentShareDeliverable(
+  userMessage: string,
+  toolCalls: TurnToolCallRef[],
+  executedToolsInTurn: boolean,
+  visible: string,
+  contentShareContinuations: number,
+  lastExecutions: ReadFileExecution[] = []
+): boolean {
+  if (contentShareContinuations >= MAX_CONTENT_SHARE_CONTINUATIONS) return false;
+  if (!executedToolsInTurn || !userRequestedContentShare(userMessage)) return false;
+  if (contentShareDeliverableCompleted(toolCalls)) return false;
+  if (!articleContentAccessedInTurn(toolCalls, lastExecutions)) return false;
+  if (contentShareDeliverableSatisfied(visible, lastExecutions)) return false;
+  return true;
+}
+
+export function shouldContinueUnparsedToolMarkup(
+  rawCombined: string,
+  toolsLength: number,
+  unparsedMarkupContinuations: number
+): boolean {
+  if (unparsedMarkupContinuations >= MAX_UNPARSED_TOOL_MARKUP_CONTINUATIONS) return false;
+  if (toolsLength > 0) return false;
+  return looksLikeUnparsedToolMarkup(rawCombined);
 }
 
 export async function shouldContinueIncompleteTodosAsync(

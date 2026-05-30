@@ -34,7 +34,7 @@ export const WORKSPACE_BROWSE_GUIDANCE =
   "Workspace paths in `browse_workspace`, `read_file`, `write_file`, and `grep` are **relative to " +
   "the workspace root** (`.` = top level). Never use `/` or host paths like `/home/...`. " +
   "**First browse step:** run `browse_workspace({\"action\":\"tree\",\"path\":\".\"})` before assuming paths exist. " +
-  "`browse_workspace` **`action`**: `list` (one directory), `tree` (layout), `find` (cross-tree by name). " +
+  "`browse_workspace` **`action`**: list (one directory), tree (layout), find (cross-tree by name). " +
   "`grep` **`root`** is a directory to recurse (default `.`) or a single file path to search. " +
   "`grep` / browse `find` use **`pattern`**; **`query`** is only for `session_search`. " +
   WORKSPACE_LAYOUT_GUIDANCE;
@@ -79,7 +79,7 @@ export const COMPOSIO_SAAS_GUIDANCE =
 
 export const MEMORY_SPILL_RECOVERY_GUIDANCE =
   "**Internal memory paths (do not scavenge):** `memory/snapshots/` = oversized tool-result spill only; " +
-  "`memory/runs/` = agent turn logs (tool names/errors), not API payloads. Never `list_dir`, `find_files`, or `grep` under those trees to recover HTTP data. " +
+  "`memory/runs/` = agent turn logs (tool names/errors), not API payloads. Never `browse_workspace`, or `grep` under those trees to recover HTTP data. " +
   "When compact tool output shows `list_digest`, use it — do not read_file the spill. When only `result_ref` is present, read_file that path once (auto-unwrapped). If the body is HTML or invalid JSON, rerun `web_fetch`/`web_post` with Authorization — never JSON.parse spill files. " +
   "For prior chat context use `session_search`, not raw run JSON.";
 

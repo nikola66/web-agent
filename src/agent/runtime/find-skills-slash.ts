@@ -48,7 +48,7 @@ export function buildFindSkillsModeUserPrompt(query: string, source: "slash" | "
     "",
     `**Search query:** ${queryText}`,
     "",
-    "First call `skill_view` with `{\"name\":\"find-skills\"}` to load the full procedure, then execute it.",
+    "First call `skill` (action=view) with `{\"name\":\"find-skills\"}` to load the full procedure, then execute it.",
     "",
     "**Deliverable:** exactly **5** online agent skills ranked by installs, stars, or votes (deduped across registries).",
     "",

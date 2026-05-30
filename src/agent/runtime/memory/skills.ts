@@ -476,19 +476,19 @@ async function readSkillSupportFilesFromDir(absDir: string): Promise<{
 
 async function installSkillFromDirectory({ path, category }) {
   const rawPath = String(path || "").trim();
-  if (!rawPath) throw new Error("skill_manage import_dir: `path` is required.");
+  if (!rawPath) throw new Error("skill (action=manage, manage_action=import_dir): `path` is required.");
   const absInput = resolveWorkspacePath(null, rawPath);
   const stat = await fs.stat(absInput).catch(() => null);
   if (!stat || !stat.isDirectory()) {
-    throw new Error(`skill_manage import_dir: directory "${rawPath}" not found.`);
+    throw new Error(`skill (action=manage, manage_action=import_dir): directory "${rawPath}" not found.`);
   }
   const skillDirs = await findSkillDirectories(absInput);
   if (skillDirs.length !== 1) {
     const rels = skillDirs.map((dir) => nodePath.relative(absInput, dir) || ".").slice(0, 8);
     throw new Error(
       skillDirs.length
-        ? `skill_manage import_dir: expected one SKILL.md, found ${skillDirs.length}: ${rels.join(", ")}. Pass the specific skill folder.`
-        : "skill_manage import_dir: no SKILL.md found in directory."
+        ? `skill (action=manage, manage_action=import_dir): expected one SKILL.md, found ${skillDirs.length}: ${rels.join(", ")}. Pass the specific skill folder.`
+        : "skill (action=manage, manage_action=import_dir): no SKILL.md found in directory."
     );
   }
   const skillDir = skillDirs[0];
@@ -515,7 +515,7 @@ async function installSkillFromDirectory({ path, category }) {
     content: raw,
   });
   const record = await findSkillRecord(String(result.slug));
-  if (!record) throw new Error(`skill_manage import_dir: saved skill "${result.slug}" not found.`);
+  if (!record) throw new Error(`skill (action=manage, manage_action=import_dir): saved skill "${result.slug}" not found.`);
   await writeSkillSupportFiles(record, support.files);
   return {
     ...result,
@@ -535,7 +535,7 @@ async function writeManagedSkillFile(
   action: string
 ) {
   if (!isSafeSkillRelativePath(filePath, { allowSkillMd: true })) {
-    throw new Error(`skill_manage ${action}: unsafe \`file_path\`.`);
+    throw new Error(`skill (action=manage): ${action}: unsafe \`file_path\`.`);
   }
   if (filePath === SKILL_FILE_NAME) validateSkillDocument(content);
   const targetPath = filePath === SKILL_FILE_NAME
@@ -568,8 +568,8 @@ export async function saveSkill({
   const contentMeta = contentText.startsWith("---") ? parseSkillFrontmatter(contentText).meta : {};
   const resolvedName = String(name || contentMeta.name || "").trim();
   const slug = skillSlug(resolvedName);
-  if (!slug) throw new Error("skill_save: `name` is required.");
-  if (!contentText) throw new Error("skill_save: `content` is required.");
+  if (!slug) throw new Error("skill (action=manage, manage_action=create): `name` is required.");
+  if (!contentText) throw new Error("skill (action=manage, manage_action=create): `content` is required.");
   const raw = contentText.startsWith("---")
     ? contentText
     : buildSkillFileContent({
@@ -583,7 +583,7 @@ export async function saveSkill({
   const validated = validateSkillDocument(raw);
   const scan = scanSkillContent(raw);
   if (!scan.ok) {
-    throw new Error(`skill_save: blocked — ${scan.dangerous.join("; ")}`);
+    throw new Error(`skill (action=manage, manage_action=create): blocked — ${scan.dangerous.join("; ")}`);
   }
   const { content: patchedRaw } = appendCompatSectionIfMissing(raw, validated.meta);
   const resolvedCategory = skillCategorySlug(category || validated.meta.category || DEFAULT_SKILL_CATEGORY);
@@ -661,22 +661,22 @@ async function collectSkillSupportFiles(skillDir: string): Promise<{ path: strin
 
 export async function viewSkill({ name, file_path }: { name?: string; file_path?: string } = {}) {
   const skillName = String(name || "").trim();
-  if (!skillName) throw new Error("skill_view: `name` is required.");
+  if (!skillName) throw new Error("skill: `name` is required.");
   const record = await findSkillRecord(skillName);
-  if (!record) throw new Error(`skill_view: skill "${name}" not found.`);
+  if (!record) throw new Error(`skill: skill "${name}" not found.`);
   const requestedPath = String(file_path || SKILL_FILE_NAME).trim();
   if (!isSafeSkillRelativePath(requestedPath, { allowSkillMd: true })) {
-    throw new Error("skill_view: `file_path` must be SKILL.md or a safe support file path.");
+    throw new Error("skill: `file_path` must be SKILL.md or a safe support file path.");
   }
   const targetPath = requestedPath === SKILL_FILE_NAME
     ? record.skillPath
     : nodePath.join(record.dir, nodePath.posix.normalize(requestedPath.replace(/\\/g, "/")));
   const stat = await fs.stat(targetPath).catch(() => null);
   if (!stat || !stat.isFile()) {
-    throw new Error(`skill_view: file "${requestedPath}" not found in skill "${record.name}".`);
+    throw new Error(`skill: file "${requestedPath}" not found in skill "${record.name}".`);
   }
   if (stat.size > SKILL_SAFE_FILE_MAX_BYTES) {
-    throw new Error(`skill_view: file "${requestedPath}" is too large to inline.`);
+    throw new Error(`skill: file "${requestedPath}" is too large to inline.`);
   }
   const content = await fs.readFile(targetPath, "utf8");
   const result: Record<string, unknown> = {
@@ -807,10 +807,10 @@ async function installSkillFromUrl({ url, category }) {
  */
 export async function bulkSaveSkills(items) {
   if (!Array.isArray(items) || items.length === 0) {
-    throw new Error("skill_bulk_save: `items` must be a non-empty array.");
+    throw new Error("skill: `items` must be a non-empty array.");
   }
   if (items.length > MAX_BULK_SKILL_ITEMS) {
-    throw new Error(`skill_bulk_save: at most ${MAX_BULK_SKILL_ITEMS} items per call.`);
+    throw new Error(`skill: at most ${MAX_BULK_SKILL_ITEMS} items per call.`);
   }
 
   const results: Record<string, unknown>[] = [];
@@ -831,7 +831,7 @@ export async function bulkSaveSkills(items) {
         index,
         kind: "url",
         ok: false,
-        error: "skill_bulk_save: cannot set `url` together with `name`, `content`, or `files`.",
+        error: "skill: cannot set `url` together with `name`, `content`, or `files`.",
         url,
       });
       continue;
@@ -878,7 +878,7 @@ export async function bulkSaveSkills(items) {
         index,
         kind: "inline",
         ok: false,
-        error: "skill_bulk_save: inline item requires `content`; `name` may be supplied or read from frontmatter.",
+        error: "skill: inline item requires `content`; `name` may be supplied or read from frontmatter.",
         name: name || undefined,
       });
       continue;
@@ -892,7 +892,7 @@ export async function bulkSaveSkills(items) {
         index,
         kind: "inline",
         ok: false,
-        error: "skill_bulk_save: inline item requires `name` or SKILL.md frontmatter `name`.",
+        error: "skill: inline item requires `name` or SKILL.md frontmatter `name`.",
       });
       continue;
     }
@@ -924,7 +924,7 @@ export async function bulkSaveSkills(items) {
       });
       if (files.length) {
         const record = await findSkillRecord(String(out.slug));
-        if (!record) throw new Error(`skill_bulk_save: saved skill "${out.slug}" not found.`);
+        if (!record) throw new Error(`skill: saved skill "${out.slug}" not found.`);
         await writeSkillSupportFiles(record, files);
       }
       saved += 1;
@@ -960,7 +960,7 @@ export async function bulkSaveSkills(items) {
 
 export async function manageSkill(args: Record<string, unknown> = {}) {
   const action = String(args?.action || "").trim();
-  if (!action) throw new Error("skill_manage: `action` is required.");
+  if (!action) throw new Error("skill (action=manage): `action` (manage operation) is required.");
 
   if (action === "create") {
     return saveSkill({
@@ -993,20 +993,20 @@ export async function manageSkill(args: Record<string, unknown> = {}) {
   const record = manageName ? await findSkillRecord(manageName) : null;
 
   if (action === "delete") {
-    if (!record) throw new Error(`skill_manage: skill "${manageName}" not found.`);
+    if (!record) throw new Error(`skill: skill "${manageName}" not found.`);
     const absorbedInto =
       typeof args.absorbed_into === "string" ? String(args.absorbed_into).trim() : null;
     const origin = getSkillWriteOrigin();
     if (origin === "background_review" || origin === "curator") {
       if (await isPinnedSkill(record.slug)) {
-        throw new Error(`skill_manage delete: skill "${manageName}" is pinned.`);
+        throw new Error(`skill (action=manage, manage_action=delete: skill "${manageName}" is pinned.`);
       }
       return archiveSkillDirectory(record.dir, record.slug, absorbedInto);
     }
     return deleteSkill(manageName);
   }
 
-  if (!record) throw new Error(`skill_manage: skill "${manageName}" not found.`);
+  if (!record) throw new Error(`skill: skill "${manageName}" not found.`);
 
   if (action === "edit") {
     await assertSkillWritable(record, "edit");
@@ -1022,18 +1022,18 @@ export async function manageSkill(args: Record<string, unknown> = {}) {
         const fallbackPath = String(args.file_path || SKILL_FILE_NAME).trim();
         return writeManagedSkillFile(record, fallbackPath, content, "edit");
       }
-      throw new Error("skill_manage patch: `old_string` is required; use action=edit for full SKILL.md replacement.");
+      throw new Error("skill (action=manage, manage_action=patch): `old_string` is required; use manage_action=edit for full SKILL.md replacement.");
     }
     const filePath = String(args.file_path || SKILL_FILE_NAME);
     if (!isSafeSkillRelativePath(filePath, { allowSkillMd: true })) {
-      throw new Error("skill_manage patch: unsafe `file_path`.");
+      throw new Error("skill (action=manage, manage_action=patch): unsafe `file_path`.");
     }
     const targetPath = filePath === SKILL_FILE_NAME
       ? record.skillPath
       : nodePath.join(record.dir, nodePath.posix.normalize(filePath.replace(/\\/g, "/")));
     const original = await fs.readFile(targetPath, "utf8");
     if (!original.includes(oldString)) {
-      throw new Error("skill_manage patch: `old_string` not found.");
+      throw new Error("skill (action=manage, manage_action=patch): `old_string` not found.");
     }
     const next = original.replace(oldString, newString);
     if (filePath === SKILL_FILE_NAME) validateSkillDocument(next);
@@ -1051,7 +1051,7 @@ export async function manageSkill(args: Record<string, unknown> = {}) {
     // lost — exactly how an empty references/*.md slipped in.
     if (!content.trim()) {
       throw new Error(
-        `skill_manage write_file: \`content\` is required and was empty for "${filePath || "(no file_path)"}". ` +
+        `skill (action=manage, manage_action=write_file): \`content\` is required and was empty for "${filePath || "(no file_path)"}". ` +
           "Pass the full file body in `content`."
       );
     }
@@ -1061,14 +1061,14 @@ export async function manageSkill(args: Record<string, unknown> = {}) {
   if (action === "remove_file") {
     const filePath = String(args.file_path || "");
     if (!isSafeSkillRelativePath(filePath)) {
-      throw new Error("skill_manage remove_file: unsafe `file_path`.");
+      throw new Error("skill (action=manage, manage_action=remove_file): unsafe `file_path`.");
     }
     const targetPath = nodePath.join(record.dir, nodePath.posix.normalize(filePath.replace(/\\/g, "/")));
     await fs.rm(targetPath, { force: true });
     return { ok: true, action, name: record.name, slug: record.slug, file_path: filePath };
   }
 
-  throw new Error(`skill_manage: unsupported action "${action}".`);
+  throw new Error(`skill: unsupported action "${action}".`);
 }
 
 export async function buildSkillsContextBlock(availableToolNames: string[] = []) {

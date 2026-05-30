@@ -308,6 +308,113 @@ export async function sendTelegramMessage(token, chatId, text) {
 }
 
 /**
+ * Send a short preview message and return its Telegram message_id (first chunk only).
+ *
+ * @param {string} token
+ * @param {string | number} chatId
+ * @param {string} text
+ * @returns {Promise<number | null>}
+ */
+export async function sendTelegramPreviewMessage(token, chatId, text) {
+  const trimmed = String(text ?? "").trim();
+  if (!trimmed) return null;
+  const sourceChunk = splitTelegramSourceMessage(trimmed, 3500)[0] || trimmed;
+  const url = new URL(`https://api.telegram.org/bot${encodeURIComponent(token)}/sendMessage`);
+  const urlString = url.toString();
+  const basePayload = {
+    chat_id: chatId,
+    disable_web_page_preview: true,
+  };
+  const chunk = renderMarkdownForTelegram(sourceChunk);
+  try {
+    const result = await sendTelegramPayload(urlString, {
+      ...basePayload,
+      text: chunk,
+      parse_mode: "HTML",
+    });
+    const messageId = Number(result?.message_id);
+    return Number.isFinite(messageId) ? messageId : null;
+  } catch (htmlError) {
+    try {
+      const result = await sendTelegramPayload(urlString, {
+        ...basePayload,
+        text: sourceChunk,
+      });
+      const messageId = Number(result?.message_id);
+      return Number.isFinite(messageId) ? messageId : null;
+    } catch {
+      await logDebugEvent("telegram_preview_send_failed", {
+        chatId: String(chatId),
+        error: htmlError instanceof Error ? htmlError.message : String(htmlError),
+        sourcePreview: sourceChunk.slice(0, 200),
+      }).catch(() => {});
+      return null;
+    }
+  }
+}
+
+/**
+ * @param {string} token
+ * @param {string | number} chatId
+ * @param {number} messageId
+ * @param {string} text
+ */
+export async function editTelegramMessage(token, chatId, messageId, text) {
+  const trimmed = String(text ?? "").trim();
+  if (!trimmed || !Number.isFinite(Number(messageId))) return;
+  const sourceChunk = splitTelegramSourceMessage(trimmed, 3500)[0] || trimmed;
+  const url = new URL(`https://api.telegram.org/bot${encodeURIComponent(token)}/editMessageText`);
+  const urlString = url.toString();
+  const basePayload = {
+    chat_id: chatId,
+    message_id: Math.trunc(Number(messageId)),
+    disable_web_page_preview: true,
+  };
+  const chunk = renderMarkdownForTelegram(sourceChunk);
+  try {
+    await sendTelegramPayload(urlString, {
+      ...basePayload,
+      text: chunk,
+      parse_mode: "HTML",
+    });
+  } catch (htmlError) {
+    try {
+      await sendTelegramPayload(urlString, {
+        ...basePayload,
+        text: sourceChunk,
+      });
+    } catch (plainError) {
+      await logDebugEvent("telegram_edit_failed", {
+        chatId: String(chatId),
+        messageId,
+        htmlError: htmlError instanceof Error ? htmlError.message : String(htmlError),
+        plainError: plainError instanceof Error ? plainError.message : String(plainError),
+        sourcePreview: sourceChunk.slice(0, 200),
+      }).catch(() => {});
+      throw plainError;
+    }
+  }
+}
+
+/**
+ * @param {string} token
+ * @param {string | number} chatId
+ * @param {number} messageId
+ */
+export async function deleteTelegramMessage(token, chatId, messageId) {
+  if (!Number.isFinite(Number(messageId))) return;
+  const url = new URL(`https://api.telegram.org/bot${encodeURIComponent(token)}/deleteMessage`);
+  await sendTelegramPayload(
+    url.toString(),
+    {
+      chat_id: chatId,
+      message_id: Math.trunc(Number(messageId)),
+    },
+    15_000
+  );
+}
+
+/**
  * Send a file as a Telegram document attachment.
  *
  * @param {string} token

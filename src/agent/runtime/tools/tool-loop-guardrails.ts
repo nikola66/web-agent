@@ -8,6 +8,7 @@ import { stableStringify } from "../stream-output.js";
 export const IDEMPOTENT_TOOL_NAMES = new Set([
   "read_file",
   "grep",
+  "browse_workspace",
   "list_dir",
   "find_files",
   "tree",
@@ -21,8 +22,7 @@ export const IDEMPOTENT_TOOL_NAMES = new Set([
   "memory_search",
   "memory_recall",
   "session_memory_list",
-  "skill_view",
-  "skill_list",
+  "skill",
   "wiki_search",
   "system_info",
 ]);
@@ -39,8 +39,6 @@ export const MUTATING_TOOL_NAMES = new Set([
   "todo_write",
   "memory_save",
   "session_memory_append",
-  "skill_manage",
-  "skill_bulk_save",
   "cron_register",
   "wiki_setup",
   "wiki_sync",
@@ -176,6 +174,8 @@ export function fileMutationResultLanded(toolName: string, result: string): bool
   const row = parsed as Record<string, unknown>;
   if (toolName === "write_file" || toolName === "edit_file" || toolName === "multi_edit") {
     if (typeof row.bytes_written === "number" && row.bytes_written > 0) return true;
+    if (typeof row.bytes === "number" && row.bytes > 0) return true;
+    if (row.ok === true) return true;
     if (row.success === true) return true;
   }
   if (toolName === "apply_patch") {
@@ -254,8 +254,8 @@ function toolFailureRecoveryHint(
   if (toolName === "grep") {
     return (
       common +
-      "grep root must exist under the workspace (directory `.` or a file path). Run list_dir/tree on `.` first, " +
-      "or find_files to locate a filename before grepping again."
+      "grep root must exist under the workspace (directory `.` or a file path). Run browse_workspace (action=list/tree) on `.`` first, " +
+      "or browse_workspace (action=find) to locate a filename before grepping again."
     );
   }
   if (toolName === "read_file" || toolName === "list_dir" || toolName === "find_files") {
@@ -270,7 +270,7 @@ function toolFailureRecoveryHint(
     return (
       common +
       "Paths are workspace-relative — run list_dir({\"path\":\".\"}) or tree before retrying. " +
-      "Do not assume src/ or .webagent/package.json; use find_files to locate by name."
+      "Do not assume src/ or .webagent/package.json; use browse_workspace (action=find) to locate by name."
     );
   }
   if (toolName === "web_fetch" || toolName === "web_search") {
@@ -281,17 +281,29 @@ function toolFailureRecoveryHint(
     );
   }
   if (toolName === "edit_file" || toolName === "write_file" || toolName === "apply_patch") {
+    const pathArg = String(args?.path ?? args?.file ?? "").trim();
+    const hasContent =
+      typeof args?.content === "string" ||
+      typeof args?.contents === "string" ||
+      typeof args?.new_content === "string";
+    if (toolName === "write_file" && !pathArg && !hasContent) {
+      return (
+        common +
+        'Emit one JSON object with "path" and "content" (flat or under "arguments") — not markdown-fenced. ' +
+        "For long bodies, write section-by-section: first write_file without append, then write_file with append:true."
+      );
+    }
     return (
       common +
       "Re-read the target file, confirm old_string/context matches exactly, try a smaller patch, " +
       "or use write_file when the file is new or empty."
     );
   }
-  if (toolName === "skill_manage") {
+  if (toolName === "skill") {
     return (
       common +
-      "Use action=create with full SKILL.md content, action=patch with old_string+new_string, " +
-      "action=import_dir with path to an extracted skill folder, or action=write_file with name+file_path+content for support files. If rewriting SKILL.md, " +
+      "Use action=manage with manage_action=create and full SKILL.md content, manage_action=patch with old_string+new_string, " +
+      "manage_action=import_dir with path to an extracted skill folder, or manage_action=write_file with name+file_path+content for support files. If rewriting SKILL.md, " +
       "include valid frontmatter (`name` and `description`) and use file_path=\"SKILL.md\"."
     );
   }
@@ -347,7 +359,15 @@ export class ToolCallGuardrailController {
     return `${signature.toolName}:${signature.argsHash}`;
   }
 
-  private isIdempotent(toolName: string): boolean {
+  private isIdempotent(
+    toolName: string,
+    args: Record<string, unknown> | null | undefined = null
+  ): boolean {
+    if (toolName === "skill") {
+      const action = String(args?.action ?? "").trim().toLowerCase();
+      if (action === "manage" || action === "bulk") return false;
+      return action === "list" || action === "view" || !action;
+    }
     if (this.config.mutatingTools.has(toolName)) return false;
     return this.config.idempotentTools.has(toolName);
   }
@@ -420,7 +440,7 @@ export class ToolCallGuardrailController {
       return blocked;
     }
 
-    if (this.isIdempotent(toolName)) {
+    if (this.isIdempotent(toolName, args)) {
       const record = this.noProgress.get(this.signatureKey(signature));
       if (record) {
         const [, repeatCount] = record;
@@ -531,7 +551,7 @@ export class ToolCallGuardrailController {
       }
     }
 
-    if (!this.isIdempotent(toolName)) {
+    if (!this.isIdempotent(toolName, args)) {
       this.noProgress.delete(this.signatureKey(signature));
       return decision({ toolName, signature });
     }

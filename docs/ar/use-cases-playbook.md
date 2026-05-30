@@ -15,17 +15,17 @@
 | بحث | إيجاد منشئي محتوى / منافسين في niche | `/open-web-research` | `web_search`, `web_fetch`, `write_file`, `artifact_present` |
 | بحث | أوراق أكاديمية / استشهادات | `/research-pack` | `web_search`, `web_fetch`, `write_file`, `artifact_present` |
 | بحث | استخراج جدول أو JSON من صفحة | `/structured-extraction` | `web_fetch`, `write_file`, `artifact_present` |
-| Meta | اكتشاف skills قابلة للتثبيت | `/find_skills` | `web_search`, `web_fetch`, `skill_manage` |
+| Meta | اكتشاف skills قابلة للتثبيت | `/find_skills` | `web_search`, `web_fetch`, `skill` (action=manage) |
 | ذاكرة | حفظ تفضيل دائم | `/memory-layers` | `memory_save`, `memory_recall` |
 | ذاكرة | تدوين سياق الجلسة | `/memory-layers` | `session_memory_append`, `session_memory_list` |
 | ذاكرة | Mirroring إلى vault بأسلوب Obsidian | `/memory-layers` | `wiki_setup`, `wiki_sync`, `wiki_search` |
 | ذاكرة | البحث في محادثة قديمة | `/memory-layers` | `session_search` |
 | تخطيط | خطة spec-first (بدون تنفيذ) | `/plan` | `read_file`, `grep`, `write_file`, `artifact_present` |
-| تخطيط | تقسيم طلب متعدد إلى todos | `/task-execution` | `todo_write`, `skill_view` |
+| تخطيط | تقسيم طلب متعدد إلى todos | `/task-execution` | `todo_write`, `skill` (action=view) |
 | تخطيط | تنفيذ خطة متعددة الخطوات | `/task-execution` | `todo_write`, `read_file`, `write_file`, `artifact_present` |
 | أتمتة | Digest يومي مع تبويب مفتوح | `/heartbeat-cron` | `cron_register`, `cron_list`, `web_search`, `web_fetch` |
-| مساحة عمل | تهيئة مجلد مشروع جانبي | `/project-scaffold` | `make_dir`, `write_file`, `tree` |
-| مساحة عمل | إعادة تنظيم ملفات بأمان | `/workspace-safety`, `/browser-runtime-map` | `list_dir`, `find_files`, `move_file`, `tree` |
+| مساحة عمل | تهيئة مجلد مشروع جانبي | `/project-scaffold` | `make_dir`, `write_file`, `browse_workspace` |
+| مساحة عمل | إعادة تنظيم ملفات بأمان | `/workspace-safety`, `/browser-runtime-map` | `browse_workspace`, `move_file` |
 | تصحيح | تصحيح بالفرضيات | `/systematic-debugging` | `read_file`, `grep`, `file_diff`, `run_shell` |
 | تصحيح | Shell / `npx` failed in WebContainer | `/browser-runtime-map` | `read_file`, `web_fetch`, `grep` |
 | متعدد الوسائط | قراءة لقطة شاشة أو مخطط | `/multimodal-ingest` | `vision_analyze`, `write_file` |
@@ -34,9 +34,9 @@
 | تسليم | إرسال deliverable بالبريد | `/artifact-delivery` | `write_file`, `email`, `artifact_present` |
 | تسليم | مخطط انسيابي للخطة أو التقرير | `/chart` | `artifact_present` |
 | تجربة | توضيح طلب غامض | `/clarify` | *(none)* |
-| أمان | Checkpoint قبل حذف جماعي | `/workspace-safety` | `list_dir`, `tree`, `delete_file` |
+| أمان | Checkpoint قبل حذف جماعي | `/workspace-safety` | `browse_workspace`, `delete_file` |
 | أمان | مفتاح API ملصوق / hygiene | `/memory-layers` | *(redaction; no secret persistence)* |
-| Meta | تحسين Web Agent نفسه | `/web-agent-skill` | `read_file`, `grep`, `skill_manage`, `memory_save` |
+| Meta | تحسين Web Agent نفسه | `/web-agent-skill` | `read_file`, `grep`, `skill` (action=manage), `memory_save` |
 
 ---
 
@@ -118,7 +118,7 @@ Search skills.sh, SkillsMP, and Cursor marketplace — return the top 5 by insta
 
 **Bundled skills:** `/find_skills` (+ `/clarify` if query ambiguous; `/web-agent-skill` if installing)
 
-**الأدوات المتوقعة:** `web_search`, `web_fetch`, `skill_manage`
+**الأدوات المتوقعة:** `web_search`, `web_fetch`, `skill` (action=manage)
 
 </details>
 
@@ -135,7 +135,7 @@ Read how bundled skills are indexed in src/agent/runtime/memory/skills.ts and su
 
 **Bundled skills:** `/web-agent-skill` (+ `/memory-layers` for where to store lessons)
 
-**الأدوات المتوقعة:** `read_file`, `grep`, `skill_manage`, `memory_save`
+**الأدوات المتوقعة:** `read_file`, `grep`, `skill` (action=manage), `memory_save`
 
 </details>
 
@@ -259,7 +259,7 @@ I need you to: (1) list top-level files in the workspace, (2) grep for TODO comm
 
 **Bundled skills:** `/task-execution` (+ `/chart` if ≥4 steps; `/task-execution` after approval)
 
-**الأدوات المتوقعة:** `todo_write`, `skill_view`
+**الأدوات المتوقعة:** `todo_write`, `skill` (action=view)
 
 </details>
 
@@ -322,7 +322,7 @@ Create projects/expense-tracker/ with a minimal README, package.json stub, and s
 
 **Bundled skills:** `/project-scaffold`
 
-**الأدوات المتوقعة:** `make_dir`, `write_file`, `tree`
+**الأدوات المتوقعة:** `make_dir`, `write_file`, `browse_workspace`
 
 </details>
 
@@ -339,7 +339,7 @@ List everything under uploads/ and work/. Propose a safe reorganization (moves o
 
 **Bundled skills:** `/workspace-safety`, `/browser-runtime-map`
 
-**الأدوات المتوقعة:** `list_dir`, `find_files`, `move_file`, `tree`
+**الأدوات المتوقعة:** `browse_workspace`, `move_file`
 
 </details>
 
@@ -529,7 +529,7 @@ I want to delete everything under work/scratch/. List what's there with sizes, c
 
 **Bundled skills:** `/workspace-safety`
 
-**الأدوات المتوقعة:** `list_dir`, `tree`, `delete_file`
+**الأدوات المتوقعة:** `browse_workspace`, `delete_file`
 
 </details>
 

@@ -3,7 +3,7 @@ name: Pyodide Runtime
 description: Use when writing or fixing Python for run_python — browser WASM Pyodide contract, forbidden APIs, package substitutes, and webagent.http.
 version: 1.0.0
 category: bundled
-primary-tools: [run_python, web_fetch, web_post, web_upload, skill_view]
+primary-tools: [run_python, web_fetch, web_post, web_upload, skill]
 tags: [pyodide, python, wasm, browser, run_python, micropip, webagent.http]
 triggers: [run_python, pyodide, python script, micropip, browser python, wasm python, python in browser, incompatible python]
 ---
@@ -19,7 +19,7 @@ triggers: [run_python, pyodide, python script, micropip, browser python, wasm py
 | Shell / git / curl / npx | **`browser-runtime-map`** — not available in Nodebox |
 | Import map & blocks | Static preflight before worker; see **`browser-runtime-map`** Pyodide table |
 
-**Non-negotiable:** Read this skill (or `skill_view` **`browser-runtime-map`**) before generating Python. Capability manifest: `src/runtimes/webcontainer/pyodide-capabilities.json`. Substitution patterns: `src/runtimes/webcontainer/pyodide-substitution-matrix.json`.
+**Non-negotiable:** Read this skill (or `skill` (action=view) **`browser-runtime-map`**) before generating Python. Capability manifest: `src/runtimes/webcontainer/pyodide-capabilities.json`. Substitution patterns: `src/runtimes/webcontainer/pyodide-substitution-matrix.json`.
 
 ## When to Use
 

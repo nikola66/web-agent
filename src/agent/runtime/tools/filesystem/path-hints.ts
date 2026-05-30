@@ -68,7 +68,7 @@ async function nearestExistingAncestor(ctx, rel) {
 
 function workspaceLayoutHint(input) {
   const base = nodePath.posix.basename(normalizeRelPath(input));
-  const findHint = base && base !== input ? ` Or find_files({"pattern":"${base}"}).` : "";
+  const findHint = base && base !== input ? ` Or browse_workspace (action=find, pattern: "${base}"}).` : "";
   return (
     "Paths are workspace-relative (`.` = sandbox root), not the host repo. " +
     "See the Workspace & filesystem map in the system prompt (or read `.webagent/workspace-map.md`). " +
@@ -120,7 +120,7 @@ export async function buildMissingPathHint(ctx, rel) {
       const anchorHint =
         anchor === "."
           ? workspaceLayoutHint(input)
-          : `Nearest existing ancestor: "${anchor}" — list_dir({"path":"${anchor}"}). ${workspaceLayoutHint(input)}`;
+          : `Nearest existing ancestor: "${anchor}" — browse_workspace (action=list, path: "${anchor}"). ${workspaceLayoutHint(input)}`;
       return `Path not found: ${input}. ${anchorHint}`;
     }
     const parentEntries = await fs.readdir(parentAbs, { withFileTypes: true }).catch(() => null);

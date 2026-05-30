@@ -14,7 +14,7 @@ export default defineTool({
   description:
     "Search file **contents** under a workspace path. Required: **`pattern`** (not `query` — that is " +
     "for session_search). Optional **`root`**: workspace-relative **directory** to recurse (default `.`) " +
-    "or a **single file** to search. Run `list_dir` or `find_files` first — do not assume src/ paths exist.",
+    "or a **single file** to search. Run `browse_workspace` (action=list or action=find) first — do not assume src/ paths exist.",
   inputSchema: {
     type: "object",
     properties: {

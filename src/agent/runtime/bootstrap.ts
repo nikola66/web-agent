@@ -180,7 +180,13 @@ export async function main() {
   }
 
   const turnMutex = getSharedTurnMutex();
-  const heartbeatSkipOpts = { shouldSkipTick: () => turnMutex.isBusy(), cfg };
+  const hasAgent = await fileExists(AGENT_MD);
+  const hasUser = await fileExists(USER_MD);
+  let onboardingActive = !hasAgent || !hasUser;
+  const heartbeatSkipOpts = {
+    shouldSkipTick: () => turnMutex.isBusy() || onboardingActive,
+    cfg,
+  };
 
   const heartbeatRunTool = async (toolName, args) => {
     const heartbeatController = new AbortController();
@@ -213,10 +219,10 @@ export async function main() {
   }, STARTUP_HEARTBEAT_DEFER_MS);
   cfg.contextWindowTokens = await fetchContextWindow(cfg, fetchWithTimeout);
 
-  const hasAgent = await fileExists(AGENT_MD);
-  const hasUser = await fileExists(USER_MD);
-  const onboardingResult =
-    !hasAgent || !hasUser ? await runFirstRunSetup(rl, fileExists) : null;
+  const onboardingResult = onboardingActive
+    ? await runFirstRunSetup(rl, fileExists)
+    : null;
+  onboardingActive = false;
 
   const profileName = cleanSetupName(
     onboardingResult?.agentName || process.env.WEBAGENT_PROFILE_NAME,

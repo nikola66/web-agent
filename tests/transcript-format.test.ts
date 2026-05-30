@@ -3,8 +3,10 @@ import assert from "node:assert/strict";
 
 import {
   createAssistantTranscriptEvent,
+  createReasoningPreviewTranscriptEvent,
   createToolResultTranscriptEvent,
   formatTranscriptEventForChannel,
+  shortenReasoningPreview,
   formatSkippedToolsTranscript,
   formatToolResultTranscript,
   formatToolStartTranscript,
@@ -143,6 +145,32 @@ test("skipped tool call transcript uses one canonical formatter", () => {
       { reason: "unknown_tool" },
     ]),
     "▸ skipped 2 invalid tool call(s): invalid_json, unknown_tool"
+  );
+});
+
+test("reasoning preview transcript formats terminal and telegram styles", () => {
+  const long = "alpha ".repeat(40).trim();
+  assert.equal(shortenReasoningPreview(long, 24).startsWith("…"), true);
+  assert.equal(
+    formatTranscriptEventForChannel(
+      createReasoningPreviewTranscriptEvent({ text: "Checking file layout" }),
+      { style: "terminal" }
+    ),
+    "💭 Checking file layout"
+  );
+  assert.equal(
+    formatTranscriptEventForChannel(
+      createReasoningPreviewTranscriptEvent({ text: "Checking file layout" }),
+      { style: "telegram" }
+    ),
+    "_💭 Checking file layout_"
+  );
+  assert.equal(
+    formatTranscriptEventForChannel(
+      createReasoningPreviewTranscriptEvent({ text: "", done: true }),
+      { style: "telegram" }
+    ),
+    ""
   );
 });
 

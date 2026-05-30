@@ -78,13 +78,110 @@ async function sendChannelError({ channel, chatId, sendReply, logType, error }) 
   await sendReply(chatId, `Error: ${message.slice(0, 3800)}`).catch(() => {});
 }
 
-function createTranscriptSender({ channel, chatId, sendReply, transcriptStyle, toolCatalog }) {
+function createTranscriptSender({
+  channel,
+  chatId,
+  sendReply,
+  sendPreview,
+  editPreview,
+  deletePreview,
+  transcriptStyle,
+  toolCatalog,
+}) {
   let lastTranscriptText = "";
   let transcriptMessageCount = 0;
   let lastAssistantPreview = "";
+  let previewMessageId = null;
+  let lastPreviewOutbound = "";
+  let lastPreviewEmitAt = 0;
+  let previewPendingText = "";
+  let previewTimer = null;
+  const previewThrottleMs = 400;
+
+  const clearPreviewTimer = () => {
+    if (previewTimer) clearTimeout(previewTimer);
+    previewTimer = null;
+  };
+
+  const clearPreviewMessage = async () => {
+    clearPreviewTimer();
+    previewPendingText = "";
+    if (previewMessageId == null || typeof deletePreview !== "function") {
+      previewMessageId = null;
+      lastPreviewOutbound = "";
+      return;
+    }
+    const id = previewMessageId;
+    previewMessageId = null;
+    lastPreviewOutbound = "";
+    try {
+      await deletePreview(chatId, id);
+    } catch {
+      /* best effort */
+    }
+  };
+
+  const flushPreview = async () => {
+    previewTimer = null;
+    const outbound = previewPendingText.trim();
+    previewPendingText = "";
+    if (!outbound || outbound === lastPreviewOutbound) return;
+    lastPreviewEmitAt = Date.now();
+    try {
+      if (previewMessageId != null && typeof editPreview === "function") {
+        await editPreview(chatId, previewMessageId, outbound);
+      } else if (typeof sendPreview === "function") {
+        const messageId = await sendPreview(chatId, outbound);
+        if (messageId != null) previewMessageId = messageId;
+      } else {
+        await sendReply(chatId, outbound);
+      }
+      lastPreviewOutbound = outbound;
+    } catch (error) {
+      await logDebugEvent("channel_reasoning_preview_failed", {
+        channel,
+        chatId,
+        error: errorMessage(error),
+        preview: outbound.slice(0, 120),
+      }).catch(() => {});
+    }
+  };
+
+  const schedulePreview = (outbound) => {
+    if (!outbound) return;
+    previewPendingText = outbound;
+    const now = Date.now();
+    if (now - lastPreviewEmitAt >= previewThrottleMs) {
+      void flushPreview();
+      return;
+    }
+    if (previewTimer) return;
+    previewTimer = setTimeout(() => {
+      void flushPreview();
+    }, previewThrottleMs - (now - lastPreviewEmitAt));
+    previewTimer.unref?.();
+  };
 
   return {
     async send(event) {
+      const kind = String(event?.type || "");
+      if (kind === "reasoning_preview") {
+        if (event?.done) {
+          await clearPreviewMessage();
+          return;
+        }
+        const outbound = formatTranscriptEventForChannel(event, {
+          style: transcriptStyle,
+          toolCatalog,
+        }).trim();
+        schedulePreview(outbound);
+        return;
+      }
+
+      if (kind === "assistant") {
+        await clearPreviewMessage();
+      }
+
       const outbound = formatTranscriptEventForChannel(event, {
         style: transcriptStyle,
         toolCatalog,
@@ -97,7 +194,7 @@ function createTranscriptSender({ channel, chatId, sendReply, transcriptStyle, t
         await logDebugEvent("channel_transcript_send_error", {
           channel,
           chatId,
-          eventType: String(event?.type || "unknown"),
+          eventType: kind || "unknown",
           critical,
           error: errorMessage(error),
           preview: outbound.slice(0, 120),
@@ -107,7 +204,12 @@ function createTranscriptSender({ channel, chatId, sendReply, transcriptStyle, t
       }
       lastTranscriptText = outbound;
       transcriptMessageCount += 1;
-      if (event?.type === "assistant") lastAssistantPreview = outbound.slice(0, 120);
+      if (kind === "assistant") lastAssistantPreview = outbound.slice(0, 120);
+    },
+    async finalize() {
+      clearPreviewTimer();
+      if (previewPendingText) await flushPreview();
+      await clearPreviewMessage();
     },
     stats() {
       return {
@@ -135,6 +237,9 @@ export function createChannelInboundHandler(deps) {
     cfg,
     sendReply,
     sendDocument,
+    sendPreview,
+    editPreview,
+    deletePreview,
     startTyping,
     abortTurn,
     contextCompaction = {},
@@ -468,6 +573,9 @@ export function createChannelInboundHandler(deps) {
         channel,
         chatId,
         sendReply,
+        sendPreview,
+        editPreview,
+        deletePreview,
         transcriptStyle,
         toolCatalog,
       });
@@ -529,6 +637,11 @@ export function createChannelInboundHandler(deps) {
         });
       } finally {
         if (progressTimer) clearInterval(progressTimer);
+        try {
+          await transcriptSender.finalize();
+        } catch {
+          /* */
+        }
         try {
           if (typeof stopTyping === "function") stopTyping();
         } catch {

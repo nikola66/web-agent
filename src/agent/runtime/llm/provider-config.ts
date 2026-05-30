@@ -58,8 +58,14 @@ function resolveBuiltInBaseUrl(selectedProvider, customBaseUrl, directBaseUrl) {
   return trimmedDirect;
 }
 
+/** When true, provider reasoning streams may be surfaced as ephemeral UI preview. */
+export function reasoningPreviewEnabled() {
+  return String(process.env.WEBAGENT_REASONING_PREVIEW ?? "1").trim() !== "0";
+}
+
 /** Disable provider-native thinking/reasoning on chat/completions requests. */
 export function reasoningDisableExtras(providerId) {
+  if (reasoningPreviewEnabled()) return {};
   const id = String(providerId || "").trim().toLowerCase();
   if (id === "openrouter") return { reasoning: { enabled: false } };
   return {};
@@ -114,9 +120,7 @@ export async function resolveLlm() {
     model:
       selectedProvider.id === "opencode"
         ? selectedProvider.model || "big-pickle"
-        : selectedProvider.id === "bitnet"
-          ? selectedProvider.model || "bitnet-b1.58-2b-4t"
-          : modelOverride || selectedProvider.model || "",
+        : modelOverride || selectedProvider.model || "",
     extraHeaders: {
       ...(selectedProvider.runtime?.extraHeaders || {}),
       ...envExtraHeaders,

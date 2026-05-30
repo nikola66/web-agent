@@ -149,3 +149,79 @@ test("writeFileTool accepts path under subdirectory", async (t) => {
   const content = await fs.readFile(nodePath.join(dir, "notes.txt"), "utf8");
   assert.equal(content, "ok");
 });
+
+test("writeFileTool rejects truncated markdown article without append", async (t) => {
+  const { writeFileTool } = await import("../dist/agent-runtime/tools/filesystem-tools.js");
+  const rootTmp = nodePath.join(process.cwd(), "tmp");
+  await fs.mkdir(rootTmp, { recursive: true });
+  const slug = `_write_incomplete_${Date.now()}`;
+  const dir = nodePath.join(rootTmp, slug);
+  await fs.mkdir(dir, { recursive: true });
+  const rel = nodePath.relative(process.cwd(), nodePath.join(dir, "article.md"));
+  t.after(async () => {
+    await fs.rm(dir, { recursive: true, force: true });
+  });
+  const truncated = `---
+title: "BitNet"
+published_at: "2026-05-29T20`;
+  await assert.rejects(
+    writeFileTool({ path: rel, content: truncated }, {}),
+    /content looks truncated/i
+  );
+});
+
+test("writeFileTool append adds to existing file", async (t) => {
+  const { writeFileTool } = await import("../dist/agent-runtime/tools/filesystem-tools.js");
+  const rootTmp = nodePath.join(process.cwd(), "tmp");
+  await fs.mkdir(rootTmp, { recursive: true });
+  const slug = `_write_append_${Date.now()}`;
+  const dir = nodePath.join(rootTmp, slug);
+  await fs.mkdir(dir, { recursive: true });
+  const rel = nodePath.relative(process.cwd(), nodePath.join(dir, "article.md"));
+  t.after(async () => {
+    await fs.rm(dir, { recursive: true, force: true });
+  });
+  await writeFileTool({ path: rel, content: "# Intro\n" }, {});
+  const appended = await writeFileTool({ path: rel, content: "## Section\n", append: true }, {});
+  assert.equal(appended.ok, true);
+  assert.equal(appended.appended, Buffer.byteLength("## Section\n", "utf8"));
+  assert.equal(appended.bytes, Buffer.byteLength("# Intro\n## Section\n", "utf8"));
+  const content = await fs.readFile(nodePath.join(dir, "article.md"), "utf8");
+  assert.equal(content, "# Intro\n## Section\n");
+});
+
+test("writeFileTool append creates file when missing", async (t) => {
+  const { writeFileTool } = await import("../dist/agent-runtime/tools/filesystem-tools.js");
+  const rootTmp = nodePath.join(process.cwd(), "tmp");
+  await fs.mkdir(rootTmp, { recursive: true });
+  const slug = `_write_append_new_${Date.now()}`;
+  const dir = nodePath.join(rootTmp, slug);
+  await fs.mkdir(dir, { recursive: true });
+  const rel = nodePath.relative(process.cwd(), nodePath.join(dir, "new.md"));
+  t.after(async () => {
+    await fs.rm(dir, { recursive: true, force: true });
+  });
+  const result = await writeFileTool({ path: rel, content: "first", append: true }, {});
+  assert.equal(result.ok, true);
+  assert.equal(await fs.readFile(nodePath.join(dir, "new.md"), "utf8"), "first");
+});
+
+test("writeFileTool append rejects when total exceeds max bytes", async (t) => {
+  const { writeFileTool } = await import("../dist/agent-runtime/tools/filesystem-tools.js");
+  const { WRITE_FILE_MAX_BYTES } = await import("../dist/agent-runtime/tools/write-file-args.js");
+  const rootTmp = nodePath.join(process.cwd(), "tmp");
+  await fs.mkdir(rootTmp, { recursive: true });
+  const slug = `_write_append_cap_${Date.now()}`;
+  const dir = nodePath.join(rootTmp, slug);
+  await fs.mkdir(dir, { recursive: true });
+  const rel = nodePath.relative(process.cwd(), nodePath.join(dir, "big.md"));
+  t.after(async () => {
+    await fs.rm(dir, { recursive: true, force: true });
+  });
+  const head = "x".repeat(WRITE_FILE_MAX_BYTES - 5);
+  await writeFileTool({ path: rel, content: head }, {});
+  await assert.rejects(
+    writeFileTool({ path: rel, content: "123456", append: true }, {}),
+    /append would reach .* bytes \(max/
+  );
+});

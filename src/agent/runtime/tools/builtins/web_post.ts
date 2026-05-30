@@ -35,7 +35,7 @@ export default defineTool({
   run: webPostTool,
   emoji: "📮",
   description:
-    "Primary HTTP client for JSON/GraphQL REST writes (POST/PATCH/PUT/DELETE/HEAD/OPTIONS). Not for CMS file uploads — use `web_upload`; mixed form fields + file(s) → `multipart` array (runtime reads `file_path`/`source_url`). Never pass base64 in args. Procedure: skill_view **`http-api`**. Not for OAuth SaaS — use `composio_*`. Pair with `web_fetch` for GET. Examples: " +
+    "Primary HTTP client for JSON/GraphQL REST writes (POST/PATCH/PUT/DELETE/HEAD/OPTIONS). Not for CMS file uploads — use `web_upload`; mixed form fields + file(s) → `multipart` array (runtime reads `file_path`/`source_url`). Never pass base64 in args. Procedure: `skill` (action=view) **`http-api`**. Not for OAuth SaaS — use `composio_*`. Pair with `web_fetch` for GET. Examples: " +
     JSON.stringify(WEB_POST_EXAMPLES[0]) +
     " | " +
     JSON.stringify(WEB_POST_EXAMPLES[2]) +

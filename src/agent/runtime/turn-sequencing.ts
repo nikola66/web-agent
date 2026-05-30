@@ -25,6 +25,8 @@ export const SKILL_INSTALL_INTENT_RE = new RegExp(
     "officialskills\\.sh",
     "skills\\.sh/",
     "skillsmp\\.com",
+    "github\\.com/[^\\s\"']+/[^\\s\"'/]*skills[^\\s\"'/]*(?:/|$|\\?)",
+    "github\\.com/[^\\s\"']+/skills(?:/|$|\\?)",
   ].join("|"),
   "i"
 );
@@ -192,7 +194,9 @@ export function buildSkillInstallContextPrefix(input) {
   if (!isSkillInstallIntent(input)) return null;
   let prefix =
     "[Skill install] Some GitHub repos are curated indexes (README + outbound links), not skill hosts. " +
-    "For uploaded/extracted skill archives: after `extract_archive` (from `.webagent/telegram-inbox/` when needed), locate the directory containing `SKILL.md`, then `skill` action=manage manage_action=import_dir path=<that-folder> — installs under `.webagent/skills/<category>/<slug>/`, NOT `.webagent/capabilities/skills/`. " +
+    "For GitHub skill repos: web_fetch the repo archive (`.../archive/refs/heads/main.zip` with `save_to`), then `extract_archive` on that zip — never run_python zipfile or run_shell to unzip. " +
+    "After extraction, locate each folder containing `SKILL.md`, then `skill` action=manage manage_action=import_dir path=<that-folder> — installs under `.webagent/skills/<category>/<slug>/`, NOT `.webagent/capabilities/skills/`. " +
+    "For uploaded/extracted skill archives: after `extract_archive` (from `.webagent/telegram-inbox/` when needed), use the same import_dir flow. " +
     "Read the README, follow registry links (officialskills.sh / skills.sh / skillsmp) or source-repo URLs — " +
     "do not guess raw paths from list labels. On 404: web_fetch registry pages, resolve GitHub links, " +
     "try alternate repo layouts, web_search — pivot before declaring a blocker. " +
@@ -313,7 +317,7 @@ export function buildExecutionContinuationContextPrefix(input) {
     "[Continuation] The user is resuming prior work—not starting a new task. " +
     "Do not stop after narration or a single search; call tools until the task is complete or you hit a real blocker. " +
     "For skill installs or find-skills hunts, continue searching and installing remaining targets without asking permission again. " +
-    "Use find_files with patterns: [\"token1\",\"token2\"] (all must match) or grep for content search."
+    "Use browse_workspace (action=find) with patterns: [\"token1\",\"token2\"] (all must match) or grep for content search."
   );
 }
 
@@ -356,9 +360,25 @@ function estimateTaskStepsFromInput(input) {
   }
 
   const imperativeHits = text.match(
-    /\b(refactor|migrate|implement|notify|remove|add|update|fix|research|translate|write|summarize|summarise|save|fetch|install|verify|test)\b/g
+    /\b(refactor|migrate|implement|notify|remove|add|update|fix|research|translate|write|summarize|summarise|save|fetch|install|verify|test|create|draft|publish|search)\b/g
   );
   if (imperativeHits && imperativeHits.length >= 5) score = Math.max(score, 7);
+
+  const deliverableVerbs = text.match(
+    /\b(?:search|research|write|create|draft|publish|post|fetch|summarize|summarise|translate)\b/g
+  );
+  const distinctDeliverables = deliverableVerbs ? new Set(deliverableVerbs).size : 0;
+  if (distinctDeliverables >= 3) score = Math.max(score, 4);
+  if (
+    /\b(?:search|research|find)\b/.test(text) &&
+    /\b(?:write|create|draft|article|blog\s*post)\b/.test(text) &&
+    /\b(?:publish|post\s+(?:it|to|on)|on\s+(?:our|the|my)\s+blog)\b/.test(text)
+  ) {
+    score = Math.max(score, 4);
+  }
+
+  const plainAndChunks = text.split(/\band\b/).map((s) => s.trim()).filter((s) => s.length > 4);
+  if (plainAndChunks.length >= 3) score = Math.max(score, 4);
 
   const semiChunks = text.split(";").map((s) => s.trim()).filter((s) => s.length > 6);
   if (semiChunks.length >= 4) score = Math.max(score, 7);
@@ -384,6 +404,84 @@ export function estimateTaskComplexity(input) {
   const estimatedSteps = estimateTaskStepsFromInput(input);
   const tier = estimatedSteps > 6 ? "plan" : estimatedSteps > 3 ? "todo" : "simple";
   return { estimatedSteps, tier };
+}
+
+export type MultistepTaskPattern = "research_write_publish" | "generic_multistep";
+
+export function detectMultistepTaskPattern(input: unknown): MultistepTaskPattern | null {
+  const text = String(input || "").trim().toLowerCase();
+  if (!text || isExecutionContinuationIntent(text)) return null;
+  if (
+    /\b(?:search|research|find)\b/.test(text) &&
+    /\b(?:write|create|draft|article|blog\s*post)\b/.test(text) &&
+    /\b(?:publish|post\s+(?:it|to|on)|on\s+(?:our|the|my)\s+blog)\b/.test(text)
+  ) {
+    return "research_write_publish";
+  }
+  if (estimateTaskStepsFromInput(input) > 3) return "generic_multistep";
+  return null;
+}
+
+function topicLabelFromArticleAsk(input: unknown): string {
+  const raw = String(input || "");
+  const m = /\babout\s+(.+?)(?:\s+and\s+(?:publish|post)\b|$)/i.exec(raw);
+  if (!m) return "topic";
+  return m[1].replace(/[''']s\b/gi, "").trim() || "topic";
+}
+
+export function slugFromArticleTopic(input: unknown): string {
+  const topic = topicLabelFromArticleAsk(input);
+  const tokens = topic.match(/[a-z0-9][a-z0-9._-]*/gi) ?? [];
+  const pick = tokens.length ? tokens[tokens.length - 1] : "draft";
+  const slug = pick.toLowerCase().replace(/[^a-z0-9-]+/g, "-").replace(/^-|-$/g, "");
+  return slug || "draft";
+}
+
+export type SuggestedTodoItem = { id: string; text: string; status: "pending" | "in_progress" | "done" };
+
+export function buildSuggestedTodoChecklist(
+  input: unknown,
+  pattern: MultistepTaskPattern | null = detectMultistepTaskPattern(input)
+): SuggestedTodoItem[] | null {
+  if (pattern === "research_write_publish") {
+    const slug = slugFromArticleTopic(input);
+    const label = topicLabelFromArticleAsk(input);
+    return [
+      { id: "1", text: `Research ${label} (web_search / web_fetch)`, status: "in_progress" },
+      { id: "2", text: `Write article to work/${slug}-article/`, status: "pending" },
+      { id: "3", text: "Publish via CMS skill + web_post", status: "pending" },
+      {
+        id: "4",
+        text: "Confirm live URL or report blocker (token, collection, etc.)",
+        status: "pending",
+      },
+    ];
+  }
+  return null;
+}
+
+/** Injected when tier is todo/plan — includes pattern-specific checklist when detected. */
+export function buildMultiStepGateHint(input: unknown, options?: { preSeeded?: boolean }): string {
+  const pattern = detectMultistepTaskPattern(input);
+  const suggested = buildSuggestedTodoChecklist(input, pattern);
+  if (options?.preSeeded && pattern === "research_write_publish") {
+    return (
+      "[Gate] Multi-step task detected (research → write → publish). Checklist is in todos " +
+      "(step 1 in_progress). Start with web_search/web_fetch, then write_file, then publish via " +
+      "CMS skill + web_post. Update todo_write as each step completes."
+    );
+  }
+  const base =
+    "[Gate] Multi-step task detected. Call `todo_write` as your **first** tool (exactly one item `in_progress`), " +
+    "then execute step-by-step. Skill: **`task-execution`**.";
+  if (!suggested?.length) {
+    return `${base} Decompose the user ask into 4–6 verifiable steps before any other tool.`;
+  }
+  const lines = suggested.map((t) => `- ${t.text} — \`${t.status}\``).join("\n");
+  return (
+    `${base}\n\nUse this checklist (adapt labels to the user ask):\n${lines}\n\n` +
+    `First tool call example: todo_write with \`todos\`: ${JSON.stringify(suggested)}`
+  );
 }
 
 /** True when content is the synthetic `/plan` user prompt from planning-slash. */

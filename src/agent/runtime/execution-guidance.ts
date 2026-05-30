@@ -30,7 +30,7 @@ export const OPENAI_MODEL_EXECUTION_GUIDANCE =
   "- Arithmetic, hashes, encodings, and checksums → use `run_python` for Python stdlib, or `run_shell` with `node -e` when dependency-free; otherwise explain browser limits\n" +
   "- Current time, date, timezone → use `system_info`\n" +
   "- System state: OS, CPU, memory, disk → use `system_info`; browser-only mode cannot inspect host ports/processes\n" +
-  "- File contents, sizes, line counts → use read_file, grep, find_files, list_dir, tree, or a `node ...` script\n" +
+  "- File contents, sizes, line counts → use read_file, grep, browse_workspace, or a `node ...` script\n" +
   "- Git history, branches, diffs → use file tools on available workspace files; browser-only mode has no git binary\n" +
   "- Current facts (weather, news, versions) → use web_search\n" +
   "</mandatory_tool_use>\n" +

@@ -15,7 +15,7 @@ export default defineTool({
   run: runPythonTool,
   emoji: "🐍",
   description:
-    "Run Python in browser-only Nodebox via lazy Pyodide (v0.29.4). **Before codegen:** `skill_view` **`pyodide-runtime`** (WASM contract). **Prefer over `run_shell python3`.** Agent one-off REST → `web_fetch`/`web_post`; file uploads → `web_upload`; HTTP inside scripts → `import webagent.http as http` (`upload_file` for files). Supports `code` or workspace `path`, optional `args`, `cwd`, `env`, `packages`, `timeout_ms`. **Create ZIP:** stdlib `zipfile` (no `create_archive` tool). Auto-loads common Pyodide wheels. Hard-blocked: host binaries/subprocess, Playwright, raw DB sockets. Examples: " +
+    "Run Python in browser-only Nodebox via lazy Pyodide (v0.29.4). **Before codegen:** `skill` (action=view) **`pyodide-runtime`** (WASM contract). **Prefer over `run_shell python3`.** Agent one-off REST → `web_fetch`/`web_post`; file uploads → `web_upload`; HTTP inside scripts → `import webagent.http as http` (`upload_file` for files). Supports `code` or workspace `path`, optional `args`, `cwd`, `env`, `packages`, `timeout_ms`. **Create ZIP:** stdlib `zipfile` (no `create_archive` tool). Auto-loads common Pyodide wheels. Hard-blocked: host binaries/subprocess, Playwright, raw DB sockets. Examples: " +
     JSON.stringify(RUN_PYTHON_EXAMPLES[0]) +
     " | " +
     JSON.stringify(RUN_PYTHON_EXAMPLES[1]),

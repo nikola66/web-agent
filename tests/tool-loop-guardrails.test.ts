@@ -148,6 +148,12 @@ test("file mutation lint error result is not a tool failure", () => {
   assert.equal(classifyToolFailure("write_file", writeResult), false);
 });
 
+test("fileMutationResultLanded accepts write_file ok and bytes shape", () => {
+  const writeResult = JSON.stringify({ ok: true, path: "work/a.md", bytes: 596 });
+  assert.equal(fileMutationResultLanded("write_file", writeResult), true);
+  assert.equal(classifyToolFailure("write_file", writeResult), false);
+});
+
 test("appendToolGuardrailGuidance appends warning suffix", () => {
   const guided = appendToolGuardrailGuidance("ok", {
     action: "warn",

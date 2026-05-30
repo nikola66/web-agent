@@ -5,7 +5,12 @@ const LEGACY_SKILL_TOOL_NAMES = new Set([
   "skill_view",
   "skill_manage",
   "skill_bulk_save",
+  "skill_bulk_import",
+  "bulk_import",
+  "bulk_import_skills",
 ]);
+
+const BULK_SKILL_TOOL_NAMES = new Set(["skill_bulk_save", "skill_bulk_import", "bulk_import", "bulk_import_skills"]);
 
 export function isLegacySkillToolName(name: string): boolean {
   return LEGACY_SKILL_TOOL_NAMES.has(String(name || "").trim());
@@ -30,7 +35,9 @@ export function normalizeSkillToolCall(
   if (tool === "skill" && !String(a.action || "").trim()) {
     if (raw === "skill_list") return { name: "skill", args: { ...a, action: "list" } };
     if (raw === "skill_view") return { name: "skill", args: { ...a, action: "view" } };
-    if (raw === "skill_bulk_save") return { name: "skill", args: { action: "bulk", ...expandSkillBulkSaveArgs(a) } };
+    if (BULK_SKILL_TOOL_NAMES.has(raw)) {
+      return { name: "skill", args: { action: "bulk", ...expandSkillBulkSaveArgs(a) } };
+    }
     if (raw === "skill_save" || raw === "skill_create") {
       return { name: "skill", args: { ...a, action: "manage", manage_action: "create" } };
     }
@@ -44,7 +51,11 @@ export function normalizeSkillToolCall(
   if (tool === "skill_view" || (tool === "skill" && String(a.action || "").toLowerCase() === "view")) {
     return { name: "skill", args: { ...a, action: "view" } };
   }
-  if (tool === "skill_bulk_save" || (tool === "skill" && String(a.action || "").toLowerCase() === "bulk")) {
+  if (
+    BULK_SKILL_TOOL_NAMES.has(tool) ||
+    BULK_SKILL_TOOL_NAMES.has(raw) ||
+    (tool === "skill" && String(a.action || "").toLowerCase() === "bulk")
+  ) {
     return { name: "skill", args: { ...expandSkillBulkSaveArgs(a), action: "bulk" } };
   }
   if (tool === "skill_manage") {

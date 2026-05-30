@@ -41,6 +41,7 @@ import heartbeatSource from "./runtime/HEARTBEAT.md?raw";
 import soulSource from "./runtime/SOUL.md?raw";
 import { TOOL_CATALOG_JSON } from "./tool-catalog";
 import { proxyTextBodyCapForUrl } from "./runtime/proxy-body-cap";
+import { stripReasoningPreviewFromStream } from "./runtime/reasoning-preview-ipc.js";
 import { normalizeLaunchMode, sanitizeForLogs } from "./runtime/privacy";
 import sqlWasmRuntimeSource from "sql.js/dist/sql-wasm.js?raw";
 import sqlWasmUrl from "sql.js/dist/sql-wasm.wasm?url";
@@ -93,6 +94,11 @@ export interface AgentStartOptions {
   onSelfImprovementSummary?: (
     profileId: string,
     payload: { summary: string; kind?: string | null; source?: string | null; at?: string },
+  ) => void;
+  /** Ephemeral model reasoning preview while the agent is thinking. */
+  onReasoningPreview?: (
+    profileId: string,
+    payload: { text: string; done: boolean },
   ) => void;
   ptySize?: SpawnPtySize;
 }
@@ -536,6 +542,8 @@ function buildEnv(profileId: string, profile: Profile, apiKeys: Record<string, s
     ...(import.meta.env.DEV ? { WEBAGENT_PROXY_ALLOW_PRIVATE: "1" } : {}),
     ...(autoApproveTools ? { WEBAGENT_AUTO_APPROVE_TOOLS: "1" } : {}),
     ...toolGuardrailsEnvForRuntime(import.meta.env),
+    WEBAGENT_REASONING_PREVIEW:
+      String(import.meta.env.WEBAGENT_REASONING_PREVIEW ?? "1").trim() === "0" ? "0" : "1",
   };
   const personalityLabel = getPersonalityDisplayLabelForPrompt(profile.personality);
   if (personalityLabel) env.WEBAGENT_PERSONALITY_LABEL = personalityLabel;
@@ -676,6 +684,7 @@ export async function startWebAgent(options: AgentStartOptions): Promise<void> {
     onArtifactOffer,
     onClarifyOffer,
     onSelfImprovementSummary,
+    onReasoningPreview,
     ptySize = DEFAULT_PTY,
   } = options;
   if (agentProcesses.has(profile.id)) {
@@ -856,6 +865,7 @@ export async function startWebAgent(options: AgentStartOptions): Promise<void> {
   let lastOnboardingIdentity = "";
   let inputReadyMarkerCarry = "";
   let awaitingResponseMarkerCarry = "";
+  let reasoningPreviewMarkerCarry = "";
   const profileIdForSave = profile.id;
 
   const persistSnapshotNow = async (): Promise<void> => {
@@ -903,9 +913,17 @@ export async function startWebAgent(options: AgentStartOptions): Promise<void> {
       }
     );
     inputReadyMarkerCarry = nextCarry;
+    const reasoningStrip = stripReasoningPreviewFromStream(
+      reasoningPreviewMarkerCarry,
+      data,
+      (payload) => {
+        onReasoningPreview?.(profile.id, payload);
+      }
+    );
+    reasoningPreviewMarkerCarry = reasoningStrip.nextCarry;
 
     // --- Onboarding saved detection ---
-    onboardingParseBuffer += stripAnsi(data);
+    onboardingParseBuffer += stripAnsi(reasoningStrip.data);
     if (onboardingParseBuffer.length > 4096) {
       onboardingParseBuffer = onboardingParseBuffer.slice(-1024);
     }
@@ -925,7 +943,7 @@ export async function startWebAgent(options: AgentStartOptions): Promise<void> {
     }
 
     // --- Tool call detection ---
-    toolParseLineBuffer += data;
+    toolParseLineBuffer += reasoningStrip.data;
     const toolLines = toolParseLineBuffer.split("\n");
     toolParseLineBuffer = toolLines.pop() ?? "";
     for (const line of toolLines) {
@@ -936,7 +954,7 @@ export async function startWebAgent(options: AgentStartOptions): Promise<void> {
     }
 
     // --- Prompt-ready detection ---
-    promptParseBuffer += stripAnsi(data);
+    promptParseBuffer += stripAnsi(reasoningStrip.data);
     if (promptParseBuffer.includes("❯ ") || ONBOARDING_PROMPT_RE.test(promptParseBuffer)) {
       onPromptReady?.();
       scheduleSnapshotSave();
@@ -951,7 +969,7 @@ export async function startWebAgent(options: AgentStartOptions): Promise<void> {
     }
 
     // --- IPC marker parsing ---
-    agentOutputBuffer += data;
+    agentOutputBuffer += reasoningStrip.data;
     agentOutputBuffer = capAgentOutputBuffer(agentOutputBuffer, (chunk) => {
       onOutput(chunk);
       appendAdapterDebugLog(profile.id, "rendered_output_chunk", {
@@ -1549,14 +1567,29 @@ export async function startWebAgent(options: AgentStartOptions): Promise<void> {
       }
     }
 
-    if (agentOutputBuffer.length > 0 && !agentOutputBuffer.includes("<<<WEBAGENT_") && !agentOutputBuffer.includes(PROXY_REQ_PREFIX)) {
-      const rendered = stripRenderedPrompt(agentOutputBuffer);
-      onOutput(rendered);
-      appendAdapterDebugLog(profile.id, "rendered_output_chunk", {
-        bytes: rendered.length,
-        chunk: trimChunk(rendered),
-      });
-      agentOutputBuffer = "";
+    if (agentOutputBuffer.length > 0) {
+      const markerIdx = agentOutputBuffer.indexOf("<<<WEBAGENT_");
+      if (markerIdx > 0) {
+        const rendered = stripRenderedPrompt(agentOutputBuffer.slice(0, markerIdx));
+        if (rendered) {
+          onOutput(rendered);
+          appendAdapterDebugLog(profile.id, "rendered_output_chunk", {
+            bytes: rendered.length,
+            chunk: trimChunk(rendered),
+          });
+        }
+        agentOutputBuffer = agentOutputBuffer.slice(markerIdx);
+      } else if (markerIdx < 0) {
+        const rendered = stripRenderedPrompt(agentOutputBuffer);
+        if (rendered) {
+          onOutput(rendered);
+          appendAdapterDebugLog(profile.id, "rendered_output_chunk", {
+            bytes: rendered.length,
+            chunk: trimChunk(rendered),
+          });
+        }
+        agentOutputBuffer = "";
+      }
     }
   };
 

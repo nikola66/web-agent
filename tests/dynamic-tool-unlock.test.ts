@@ -18,7 +18,7 @@ const POLICY_CATALOG = Object.fromEntries(
   POLICY_NAMES.map((name) => [name, { visibility: resolveToolVisibility(name, null) }])
 );
 
-test("skill_view primary_tools unlock deferred composio tools when configured", async () => {
+test("skill (action=view) primary_tools unlock deferred composio tools when configured", async () => {
   const viewed = await viewSkill({ name: "composio-oauth" });
   assert.ok(Array.isArray(viewed.primary_tools));
   assert.ok(viewed.primary_tools.includes("composio_action"));
@@ -57,7 +57,7 @@ test("canUnlockTool blocks composio tools without API key", () => {
   );
 });
 
-test("skill_view primary_tools match bundled multimodal-ingest frontmatter", async () => {
+test("skill (action=view) primary_tools match bundled multimodal-ingest frontmatter", async () => {
   const viewed = await viewSkill({ name: "multimodal-ingest" });
   assert.ok(Array.isArray(viewed.primary_tools));
   assert.ok(viewed.primary_tools.includes("vision_analyze"));
