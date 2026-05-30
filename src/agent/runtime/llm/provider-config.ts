@@ -2,6 +2,7 @@ import fs from "node:fs/promises";
 import type { ProviderDefinition } from "../../../core/providers/index.js";
 import { PROVIDER_CATALOG_PATH } from "../constants.js";
 import { fetchContextWindow } from "./model-metadata.js";
+import { isBigPickleModel } from "./model-quirks.js";
 
 export { fetchContextWindow };
 
@@ -51,7 +52,8 @@ function resolveBuiltInBaseUrl(selectedProvider, customBaseUrl, directBaseUrl) {
   const proxyProviderId = String(
     selectedProvider.runtime?.basePath || selectedProvider.id || ""
   ).trim();
-  if (runtimeKind === "nodebox" && appOrigin && proxyProviderId) {
+  const useLocalProxy = selectedProvider.runtime?.useLocalProxy !== false;
+  if (runtimeKind === "nodebox" && appOrigin && proxyProviderId && useLocalProxy) {
     return `${appOrigin.replace(/\/$/, "")}${LLM_PROXY_PATH_PREFIX}/${proxyProviderId}`;
   }
 
@@ -64,17 +66,22 @@ export function reasoningPreviewEnabled() {
 }
 
 /** Disable provider-native thinking/reasoning on chat/completions requests. */
-export function reasoningDisableExtras(providerId) {
-  if (reasoningPreviewEnabled()) return {};
+export function reasoningDisableExtras(providerId, modelId) {
   const id = String(providerId || "").trim().toLowerCase();
+  const model = String(modelId || "").trim();
+  if (isBigPickleModel({ provider: id, model })) {
+    return { reasoning: { enabled: false } };
+  }
+  if (reasoningPreviewEnabled()) return {};
   if (id === "openrouter") return { reasoning: { enabled: false } };
+  if (id === "opencode") return { reasoning: { enabled: false } };
   return {};
 }
 
 /** Provider-specific chat/completions body fields (stream usage, etc.). */
-export function llmChatCompletionExtras(providerId, { stream = false } = {}) {
+export function llmChatCompletionExtras(providerId, { stream = false, model } = {}) {
   const id = String(providerId || "").trim().toLowerCase();
-  const extras = { ...reasoningDisableExtras(id) };
+  const extras = { ...reasoningDisableExtras(id, model) };
   if (stream && id !== "nous" && id !== "openai-codex") {
     extras.stream_options = { include_usage: true };
   }

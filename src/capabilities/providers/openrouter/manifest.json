@@ -13,6 +13,7 @@
   },
   "runtime": {
     "basePath": "openrouter",
+    "useLocalProxy": false,
     "fallbackBaseUrl": "https://openrouter.ai/api/v1",
     "extraHeaders": {
       "HTTP-Referer": "https://github.com/aratech/web-agent",

@@ -543,7 +543,7 @@ export async function streamOpenAI(
   });
   if (cfg.apiKey) headers.Authorization = `Bearer ${cfg.apiKey}`;
   const toolList = Array.isArray(tools) ? tools : [];
-  const requestExtras = llmChatCompletionExtras(cfg.provider, { stream: true });
+  const requestExtras = llmChatCompletionExtras(cfg.provider, { stream: true, model: cfg.model });
   const maxTokens = resolveStreamMaxTokens(cfg);
   const withToolsBody =
     toolList.length > 0

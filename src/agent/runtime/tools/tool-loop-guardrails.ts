@@ -4,6 +4,11 @@
 
 import { createHash } from "node:crypto";
 import { stableStringify } from "../stream-output.js";
+import {
+  formatWriteFileMissingFieldsHint,
+  normalizeWriteFileArgs,
+  writeFileArgsMissing,
+} from "./write-file-args.js";
 
 export const IDEMPOTENT_TOOL_NAMES = new Set([
   "read_file",
@@ -220,6 +225,18 @@ function resultHash(result: string | null | undefined): string {
 export const SNAPSHOT_READ_WARN_AFTER = 1;
 export const SNAPSHOT_READ_BLOCK_AFTER = 2;
 export const WEB_FETCH_REPEAT_BLOCK_AFTER = 3;
+export const WRITE_FILE_OVERWRITE_BLOCK_AFTER = 1;
+
+function normalizeWriteFilePath(args: Record<string, unknown> | null | undefined): string {
+  const normalized = normalizeWriteFileArgs(args ?? {});
+  const path =
+    typeof normalized.path === "string"
+      ? normalized.path.trim()
+      : typeof normalized.file === "string"
+        ? normalized.file.trim()
+        : "";
+  return path.replace(/\\/g, "/");
+}
 
 function isSnapshotSpillReadPath(args: Record<string, unknown> | null | undefined): boolean {
   const pathArg = String(args?.path ?? args?.filename ?? args?.file ?? "").trim().replace(/\\/g, "/");
@@ -335,6 +352,8 @@ export class ToolCallGuardrailController {
   private noProgress = new Map<string, [string, number]>();
   private snapshotReadCount = 0;
   private webFetchUrlCounts = new Map<string, number>();
+  private writeFileOverwriteCounts = new Map<string, number>();
+  private writeFilePathLastHash = new Map<string, string>();
   private _haltDecision: ToolGuardrailDecision | null = null;
 
   constructor(config: ToolLoopGuardrailConfig = TOOL_LOOP_GUARDRAIL_DEFAULTS) {
@@ -348,6 +367,8 @@ export class ToolCallGuardrailController {
     this.noProgress.clear();
     this.snapshotReadCount = 0;
     this.webFetchUrlCounts.clear();
+    this.writeFileOverwriteCounts.clear();
+    this.writeFilePathLastHash.clear();
     this._haltDecision = null;
   }
 
@@ -377,6 +398,45 @@ export class ToolCallGuardrailController {
     args: Record<string, unknown> | null | undefined
   ): ToolGuardrailDecision {
     const signature = toolCallSignatureFromCall(toolName, args);
+
+    if (toolName === "write_file") {
+      const missing = writeFileArgsMissing(normalizeWriteFileArgs(args ?? {}));
+      if (missing.length) {
+        const blocked = decision({
+          action: "block",
+          code: "write_file_missing_required",
+          message: `write_file: invalid arguments: missing required field(s) [${missing.join(", ")}]. ${formatWriteFileMissingFieldsHint(missing)}`,
+          toolName,
+          count: 1,
+          signature,
+        });
+        this._haltDecision = blocked;
+        return blocked;
+      }
+      const path = normalizeWriteFilePath(args);
+      const append = args?.append === true;
+      if (path && !append) {
+        const lastHash = this.writeFilePathLastHash.get(path);
+        const contentChanged = !!lastHash && lastHash !== signature.argsHash;
+        if (contentChanged) {
+          const prior = this.writeFileOverwriteCounts.get(path) ?? 0;
+          if (prior >= WRITE_FILE_OVERWRITE_BLOCK_AFTER) {
+            const blocked = decision({
+              action: "block",
+              code: "write_file_overwrite_block",
+              message:
+                `write_file already overwrote ${path} ${prior} time(s) this turn with different content. ` +
+                "Use append:true for additional sections or edit_file for targeted changes — do not rewrite the whole file again.",
+              toolName,
+              count: prior,
+              signature,
+            });
+            this._haltDecision = blocked;
+            return blocked;
+          }
+        }
+      }
+    }
 
     if (toolName === "web_fetch") {
       const url = String(args?.url ?? "").trim();
@@ -472,6 +532,39 @@ export class ToolCallGuardrailController {
   ): ToolGuardrailDecision {
     const signature = toolCallSignatureFromCall(toolName, args);
     const isFailed = failed ?? classifyToolFailure(toolName, result ?? null);
+
+    if (
+      toolName === "write_file" &&
+      !isFailed &&
+      fileMutationResultLanded(toolName, result ?? "")
+    ) {
+      const path = normalizeWriteFilePath(args);
+      const append = args?.append === true;
+      if (path && !append) {
+        const lastHash = this.writeFilePathLastHash.get(path);
+        const contentChanged = !!lastHash && lastHash !== signature.argsHash;
+        if (contentChanged) {
+          const count = (this.writeFileOverwriteCounts.get(path) ?? 0) + 1;
+          this.writeFileOverwriteCounts.set(path, count);
+          if (
+            this.config.warningsEnabled &&
+            count === WRITE_FILE_OVERWRITE_BLOCK_AFTER
+          ) {
+            return decision({
+              action: "warn",
+              code: "write_file_overwrite_warning",
+              message:
+                `write_file overwrote ${path} again with different content. For additional sections use append:true; ` +
+                "for edits use edit_file — do not rewrite the entire file again unless the user asked for a full rewrite.",
+              toolName,
+              count,
+              signature,
+            });
+          }
+        }
+        this.writeFilePathLastHash.set(path, signature.argsHash);
+      }
+    }
 
     if (
       toolName === "read_file" &&

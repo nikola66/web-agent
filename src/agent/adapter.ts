@@ -1334,6 +1334,7 @@ export async function startWebAgent(options: AgentStartOptions): Promise<void> {
               url: string;
               headers?: Record<string, string>;
               body?: string | null;
+              bodyEncoding?: string;
               textBodyCap?: number;
             }>(reqBody);
             const proxyHeaders = withSubscriptionProfileHeader(profile.id, req.url, req.headers);
@@ -1345,6 +1346,7 @@ export async function startWebAgent(options: AgentStartOptions): Promise<void> {
                 url: req.url,
                 headers: proxyHeaders,
                 body: req.body ?? null,
+                bodyEncoding: req.bodyEncoding,
               }),
             });
             const data = (await parseProxyGateResponse(res)) as {

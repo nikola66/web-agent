@@ -135,6 +135,8 @@ import {
   shouldContinueContentShareDeliverable,
   shouldContinueUnparsedToolMarkup,
   buildContentShareContinuationNudge,
+  buildContentShareFallbackVisible,
+  shouldApplyContentShareFallback,
   shouldContinueIntermediateAck,
   shouldContinuePostToolStall,
   shouldContinuePreToolPromiseStall,
@@ -570,7 +572,7 @@ export async function agentTurn(
         toolIndexBlock +
         capabilityRouterBlock +
         refreshedSkills +
-        buildExecutionGuidanceBlock(typeof cfg.model === "string" ? cfg.model : null) +
+        buildExecutionGuidanceBlock(cfg) +
         buildMemoryLayerGuidanceBlock(activeToolNames);
     }
   };
@@ -638,7 +640,7 @@ export async function agentTurn(
         toolIndexBlock +
         capabilityRouterBlock +
         skillsBlock +
-        buildExecutionGuidanceBlock(typeof cfg.model === "string" ? cfg.model : null) +
+        buildExecutionGuidanceBlock(cfg) +
         buildMemoryLayerGuidanceBlock(activeToolNames),
     },
     ...safeList.filter((m) => m.role !== "system"),
@@ -694,6 +696,7 @@ export async function agentTurn(
   }
   let injectedPlanningGate = false;
   let usedTodoWriteInTurn = false;
+  let todosSeededAtTurnStart = false;
   const multistepPattern = detectMultistepTaskPattern(originalUserInput);
   const suggestedTodos = buildSuggestedTodoChecklist(originalUserInput);
   const shouldInjectGate =
@@ -715,6 +718,7 @@ export async function agentTurn(
       const { todoWriteTool } = await import("./tools/remote-tools.js");
       await todoWriteTool({ todos: suggestedTodos }, turnCtx);
       usedTodoWriteInTurn = true;
+      todosSeededAtTurnStart = true;
       await logDebugEvent("turn_multistep_todo_seeded", {
         pattern: multistepPattern,
         count: suggestedTodos.length,
@@ -1336,7 +1340,8 @@ export async function agentTurn(
           originalUserInput,
           executedToolsInTurn,
           incompleteTodoContinuations,
-          visible
+          visible,
+          { todosSeededAtTurnStart, usedTodoWriteInTurn }
         );
         if (incompleteTodoGate.continue) {
           incompleteTodoContinuations++;
@@ -1377,6 +1382,50 @@ export async function agentTurn(
             toolCalls: run.tool_calls.length,
           });
           continue;
+        }
+        if (
+          shouldApplyContentShareFallback(
+            originalUserInput,
+            executedToolsInTurn,
+            contentShareContinuations,
+            visible,
+            lastToolExecutions
+          )
+        ) {
+          const fallbackVisible = buildContentShareFallbackVisible(lastToolExecutions);
+          if (fallbackVisible) {
+            visible = fallbackVisible;
+            run.final_visible_assistant_text = fallbackVisible;
+            if (conv.length && (conv[conv.length - 1] as ChatTurnMsg).role === "assistant") {
+              conv[conv.length - 1] = { role: "assistant", content: fallbackVisible };
+            }
+            if (!quietTurn && fallbackVisible.trim() && mirrorTerminal) {
+              if (!turnHeaderPrinted) {
+                process.stdout.write(`${bold(cyan(agentName))}\n`);
+                turnHeaderPrinted = true;
+              } else {
+                process.stdout.write("\n");
+              }
+              process.stdout.write(`${prefixBlock(renderMarkdownToAnsi(fallbackVisible), false)}\n\n`);
+            }
+            await emitTranscriptEvent(
+              turnMeta,
+              createAssistantTranscriptEvent({
+                round,
+                agentName,
+                text: fallbackVisible,
+                branchBelowName: false,
+              }),
+              { round, visiblePreview: fallbackVisible.slice(0, 200) }
+            );
+            await logDebugEvent("turn_content_share_fallback", {
+              round,
+              contentShareContinuations,
+            });
+            await logTurnStopReason("completed", { round, continuationRecoveriesFired });
+            emitTurnStopLine("completed");
+            break;
+          }
         }
         let stopReason = resolveTurnStopReason(visible, executedToolsInTurn);
         const deliveredVisible = String(run.final_visible_assistant_text || "").trim();

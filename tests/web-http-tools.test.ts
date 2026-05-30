@@ -1,5 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import fs from "node:fs/promises";
+import path from "node:path";
 
 import {
   formatProxyTransportError,
@@ -17,6 +19,8 @@ import {
   urlExpectsApiJson,
   webFetchTool,
   webPostTool,
+  webSearchTool,
+  resetBrowserAgentCatalogCacheForTests,
 } from "../dist/agent-runtime/tools/remote-tools.js";
 import { BUILTIN_TOOLS } from "../dist/agent-runtime/tools/registry.js";
 
@@ -267,4 +271,88 @@ test("webPostTool schema includes extended methods and optional body", () => {
   assert.ok(schema.properties.params);
   assert.ok(schema.properties.form);
   assert.ok(schema.properties.timeout_ms);
+});
+
+test("webSearchTool calls TinyFish search API directly (not /api/proxy)", async () => {
+  const tinyfish = JSON.parse(
+    await fs.readFile(path.join(process.cwd(), "src/core/browseragent/tinyfish.json"), "utf8")
+  );
+  await fs.mkdir(".webagent", { recursive: true });
+  await fs.writeFile(".webagent/browseragent.json", JSON.stringify([tinyfish], null, 2));
+  resetBrowserAgentCatalogCacheForTests();
+
+  const fetchUrls: string[] = [];
+  const prevFetch = globalThis.fetch;
+  globalThis.fetch = async (input: RequestInfo | URL) => {
+    fetchUrls.push(String(input));
+    return {
+      ok: true,
+      async json() {
+        return { results: [] };
+      },
+    } as Response;
+  };
+
+  const prevKey = process.env.TINYFISH_API_KEY;
+  const prevAgent = process.env.WEBAGENT_BROWSER_AGENT;
+  process.env.TINYFISH_API_KEY = "tf_test";
+  process.env.WEBAGENT_BROWSER_AGENT = "tinyfish";
+
+  try {
+    await webSearchTool({ query: "test query" }, { env: process.env });
+    assert.equal(fetchUrls.length, 1);
+    assert.match(fetchUrls[0], /^https:\/\/api\.search\.tinyfish\.ai/);
+    assert.doesNotMatch(fetchUrls[0], /\/api\/proxy/);
+  } finally {
+    globalThis.fetch = prevFetch;
+    if (prevKey === undefined) delete process.env.TINYFISH_API_KEY;
+    else process.env.TINYFISH_API_KEY = prevKey;
+    if (prevAgent === undefined) delete process.env.WEBAGENT_BROWSER_AGENT;
+    else process.env.WEBAGENT_BROWSER_AGENT = prevAgent;
+    resetBrowserAgentCatalogCacheForTests();
+  }
+});
+
+test("webFetchTool calls TinyFish fetch API directly for markdown pages", async () => {
+  const tinyfish = JSON.parse(
+    await fs.readFile(path.join(process.cwd(), "src/core/browseragent/tinyfish.json"), "utf8")
+  );
+  await fs.mkdir(".webagent", { recursive: true });
+  await fs.writeFile(".webagent/browseragent.json", JSON.stringify([tinyfish], null, 2));
+  resetBrowserAgentCatalogCacheForTests();
+
+  const pageUrl = "https://example.com/about";
+  const fetchCalls: Array<{ url: string; method: string }> = [];
+  const prevFetch = globalThis.fetch;
+  globalThis.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
+    fetchCalls.push({ url: String(input), method: String(init?.method || "GET") });
+    return {
+      ok: true,
+      async json() {
+        return { results: [{ url: pageUrl, text: "page body" }] };
+      },
+    } as Response;
+  };
+
+  const prevKey = process.env.TINYFISH_API_KEY;
+  const prevAgent = process.env.WEBAGENT_BROWSER_AGENT;
+  process.env.TINYFISH_API_KEY = "tf_test";
+  process.env.WEBAGENT_BROWSER_AGENT = "tinyfish";
+
+  try {
+    const result = await webFetchTool({ url: pageUrl }, { env: process.env });
+    assert.equal(fetchCalls.length, 1);
+    assert.equal(fetchCalls[0].url, "https://api.fetch.tinyfish.ai");
+    assert.equal(fetchCalls[0].method, "POST");
+    assert.doesNotMatch(fetchCalls[0].url, /\/api\/proxy/);
+    assert.equal(result.provider, "tinyfish");
+    assert.equal(result.text, "page body");
+  } finally {
+    globalThis.fetch = prevFetch;
+    if (prevKey === undefined) delete process.env.TINYFISH_API_KEY;
+    else process.env.TINYFISH_API_KEY = prevKey;
+    if (prevAgent === undefined) delete process.env.WEBAGENT_BROWSER_AGENT;
+    else process.env.WEBAGENT_BROWSER_AGENT = prevAgent;
+    resetBrowserAgentCatalogCacheForTests();
+  }
 });

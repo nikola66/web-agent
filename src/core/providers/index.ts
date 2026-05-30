@@ -20,6 +20,8 @@ export interface ProviderDefinition {
     ensureV1Suffix?: boolean;
     extraHeaders?: Record<string, string>;
     builtinApiKey?: string;
+    /** When false, nodebox calls fallbackBaseUrl directly (CORS-tolerant providers). Default true. */
+    useLocalProxy?: boolean;
   };
 }
 

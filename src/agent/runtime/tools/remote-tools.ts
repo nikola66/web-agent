@@ -275,6 +275,10 @@ function sha256Prefix(bytes: Buffer): string {
 
 let browserAgentCatalogCache: BrowserCatalogProvider[] | null = null;
 
+export function resetBrowserAgentCatalogCacheForTests() {
+  browserAgentCatalogCache = null;
+}
+
 function ctxEnv(ctx) {
   return ctx?.env ?? process.env;
 }

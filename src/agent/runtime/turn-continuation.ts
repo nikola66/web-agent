@@ -799,13 +799,21 @@ export function shouldContinueIncompleteTodos(
   executedToolsInTurn: boolean,
   incompleteTodoContinuations: number,
   stats: TodoCompletionStats,
-  visible = ""
+  visible = "",
+  opts: { todosSeededAtTurnStart?: boolean; usedTodoWriteInTurn?: boolean } = {}
 ): boolean {
   if (incompleteTodoContinuations >= MAX_INCOMPLETE_TODO_CONTINUATIONS) return false;
   if (!executedToolsInTurn) return false;
   if (stats.total < 2 || stats.open <= 0) return false;
   if (userRequiredFinalLineSatisfied(userMessage, visible)) return false;
   if (matchesUserInputRequest(String(visible || ""))) return false;
+  if (userRequestedContentShare(userMessage)) return false;
+  const todoRelevant =
+    opts.todosSeededAtTurnStart ||
+    opts.usedTodoWriteInTurn ||
+    userRequestedStructuredTodos(userMessage) ||
+    detectMultistepTaskPattern(userMessage) != null;
+  if (!todoRelevant) return false;
   return true;
 }
 
@@ -1166,6 +1174,8 @@ export function shouldContinueIncompletePublishDeliverable(
 export function userRequestedContentShare(userMessage: string): boolean {
   const low = String(userMessage || "").trim().toLowerCase();
   if (!low) return false;
+  if (/\bshare\b.{0,30}\b(?:the|this|that|your|my)?\s*file\b/.test(low)) return true;
+  if (/\bshare\b.{0,24}\b(?:with|for)\s+me\b/.test(low)) return true;
   if (
     /\b(?:share|show|paste|display|send)\b.{0,50}\b(?:article|draft|content|markdown|file|body|text)\b/.test(
       low
@@ -1275,6 +1285,28 @@ export function contentShareDeliverableSatisfied(
   return false;
 }
 
+export function buildContentShareFallbackVisible(
+  lastExecutions: ReadFileExecution[] = []
+): string | null {
+  const read = lastSubstantialReadFileContent(lastExecutions);
+  if (!read?.content?.trim()) return null;
+  const pathHint = read.path ? ` (${read.path})` : "";
+  return `Here is the file${pathHint}:\n\n${read.content.trim()}`;
+}
+
+export function shouldApplyContentShareFallback(
+  userMessage: string,
+  executedToolsInTurn: boolean,
+  contentShareContinuations: number,
+  visible: string,
+  lastExecutions: ReadFileExecution[] = []
+): boolean {
+  if (contentShareContinuations < MAX_CONTENT_SHARE_CONTINUATIONS) return false;
+  if (!executedToolsInTurn || !userRequestedContentShare(userMessage)) return false;
+  if (contentShareDeliverableSatisfied(visible, lastExecutions)) return false;
+  return buildContentShareFallbackVisible(lastExecutions) != null;
+}
+
 export function buildContentShareContinuationNudge(
   continuationCount: number,
   lastExecutions: ReadFileExecution[] = []
@@ -1317,7 +1349,8 @@ export async function shouldContinueIncompleteTodosAsync(
   userMessage: string,
   executedToolsInTurn: boolean,
   incompleteTodoContinuations: number,
-  visible = ""
+  visible = "",
+  opts: { todosSeededAtTurnStart?: boolean; usedTodoWriteInTurn?: boolean } = {}
 ): Promise<{ continue: boolean; stats: TodoCompletionStats }> {
   const stats = await loadTodoCompletionStats();
   return {
@@ -1326,7 +1359,8 @@ export async function shouldContinueIncompleteTodosAsync(
       executedToolsInTurn,
       incompleteTodoContinuations,
       stats,
-      visible
+      visible,
+      opts
     ),
     stats,
   };

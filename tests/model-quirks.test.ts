@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 
 import {
   isOpencodeBigPickle,
+  isBigPickleModel,
   reasoningPreviewSupportedForModel,
   resolveStreamMaxTokens,
 } from "../src/agent/runtime/llm/model-quirks.js";
@@ -10,7 +11,9 @@ import {
 test("resolveStreamMaxTokens raises cap for OpenCode Big Pickle", () => {
   assert.equal(resolveStreamMaxTokens({ provider: "openrouter", model: "x" }), 8192);
   assert.equal(resolveStreamMaxTokens({ provider: "opencode", model: "big-pickle" }), 32_000);
+  assert.equal(resolveStreamMaxTokens({ provider: "openrouter", model: "org/big-pickle" }), 32_000);
   assert.equal(isOpencodeBigPickle({ provider: "opencode", model: "big-pickle" }), true);
+  assert.equal(isBigPickleModel({ provider: "openrouter", model: "org/big-pickle" }), true);
 });
 
 test("reasoning preview off for Big Pickle unless WEBAGENT_OPENCODE_REASONING_PREVIEW=1", () => {

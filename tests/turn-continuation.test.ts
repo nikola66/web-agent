@@ -31,6 +31,8 @@ import {
   shouldContinueContentShareDeliverable,
   shouldContinueUnparsedToolMarkup,
   buildContentShareContinuationNudge,
+  buildContentShareFallbackVisible,
+  shouldApplyContentShareFallback,
   userRequestedContentShare,
   contentShareDeliverableSatisfied,
   visibleContainsReadFileContent,
@@ -538,12 +540,13 @@ test("shouldContinueIncompleteTodos nudges when todos remain open", () => {
 test("shouldContinueIncompleteTodos continues despite faux completion when todos remain open", () => {
   const msg = "Refactor auth, update docs, migrate DB, and notify customers.";
   const stats = { total: 4, completed: 1, open: 3 };
+  const opts = { todosSeededAtTurnStart: true };
   assert.equal(
-    shouldContinueIncompleteTodos(msg, true, 0, stats, "Auth refactor done. Task complete."),
+    shouldContinueIncompleteTodos(msg, true, 0, stats, "Auth refactor done. Task complete.", opts),
     true
   );
   assert.equal(
-    shouldContinueIncompleteTodos(msg, true, 0, stats, "All set — ready for your review."),
+    shouldContinueIncompleteTodos(msg, true, 0, stats, "All set — ready for your review.", opts),
     true
   );
 });
@@ -551,7 +554,9 @@ test("shouldContinueIncompleteTodos continues despite faux completion when todos
 test("shouldContinueIncompleteTodos continues for open todos without structured-todo phrasing", () => {
   const msg = "Refactor auth, update docs, migrate DB, and notify customers.";
   assert.equal(
-    shouldContinueIncompleteTodos(msg, true, 0, { total: 4, completed: 1, open: 3 }),
+    shouldContinueIncompleteTodos(msg, true, 0, { total: 4, completed: 1, open: 3 }, "", {
+      todosSeededAtTurnStart: true,
+    }),
     true
   );
 });
@@ -948,4 +953,72 @@ test("buildContentShareContinuationNudge includes path on final attempt", () => 
   const nudge = buildContentShareContinuationNudge(MAX_CONTENT_SHARE_CONTINUATIONS, executions);
   assert.match(nudge, /work\/bitnet-article\/bitnet-b1-58-2b4t\.md/);
   assert.match(nudge, /Do not call read_file again/i);
+});
+
+test("userRequestedContentShare matches Share the file with me", () => {
+  assert.equal(userRequestedContentShare("Share the file with me"), true);
+});
+
+test("shouldContinueIncompleteTodos ignores stale todos on simple share request", () => {
+  const stats = { total: 4, completed: 1, open: 3 };
+  assert.equal(
+    shouldContinueIncompleteTodos("Share the file with me", true, 0, stats),
+    false
+  );
+  assert.equal(
+    shouldContinueIncompleteTodos("Share the file with me", true, 0, stats, "", {
+      todosSeededAtTurnStart: true,
+    }),
+    false
+  );
+});
+
+test("shouldContinueIncompleteTodos still nudges when todos seeded at turn start", () => {
+  assert.equal(
+    shouldContinueIncompleteTodos(
+      "Write me a fresh article about CISO challenges in 2026",
+      true,
+      0,
+      { total: 4, completed: 1, open: 3 },
+      "",
+      { todosSeededAtTurnStart: true }
+    ),
+    true
+  );
+});
+
+test("buildContentShareFallbackVisible pastes read_file body", () => {
+  const article = `# CISO Challenges\n\n${"Paragraph. ".repeat(40)}`;
+  const visible = buildContentShareFallbackVisible([
+    {
+      tool: "read_file",
+      result: { ok: true, path: "projects/ciso/article.md", content: article },
+    },
+  ]);
+  assert.ok(visible);
+  assert.match(visible!, /projects\/ciso\/article\.md/);
+  assert.match(visible!, /CISO Challenges/);
+});
+
+test("shouldApplyContentShareFallback after continuation cap with unread pasted body", () => {
+  const user = "Share the file with me";
+  const visible = "Let me read the current state and share it properly.";
+  const executions = [
+    {
+      tool: "read_file",
+      result: {
+        ok: true,
+        path: "projects/ciso/article.md",
+        content: `# CISO Challenges\n\n${"Paragraph. ".repeat(40)}`,
+      },
+    },
+  ];
+  assert.equal(
+    shouldApplyContentShareFallback(user, true, MAX_CONTENT_SHARE_CONTINUATIONS, visible, executions),
+    true
+  );
+  assert.equal(
+    shouldApplyContentShareFallback(user, true, MAX_CONTENT_SHARE_CONTINUATIONS - 1, visible, executions),
+    false
+  );
 });

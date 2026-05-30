@@ -299,6 +299,13 @@ export function buildToolGuardrailsBenchmarkCases(): BenchmarkCase[] {
     push({ category: "exact_failure_block", config, steps, expectHalt: true });
   }
 
+function benchmarkToolArgs(tool: string, base: Record<string, unknown>): Record<string, unknown> {
+  if (tool === "write_file" && base.content == null && typeof base.path === "string") {
+    return { ...base, content: `// benchmark ${String(base.path)}\n` };
+  }
+  return base;
+}
+
   for (let i = 0; i < CATEGORY_COUNTS.same_tool_warn; i++) {
     const warnAfter = 2 + (i % 3);
     const config = mergeConfig({ sameToolFailureWarnAfter: warnAfter, hardStopEnabled: false });
@@ -312,7 +319,7 @@ export function buildToolGuardrailsBenchmarkCases(): BenchmarkCase[] {
           : JSON.stringify({ error: "failed", detail: `attempt-${r}` });
       steps.push({
         tool,
-        args: { attempt: r, case: i, path: `src/x-${i}-${r}.ts` },
+        args: benchmarkToolArgs(tool, { attempt: r, case: i, path: `src/x-${i}-${r}.ts` }),
         result,
         failed: true,
         expectBefore: { action: "allow", code: "allow" },
@@ -498,7 +505,12 @@ export function buildToolGuardrailsBenchmarkCases(): BenchmarkCase[] {
     const chain = workflowTools[i % workflowTools.length]!;
     const steps: BenchmarkStep[] = chain.map((tool, j): BenchmarkStep => ({
       tool,
-      args: { step: j, batch: i, path: `projects/run-${i}/file.txt`, query: `step-${j}` },
+      args: benchmarkToolArgs(tool, {
+        step: j,
+        batch: i,
+        path: `projects/run-${i}/file.txt`,
+        query: `step-${j}`,
+      }),
       result: JSON.stringify({ ok: true, tool, step: j }),
       failed: false,
       expectBefore: { action: "allow", code: "allow" },

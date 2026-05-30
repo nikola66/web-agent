@@ -211,6 +211,55 @@ test("web_fetch blocks fourth identical URL after three successes in one turn", 
   assert.equal(blocked.code, "web_fetch_repeat_block");
 });
 
+test("write_file missing required fields blocks before execution", () => {
+  const controller = new ToolCallGuardrailController();
+  const blocked = controller.beforeCall("write_file", {});
+  assert.equal(blocked.action, "block");
+  assert.equal(blocked.code, "write_file_missing_required");
+  assert.match(blocked.message, /path.*content/i);
+});
+
+test("write_file repeated full overwrite blocks after second distinct rewrite", () => {
+  const controller = new ToolCallGuardrailController();
+  const path = "projects/blog/article.md";
+  const ok = JSON.stringify({ ok: true, path, bytes: 120 });
+  assert.equal(
+    controller.beforeCall("write_file", { path, content: "# Title\n\nBody" }).action,
+    "allow"
+  );
+  controller.afterCall("write_file", { path, content: "# Title\n\nBody" }, ok, false);
+  assert.equal(
+    controller.beforeCall("write_file", { path, content: "# New Title\n\nRewritten" }).action,
+    "allow"
+  );
+  const warned = controller.afterCall(
+    "write_file",
+    { path, content: "# New Title\n\nRewritten" },
+    ok,
+    false
+  );
+  assert.equal(warned.action, "warn");
+  assert.equal(warned.code, "write_file_overwrite_warning");
+  const blocked = controller.beforeCall("write_file", {
+    path,
+    content: "# Third rewrite\n\nAgain",
+  });
+  assert.equal(blocked.action, "block");
+  assert.equal(blocked.code, "write_file_overwrite_block");
+});
+
+test("write_file append after overwrite remains allowed", () => {
+  const controller = new ToolCallGuardrailController();
+  const path = "projects/blog/article.md";
+  const ok = JSON.stringify({ ok: true, path, bytes: 120 });
+  controller.afterCall("write_file", { path, content: "# Title" }, ok, false);
+  controller.afterCall("write_file", { path, content: "# Title v2" }, ok, false);
+  assert.equal(
+    controller.beforeCall("write_file", { path, content: "\n\nMore", append: true }).action,
+    "allow"
+  );
+});
+
 test("success resets exact signature failure streak", () => {
   const controller = new ToolCallGuardrailController({
     ...TOOL_LOOP_GUARDRAIL_DEFAULTS,

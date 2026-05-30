@@ -255,7 +255,8 @@ export function decideNoToolsContinuation(input: NoToolsContinuationInput): NoTo
       executedToolsInTurn,
       counts.incompleteTodos,
       todoStats,
-      visible
+      visible,
+      { usedTodoWriteInTurn: runToolCalls.some((t) => String(t?.name || "") === "todo_write") }
     )
   ) {
     return { action: "continue", kind: "incomplete_todos" };

@@ -1,5 +1,7 @@
 /** Hermes-style tool-use and execution guidance (ported from hermes-agent prompt_builder.py). */
 
+import { isBigPickleModel, type LlmCfgLike } from "./llm/model-quirks.js";
+
 export const TOOL_USE_ENFORCEMENT_GUIDANCE =
   "# Tool-use enforcement\n" +
   "You MUST use your tools to take action — do not describe what you would do " +
@@ -66,10 +68,31 @@ export const OPENAI_MODEL_EXECUTION_GUIDANCE =
 
 const ENFORCEMENT_MODEL_HINTS = ["gpt", "codex", "gemini", "gemma", "grok", "glm", "qwen", "deepseek"];
 
-export function buildExecutionGuidanceBlock(modelId: string | null | undefined): string {
+export const BIG_PICKLE_TOOL_CALL_GUIDANCE =
+  "# Big Pickle tool-call discipline\n" +
+  "Emit native tool_calls with valid JSON arguments — never bare tool names, DSML/XML tags, or markdown fences.\n" +
+  "Each tool call must include every required schema field in one object (flat keys or under `arguments`).\n" +
+  "write_file example: {\"path\":\"projects/<slug>/article.md\",\"content\":\"# Title\\n\\n...\"}. " +
+  "For long bodies: first write_file without append, then write_file with \"append\":true for later sections.\n" +
+  "Never call write_file with {} or without both path and content.\n" +
+  "When the user asks to share/show/paste a file you already wrote or read, paste the full markdown in your reply — " +
+  "do not call read_file again or promise to share later.\n" +
+  "Do not rewrite the same file from scratch unless the user asked for a full rewrite — use append:true or edit_file.";
+
+export function buildExecutionGuidanceBlock(
+  cfgOrModelId: LlmCfgLike | string | null | undefined
+): string {
+  const cfg: LlmCfgLike | null =
+    cfgOrModelId && typeof cfgOrModelId === "object" ? cfgOrModelId : null;
+  const modelId = cfg ? cfg.model : cfgOrModelId;
   const model = String(modelId || "").toLowerCase();
-  const extended = ENFORCEMENT_MODEL_HINTS.some((hint) => model.includes(hint));
-  return extended
+  const extended =
+    ENFORCEMENT_MODEL_HINTS.some((hint) => model.includes(hint)) || isBigPickleModel(cfg ?? { model });
+  let block = extended
     ? `${TOOL_USE_ENFORCEMENT_GUIDANCE}\n\n${OPENAI_MODEL_EXECUTION_GUIDANCE}`
     : TOOL_USE_ENFORCEMENT_GUIDANCE;
+  if (isBigPickleModel(cfg ?? { model: modelId })) {
+    block += `\n\n${BIG_PICKLE_TOOL_CALL_GUIDANCE}`;
+  }
+  return block;
 }

@@ -12,6 +12,7 @@ test("reasoningDisableExtras uses OpenRouter reasoning object only", async () =>
   try {
     assert.equal(reasoningPreviewEnabled(), false);
     assert.deepEqual(reasoningDisableExtras("openrouter"), { reasoning: { enabled: false } });
+    assert.deepEqual(reasoningDisableExtras("opencode"), { reasoning: { enabled: false } });
     assert.deepEqual(reasoningDisableExtras("ollama"), {});
   } finally {
     if (prev === undefined) delete process.env.WEBAGENT_REASONING_PREVIEW;
@@ -19,6 +20,12 @@ test("reasoningDisableExtras uses OpenRouter reasoning object only", async () =>
   }
   assert.equal(reasoningPreviewEnabled(), true);
   assert.deepEqual(reasoningDisableExtras("openrouter"), {});
+  assert.deepEqual(reasoningDisableExtras("openrouter", "org/big-pickle"), {
+    reasoning: { enabled: false },
+  });
+  assert.deepEqual(reasoningDisableExtras("opencode", "big-pickle"), {
+    reasoning: { enabled: false },
+  });
   assert.deepEqual(reasoningDisableExtras("nous"), {});
   assert.deepEqual(reasoningDisableExtras("custom"), {});
 });
@@ -63,6 +70,48 @@ test("resolveLlm routes built-in providers through the app LLM proxy in nodebox"
     process.env.WEBAGENT_RUNTIME = previous.runtime;
     process.env.WEBAGENT_APP_ORIGIN = previous.origin;
     process.env.OLLAMA_API_KEY = previous.ollamaKey;
+  }
+});
+
+test("resolveLlm routes OpenRouter directly in nodebox when useLocalProxy is false", async () => {
+  const providers = await Promise.all(
+    (await fs.readdir(path.join(process.cwd(), "src/capabilities/providers"))).map(
+      async (dir) =>
+        JSON.parse(
+          await fs.readFile(
+            path.join(process.cwd(), "src/capabilities/providers", dir, "manifest.json"),
+            "utf8"
+          )
+        )
+    )
+  );
+
+  await fs.mkdir(".webagent", { recursive: true });
+  await fs.writeFile(".webagent/providers.json", JSON.stringify(providers, null, 2));
+
+  const previous = {
+    provider: process.env.WEBAGENT_PROVIDER,
+    runtime: process.env.WEBAGENT_RUNTIME,
+    origin: process.env.WEBAGENT_APP_ORIGIN,
+    openrouterKey: process.env.OPENROUTER_API_KEY,
+  };
+
+  process.env.WEBAGENT_PROVIDER = "openrouter";
+  process.env.WEBAGENT_RUNTIME = "nodebox";
+  process.env.WEBAGENT_APP_ORIGIN = "http://localhost:5173";
+  process.env.OPENROUTER_API_KEY = "test-key";
+
+  try {
+    const { resolveLlm } = await import("../dist/agent-runtime/llm/provider-config.js");
+    const cfg = await resolveLlm();
+    assert.ok(cfg);
+    assert.equal(cfg.provider, "openrouter");
+    assert.equal(cfg.baseUrl, "https://openrouter.ai/api/v1");
+  } finally {
+    process.env.WEBAGENT_PROVIDER = previous.provider;
+    process.env.WEBAGENT_RUNTIME = previous.runtime;
+    process.env.WEBAGENT_APP_ORIGIN = previous.origin;
+    process.env.OPENROUTER_API_KEY = previous.openrouterKey;
   }
 });
 
