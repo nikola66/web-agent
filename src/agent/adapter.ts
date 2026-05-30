@@ -113,7 +113,8 @@ const runtimeBootLabel = () =>
 
 const DEFAULT_PTY: SpawnPtySize = { cols: 120, rows: 40 };
 const STARTUP_TIMEOUT_MS = 20_000;
-const BOOT_TIMEOUT_MS = 90_000;
+const NODEBOX_BOOT_TIMEOUT_MS = 90_000;
+const LINUXONTAB_BOOT_TIMEOUT_MS = 600_000;
 const PROFILE_UPDATE_START = "<<<WEBAGENT_PROFILE_UPDATE>>>";
 const PROFILE_UPDATE_END = "<<<END_WEBAGENT_PROFILE_UPDATE>>>";
 const USER_UPDATE_START = "<<<WEBAGENT_USER_UPDATE>>>";
@@ -717,7 +718,11 @@ export async function startWebAgent(options: AgentStartOptions): Promise<void> {
       : "\x1b[90m  (First run can take a moment while runtime assets download.)\x1b[0m\n"
   );
   try {
-    await withTimeout(bootSandboxRuntime(activeRuntimeKind()), `${runtimeBootLabel()} boot`, BOOT_TIMEOUT_MS);
+    await withTimeout(
+      bootSandboxRuntime(activeRuntimeKind()),
+      `${runtimeBootLabel()} boot`,
+      activeRuntimeKind() === "linuxontab" ? LINUXONTAB_BOOT_TIMEOUT_MS : NODEBOX_BOOT_TIMEOUT_MS
+    );
   } catch (err) {
     if ((err as Error)?.message?.includes("timed out")) {
       onOutput(`\x1b[33m▸ ${formatBootTimeoutMessage("boot")}\x1b[0m\n`);

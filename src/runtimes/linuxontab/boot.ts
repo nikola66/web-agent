@@ -16,10 +16,12 @@ function readViteEnv(name: string): string {
 
 type V86Emulator = {
   serial0_send: (char: string) => void;
-  add_listener: (event: string, cb: (byte: number) => void) => void;
+  keyboard_send_scancodes?: (codes: number[]) => void | Promise<void>;
+  add_listener: (event: string, cb: (...args: unknown[]) => void) => void;
+  remove_listener: (event: string, cb: (...args: unknown[]) => void) => void;
   destroy: () => void;
-  run: () => void;
-  stop: () => void;
+  run: () => void | Promise<void>;
+  stop: () => void | Promise<void>;
   fs9p?: {
     read_file: (path: string) => Uint8Array | string;
     write_file: (path: string, data: string | Uint8Array) => void;
@@ -36,7 +38,7 @@ declare global {
   }
 }
 
-const BOOT_TIMEOUT_MS = 180_000;
+const BOOT_TIMEOUT_MS = 600_000;
 const DEFAULT_ASSET_BASE = "https://linuxontab.com/shell/";
 const DEFAULT_ISO = "alpine.iso";
 const DEFAULT_RELAY = "wisps://linuxontab-net.fly.dev/wisp";
@@ -46,6 +48,24 @@ let bridge: SerialBridge | null = null;
 let booting: Promise<void> | null = null;
 let bootReady = false;
 let scriptLoaded = false;
+let serialByteCount = 0;
+
+function tapEnter(): void {
+  try {
+    emulator?.keyboard_send_scancodes?.([0x1c, 0x9c]);
+  } catch {
+    /* keyboard optional */
+  }
+}
+
+async function waitForSerialActivity(timeoutMs = 120_000): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (serialByteCount > 0) return;
+    tapEnter();
+    await new Promise((r) => setTimeout(r, 1500));
+  }
+}
 
 function assetBase(): string {
   const raw = String(readViteEnv("VITE_LINUXONTAB_ASSET_BASE") || DEFAULT_ASSET_BASE).trim();
@@ -92,11 +112,17 @@ function sendSerial(text: string): void {
 async function waitForLoginPrompt(timeoutMs = BOOT_TIMEOUT_MS): Promise<void> {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
-    const probe = await getBridge().runShell("echo __WEBAGENT_LOT_LOGIN_OK__", {
-      timeoutMs: 15_000,
-    });
-    if (probe.stdout.includes("__WEBAGENT_LOT_LOGIN_OK__") && probe.exitCode === 0) return;
-    await new Promise((r) => setTimeout(r, 2000));
+    const remaining = deadline - Date.now();
+    if (remaining <= 0) break;
+    try {
+      const probe = await getBridge().runShell("echo __WEBAGENT_LOT_LOGIN_OK__", {
+        timeoutMs: Math.min(30_000, remaining),
+      });
+      if (probe.stdout.includes("__WEBAGENT_LOT_LOGIN_OK__") && probe.exitCode === 0) return;
+    } catch {
+      /* serial shell not ready yet — Alpine/v86 may still be booting */
+    }
+    await new Promise((r) => setTimeout(r, 3000));
   }
   throw new Error("LinuxOnTab boot timed out waiting for shell");
 }
@@ -125,16 +151,35 @@ function getBridge(): SerialBridge {
   return bridge;
 }
 
+function waitForEmulatorEvent(event: string, timeoutMs: number): Promise<void> {
+  const emu = emulator;
+  if (!emu) return Promise.reject(new Error("LinuxOnTab emulator not initialized"));
+  return new Promise((resolve, reject) => {
+    const handler = () => {
+      clearTimeout(timer);
+      emu.remove_listener(event, handler);
+      resolve();
+    };
+    const timer = setTimeout(() => {
+      emu.remove_listener(event, handler);
+      reject(new Error(`LinuxOnTab v86 '${event}' timed out after ${timeoutMs}ms`));
+    }, timeoutMs);
+    emu.add_listener(event, handler);
+  });
+}
+
 async function bootEmulator(): Promise<void> {
   await loadV86Script();
   if (emulator) return;
 
+  serialByteCount = 0;
   bridge = new SerialBridge({ send: sendSerial, timeoutMs: 120_000 });
 
   const iso = String(readViteEnv("VITE_LINUXONTAB_ISO") || DEFAULT_ISO).trim() || DEFAULT_ISO;
   const memMb = Number.parseInt(String(readViteEnv("VITE_LINUXONTAB_MEM_MB") || "2048"), 10) || 2048;
   const relay = String(readViteEnv("VITE_LINUXONTAB_RELAY_URL") || DEFAULT_RELAY).trim() || DEFAULT_RELAY;
 
+  let downloadError: unknown = null;
   emulator = new window.V86!({
     wasm_path: assetUrl("v86.wasm"),
     bios: { url: assetUrl("seabios.bin") },
@@ -154,12 +199,35 @@ async function bootEmulator(): Promise<void> {
     },
   });
 
+  emulator.add_listener("download-error", (info) => {
+    downloadError = info;
+    console.error("[linuxontab] v86 asset download failed", info);
+  });
+
   emulator.add_listener("serial0-output-byte", (byte) => {
-    bridge?.onByte(byte);
+    serialByteCount++;
+    bridge?.onByte(Number(byte));
   });
 
   bridge.setReady(true);
-  emulator.run();
+
+  await waitForEmulatorEvent("emulator-ready", 300_000);
+  if (downloadError) {
+    throw new Error(
+      `LinuxOnTab failed to download v86 assets: ${JSON.stringify(downloadError)}`
+    );
+  }
+
+  const isolinuxAutopilot = setInterval(() => {
+    if (serialByteCount > 0) {
+      clearInterval(isolinuxAutopilot);
+      return;
+    }
+    tapEnter();
+  }, 1500);
+  setTimeout(() => clearInterval(isolinuxAutopilot), 30_000);
+
+  await waitForSerialActivity();
   await waitForLoginPrompt();
   bootReady = true;
   await ensureGuestPackages();
@@ -318,6 +386,7 @@ export const linuxOnTabRuntime: SandboxRuntime = {
   },
   async teardown() {
     bootReady = false;
+    serialByteCount = 0;
     bridge = null;
     if (emulator) {
       try {
