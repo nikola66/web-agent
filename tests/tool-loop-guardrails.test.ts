@@ -30,7 +30,7 @@ test("default config is warn-first with hard stop disabled", () => {
   assert.equal(TOOL_LOOP_GUARDRAIL_DEFAULTS.noProgressWarnAfter, 2);
 });
 
-test("repeated identical failed call warns without blocking by default", () => {
+test("repeated identical failed call warns then halts by default", () => {
   const controller = new ToolCallGuardrailController();
   const args = { query: "same" };
   const decisions = [];
@@ -41,9 +41,10 @@ test("repeated identical failed call warns without blocking by default", () => {
   assert.equal(decisions[0]?.action, "allow");
   assert.deepEqual(
     decisions.slice(1).map((d) => d.action),
-    ["warn", "warn", "warn", "warn"]
+    ["warn", "halt", "halt", "halt"]
   );
-  assert.equal(controller.haltDecision, null);
+  assert.equal(decisions[2]?.code, "doom_loop_halt");
+  assert.equal(controller.haltDecision?.code, "doom_loop_halt");
 });
 
 test("hard stop blocks repeated exact failure before next execution", () => {
@@ -88,6 +89,25 @@ test("read_file failure warnings include path-specific recovery guidance", () =>
   const warned = controller.afterCall("read_file", { path: "b.ts" }, '{"error":"missing"}', true);
   assert.equal(warned.action, "warn");
   assert.match(warned.message, /list_dir|find_files/i);
+});
+
+test("run_python failure warnings steer away from urllib loops", () => {
+  const controller = new ToolCallGuardrailController({
+    ...TOOL_LOOP_GUARDRAIL_DEFAULTS,
+    sameToolFailureWarnAfter: 2,
+  });
+  const err = "run_python exited with code 1\nstderr:\nTypeError: 'JsProxy' object is not iterable";
+  controller.afterCall("run_python", { code: "import urllib.request" }, JSON.stringify({ error: err }), true);
+  const warned = controller.afterCall(
+    "run_python",
+    { code: "import webagent.http as http" },
+    JSON.stringify({ error: err }),
+    true
+  );
+  assert.equal(warned.action, "warn");
+  assert.match(warned.message, /web_fetch|web_post/);
+  assert.match(warned.message, /webagent\.http/);
+  assert.match(warned.message, /urllib|pyfetch|requests/i);
 });
 
 test("grep failure warnings mention directory root requirement", () => {
@@ -219,6 +239,15 @@ test("write_file missing required fields blocks before execution", () => {
   assert.match(blocked.message, /path.*content/i);
 });
 
+test("repeated identical blocked calls halt as a doom loop", () => {
+  const controller = new ToolCallGuardrailController();
+  assert.equal(controller.beforeCall("write_file", {}).action, "block");
+  assert.equal(controller.beforeCall("write_file", {}).action, "block");
+  const halted = controller.beforeCall("write_file", {});
+  assert.equal(halted.action, "halt");
+  assert.equal(halted.code, "doom_loop_halt");
+});
+
 test("write_file repeated full overwrite blocks after second distinct rewrite", () => {
   const controller = new ToolCallGuardrailController();
   const path = "projects/blog/article.md";
@@ -256,6 +285,27 @@ test("write_file append after overwrite remains allowed", () => {
   controller.afterCall("write_file", { path, content: "# Title v2" }, ok, false);
   assert.equal(
     controller.beforeCall("write_file", { path, content: "\n\nMore", append: true }).action,
+    "allow"
+  );
+  assert.equal(
+    controller.beforeCall("write_file", { path, content: "\n\nMore", append: "true" }).action,
+    "allow"
+  );
+});
+
+test("delete_file resets same-path write_file overwrite guardrail", () => {
+  const controller = new ToolCallGuardrailController();
+  const path = "projects/blog/article.md";
+  const ok = JSON.stringify({ ok: true, path, bytes: 120 });
+  controller.afterCall("write_file", { path, content: "# Title" }, ok, false);
+  controller.afterCall("write_file", { path, content: "# Title v2" }, ok, false);
+  assert.equal(
+    controller.beforeCall("write_file", { path, content: "# Blocked rewrite" }).action,
+    "block"
+  );
+  controller.afterCall("delete_file", { path }, JSON.stringify({ ok: true }), false);
+  assert.equal(
+    controller.beforeCall("write_file", { path, content: "# Fresh file after delete" }).action,
     "allow"
   );
 });

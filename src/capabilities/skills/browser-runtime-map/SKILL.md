@@ -1,9 +1,9 @@
 ---
 name: Browser Runtime Map
 description: Use when shell commands fail, npx/curl/git won't run, or you must choose run_shell vs web_fetch vs file tools in Nodebox vs host.
-version: 1.1.0
+version: 1.2.0
 category: bundled
-primary-tools: [read_file, browse_workspace, grep, web_fetch, web_post, run_python, run_shell]
+primary-tools: [read_file, browse_workspace, grep, web_search, web_fetch, web_post, web_upload, write_file, edit_file, multi_edit, apply_patch, make_dir, move_file, delete_file, file_diff, run_python, run_shell, archive_list, extract_archive, system_info, tool_search, tool_activate]
 tags: [nodebox, shell, runtime, tools, webcontainer, run_shell, command-failed]
 triggers: [shell failed, command failed, npx, curl, git clone, nodebox, no such file, not found in path, webcontainer, run this command]
 ---
@@ -48,6 +48,7 @@ Canonical built-in tool picker. Other skills defer here for filesystem vs HTTP v
 | One-off shell (last resort) | `run_shell` — Nodebox: **`node …`**, `python3 …` via Pyodide, plus simple read-only probes (`date`, `pwd`, `echo`, `wc -l`) |
 
 **Non-negotiable:** No `curl`/`npx`/`git clone` when a row above fits. Nodebox has **no** POSIX shell. Skill installs: `skill` (action=bulk / action=manage), never shell.
+Legacy browse aliases may appear in older transcripts; prefer `browse_workspace` actions in new work.
 
 ## When to Use
 

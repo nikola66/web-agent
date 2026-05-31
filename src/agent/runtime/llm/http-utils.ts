@@ -1,3 +1,20 @@
+const SUBSCRIPTION_LLM_PROVIDER_IDS = ["nous", "openai-codex"] as const;
+
+export function isSubscriptionLlmEndpoint(endpoint: string): boolean {
+  const target = String(endpoint || "");
+  return SUBSCRIPTION_LLM_PROVIDER_IDS.some((id) => target.includes(`/api/llm/${id}/`));
+}
+
+export function withRuntimeSubscriptionProfileHeader(
+  endpoint: string,
+  headers: Record<string, string> = {}
+): Record<string, string> {
+  if (!isSubscriptionLlmEndpoint(endpoint)) return headers;
+  const profileId = String(process.env.WEBAGENT_PROFILE_ID || "").trim();
+  if (!profileId) return headers;
+  return { ...headers, "x-webagent-profile-id": profileId };
+}
+
 export function shouldUseNodeboxLlmProxy(endpoint: string): boolean {
   const runtime = String(process.env.WEBAGENT_RUNTIME || "").trim();
   if (runtime !== "nodebox" && runtime !== "linuxontab") return false;

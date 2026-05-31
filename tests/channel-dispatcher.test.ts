@@ -247,6 +247,111 @@ test("channel dispatcher continues when non-critical transcript delivery fails",
   }
 });
 
+test("telegram sends phase-aware status after configured silence", async () => {
+  const originalCwd = process.cwd();
+  const tmp = await fs.mkdtemp(path.join(os.tmpdir(), "webagent-channel-"));
+  const dispatcherUrl = pathToFileURL(
+    path.join(originalCwd, "dist/agent-runtime/channels/dispatcher.js")
+  ).href;
+  const prevFirst = process.env.WEBAGENT_CHANNEL_STATUS_FIRST_MS;
+  const prevRepeat = process.env.WEBAGENT_CHANNEL_STATUS_REPEAT_MS;
+
+  process.chdir(tmp);
+  process.env.WEBAGENT_MEMORY_ROOT = path.join(tmp, "memory");
+  process.env.WEBAGENT_CHANNEL_STATUS_FIRST_MS = "20";
+  process.env.WEBAGENT_CHANNEL_STATUS_REPEAT_MS = "1000";
+
+  try {
+    const { createChannelInboundHandler } = await import(`${dispatcherUrl}?t=${Date.now()}-status`);
+    const replies = [];
+    const inbound = createChannelInboundHandler({
+      cfg: {},
+      sendReply: async (_chatId, text) => {
+        replies.push(text);
+      },
+      agentTurn: async (_history, _cfg, meta) => {
+        await new Promise((resolve) => setTimeout(resolve, 70));
+        await meta.onTranscript({
+          type: "assistant",
+          agentName: "Opaline",
+          text: "Done",
+          branchBelowName: true,
+        });
+        return [{ role: "assistant", content: "Done" }];
+      },
+    });
+
+    await inbound({ channel: "telegram", chatId: "123", text: "slow answer" });
+
+    assert.ok(replies.includes("Working…"));
+    assert.equal(replies.at(-1), "Done");
+    assert.ok(!replies.some((text) => /Still working/i.test(text)));
+  } finally {
+    process.chdir(originalCwd);
+    delete process.env.WEBAGENT_MEMORY_ROOT;
+    if (prevFirst === undefined) delete process.env.WEBAGENT_CHANNEL_STATUS_FIRST_MS;
+    else process.env.WEBAGENT_CHANNEL_STATUS_FIRST_MS = prevFirst;
+    if (prevRepeat === undefined) delete process.env.WEBAGENT_CHANNEL_STATUS_REPEAT_MS;
+    else process.env.WEBAGENT_CHANNEL_STATUS_REPEAT_MS = prevRepeat;
+    await fs.rm(tmp, { recursive: true, force: true });
+  }
+});
+
+test("telegram status timer is suppressed while transcript events flow", async () => {
+  const originalCwd = process.cwd();
+  const tmp = await fs.mkdtemp(path.join(os.tmpdir(), "webagent-channel-"));
+  const dispatcherUrl = pathToFileURL(
+    path.join(originalCwd, "dist/agent-runtime/channels/dispatcher.js")
+  ).href;
+  const prevFirst = process.env.WEBAGENT_CHANNEL_STATUS_FIRST_MS;
+  const prevRepeat = process.env.WEBAGENT_CHANNEL_STATUS_REPEAT_MS;
+
+  process.chdir(tmp);
+  process.env.WEBAGENT_MEMORY_ROOT = path.join(tmp, "memory");
+  process.env.WEBAGENT_CHANNEL_STATUS_FIRST_MS = "20";
+  process.env.WEBAGENT_CHANNEL_STATUS_REPEAT_MS = "1000";
+
+  try {
+    const { createChannelInboundHandler } = await import(`${dispatcherUrl}?t=${Date.now()}-status-suppress`);
+    const replies = [];
+    const inbound = createChannelInboundHandler({
+      cfg: {},
+      sendReply: async (_chatId, text) => {
+        replies.push(text);
+      },
+      agentTurn: async (_history, _cfg, meta) => {
+        for (let i = 0; i < 4; i++) {
+          await meta.onTranscript({ type: "tool_start", name: "web_fetch", argsPreview: "{}" });
+          await new Promise((resolve) => setTimeout(resolve, 12));
+        }
+        await meta.onTranscript({ type: "tool_result", name: "web_fetch", status: "ok" });
+        await meta.onTranscript({
+          type: "assistant",
+          agentName: "Opaline",
+          text: "Done",
+          branchBelowName: true,
+        });
+        return [{ role: "assistant", content: "Done" }];
+      },
+    });
+
+    await inbound({ channel: "telegram", chatId: "123", text: "fetch this" });
+
+    assert.ok(replies.some((text) => /^▸ .*web_fetch/.test(text)));
+    assert.ok(replies.some((text) => /^✓ .*web_fetch/.test(text)));
+    assert.equal(replies.at(-1), "Done");
+    assert.ok(!replies.some((text) => /^(Working|Still running|Still working)/i.test(text)));
+  } finally {
+    process.chdir(originalCwd);
+    delete process.env.WEBAGENT_MEMORY_ROOT;
+    if (prevFirst === undefined) delete process.env.WEBAGENT_CHANNEL_STATUS_FIRST_MS;
+    else process.env.WEBAGENT_CHANNEL_STATUS_FIRST_MS = prevFirst;
+    if (prevRepeat === undefined) delete process.env.WEBAGENT_CHANNEL_STATUS_REPEAT_MS;
+    else process.env.WEBAGENT_CHANNEL_STATUS_REPEAT_MS = prevRepeat;
+    await fs.rm(tmp, { recursive: true, force: true });
+  }
+});
+
 test("channel dispatcher handles /compact without starting an agent turn", async () => {
   const originalCwd = process.cwd();
   const tmp = await fs.mkdtemp(path.join(os.tmpdir(), "webagent-channel-"));

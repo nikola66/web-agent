@@ -10,6 +10,7 @@ import {
   invalidateSkillsContextCache,
 } from "../dist/agent-runtime/memory/index.js";
 import { BUILTIN_TOOLS } from "../dist/agent-runtime/tools/registry-browser.js";
+import { TOOL_SKILL_ROUTES } from "../dist/agent-runtime/tool-skill-routes.js";
 
 const BUNDLED_SKILL_DIR = nodePath.join(process.cwd(), "src/capabilities/skills");
 const BUILTIN_TOOL_NAMES = Object.keys(BUILTIN_TOOLS);
@@ -37,6 +38,15 @@ function parseTriggersFromRaw(raw) {
     out.push(m[1].trim());
   }
   return out;
+}
+
+function parsePrimaryToolsFromRaw(raw) {
+  const inline = raw.match(/^primary-tools:\s*\[([^\]]*)\]/m);
+  if (!inline) return [];
+  return inline[1]
+    .split(",")
+    .map((t) => t.trim().replace(/^["']|["']$/g, ""))
+    .filter(Boolean);
 }
 
 async function readBundledSkillSlugs() {
@@ -144,4 +154,50 @@ test("skills context index matches user message to triggers", async () => {
   assert.match(context, /skill[^a-z]|`skill`/);
   assert.match(context, /systematic-debugging/);
   assert.match(context, /\| triggers:.*\bbug\b/);
+});
+
+test("every built-in tool has one canonical skill route", async () => {
+  invalidateSkillsContextCache();
+  const builtinNames = Object.keys(BUILTIN_TOOLS).sort();
+  const routes = [...TOOL_SKILL_ROUTES].sort((a, b) => a.tool.localeCompare(b.tool));
+  assert.deepEqual(
+    routes.map((r) => r.tool),
+    builtinNames,
+    "tool-skill route map should cover each built-in exactly once"
+  );
+
+  const slugs = await readBundledSkillSlugs();
+  const slugSet = new Set(slugs);
+  const primaryBySlug = new Map();
+  for (const slug of slugs) {
+    const raw = await fs.readFile(nodePath.join(BUNDLED_SKILL_DIR, slug, "SKILL.md"), "utf8");
+    primaryBySlug.set(slug, new Set(parsePrimaryToolsFromRaw(raw)));
+  }
+
+  for (const route of routes) {
+    assert.ok(slugSet.has(route.skill), `${route.tool} canonical skill should exist: ${route.skill}`);
+    const viewed = await viewSkill({ name: route.skill });
+    assert.equal(viewed.slug, route.skill, `${route.skill} should be viewable`);
+    if (!route.aliasOf) {
+      const primary = primaryBySlug.get(route.skill) || new Set();
+      assert.ok(
+        primary.has(route.tool),
+        `${route.tool} should be in ${route.skill} primary-tools or marked aliasOf`
+      );
+    }
+  }
+});
+
+test("bundled skills do not teach hidden browse aliases as preferred primary tools", async () => {
+  const hiddenBrowseAliases = new Set(["list_dir", "find_files", "tree"]);
+  const slugs = await readBundledSkillSlugs();
+  const offenders = [];
+  for (const slug of slugs) {
+    const raw = await fs.readFile(nodePath.join(BUNDLED_SKILL_DIR, slug, "SKILL.md"), "utf8");
+    const primary = parsePrimaryToolsFromRaw(raw);
+    for (const tool of primary) {
+      if (hiddenBrowseAliases.has(tool)) offenders.push(`${slug}:${tool}`);
+    }
+  }
+  assert.deepEqual(offenders, []);
 });

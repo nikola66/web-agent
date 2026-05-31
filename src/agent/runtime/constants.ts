@@ -197,4 +197,7 @@ export const HIDDEN_STREAM_MARKERS = [
   { start: LONGCAT_TOOLCALL_START_MARKER, end: LONGCAT_TOOLCALL_END_MARKER },
   { start: FUNCTION_XML_START_MARKER, end: FUNCTION_XML_END_MARKER },
   { start: DSML_TOOLCALLS_START_MARKER, end: DSML_TOOLCALLS_END_MARKER },
+  { start: "<read_file>", end: "</read_file>" },
+  { start: "<write_file>", end: "</write_file>" },
+  { start: "<artifact_present>", end: "</artifact_present>" },
 ];

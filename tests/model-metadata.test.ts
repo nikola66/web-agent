@@ -222,6 +222,38 @@ test("shouldUseNodeboxLlmProxy matches app-origin llm proxy URLs only in nodebox
   }
 });
 
+test("withRuntimeSubscriptionProfileHeader adds profile id for subscription LLM endpoints", async () => {
+  const {
+    isSubscriptionLlmEndpoint,
+    withRuntimeSubscriptionProfileHeader,
+  } = await import("../dist/agent-runtime/llm/http-utils.js");
+  const prevProfile = process.env.WEBAGENT_PROFILE_ID;
+  try {
+    assert.equal(isSubscriptionLlmEndpoint("http://localhost:5173/api/llm/nous/chat/completions"), true);
+    assert.equal(isSubscriptionLlmEndpoint("https://openrouter.ai/api/v1/chat/completions"), false);
+    delete process.env.WEBAGENT_PROFILE_ID;
+    assert.deepEqual(
+      withRuntimeSubscriptionProfileHeader("http://localhost:5173/api/llm/nous/chat/completions", {
+        "Content-Type": "application/json",
+      }),
+      { "Content-Type": "application/json" }
+    );
+    process.env.WEBAGENT_PROFILE_ID = "agent-1";
+    assert.deepEqual(
+      withRuntimeSubscriptionProfileHeader("http://localhost:5173/api/llm/nous/chat/completions", {
+        "Content-Type": "application/json",
+      }),
+      {
+        "Content-Type": "application/json",
+        "x-webagent-profile-id": "agent-1",
+      }
+    );
+  } finally {
+    if (prevProfile === undefined) delete process.env.WEBAGENT_PROFILE_ID;
+    else process.env.WEBAGENT_PROFILE_ID = prevProfile;
+  }
+});
+
 test("fetchContextWindow uses Ollama show fallback when catalog lacks context", async () => {
   const { fetchContextWindow, resetModelMetadataCacheForTests } = await import(
     "../dist/agent-runtime/llm/model-metadata.js"

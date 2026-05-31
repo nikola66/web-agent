@@ -12,6 +12,31 @@ function normalizeStringArray(value: unknown): string[] {
   return value.map((item) => String(item ?? "").trim()).filter(Boolean);
 }
 
+export type PythonIpcResult = {
+  ok?: boolean;
+  error?: string;
+  stdout?: string;
+  stderr?: string;
+  exit_code?: number;
+  files_written?: string[];
+  pyodide_version?: string;
+  sync_note?: string;
+};
+
+export function pythonNonZeroExitError(raw: PythonIpcResult): string | null {
+  const exitCode = Number(raw.exit_code ?? 0);
+  if (!Number.isFinite(exitCode) || exitCode === 0) return null;
+  const stderr = String(raw.stderr ?? "").trim();
+  const stdout = String(raw.stdout ?? "").trim();
+  const parts = [`run_python exited with code ${exitCode}`];
+  if (stderr) parts.push(`stderr:\n${stderr.slice(0, 4000)}`);
+  else if (stdout) parts.push(`stdout:\n${stdout.slice(0, 2000)}`);
+  parts.push(
+    "Inspect stderr before retrying. One-off REST/CMS/GraphQL → web_fetch/web_post; reusable script HTTP → import webagent.http as http; avoid urllib/requests/pyfetch loops in Pyodide."
+  );
+  return parts.join("\n");
+}
+
 function normalizePythonEnv(env: unknown): Record<string, string> | undefined {
   if (!env || typeof env !== "object" || Array.isArray(env)) return undefined;
   const out: Record<string, string> = {};
@@ -75,18 +100,13 @@ export async function runPythonTool(args: Record<string, unknown>, ctx: any) {
   if (!rawUnknown || typeof rawUnknown !== "object") {
     throw new Error("run_python: invalid IPC response");
   }
-  const raw = rawUnknown as {
-    ok?: boolean;
-    error?: string;
-    stdout?: string;
-    stderr?: string;
-    exit_code?: number;
-    files_written?: string[];
-    pyodide_version?: string;
-    sync_note?: string;
-  };
+  const raw = rawUnknown as PythonIpcResult;
   if (!raw.ok) {
     throw new Error(String(raw.error || "run_python failed"));
+  }
+  const exitErr = pythonNonZeroExitError(raw);
+  if (exitErr) {
+    throw new Error(exitErr);
   }
   return {
     stdout: String(raw.stdout ?? ""),

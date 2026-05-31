@@ -1,4 +1,6 @@
 import { SerialBridge } from "./serial-bridge";
+import { GuestBootController } from "./guest-boot";
+import { LinuxOnTabBootProgress } from "./progress-bar";
 import type {
   SandboxFs,
   SandboxProcess,
@@ -22,13 +24,11 @@ type V86Emulator = {
   destroy: () => void;
   run: () => void | Promise<void>;
   stop: () => void | Promise<void>;
+  create_file?: (path: string, data: Uint8Array) => Promise<void>;
   fs9p?: {
-    read_file: (path: string) => Uint8Array | string;
-    write_file: (path: string, data: string | Uint8Array) => void;
-    mkdir: (path: string) => void;
-    read_dir: (path: string) => string[];
-    unlink: (path: string) => void;
-    stat: (path: string) => { is_directory: boolean };
+    SearchPath: (path: string) => { id: number; parentid: number; name: string } | null;
+    Unlink: (parentid: number, name: string) => void;
+    GetInode: (id: number) => { mode: number; mtime: number; ctime: number };
   };
 };
 
@@ -48,22 +48,18 @@ let bridge: SerialBridge | null = null;
 let booting: Promise<void> | null = null;
 let bootReady = false;
 let scriptLoaded = false;
-let serialByteCount = 0;
+let guestBoot: GuestBootController | null = null;
+let bootProgress: LinuxOnTabBootProgress | null = null;
+
+export function attachLinuxOnTabBootProgress(reporter: LinuxOnTabBootProgress | null): void {
+  bootProgress = reporter;
+}
 
 function tapEnter(): void {
   try {
     emulator?.keyboard_send_scancodes?.([0x1c, 0x9c]);
   } catch {
     /* keyboard optional */
-  }
-}
-
-async function waitForSerialActivity(timeoutMs = 120_000): Promise<void> {
-  const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline) {
-    if (serialByteCount > 0) return;
-    tapEnter();
-    await new Promise((r) => setTimeout(r, 1500));
   }
 }
 
@@ -109,22 +105,55 @@ function sendSerial(text: string): void {
   for (let i = 0; i < text.length; i++) emulator.serial0_send(text[i]!);
 }
 
-async function waitForLoginPrompt(timeoutMs = BOOT_TIMEOUT_MS): Promise<void> {
-  const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline) {
-    const remaining = deadline - Date.now();
-    if (remaining <= 0) break;
+async function deployGuestInitScript(script: string): Promise<boolean> {
+  const emu = emulator;
+  const fs = emu?.fs9p;
+  if (!emu?.create_file || !fs) return false;
+  const fsPath = "/.webagent-init.sh";
+  try {
     try {
-      const probe = await getBridge().runShell("echo __WEBAGENT_LOT_LOGIN_OK__", {
-        timeoutMs: Math.min(30_000, remaining),
-      });
-      if (probe.stdout.includes("__WEBAGENT_LOT_LOGIN_OK__") && probe.exitCode === 0) return;
+      const existing = fs.SearchPath(fsPath);
+      if (existing && existing.id !== -1 && existing.parentid !== -1) {
+        fs.Unlink(existing.parentid, existing.name);
+      }
     } catch {
-      /* serial shell not ready yet — Alpine/v86 may still be booting */
+      /* no prior file */
     }
-    await new Promise((r) => setTimeout(r, 3000));
+    await emu.create_file(fsPath, new TextEncoder().encode(script));
+    try {
+      const sp = fs.SearchPath(fsPath);
+      if (sp && sp.id !== -1) {
+        const inode = fs.GetInode(sp.id);
+        inode.mode = (inode.mode & ~0o777) | 0o755;
+        const now = Math.floor(Date.now() / 1000);
+        inode.mtime = now;
+        inode.ctime = now;
+      }
+    } catch {
+      /* chmod best-effort */
+    }
+    sendSerial(
+      "mkdir -p /tmp/.lothost 2>/dev/null; " +
+        "mount -t 9p -o trans=virtio,version=9p2000.L,msize=8192,access=any,cache=none host9p /tmp/.lothost 2>/dev/null; " +
+        "sh /tmp/.lothost/.webagent-init.sh\n"
+    );
+    return true;
+  } catch (err) {
+    console.warn("[linuxontab] 9p init deploy failed", err);
+    return false;
   }
-  throw new Error("LinuxOnTab boot timed out waiting for shell");
+}
+
+async function waitForGuestReady(timeoutMs = BOOT_TIMEOUT_MS): Promise<void> {
+  if (!guestBoot) throw new Error("Guest boot controller not initialized");
+  await guestBoot.waitForShell(Math.min(timeoutMs, 300_000));
+  await guestBoot.waitForSetupComplete(Math.min(timeoutMs, 780_000));
+  bridge!.setReady(true);
+  const probe = await getBridge().runShell("echo __WEBAGENT_LOT_LOGIN_OK__", { timeoutMs: 120_000 });
+  if (!probe.stdout.includes("__WEBAGENT_LOT_LOGIN_OK__") || probe.exitCode !== 0) {
+    throw new Error("LinuxOnTab shell probe failed after guest setup");
+  }
+  bootProgress?.completeGuestSetup();
 }
 
 async function ensureGuestPackages(): Promise<void> {
@@ -132,18 +161,7 @@ async function ensureGuestPackages(): Promise<void> {
   const nodeProbe = await bridgeRef.runCommand("node", ["-v"], { timeoutMs: 10_000 });
   const pythonProbe = await bridgeRef.runCommand("python3", ["--version"], { timeoutMs: 10_000 });
   if (nodeProbe.exitCode === 0 && pythonProbe.exitCode === 0) return;
-
-  await bridgeRef.runShell(
-    "apk add --no-cache nodejs npm python3 py3-pip bash 2>/dev/null || true",
-    { timeoutMs: 300_000 }
-  );
-
-  const nodeVersion = await bridgeRef.runCommand("node", ["-v"], { timeoutMs: 30_000 });
-  if (nodeVersion.exitCode !== 0) {
-    throw new Error(
-      "LinuxOnTab guest is missing Node.js. Boot Alpine networking and run `apk add nodejs npm python3`."
-    );
-  }
+  throw new Error("LinuxOnTab guest is missing Node.js or Python after setup.");
 }
 
 function getBridge(): SerialBridge {
@@ -169,13 +187,24 @@ function waitForEmulatorEvent(event: string, timeoutMs: number): Promise<void> {
 }
 
 async function bootEmulator(): Promise<void> {
-  await loadV86Script();
-  if (emulator) return;
-
-  serialByteCount = 0;
-  bridge = new SerialBridge({ send: sendSerial, timeoutMs: 120_000 });
-
   const iso = String(readViteEnv("VITE_LINUXONTAB_ISO") || DEFAULT_ISO).trim() || DEFAULT_ISO;
+  bootProgress?.header(`${iso} (v86 + network)`);
+  bootProgress?.beginVmLoad(50 * 1024 * 1024);
+
+  await loadV86Script();
+  if (emulator) {
+    bootProgress?.completeVmLoad();
+    bootProgress?.completeGuestSetup();
+    return;
+  }
+
+  bridge = new SerialBridge({ send: sendSerial, timeoutMs: 120_000 });
+  guestBoot = new GuestBootController(sendSerial, (msg, pct) => {
+    console.log("[linuxontab]", msg);
+    if (pct !== undefined) bootProgress?.setGuestPct(pct);
+    bootProgress?.log(msg);
+  }, deployGuestInitScript);
+
   const memMb = Number.parseInt(String(readViteEnv("VITE_LINUXONTAB_MEM_MB") || "2048"), 10) || 2048;
   const relay = String(readViteEnv("VITE_LINUXONTAB_RELAY_URL") || DEFAULT_RELAY).trim() || DEFAULT_RELAY;
 
@@ -205,13 +234,14 @@ async function bootEmulator(): Promise<void> {
   });
 
   emulator.add_listener("serial0-output-byte", (byte) => {
-    serialByteCount++;
+    guestBoot?.onSerialByte(Number(byte));
     bridge?.onByte(Number(byte));
   });
 
-  bridge.setReady(true);
-
   await waitForEmulatorEvent("emulator-ready", 300_000);
+  bootProgress?.completeVmLoad();
+  bootProgress?.beginGuestSetup();
+  guestBoot.startFreshBootSafetyNet();
   if (downloadError) {
     throw new Error(
       `LinuxOnTab failed to download v86 assets: ${JSON.stringify(downloadError)}`
@@ -219,16 +249,15 @@ async function bootEmulator(): Promise<void> {
   }
 
   const isolinuxAutopilot = setInterval(() => {
-    if (serialByteCount > 0) {
+    if (guestBoot?.isShellReady() || guestBoot?.isLoginSent()) {
       clearInterval(isolinuxAutopilot);
       return;
     }
     tapEnter();
   }, 1500);
-  setTimeout(() => clearInterval(isolinuxAutopilot), 30_000);
+  setTimeout(() => clearInterval(isolinuxAutopilot), 180_000);
 
-  await waitForSerialActivity();
-  await waitForLoginPrompt();
+  await waitForGuestReady();
   bootReady = true;
   await ensureGuestPackages();
 }
@@ -386,7 +415,8 @@ export const linuxOnTabRuntime: SandboxRuntime = {
   },
   async teardown() {
     bootReady = false;
-    serialByteCount = 0;
+    guestBoot?.dispose();
+    guestBoot = null;
     bridge = null;
     if (emulator) {
       try {

@@ -44,6 +44,6 @@ export const PROVIDERS_BY_ID = Object.fromEntries(
 export const PROVIDER_IDS = PROVIDERS.map((provider) => provider.id);
 
 export const DEFAULT_PROVIDER_ID =
-  PROVIDERS.find((provider) => provider.isDefault)?.id ?? PROVIDERS[0]?.id ?? "openrouter";
+  PROVIDERS.find((provider) => provider.isDefault)?.id ?? PROVIDERS[0]?.id ?? "ollama";
 
 export const PROVIDER_CATALOG_JSON = JSON.stringify(PROVIDERS, null, 2);

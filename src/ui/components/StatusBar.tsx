@@ -64,7 +64,14 @@ export function StatusBar() {
   const filesRootRef = useRef<HTMLDivElement>(null);
   const active = profiles.find((p) => p.id === activeProfileId);
   const profileLabel = active?.name ?? "Web Agent";
-  const toolCallsTitle = useMemo(() => recentToolCalls.join(", "), [recentToolCalls]);
+  const toolCallLabels = useMemo(
+    () =>
+      recentToolCalls.map((tool) => {
+        const meta = TOOL_CATALOG[tool];
+        return meta?.description ? `${tool} — ${meta.description}` : tool;
+      }),
+    [recentToolCalls]
+  );
   const contextUsage = useMemo(() => {
     if (!contextWindowTokens || contextWindowTokens <= 0) return null;
     const used = Math.max(0, estimatedPromptTokens);
@@ -112,11 +119,15 @@ export function StatusBar() {
           <span className="shrink-0 text-text-muted">·</span>
           <span
             className="inline-flex shrink-0 items-center gap-0.5 text-[11px] leading-none text-text-muted"
-            title={toolCallsTitle}
+            title={toolCallLabels.join(", ")}
             aria-label="Recent tool calls"
           >
             {recentToolCalls.map((tool, i) => (
-              <span key={`${i}:${tool}`} className="inline-block shrink-0" title={tool}>
+              <span
+                key={`${i}:${tool}`}
+                className="inline-block shrink-0 cursor-default"
+                title={toolCallLabels[i]}
+              >
                 {TOOL_EMOJI[tool] ?? "🛠️"}
               </span>
             ))}

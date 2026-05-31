@@ -11,6 +11,21 @@ class _FakeSSLCtx:
     def load_cert_chain(self, *a, **kw): pass
 _ssl.create_default_context = lambda *a, **kw: _FakeSSLCtx()
 
+def _headers_from_bridge(val):
+    if val is None:
+        return {}
+    to_py = getattr(val, "to_py", None)
+    if callable(to_py):
+        py = to_py()
+        if isinstance(py, dict):
+            return {str(k): str(v) for k, v in py.items()}
+    if isinstance(val, dict):
+        return {str(k): str(v) for k, v in val.items()}
+    try:
+        return {str(k): str(v) for k, v in dict(val).items()}
+    except Exception:
+        return {}
+
 def _to_bytes(val):
     if val is None:
         return b""
@@ -39,7 +54,7 @@ def _merge_params(url, params):
     return urlunparse(parsed._replace(query=urlencode(query, doseq=True)))
 
 def _bridge_call(method, url, headers=None, body=None, body_encoding=None):
-    result = _bridge_request(method, str(url), dict(headers or {}), body, body_encoding)
+    result = _bridge_request(method, str(url), _headers_from_bridge(headers), body, body_encoding)
     if getattr(result, "error", None):
         raise OSError(str(result.error))
     status = int(getattr(result, "status", 0) or 0)
@@ -49,11 +64,11 @@ def _bridge_call(method, url, headers=None, body=None, body_encoding=None):
         body_bytes = str(body_text).encode("utf-8", errors="replace")
     if body_text is None:
         body_text = body_bytes.decode("utf-8", errors="replace")
-    hdrs = dict(getattr(result, "headers", None) or {})
+    hdrs = _headers_from_bridge(getattr(result, "headers", None))
     return status, hdrs, body_bytes, str(body_text)
 
 def _bridge_multipart(url, headers, parts):
-    result = _bridge_upload_multipart(str(url), dict(headers or {}), parts)
+    result = _bridge_upload_multipart(str(url), _headers_from_bridge(headers), parts)
     if getattr(result, "error", None):
         raise OSError(str(result.error))
     status = int(getattr(result, "status", 0) or 0)
@@ -63,7 +78,7 @@ def _bridge_multipart(url, headers, parts):
         body_bytes = str(body_text).encode("utf-8", errors="replace")
     if body_text is None:
         body_text = body_bytes.decode("utf-8", errors="replace")
-    hdrs = dict(getattr(result, "headers", None) or {})
+    hdrs = _headers_from_bridge(getattr(result, "headers", None))
     return status, hdrs, body_bytes, str(body_text)
 
 class _ProxyResponse:
@@ -169,7 +184,7 @@ class _HttpResponse:
 def _http_request(method, url, headers=None, params=None, json_body=None, data=None, timeout_ms=30000):
     del timeout_ms
     final_url = _merge_params(url, params)
-    hdrs = dict(headers or {})
+    hdrs = _headers_from_bridge(headers)
     body = None
     if json_body is not None:
         body = json.dumps(json_body)

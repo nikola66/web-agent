@@ -1,10 +1,15 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import fs from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
+import { pathToFileURL } from "node:url";
 
 import {
   createAssistantTranscriptEvent,
   createReasoningPreviewTranscriptEvent,
   createToolResultTranscriptEvent,
+  createTurnSignalTranscriptEvent,
   formatTranscriptEventForChannel,
   shortenReasoningPreview,
   formatSkippedToolsTranscript,
@@ -172,6 +177,83 @@ test("reasoning preview transcript formats terminal and telegram styles", () => 
     ),
     ""
   );
+});
+
+test("turn signal transcript formats compact channel status lines", () => {
+  assert.equal(
+    formatTranscriptEventForChannel(
+      createTurnSignalTranscriptEvent({ signal: "turn_status", text: "Working…" }),
+      { style: "terminal" }
+    ),
+    ""
+  );
+  assert.equal(
+    formatTranscriptEventForChannel(
+      createTurnSignalTranscriptEvent({ signal: "tool_batch_start", toolCount: 3 }),
+      { style: "telegram" }
+    ),
+    "Working: running 3 tools…"
+  );
+  assert.equal(
+    formatTranscriptEventForChannel(
+      createTurnSignalTranscriptEvent({ signal: "continuation", reason: "pre_tool_promise" }),
+      { style: "terminal" }
+    ),
+    "Continuing: pre_tool_promise…"
+  );
+  assert.equal(
+    formatTranscriptEventForChannel(
+      createTurnSignalTranscriptEvent({ signal: "blocked", reason: "max_rounds" }),
+      { style: "telegram" }
+    ),
+    "Blocked: max_rounds"
+  );
+});
+
+test("telegram timer status does not suppress identical assistant text", async () => {
+  const originalCwd = process.cwd();
+  const tmp = await fs.mkdtemp(path.join(os.tmpdir(), "webagent-transcript-"));
+  const dispatcherUrl = pathToFileURL(
+    path.join(originalCwd, "dist/agent-runtime/channels/dispatcher.js")
+  ).href;
+  const prevFirst = process.env.WEBAGENT_CHANNEL_STATUS_FIRST_MS;
+  const prevRepeat = process.env.WEBAGENT_CHANNEL_STATUS_REPEAT_MS;
+
+  process.chdir(tmp);
+  process.env.WEBAGENT_MEMORY_ROOT = path.join(tmp, "memory");
+  process.env.WEBAGENT_CHANNEL_STATUS_FIRST_MS = "20";
+  process.env.WEBAGENT_CHANNEL_STATUS_REPEAT_MS = "1000";
+
+  try {
+    const { createChannelInboundHandler } = await import(`${dispatcherUrl}?t=${Date.now()}-status-dedupe`);
+    const replies = [];
+    const inbound = createChannelInboundHandler({
+      cfg: {},
+      sendReply: async (_chatId, text) => replies.push(text),
+      agentTurn: async (_history, _cfg, meta) => {
+        await new Promise((resolve) => setTimeout(resolve, 70));
+        await meta.onTranscript({
+          type: "assistant",
+          agentName: "Opaline",
+          text: "Working…",
+          branchBelowName: true,
+        });
+        return [{ role: "assistant", content: "Working…" }];
+      },
+    });
+
+    await inbound({ channel: "telegram", chatId: "123", text: "slow same text" });
+
+    assert.deepEqual(replies, ["Working…", "Working…"]);
+  } finally {
+    process.chdir(originalCwd);
+    delete process.env.WEBAGENT_MEMORY_ROOT;
+    if (prevFirst === undefined) delete process.env.WEBAGENT_CHANNEL_STATUS_FIRST_MS;
+    else process.env.WEBAGENT_CHANNEL_STATUS_FIRST_MS = prevFirst;
+    if (prevRepeat === undefined) delete process.env.WEBAGENT_CHANNEL_STATUS_REPEAT_MS;
+    else process.env.WEBAGENT_CHANNEL_STATUS_REPEAT_MS = prevRepeat;
+    await fs.rm(tmp, { recursive: true, force: true });
+  }
 });
 
 test("transcript delivery helper swallows non-critical failures and propagates assistant failures", async () => {

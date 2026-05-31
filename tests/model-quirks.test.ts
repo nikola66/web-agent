@@ -16,12 +16,14 @@ test("resolveStreamMaxTokens raises cap for OpenCode Big Pickle", () => {
   assert.equal(isBigPickleModel({ provider: "openrouter", model: "org/big-pickle" }), true);
 });
 
-test("reasoning preview off for Big Pickle unless WEBAGENT_OPENCODE_REASONING_PREVIEW=1", () => {
+test("reasoning preview supports Big Pickle unless model-specific override disables it", () => {
   const prev = process.env.WEBAGENT_OPENCODE_REASONING_PREVIEW;
   delete process.env.WEBAGENT_OPENCODE_REASONING_PREVIEW;
   try {
-    assert.equal(reasoningPreviewSupportedForModel({ provider: "opencode", model: "big-pickle" }), false);
+    assert.equal(reasoningPreviewSupportedForModel({ provider: "opencode", model: "big-pickle" }), true);
     assert.equal(reasoningPreviewSupportedForModel({ provider: "openrouter", model: "x" }), true);
+    process.env.WEBAGENT_OPENCODE_REASONING_PREVIEW = "0";
+    assert.equal(reasoningPreviewSupportedForModel({ provider: "opencode", model: "big-pickle" }), false);
     process.env.WEBAGENT_OPENCODE_REASONING_PREVIEW = "1";
     assert.equal(reasoningPreviewSupportedForModel({ provider: "opencode", model: "big-pickle" }), true);
   } finally {

@@ -31,6 +31,7 @@ import {
   shouldContinueContentShareDeliverable,
   shouldContinueUnparsedToolMarkup,
   buildContentShareContinuationNudge,
+  buildContentShareArtifactPresentArgs,
   buildContentShareFallbackVisible,
   shouldApplyContentShareFallback,
   userRequestedContentShare,
@@ -817,6 +818,9 @@ test("userRequestedContentShare detects share for review ask", () => {
   assert.equal(userRequestedContentShare("share the article to see for review"), true);
   assert.equal(userRequestedContentShare("Show me this Bitnet article for approval"), true);
   assert.equal(userRequestedContentShare("can you show me the article in markdown?"), true);
+  assert.equal(userRequestedContentShare("share this article with me"), true);
+  assert.equal(userRequestedContentShare("send me the file"), true);
+  assert.equal(userRequestedContentShare("show me the document"), true);
   assert.equal(userRequestedContentShare("continue working on article"), false);
 });
 
@@ -833,7 +837,7 @@ test("shouldContinueContentShareDeliverable nudges after read_file without paste
       `# BitNet B1.58\n\n${"Body paragraph. ".repeat(80)}`,
       0
     ),
-    false
+    true
   );
   assert.equal(
     shouldContinueContentShareDeliverable(user, toolCalls, true, visible, MAX_CONTENT_SHARE_CONTINUATIONS),
@@ -841,10 +845,15 @@ test("shouldContinueContentShareDeliverable nudges after read_file without paste
   );
 });
 
-test("contentShareDeliverableSatisfied detects pasted markdown draft", () => {
+test("contentShareDeliverableSatisfied requires artifact_present", () => {
   const draft = `# Title\n\n${"Section text. ".repeat(60)}`;
-  assert.equal(contentShareDeliverableSatisfied(draft), true);
+  assert.equal(contentShareDeliverableSatisfied(draft), false);
   assert.equal(contentShareDeliverableSatisfied("Here is a short summary."), false);
+  assert.equal(
+    contentShareDeliverableSatisfied("", [{ tool: "artifact_present", result: { ok: true } }]),
+    true
+  );
+  assert.equal(contentShareDeliverableSatisfied("", [], [{ name: "artifact_present" }]), true);
 });
 
 test("contentShareDeliverableSatisfied rejects long promise-only ramble", () => {
@@ -855,7 +864,7 @@ test("contentShareDeliverableSatisfied rejects long promise-only ramble", () => 
   assert.equal(contentShareDeliverableSatisfied(ramble), false);
 });
 
-test("contentShareDeliverableSatisfied accepts visible containing read_file body", () => {
+test("contentShareDeliverableSatisfied ignores pasted markdown even when it matches read_file", () => {
   const articleBody = `# BitNet B1.58\n\n${"Quantized inference enables edge deployment. ".repeat(20)}`;
   const executions = [
     {
@@ -863,7 +872,7 @@ test("contentShareDeliverableSatisfied accepts visible containing read_file body
       result: { ok: true, path: "work/bitnet-article/bitnet-b1-58-2b4t.md", content: articleBody },
     },
   ];
-  assert.equal(contentShareDeliverableSatisfied("Here is the draft:\n\n" + articleBody, executions), true);
+  assert.equal(contentShareDeliverableSatisfied("Here is the draft:\n\n" + articleBody, executions), false);
   assert.equal(visibleContainsReadFileContent(articleBody.slice(0, 120), articleBody), true);
 });
 
@@ -952,7 +961,7 @@ test("buildContentShareContinuationNudge includes path on final attempt", () => 
   ];
   const nudge = buildContentShareContinuationNudge(MAX_CONTENT_SHARE_CONTINUATIONS, executions);
   assert.match(nudge, /work\/bitnet-article\/bitnet-b1-58-2b4t\.md/);
-  assert.match(nudge, /Do not call read_file again/i);
+  assert.match(nudge, /artifact_present/i);
 });
 
 test("userRequestedContentShare matches Share the file with me", () => {
@@ -987,7 +996,18 @@ test("shouldContinueIncompleteTodos still nudges when todos seeded at turn start
   );
 });
 
-test("buildContentShareFallbackVisible pastes read_file body", () => {
+test("buildContentShareArtifactPresentArgs prefers workspace path from read_file", () => {
+  const article = `# CISO Challenges\n\n${"Paragraph. ".repeat(40)}`;
+  const args = buildContentShareArtifactPresentArgs([
+    {
+      tool: "read_file",
+      result: { ok: true, path: "projects/ciso/article.md", content: article },
+    },
+  ]);
+  assert.deepEqual(args, { title: "article", path: "projects/ciso/article.md" });
+});
+
+test("buildContentShareFallbackVisible summarizes artifact_present delivery", () => {
   const article = `# CISO Challenges\n\n${"Paragraph. ".repeat(40)}`;
   const visible = buildContentShareFallbackVisible([
     {
@@ -997,7 +1017,7 @@ test("buildContentShareFallbackVisible pastes read_file body", () => {
   ]);
   assert.ok(visible);
   assert.match(visible!, /projects\/ciso\/article\.md/);
-  assert.match(visible!, /CISO Challenges/);
+  assert.doesNotMatch(visible!, /CISO Challenges/);
 });
 
 test("shouldApplyContentShareFallback after continuation cap with unread pasted body", () => {
@@ -1018,7 +1038,11 @@ test("shouldApplyContentShareFallback after continuation cap with unread pasted 
     true
   );
   assert.equal(
-    shouldApplyContentShareFallback(user, true, MAX_CONTENT_SHARE_CONTINUATIONS - 1, visible, executions),
+    shouldApplyContentShareFallback(user, true, 0, visible, executions),
+    true
+  );
+  assert.equal(
+    shouldApplyContentShareFallback(user, true, 0, visible, []),
     false
   );
 });

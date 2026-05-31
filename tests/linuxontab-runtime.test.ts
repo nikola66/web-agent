@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { SerialBridge } from "../src/runtimes/linuxontab/serial-bridge.ts";
+import { GuestBootController } from "../src/runtimes/linuxontab/guest-boot.ts";
+import { renderProgressBar } from "../src/runtimes/linuxontab/progress-bar.ts";
 import {
   getAgentRuntimeEnvValue,
   getSandboxRuntimeKind,
@@ -35,6 +37,38 @@ describe("SerialBridge marker framing", () => {
     const result = await pending;
     assert.equal(result.stdout, "hello");
     assert.equal(result.exitCode, 0);
+  });
+});
+
+describe("guest boot controller", () => {
+  it("auto-logs in on Alpine login prompt and detects root shell", () => {
+    const sent: string[] = [];
+    const boot = new GuestBootController((text) => sent.push(text));
+    for (const ch of "localhost login: \n") boot.onSerialByte(ch.charCodeAt(0));
+    assert.ok(sent.some((s) => s === "root\n"));
+    for (const ch of "localhost:~# ") boot.onSerialByte(ch.charCodeAt(0));
+    assert.equal(boot.isShellReady(), true);
+  });
+
+  it("does not treat typed echo command as guest-ready marker", async () => {
+    const boot = new GuestBootController(() => {});
+    for (const ch of "localhost:~# ") boot.onSerialByte(ch.charCodeAt(0));
+    for (const ch of 'echo "[webagent] guest ready"\n') boot.onSerialByte(ch.charCodeAt(0));
+    let setupDone = false;
+    const setupPromise = boot.waitForSetupComplete(1000).then(() => {
+      setupDone = true;
+    });
+    await new Promise((r) => setTimeout(r, 50));
+    assert.equal(setupDone, false);
+    for (const ch of "[webagent] guest ready\n") boot.onSerialByte(ch.charCodeAt(0));
+    await setupPromise;
+    assert.equal(setupDone, true);
+  });
+});
+
+describe("linuxontab progress bar", () => {
+  it("renders demo-style ASCII blocks", () => {
+    assert.equal(renderProgressBar(50, 4), "[\u2588\u2588\u2591\u2591]");
   });
 });
 

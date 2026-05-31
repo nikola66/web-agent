@@ -2,7 +2,7 @@ import fs from "node:fs/promises";
 import type { ProviderDefinition } from "../../../core/providers/index.js";
 import { PROVIDER_CATALOG_PATH } from "../constants.js";
 import { fetchContextWindow } from "./model-metadata.js";
-import { isBigPickleModel } from "./model-quirks.js";
+import { isBigPickleModel, reasoningPreviewSupportedForModel } from "./model-quirks.js";
 
 export { fetchContextWindow };
 
@@ -70,6 +70,7 @@ export function reasoningDisableExtras(providerId, modelId) {
   const id = String(providerId || "").trim().toLowerCase();
   const model = String(modelId || "").trim();
   if (isBigPickleModel({ provider: id, model })) {
+    if (reasoningPreviewEnabled() && reasoningPreviewSupportedForModel({ provider: id, model })) return {};
     return { reasoning: { enabled: false } };
   }
   if (reasoningPreviewEnabled()) return {};

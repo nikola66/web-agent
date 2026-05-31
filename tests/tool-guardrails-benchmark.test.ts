@@ -48,7 +48,7 @@ function runCase(benchmarkCase: BenchmarkCase): {
 
   for (const step of benchmarkCase.steps) {
     const before = controller.beforeCall(step.tool, step.args);
-    const blocked = before.action === "block";
+    const blocked = before.action === "block" || before.action === "halt";
     let after: ToolGuardrailDecision;
     if (blocked) {
       after = before;

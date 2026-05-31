@@ -1,7 +1,8 @@
 {
   "id": "ollama",
   "name": "Ollama (cloud)",
-  "order": 2,
+  "isDefault": true,
+  "order": 0,
   "kind": "openai",
   "requiresUserApiKey": true,
   "model": "gemma4:31b-cloud",

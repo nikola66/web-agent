@@ -1,7 +1,11 @@
 import { HIDDEN_STREAM_MARKERS, LLM_REQUEST_TIMEOUT_MS } from "../constants.js";
 import { ipcProxyStreamRequest } from "../ipc.js";
 import { logDebugEvent } from "../logging/debug-log.js";
-import { shouldUseNodeboxLlmProxy } from "./http-utils.js";
+import {
+  sanitizeHeadersForFetch,
+  shouldUseNodeboxLlmProxy,
+  withRuntimeSubscriptionProfileHeader,
+} from "./http-utils.js";
 import { llmChatCompletionExtras, reasoningPreviewEnabled } from "./provider-config.js";
 import { resolveStreamMaxTokens } from "./model-quirks.js";
 import { classifyLlmProviderError, formatClassifiedLlmError } from "./llm-error-classifier.js";
@@ -250,8 +254,6 @@ function formatStreamIdleWait(ms) {
   return `${Math.round(n / 1000)}s`;
 }
 
-import { sanitizeHeadersForFetch } from "./http-utils.js";
-
 export function estimateTokens(text) {
   if (!text) return 0;
   return Math.max(1, Math.ceil(String(text).length / 4));
@@ -320,7 +322,11 @@ export async function fetchWithTimeout(
   };
 
   const externalSignal = options?.signal || null;
-  const { signal: _externalSignal, ...fetchOptions } = options || {};
+  const { signal: _externalSignal, headers: rawHeaders, ...fetchOptions } = options || {};
+  const headers = withRuntimeSubscriptionProfileHeader(
+    url,
+    sanitizeHeadersForFetch((rawHeaders as Record<string, unknown>) || {})
+  );
   let forcedFailuresLeft = Math.max(0, Math.min(32, Math.floor(Number(process.env.WEBAGENT_FORCE_HTTP_FAIL) || 0)));
 
   const isAbortError = (err) => err?.name === "AbortError";
@@ -344,7 +350,7 @@ export async function fetchWithTimeout(
     else externalSignal?.addEventListener?.("abort", abortFromExternal, { once: true });
     const timer = setTimeout(() => controller.abort(), timeoutMs);
     try {
-      return await fetch(targetUrl, { ...fetchOptions, signal: controller.signal });
+      return await fetch(targetUrl, { ...fetchOptions, headers, signal: controller.signal });
     } finally {
       clearTimeout(timer);
       externalSignal?.removeEventListener?.("abort", abortFromExternal);
@@ -925,6 +931,9 @@ export function looksLikeUnparsedToolMarkup(text: string): boolean {
   if (/<parameter\b[\s\S]*?<\/parameter>/i.test(raw)) return true;
   if (/<function>\s*[\s\S]*?<\/function>/i.test(raw)) return true;
   if (/<function_name>/i.test(raw)) return true;
+  if (/<(read_file|write_file|edit_file|artifact_present|grep|browse_workspace|list_dir|find_files|make_dir|delete_file|web_search|web_fetch|run_shell)\b[^>]*>[\s\S]*?<\/\1>/i.test(raw)) {
+    return true;
+  }
   if (looksLikeUnparsedPlainToolHints(raw)) return true;
   return false;
 }
@@ -970,6 +979,7 @@ export function stripXmlToolArtifacts(text) {
     /<longcat_tool_call>[\s\S]*?<\/longcat_tool_call>/gi,
     /<function>[\s\S]*?<\/function>/gi,
     /<invoke\b[\s\S]*?<\/invoke>/gi,
+    /<(read_file|write_file|edit_file|artifact_present|grep|browse_workspace|list_dir|find_files|make_dir|delete_file|web_search|web_fetch|run_shell)\b[^>]*>[\s\S]*?<\/\1>/gi,
   ];
   let out = String(text);
   for (const pattern of patterns) out = out.replace(pattern, "");
@@ -1524,6 +1534,42 @@ export function extractFunctionXmlToolCallPayloads(text: string) {
   }
   const visible = String(text || "").replace(re, "").trimEnd();
   return { tools, visible };
+}
+
+function parseNamedXmlToolBlock(name: string, inner: string): ToolCallPayload | null {
+  const toolName = String(name || "").trim();
+  if (!toolName) return null;
+  const args: Record<string, unknown> = {};
+  const childRe = /<([a-zA-Z_][\w.-]*)\b[^>]*>([\s\S]*?)<\/\1>/g;
+  let child;
+  while ((child = childRe.exec(String(inner || "")))) {
+    const key = String(child[1] || "").trim();
+    if (!key) continue;
+    args[key] = String(child[2] || "").trim();
+  }
+  return { name: toolName, arguments: args };
+}
+
+/**
+ * Big Pickle sometimes emits bare XML-shaped tool calls:
+ * `<read_file><path>projects/x.md</path></read_file>`.
+ */
+export function extractNamedXmlToolCallPayloads(text: string, toolNames?: string[]) {
+  const known = new Set(Array.isArray(toolNames) ? toolNames : []);
+  const names = [...known]
+    .filter((name) => /^[a-z][a-z0-9_]{1,48}$/i.test(String(name || "")))
+    .sort((a, b) => b.length - a.length);
+  if (!names.length) return { tools: [] as ToolCallPayload[], visible: String(text || "") };
+  const nameAlternation = names.map(escapeRegExp).join("|");
+  const re = new RegExp(`<(${nameAlternation})\\b[^>]*>([\\s\\S]*?)<\\/\\1>`, "gi");
+  const input = String(text || "");
+  const tools: ToolCallPayload[] = [];
+  let m;
+  while ((m = re.exec(input))) {
+    const parsed = parseNamedXmlToolBlock(m[1], m[2]);
+    if (parsed?.name) tools.push(parsed);
+  }
+  return { tools, visible: input.replace(re, "").trimEnd() };
 }
 
 export function normalizeToolCalls(

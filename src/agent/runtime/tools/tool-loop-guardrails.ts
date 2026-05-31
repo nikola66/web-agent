@@ -7,6 +7,7 @@ import { stableStringify } from "../stream-output.js";
 import {
   formatWriteFileMissingFieldsHint,
   normalizeWriteFileArgs,
+  writeFileAppendEnabled,
   writeFileArgsMissing,
 } from "./write-file-args.js";
 
@@ -58,6 +59,7 @@ export type ToolLoopGuardrailConfig = {
   exactFailureBlockAfter: number;
   sameToolFailureWarnAfter: number;
   sameToolFailureHaltAfter: number;
+  doomLoopHaltAfter: number;
   noProgressWarnAfter: number;
   noProgressBlockAfter: number;
   idempotentTools: Set<string>;
@@ -71,6 +73,7 @@ export const TOOL_LOOP_GUARDRAIL_DEFAULTS: ToolLoopGuardrailConfig = {
   exactFailureBlockAfter: 5,
   sameToolFailureWarnAfter: 3,
   sameToolFailureHaltAfter: 8,
+  doomLoopHaltAfter: 3,
   noProgressWarnAfter: 2,
   noProgressBlockAfter: 5,
   idempotentTools: IDEMPOTENT_TOOL_NAMES,
@@ -135,6 +138,10 @@ export function readToolLoopGuardrailConfig(
     sameToolFailureHaltAfter: positiveInt(
       env.WEBAGENT_TOOL_LOOP_SAME_TOOL_FAILURE_HALT_AFTER,
       d.sameToolFailureHaltAfter
+    ),
+    doomLoopHaltAfter: positiveInt(
+      env.WEBAGENT_TOOL_LOOP_DOOM_LOOP_HALT_AFTER,
+      d.doomLoopHaltAfter
     ),
     noProgressWarnAfter: positiveInt(
       env.WEBAGENT_TOOL_LOOP_NO_PROGRESS_WARN_AFTER,
@@ -238,6 +245,11 @@ function normalizeWriteFilePath(args: Record<string, unknown> | null | undefined
   return path.replace(/\\/g, "/");
 }
 
+function normalizePathArg(args: Record<string, unknown> | null | undefined): string {
+  const path = String(args?.path ?? args?.file ?? args?.filename ?? args?.file_path ?? "").trim();
+  return path.replace(/\\/g, "/");
+}
+
 function isSnapshotSpillReadPath(args: Record<string, unknown> | null | undefined): boolean {
   const pathArg = String(args?.path ?? args?.filename ?? args?.file ?? "").trim().replace(/\\/g, "/");
   return /^memory\/snapshots\b/i.test(pathArg);
@@ -324,6 +336,14 @@ function toolFailureRecoveryHint(
       "include valid frontmatter (`name` and `description`) and use file_path=\"SKILL.md\"."
     );
   }
+  if (toolName === "run_python") {
+    return (
+      common +
+      "Read stderr from the last run_python failure — do not assume file I/O is blocked unless sync_note says so. " +
+      "One-off REST/CMS/translation/GraphQL → web_fetch/web_post (chunk long bodies; use POST, not giant GET URLs). " +
+      "Reusable .py HTTP → `import webagent.http as http` inside run_python. Stop cycling urllib, pyfetch, and requests."
+    );
+  }
   return (
     common +
     "Try different arguments, a narrower query/path, an absolute path when relevant, or a different " +
@@ -348,6 +368,7 @@ function decision(
 export class ToolCallGuardrailController {
   private readonly config: ToolLoopGuardrailConfig;
   private exactFailureCounts = new Map<string, number>();
+  private blockedCallCounts = new Map<string, number>();
   private sameToolFailureCounts = new Map<string, number>();
   private noProgress = new Map<string, [string, number]>();
   private snapshotReadCount = 0;
@@ -363,6 +384,7 @@ export class ToolCallGuardrailController {
 
   resetForTurn(): void {
     this.exactFailureCounts.clear();
+    this.blockedCallCounts.clear();
     this.sameToolFailureCounts.clear();
     this.noProgress.clear();
     this.snapshotReadCount = 0;
@@ -393,6 +415,26 @@ export class ToolCallGuardrailController {
     return this.config.idempotentTools.has(toolName);
   }
 
+  private withDoomLoopHalt(dec: ToolGuardrailDecision): ToolGuardrailDecision {
+    if (!dec.signature) return dec;
+    const key = this.signatureKey(dec.signature);
+    const count = (this.blockedCallCounts.get(key) ?? 0) + 1;
+    this.blockedCallCounts.set(key, count);
+    if (count < this.config.doomLoopHaltAfter) return { ...dec, count };
+    const halt = decision({
+      action: "halt",
+      code: "doom_loop_halt",
+      message:
+        `Doom loop detected: ${dec.toolName} repeated the same blocked call ${count} times. ` +
+        "Stop retrying it unchanged; use the latest error to choose a different tool/arguments, or report the blocker.",
+      toolName: dec.toolName,
+      count,
+      signature: dec.signature,
+    });
+    this._haltDecision = halt;
+    return halt;
+  }
+
   beforeCall(
     toolName: string,
     args: Record<string, unknown> | null | undefined
@@ -411,10 +453,10 @@ export class ToolCallGuardrailController {
           signature,
         });
         this._haltDecision = blocked;
-        return blocked;
+        return this.withDoomLoopHalt(blocked);
       }
       const path = normalizeWriteFilePath(args);
-      const append = args?.append === true;
+      const append = writeFileAppendEnabled(args);
       if (path && !append) {
         const lastHash = this.writeFilePathLastHash.get(path);
         const contentChanged = !!lastHash && lastHash !== signature.argsHash;
@@ -432,7 +474,7 @@ export class ToolCallGuardrailController {
               signature,
             });
             this._haltDecision = blocked;
-            return blocked;
+            return this.withDoomLoopHalt(blocked);
           }
         }
       }
@@ -459,7 +501,7 @@ export class ToolCallGuardrailController {
             signature,
           });
           this._haltDecision = blocked;
-          return blocked;
+          return this.withDoomLoopHalt(blocked);
         }
       }
     }
@@ -476,7 +518,7 @@ export class ToolCallGuardrailController {
           signature,
         });
         this._haltDecision = blocked;
-        return blocked;
+        return this.withDoomLoopHalt(blocked);
       }
     }
 
@@ -516,7 +558,7 @@ export class ToolCallGuardrailController {
             signature,
           });
           this._haltDecision = blocked;
-          return blocked;
+          return this.withDoomLoopHalt(blocked);
         }
       }
     }
@@ -539,7 +581,7 @@ export class ToolCallGuardrailController {
       fileMutationResultLanded(toolName, result ?? "")
     ) {
       const path = normalizeWriteFilePath(args);
-      const append = args?.append === true;
+      const append = writeFileAppendEnabled(args);
       if (path && !append) {
         const lastHash = this.writeFilePathLastHash.get(path);
         const contentChanged = !!lastHash && lastHash !== signature.argsHash;
@@ -563,6 +605,14 @@ export class ToolCallGuardrailController {
           }
         }
         this.writeFilePathLastHash.set(path, signature.argsHash);
+      }
+    }
+
+    if (toolName === "delete_file" && !isFailed) {
+      const path = normalizePathArg(args);
+      if (path) {
+        this.writeFileOverwriteCounts.delete(path);
+        this.writeFilePathLastHash.delete(path);
       }
     }
 
@@ -591,6 +641,21 @@ export class ToolCallGuardrailController {
 
       const sameCount = (this.sameToolFailureCounts.get(toolName) ?? 0) + 1;
       this.sameToolFailureCounts.set(toolName, sameCount);
+
+      if (exactCount >= this.config.doomLoopHaltAfter) {
+        const halt = decision({
+          action: "halt",
+          code: "doom_loop_halt",
+          message:
+            `Doom loop detected: ${toolName} failed ${exactCount} times with identical arguments. ` +
+            "Stop retrying it unchanged; use a different tool/arguments, or report the blocker.",
+          toolName,
+          count: exactCount,
+          signature,
+        });
+        this._haltDecision = halt;
+        return halt;
+      }
 
       if (this.config.hardStopEnabled && sameCount >= this.config.sameToolFailureHaltAfter) {
         const halt = decision({

@@ -1,9 +1,9 @@
 ---
 name: Memory Layers
 description: Use when the user says remember this, save a preference or API key, or you must pick memory_save vs session notes vs skill (action=manage) vs wiki_* tools.
-version: 1.2.0
+version: 1.3.0
 category: bundled
-primary-tools: [memory_save, session_search, skill, wiki_search]
+primary-tools: [memory_save, memory_forget, memory_recall, memory_search, session_memory_append, session_memory_list, session_search, wiki_setup, wiki_sync, wiki_search]
 tags: [memory, session, skills, facts, context, remember, preference]
 triggers: [remember this, save preference, session note, store fact, recall later, what do we remember, persistent note, knowledge vault, wiki sync, sync facts to wiki, wiki search, api key, token, password in chat]
 ---

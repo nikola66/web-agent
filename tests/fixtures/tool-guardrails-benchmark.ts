@@ -174,6 +174,9 @@ function cfgHardStop(overrides: Partial<ToolLoopGuardrailConfig> = {}): Partial<
 }
 
 function expectExactAfter(count: number, config: ToolLoopGuardrailConfig): ExpectedDecision {
+  if (count >= config.doomLoopHaltAfter) {
+    return { action: "halt", code: "doom_loop_halt" };
+  }
   if (config.warningsEnabled && count >= config.exactFailureWarnAfter) {
     return { action: "warn", code: "repeated_exact_failure_warning" };
   }
@@ -270,7 +273,7 @@ export function buildToolGuardrailsBenchmarkCases(): BenchmarkCase[] {
         expectAfter: expectExactAfter(r, config),
       });
     }
-    push({ category: "exact_failure_warn", config: { hardStopEnabled: false }, steps, expectHalt: false });
+    push({ category: "exact_failure_warn", config: { hardStopEnabled: false }, steps, expectHalt: reps >= config.doomLoopHaltAfter });
   }
 
   for (let i = 0; i < CATEGORY_COUNTS.exact_failure_block; i++) {

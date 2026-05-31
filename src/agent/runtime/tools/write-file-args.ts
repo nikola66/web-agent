@@ -22,7 +22,16 @@ export function normalizeWriteFileArgs(args: Record<string, unknown>): Record<st
   if (out.content === undefined && typeof out.data === "string") out.content = out.data;
   if (out.content === undefined && typeof out.markdown === "string") out.content = out.markdown;
   if (out.content === undefined && typeof out.body === "string") out.content = out.body;
+  if (typeof out.append === "string") {
+    const low = out.append.trim().toLowerCase();
+    if (["true", "1", "yes", "y"].includes(low)) out.append = true;
+    else if (["false", "0", "no", "n"].includes(low)) out.append = false;
+  }
   return out;
+}
+
+export function writeFileAppendEnabled(args: Record<string, unknown> | null | undefined): boolean {
+  return normalizeWriteFileArgs(args ?? {}).append === true;
 }
 
 function unescapeJsonStringFragment(raw: string): string {

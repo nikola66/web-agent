@@ -7,6 +7,7 @@ import {
   proxyHttpUploadMultipart,
   CORS_PROXY_PATH,
 } from "../src/runtimes/webcontainer/python-http-bridge.ts";
+import { PYTHON_HTTP_SHIM } from "../src/runtimes/webcontainer/python-http-shim.py.ts";
 
 test("proxyHttpRequest rejects empty url", () => {
   const resp = proxyHttpRequest({ url: "" });
@@ -123,4 +124,11 @@ test("proxyHttpUploadMultipart sends multipart via proxy", () => {
 
 test("CORS_PROXY_PATH matches adapter route", () => {
   assert.equal(CORS_PROXY_PATH, "/api/proxy");
+});
+
+test("PYTHON_HTTP_SHIM converts JsProxy headers via to_py", () => {
+  assert.match(PYTHON_HTTP_SHIM, /def _headers_from_bridge/);
+  assert.match(PYTHON_HTTP_SHIM, /to_py/);
+  assert.match(PYTHON_HTTP_SHIM, /_headers_from_bridge\(getattr\(result, "headers"/);
+  assert.doesNotMatch(PYTHON_HTTP_SHIM, /hdrs = dict\(getattr\(result, "headers"/);
 });

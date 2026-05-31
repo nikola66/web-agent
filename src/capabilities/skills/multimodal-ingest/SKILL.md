@@ -1,20 +1,23 @@
 ---
 name: Multimodal Ingest
-description: Use when the input is an image, screenshot, diagram, or YouTube link—vision_analyze and youtube_transcribe before text reasoning.
-version: 1.0.0
+description: Use when the input is an image, screenshot, diagram, PDF/DOCX, audio file, or YouTube link—extract metadata/text before reasoning.
+version: 1.1.0
 category: bundled
-primary-tools: [vision_analyze, audio_analyze, youtube_transcribe]
-tags: [vision, multimodal, ocr, youtube, transcript, image]
-triggers: [screenshot, image, diagram, ocr, what is in this image, youtube link, transcribe, video summary, vision_analyze, youtube_transcribe, audio_analyze]
+primary-tools: [vision_analyze, image_info, audio_analyze, youtube_transcribe, pdf_extract, docx_extract]
+tags: [vision, multimodal, ocr, youtube, transcript, image, pdf, docx]
+triggers: [screenshot, image, diagram, ocr, what is in this image, youtube link, transcribe, video summary, pdf text, docx text, vision_analyze, youtube_transcribe, audio_analyze]
 ---
 
 ## Tool contract (read first)
 
 | Input | Tool |
 |-------|------|
+| Image metadata / dimensions | `image_info` |
 | Image / screenshot / diagram | `vision_analyze` with a focused question |
 | YouTube / Shorts URL | `youtube_transcribe` |
 | Workspace audio file | `audio_analyze` |
+| Workspace PDF | `pdf_extract` |
+| Workspace DOCX | `docx_extract` |
 | Cross-check claims | `web_search`, `web_fetch` — **`open-web-research`** |
 | Persist transcript / extract | `write_file` under `work/<slug>/` |
 | Show visual to user | `artifact_present` — **`artifact-delivery`** |
@@ -24,7 +27,7 @@ triggers: [screenshot, image, diagram, ocr, what is in this image, youtube link,
 
 ## When to Use
 
-- User attaches or references an image / screenshot / diagram path.
+- User attaches or references an image / screenshot / diagram / PDF / DOCX path.
 - User pastes a YouTube or Shorts URL and asks about content.
 - OCR or chart-read needed before any text reasoning can proceed.
 - Visual evidence requested (UI bug screenshot, design mock comparison).
@@ -37,8 +40,9 @@ triggers: [screenshot, image, diagram, ocr, what is in this image, youtube link,
 
 1. **Images** → `vision_analyze` with a **focused question**, not "describe everything". Examples: "What error code is shown?", "List visible CLI flags", "Read the chart x-axis values".
 2. **Video** → `youtube_transcribe` → grep / scan segments for the relevant span → summarize with **timestamp citations** (`[mm:ss]`). For long videos, transcribe once, then operate on the cached transcript text.
-3. **Cross-check** factual claims pulled from visuals using **`open-web-research`** (verify a name, date, or product before asserting).
-4. **Persist** non-trivial extracted facts via `memory_save`; long transcripts belong in `work/<slug>/` then **`artifact-delivery`** — not inline.
+3. **Documents** → `pdf_extract` / `docx_extract` before `run_python`; persist long extracted text under `work/<slug>/`.
+4. **Cross-check** factual claims pulled from visuals or documents using **`open-web-research`** (verify a name, date, or product before asserting).
+5. **Persist** non-trivial extracted facts via `memory_save`; long transcripts belong in `work/<slug>/` then **`artifact-delivery`** — not inline.
 
 ## Pitfalls
 

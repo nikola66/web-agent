@@ -28,8 +28,10 @@ export function resolveStreamMaxTokens(cfg: LlmCfgLike | null | undefined): numb
   return DEFAULT_STREAM_MAX_TOKENS;
 }
 
-/** Big Pickle emits interleaved reasoning_content; preview can duplicate visible answer prefixes. */
+/** Big Pickle emits interleaved reasoning_content; allow model-specific opt-out. */
 export function reasoningPreviewSupportedForModel(cfg: LlmCfgLike | null | undefined): boolean {
   if (!isBigPickleModel(cfg)) return true;
-  return String(process.env.WEBAGENT_OPENCODE_REASONING_PREVIEW ?? "0").trim() === "1";
+  const override = process.env.WEBAGENT_OPENCODE_REASONING_PREVIEW;
+  if (override == null || String(override).trim() === "") return true;
+  return String(override).trim() !== "0";
 }

@@ -939,15 +939,15 @@ export function buildContinuationNudge(
   if (kind === "content_share") {
     if (extra?.finalAttempt && extra?.readPath) {
       return (
-        "The user still has not seen the draft. Paste the full markdown from read_file " +
-        `(\`${extra.readPath}\`) into your reply now — include headings and body. ` +
+        "The user still has not seen the deliverable. Call artifact_present now with " +
+        `\`path\`: \`${extra.readPath}\` and a short title — do not paste the file body in chat. ` +
         "Do not call read_file again or send another status message."
       );
     }
     return (
-      "The user asked to see or review the content. Paste the full draft from read_file into your reply " +
-      "(markdown headings and body), or call artifact_present with the workspace path. " +
-      "Do not stop after only reading the file or promising to share it."
+      "The user asked to see, share, or receive the deliverable. Call artifact_present with the workspace " +
+      "`path` (preferred) or inline `markdown` — the host shows View/Download. " +
+      "Do not paste the full document in chat and do not stop after only read_file."
     );
   }
   if (kind === "unparsed_tool_markup") {
@@ -1175,9 +1175,14 @@ export function userRequestedContentShare(userMessage: string): boolean {
   const low = String(userMessage || "").trim().toLowerCase();
   if (!low) return false;
   if (/\bshare\b.{0,30}\b(?:the|this|that|your|my)?\s*file\b/.test(low)) return true;
+  if (/\bshare\b.{0,30}\b(?:the|this|that|your|my)?\s*article\b/.test(low)) return true;
   if (/\bshare\b.{0,24}\b(?:with|for)\s+me\b/.test(low)) return true;
+  if (/\b(?:send|give)\b.{0,30}\b(?:me\s+)?(?:the|this|that|your|my)?\s*(?:file|document|article|draft)\b/.test(low)) {
+    return true;
+  }
+  if (/\bshow me\b.{0,40}\b(?:the|this|that|your|my)?\s*document\b/.test(low)) return true;
   if (
-    /\b(?:share|show|paste|display|send)\b.{0,50}\b(?:article|draft|content|markdown|file|body|text)\b/.test(
+    /\b(?:share|show|paste|display|send)\b.{0,50}\b(?:article|draft|content|markdown|file|body|text|document)\b/.test(
       low
     )
   ) {
@@ -1205,6 +1210,15 @@ export function userRequestedContentShare(userMessage: string): boolean {
 
 export function contentShareDeliverableCompleted(toolCalls: TurnToolCallRef[]): boolean {
   return toolCalls.some((t) => String(t?.name || "").trim() === "artifact_present");
+}
+
+export function buildContentShareContextPrefix(userMessage: string): string {
+  if (!userRequestedContentShare(userMessage)) return "";
+  return (
+    "[Content delivery: the user asked to see or receive the deliverable. " +
+    "Call artifact_present with the workspace file path (or inline markdown if no file exists yet). " +
+    "Do not paste the full document body in chat.]\n\n"
+  );
 }
 
 type ReadFileExecution = {
@@ -1265,33 +1279,82 @@ export function visibleContainsReadFileContent(
 
 export function contentShareDeliverableSatisfied(
   visible: string,
-  lastExecutions: ReadFileExecution[] = []
+  lastExecutions: ReadFileExecution[] = [],
+  toolCalls: TurnToolCallRef[] = []
 ): boolean {
-  const vis = stripMarkupForContinuationHeuristics(String(visible || "")).trim();
-  if (!vis) return false;
-  const read = lastSubstantialReadFileContent(lastExecutions);
-  if (read && visibleContainsReadFileContent(vis, read.content, true)) return true;
-  if (
-    /\b(?:here(?:'s| is)|below is|full (?:article|draft)|complete draft)\b/i.test(vis) &&
-    /^#{1,3}\s+/m.test(vis) &&
-    vis.length >= 400
-  ) {
-    return true;
+  if (contentShareDeliverableCompleted(toolCalls)) return true;
+  for (let i = lastExecutions.length - 1; i >= 0; i--) {
+    const item = lastExecutions[i];
+    if (String(item?.tool || "") !== "artifact_present" || item?.error) continue;
+    const r = item.result as { ok?: boolean } | undefined;
+    if (r && r.ok !== false) return true;
   }
-  const headingCount = (vis.match(/^#{1,3}\s+/gm) || []).length;
-  if (headingCount >= 2 && vis.length >= 400) return true;
-  if (headingCount >= 1 && vis.length >= 800) return true;
-  if (/```[\s\S]{500,}```/.test(vis)) return true;
   return false;
 }
 
+export function lastDeliverableWorkspacePath(
+  lastExecutions: ReadFileExecution[] = []
+): { path: string; title: string } | null {
+  for (let i = lastExecutions.length - 1; i >= 0; i--) {
+    const item = lastExecutions[i];
+    if (item?.error) continue;
+    const tool = String(item?.tool || "").trim();
+    if (!/^(read_file|write_file|edit_file|apply_patch)$/.test(tool)) continue;
+    const r = item.result;
+    if (!r || r.ok === false) continue;
+    const path = String(r?.path ?? "").trim();
+    if (!path) continue;
+    const base = path.split("/").pop() || "Document";
+    const title = base.replace(/\.[^.]+$/, "") || "Document";
+    return { path, title };
+  }
+  return null;
+}
+
+export type ContentShareArtifactPresentArgs = {
+  title: string;
+  path?: string;
+  markdown?: string;
+  filename?: string;
+};
+
+export function buildContentShareArtifactPresentArgs(
+  lastExecutions: ReadFileExecution[] = []
+): ContentShareArtifactPresentArgs | null {
+  const file = lastDeliverableWorkspacePath(lastExecutions);
+  if (file?.path) {
+    return { title: file.title, path: file.path };
+  }
+  const read = lastSubstantialReadFileContent(lastExecutions);
+  if (!read?.content?.trim()) return null;
+  const filename = read.path ? read.path.split("/").pop() || "artifact.md" : "artifact.md";
+  const title = filename.replace(/\.[^.]+$/, "") || "Document";
+  if (read.path) return { title, path: read.path };
+  return { title, markdown: read.content.trim(), filename };
+}
+
+/** @deprecated Use buildContentShareArtifactPresentArgs — content share must use artifact_present. */
 export function buildContentShareFallbackVisible(
   lastExecutions: ReadFileExecution[] = []
 ): string | null {
-  const read = lastSubstantialReadFileContent(lastExecutions);
-  if (!read?.content?.trim()) return null;
-  const pathHint = read.path ? ` (${read.path})` : "";
-  return `Here is the file${pathHint}:\n\n${read.content.trim()}`;
+  const args = buildContentShareArtifactPresentArgs(lastExecutions);
+  if (!args) return null;
+  if (args.path) return `Presented **${args.title}** (\`${args.path}\`).`;
+  return `Presented **${args.title}**.`;
+}
+
+/** Model read the file but replied with status/promise text instead of pasting the body. */
+export function contentShareStallVisible(
+  visible: string,
+  lastExecutions: ReadFileExecution[] = [],
+  toolCalls: TurnToolCallRef[] = []
+): boolean {
+  if (contentShareDeliverableSatisfied(visible, lastExecutions, toolCalls)) return false;
+  const vis = stripMarkupForContinuationHeuristics(String(visible || "")).trim();
+  if (!vis) return true;
+  if (looksLikeActionPromiseStall(visible)) return true;
+  if (vis.length < 400 && !/^#{1,3}\s+/m.test(vis)) return true;
+  return false;
 }
 
 export function shouldApplyContentShareFallback(
@@ -1299,12 +1362,14 @@ export function shouldApplyContentShareFallback(
   executedToolsInTurn: boolean,
   contentShareContinuations: number,
   visible: string,
-  lastExecutions: ReadFileExecution[] = []
+  lastExecutions: ReadFileExecution[] = [],
+  toolCalls: TurnToolCallRef[] = []
 ): boolean {
-  if (contentShareContinuations < MAX_CONTENT_SHARE_CONTINUATIONS) return false;
   if (!executedToolsInTurn || !userRequestedContentShare(userMessage)) return false;
-  if (contentShareDeliverableSatisfied(visible, lastExecutions)) return false;
-  return buildContentShareFallbackVisible(lastExecutions) != null;
+  if (contentShareDeliverableSatisfied(visible, lastExecutions, toolCalls)) return false;
+  if (!buildContentShareArtifactPresentArgs(lastExecutions)) return false;
+  if (contentShareContinuations >= MAX_CONTENT_SHARE_CONTINUATIONS) return true;
+  return contentShareStallVisible(visible, lastExecutions, toolCalls);
 }
 
 export function buildContentShareContinuationNudge(
@@ -1331,7 +1396,7 @@ export function shouldContinueContentShareDeliverable(
   if (!executedToolsInTurn || !userRequestedContentShare(userMessage)) return false;
   if (contentShareDeliverableCompleted(toolCalls)) return false;
   if (!articleContentAccessedInTurn(toolCalls, lastExecutions)) return false;
-  if (contentShareDeliverableSatisfied(visible, lastExecutions)) return false;
+  if (contentShareDeliverableSatisfied(visible, lastExecutions, toolCalls)) return false;
   return true;
 }
 

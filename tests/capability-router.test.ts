@@ -12,6 +12,8 @@ test("buildCapabilityRouterBlock includes capability router header and env foote
   assert.match(block, /browser-runtime-map|Browse workspace/);
   assert.match(block, /http-api|REST|GraphQL/i);
   assert.match(block, /Nodebox browser/);
+  assert.match(block, /pyodide-runtime|Browser Python/i);
+  assert.match(block, /avoid run_python for one-off REST/i);
 });
 
 test("buildCapabilityRouterBlock filters deferred routes but keeps OAuth SaaS hint", async () => {

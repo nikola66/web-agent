@@ -1,6 +1,7 @@
 /** Compact always-on task → skill → tool routing for the agent system prompt. */
 
 import { listSkills } from "./memory/skills.js";
+import { canonicalSkillForTool } from "./tool-skill-routes.js";
 
 export type CapabilityRoute = {
   need: string;
@@ -14,7 +15,7 @@ export type CapabilityRoute = {
 const STATIC_CAPABILITY_ROUTES: CapabilityRoute[] = [
   {
     need: "Browse workspace (list/tree/find)",
-    skill: "browser-runtime-map",
+    skill: canonicalSkillForTool("browse_workspace")?.skill,
     tools: ["browse_workspace"],
     avoid: "grep for filenames",
   },
@@ -34,18 +35,27 @@ const STATIC_CAPABILITY_ROUTES: CapabilityRoute[] = [
   },
   {
     need: "Extract/list ZIP",
+    skill: canonicalSkillForTool("extract_archive")?.skill,
     tools: ["extract_archive", "archive_list"],
     avoid: "shell unzip",
   },
   {
     need: "PDF/DOCX plain text",
+    skill: canonicalSkillForTool("pdf_extract")?.skill,
     tools: ["pdf_extract", "docx_extract"],
     avoid: "run_python first for simple text",
   },
   {
     need: "System clock / env",
+    skill: canonicalSkillForTool("system_info")?.skill,
     tools: ["system_info"],
     avoid: "run_shell date",
+  },
+  {
+    need: "Browser Python (Pyodide scripts)",
+    skill: canonicalSkillForTool("run_python")?.skill,
+    tools: ["run_python"],
+    avoid: "run_python for one-off REST/CMS/translation — use web_fetch/web_post",
   },
   {
     need: "DOM click/type automation",

@@ -75,8 +75,8 @@ export const BIG_PICKLE_TOOL_CALL_GUIDANCE =
   "write_file example: {\"path\":\"projects/<slug>/article.md\",\"content\":\"# Title\\n\\n...\"}. " +
   "For long bodies: first write_file without append, then write_file with \"append\":true for later sections.\n" +
   "Never call write_file with {} or without both path and content.\n" +
-  "When the user asks to share/show/paste a file you already wrote or read, paste the full markdown in your reply — " +
-  "do not call read_file again or promise to share later.\n" +
+  "When the user asks to share/show/send the file or document, call artifact_present with the workspace path — " +
+  "do not paste the full body in chat and do not call read_file again.\n" +
   "Do not rewrite the same file from scratch unless the user asked for a full rewrite — use append:true or edit_file.";
 
 export function buildExecutionGuidanceBlock(

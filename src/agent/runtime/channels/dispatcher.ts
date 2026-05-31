@@ -97,6 +97,12 @@ function createTranscriptSender({
   let previewPendingText = "";
   let previewTimer = null;
   const previewThrottleMs = 400;
+  let lastActivityAt = Date.now();
+  let lastStatusAt = 0;
+  let lastStatusText = "";
+  let currentPhase = "Working…";
+  let runningTool = "";
+  let finalDelivered = false;
 
   const clearPreviewTimer = () => {
     if (previewTimer) clearTimeout(previewTimer);
@@ -149,6 +155,7 @@ function createTranscriptSender({
 
   const schedulePreview = (outbound) => {
     if (!outbound) return;
+    lastActivityAt = Date.now();
     previewPendingText = outbound;
     const now = Date.now();
     if (now - lastPreviewEmitAt >= previewThrottleMs) {
@@ -165,6 +172,7 @@ function createTranscriptSender({
   return {
     async send(event) {
       const kind = String(event?.type || "");
+      const signal = String(event?.signal || "");
       if (kind === "reasoning_preview") {
         if (event?.done) {
           await clearPreviewMessage();
@@ -180,12 +188,46 @@ function createTranscriptSender({
 
       if (kind === "assistant") {
         await clearPreviewMessage();
+        finalDelivered = true;
+        lastActivityAt = Date.now();
+      } else if (kind === "tool_start") {
+        runningTool = String(event?.name || "").trim();
+        currentPhase = runningTool ? `Still running ${runningTool}…` : "Working with tools…";
+        lastActivityAt = Date.now();
+      } else if (kind === "tool_result") {
+        runningTool = "";
+        currentPhase = "Continuing after tool results…";
+        lastActivityAt = Date.now();
+      } else if (kind === "turn_signal") {
+        if (signal === "tool_batch_start") {
+          const count = Number(event?.toolCount || 0);
+          const toolName = String(event?.toolName || "").trim();
+          runningTool = toolName;
+          currentPhase =
+            count > 1 ? `Working: running ${count} tools…` : `Still running ${toolName || "tool"}…`;
+        } else if (signal === "tool_batch_end") {
+          runningTool = "";
+          currentPhase = "Continuing after tool results…";
+        } else if (signal === "continuation") {
+          currentPhase = formatTranscriptEventForChannel(event, {
+            style: transcriptStyle,
+            toolCatalog,
+          }).trim() || "Continuing…";
+        } else if (signal === "blocked") {
+          currentPhase = formatTranscriptEventForChannel(event, {
+            style: transcriptStyle,
+            toolCatalog,
+          }).trim() || "Blocked.";
+        } else if (signal === "turn_status" && event?.text) {
+          currentPhase = String(event.text).trim();
+        }
       }
 
       const outbound = formatTranscriptEventForChannel(event, {
         style: transcriptStyle,
         toolCatalog,
       }).trim();
+      if (kind === "turn_signal" && transcriptStyle === "telegram") return;
       if (!outbound || outbound === lastTranscriptText) return;
       try {
         await sendReply(chatId, outbound);
@@ -206,10 +248,25 @@ function createTranscriptSender({
       transcriptMessageCount += 1;
       if (kind === "assistant") lastAssistantPreview = outbound.slice(0, 120);
     },
+    async maybeSendStatus({ firstSilenceMs, repeatSilenceMs }) {
+      if (finalDelivered) return;
+      if (transcriptStyle !== "telegram") return;
+      const now = Date.now();
+      const waitMs = lastStatusAt ? repeatSilenceMs : firstSilenceMs;
+      if (now - lastActivityAt < waitMs) return;
+      if (lastStatusAt && now - lastStatusAt < repeatSilenceMs) return;
+      const text = (currentPhase || (runningTool ? `Still running ${runningTool}…` : "Working…")).trim();
+      if (!text || text === lastStatusText) return;
+      await sendReply(chatId, text);
+      lastStatusAt = now;
+      lastStatusText = text;
+      transcriptMessageCount += 1;
+    },
     async finalize() {
       clearPreviewTimer();
       if (previewPendingText) await flushPreview();
       await clearPreviewMessage();
+      finalDelivered = true;
     },
     stats() {
       return {
@@ -580,17 +637,23 @@ export function createChannelInboundHandler(deps) {
         toolCatalog,
       });
 
-      const RESEARCH_PROGRESS_MS = 90_000;
       let progressTimer: ReturnType<typeof setInterval> | null = null;
       if (channel === "telegram") {
-        const turnStartedAt = Date.now();
+        const firstSilenceMs = Math.max(
+          1,
+          Number(process.env.WEBAGENT_CHANNEL_STATUS_FIRST_MS) || 20_000
+        );
+        const repeatSilenceMs = Math.max(
+          1,
+          Number(process.env.WEBAGENT_CHANNEL_STATUS_REPEAT_MS) || 60_000
+        );
+        const tickMs = Math.max(10, Math.min(5_000, Math.floor(Math.min(firstSilenceMs, repeatSilenceMs) / 2)));
         progressTimer = setInterval(() => {
-          const elapsedMin = Math.floor((Date.now() - turnStartedAt) / 60_000);
-          void sendReply(
-            chatId,
-            `⏳ Still working… (${elapsedMin} min elapsed)`
-          ).catch(() => {});
-        }, RESEARCH_PROGRESS_MS);
+          void transcriptSender
+            .maybeSendStatus({ firstSilenceMs, repeatSilenceMs })
+            .catch(() => {});
+        }, tickMs);
+        progressTimer.unref?.();
       }
 
       const channelMaxRounds =

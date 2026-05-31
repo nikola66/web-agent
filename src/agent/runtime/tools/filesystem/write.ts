@@ -15,6 +15,7 @@ import {
   formatWriteFileIncompleteContentHint,
   looksLikeIncompleteMarkdownWrite,
   normalizeWriteFileArgs,
+  writeFileAppendEnabled,
 } from "../write-file-args.js";
 
 function coerceWriteContent(raw) {
@@ -43,7 +44,7 @@ export async function writeFileTool(args = {}, ctx) {
   }
   const raw = normalized.content;
   const contents = coerceWriteContent(raw);
-  const append = normalized.append === true;
+  const append = writeFileAppendEnabled(normalized);
   const byteLen = Buffer.byteLength(contents, "utf8");
   if (byteLen > WRITE_FILE_MAX_BYTES) {
     throw new Error(

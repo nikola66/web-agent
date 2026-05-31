@@ -2,7 +2,6 @@
   "id": "opencode",
   "name": "OpenCode (free, limited)",
   "label": "OpenCode (free, limited)",
-  "isDefault": true,
   "order": 3,
   "kind": "openai",
   "requiresUserApiKey": false,

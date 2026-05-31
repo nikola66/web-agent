@@ -238,6 +238,7 @@ test("buildApiCallContextPrefix orders discovery before guessing resources", () 
   assert.ok(prefix);
   assert.match(prefix!, /discovery/i);
   assert.match(prefix!, /Do not retry/i);
+  assert.match(prefix!, /Do not move API calls into run_python/i);
   assert.doesNotMatch(prefix!, /\/collections/);
 });
 

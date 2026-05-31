@@ -14,6 +14,8 @@ import {
 } from "@/runtimes/index";
 import { getSandboxFs, readSandboxFileUtf8 } from "@/runtimes/fs";
 import { executePythonInSandbox } from "@/runtimes/webcontainer/python";
+import { attachLinuxOnTabBootProgress } from "@/runtimes/linuxontab/boot";
+import { LinuxOnTabBootProgress } from "@/runtimes/linuxontab/progress-bar";
 import {
   hasWorkspaceSnapshot,
   restoreFilesystem,
@@ -45,6 +47,7 @@ import soulSource from "./runtime/SOUL.md?raw";
 import { TOOL_CATALOG_JSON } from "./tool-catalog";
 import { proxyTextBodyCapForUrl } from "./runtime/proxy-body-cap";
 import { stripReasoningPreviewFromStream } from "./runtime/reasoning-preview-ipc.js";
+import { parseToolStartTranscriptLine } from "./tool-call-line";
 import { normalizeLaunchMode, sanitizeForLogs } from "./runtime/privacy";
 import sqlWasmRuntimeSource from "sql.js/dist/sql-wasm.js?raw";
 import sqlWasmUrl from "sql.js/dist/sql-wasm.wasm?url";
@@ -114,7 +117,7 @@ const runtimeBootLabel = () =>
 const DEFAULT_PTY: SpawnPtySize = { cols: 120, rows: 40 };
 const STARTUP_TIMEOUT_MS = 20_000;
 const NODEBOX_BOOT_TIMEOUT_MS = 90_000;
-const LINUXONTAB_BOOT_TIMEOUT_MS = 600_000;
+const LINUXONTAB_BOOT_TIMEOUT_MS = 900_000;
 const PROFILE_UPDATE_START = "<<<WEBAGENT_PROFILE_UPDATE>>>";
 const PROFILE_UPDATE_END = "<<<END_WEBAGENT_PROFILE_UPDATE>>>";
 const USER_UPDATE_START = "<<<WEBAGENT_USER_UPDATE>>>";
@@ -166,7 +169,6 @@ const MCP_RESP_END = "<<<END_WEBAGENT_MCP_RESP>>>";
 /** Emitted by agent runtime before exit(1); parsed so the terminal can show the message. */
 const FATAL_ERROR_START = "<<<WEBAGENT_FATAL_ERROR>>>";
 const FATAL_ERROR_END = "<<<END_WEBAGENT_FATAL_ERROR>>>";
-const TOOL_CALL_LINE_RE = /^\s*▸\s+([a-z0-9_]+)\s+/;
 const ONBOARDING_PROMPT_RE = /(Agent name \[[^\]]*\]:\s*$|Your name \[[^\]]*\]:\s*$)/m;
 const ONBOARDING_SAVED_LINE_RE = /Saved AGENT\.md for (.+?) and USER\.md for (.+?)\./;
 // Nodebox prints a welcome/feedback banner on every boot — suppress it entirely.
@@ -525,6 +527,25 @@ function withSubscriptionProfileHeader(
   return next;
 }
 
+function resolveSubscriptionLlmFetchPath(url: string): string | null {
+  try {
+    const parsed = new URL(url, typeof window !== "undefined" ? window.location.origin : "http://localhost");
+    const path = `${parsed.pathname}${parsed.search}`;
+    return isSubscriptionLlmUrl(path) ? path : null;
+  } catch {
+    return isSubscriptionLlmUrl(url) ? url : null;
+  }
+}
+
+function decodeProxyStreamBody(body: string | null | undefined, bodyEncoding?: string): BodyInit | undefined {
+  if (body == null) return undefined;
+  if (bodyEncoding === "base64" && typeof body === "string") {
+    const bytes = Uint8Array.from(atob(body), (c) => c.charCodeAt(0));
+    return bytes;
+  }
+  return body;
+}
+
 function buildEnv(profileId: string, profile: Profile, apiKeys: Record<string, string>): Record<string, string> {
   const autoApproveTools =
     String(import.meta.env.VITE_WEBAGENT_AUTO_APPROVE_TOOLS || "").trim() === "1" ||
@@ -711,12 +732,14 @@ export async function startWebAgent(options: AgentStartOptions): Promise<void> {
   }
 
   onStatusChange("booting");
-  onOutput(`\x1b[90m▸ Booting ${runtimeBootLabel()}…\x1b[0m\n`);
-  onOutput(
-    activeRuntimeKind() === "linuxontab"
-      ? "\x1b[90m  (First run boots Alpine via v86 — this can take several minutes.)\x1b[0m\n"
-      : "\x1b[90m  (First run can take a moment while runtime assets download.)\x1b[0m\n"
-  );
+  let lotBootProgress: LinuxOnTabBootProgress | null = null;
+  if (activeRuntimeKind() === "linuxontab") {
+    lotBootProgress = new LinuxOnTabBootProgress(onOutput);
+    attachLinuxOnTabBootProgress(lotBootProgress);
+  } else {
+    onOutput(`\x1b[90m▸ Booting ${runtimeBootLabel()}…\x1b[0m\n`);
+    onOutput("\x1b[90m  (First run can take a moment while runtime assets download.)\x1b[0m\n");
+  }
   try {
     await withTimeout(
       bootSandboxRuntime(activeRuntimeKind()),
@@ -731,6 +754,10 @@ export async function startWebAgent(options: AgentStartOptions): Promise<void> {
       "\x1b[33m▸ Boot failed. Fix network/blockers first, then relaunch.\x1b[0m\n"
     );
     throw err;
+  } finally {
+    attachLinuxOnTabBootProgress(null);
+    lotBootProgress?.dispose();
+    lotBootProgress = null;
   }
 
   onOutput("\x1b[90m▸ Checking Node runtime…\x1b[0m\n");
@@ -972,10 +999,8 @@ export async function startWebAgent(options: AgentStartOptions): Promise<void> {
     const toolLines = toolParseLineBuffer.split("\n");
     toolParseLineBuffer = toolLines.pop() ?? "";
     for (const line of toolLines) {
-      const plain = stripAnsi(line);
-      const match = plain.match(TOOL_CALL_LINE_RE);
-      const toolName = match?.[1];
-      if (toolName && toolName !== "no") onToolCall?.(toolName);
+      const toolName = parseToolStartTranscriptLine(stripAnsi(line));
+      if (toolName) onToolCall?.(toolName);
     }
 
     // --- Prompt-ready detection ---
@@ -1363,6 +1388,71 @@ export async function startWebAgent(options: AgentStartOptions): Promise<void> {
               textBodyCap?: number;
             }>(reqBody);
             const proxyHeaders = withSubscriptionProfileHeader(profile.id, req.url, req.headers);
+            const textBodyCap = Number(req.textBodyCap);
+            const streamCap =
+              Number.isFinite(textBodyCap) && textBodyCap > 0 ? Math.floor(textBodyCap) : 0;
+            let streamed = 0;
+            const writeCappedChunk = async (chunk: string) => {
+              if (!chunk) return;
+              if (!streamCap) {
+                await writeStreamEvent(PROXY_STREAM_CHUNK_PREFIX, { chunk }, PROXY_STREAM_CHUNK_END);
+                return;
+              }
+              const room = streamCap - streamed;
+              if (room <= 0) return;
+              const slice = chunk.slice(0, room);
+              streamed += slice.length;
+              await writeStreamEvent(PROXY_STREAM_CHUNK_PREFIX, { chunk: slice }, PROXY_STREAM_CHUNK_END);
+            };
+            const subscriptionPath = resolveSubscriptionLlmFetchPath(req.url);
+            if (subscriptionPath) {
+              const upstream = await fetch(subscriptionPath, {
+                method: req.method ?? "POST",
+                headers: proxyHeaders,
+                body: decodeProxyStreamBody(req.body, req.bodyEncoding),
+              });
+              if (!upstream.ok) {
+                const errText = await upstream.text().catch(() => "");
+                await writeStreamEvent(
+                  PROXY_STREAM_END_PREFIX,
+                  { error: errText || `HTTP ${upstream.status}` },
+                  PROXY_STREAM_END_END
+                );
+                return;
+              }
+              await writeStreamEvent(
+                PROXY_STREAM_START_PREFIX,
+                {
+                  status: upstream.status,
+                  statusText: upstream.statusText,
+                  contentType: upstream.headers.get("content-type") ?? "",
+                },
+                PROXY_STREAM_START_END
+              );
+              if (!upstream.body) {
+                await writeStreamEvent(PROXY_STREAM_END_PREFIX, { ok: true }, PROXY_STREAM_END_END);
+                return;
+              }
+              const reader = upstream.body.getReader();
+              const decoder = new TextDecoder();
+              try {
+                while (true) {
+                  const { done, value } = await reader.read();
+                  if (done) break;
+                  if (streamCap && streamed >= streamCap) break;
+                  await writeCappedChunk(decoder.decode(value, { stream: true }));
+                }
+                await writeCappedChunk(decoder.decode());
+                await writeStreamEvent(PROXY_STREAM_END_PREFIX, { ok: true }, PROXY_STREAM_END_END);
+              } catch (streamErr) {
+                await writeStreamEvent(
+                  PROXY_STREAM_END_PREFIX,
+                  { error: String((streamErr as Error)?.message ?? streamErr) },
+                  PROXY_STREAM_END_END
+                );
+              }
+              return;
+            }
             const res = await fetch("/api/proxy", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
@@ -1400,22 +1490,6 @@ export async function startWebAgent(options: AgentStartOptions): Promise<void> {
               },
               PROXY_STREAM_START_END
             );
-            const textBodyCap = Number(req.textBodyCap);
-            const streamCap =
-              Number.isFinite(textBodyCap) && textBodyCap > 0 ? Math.floor(textBodyCap) : 0;
-            let streamed = 0;
-            const writeCappedChunk = async (chunk: string) => {
-              if (!chunk) return;
-              if (!streamCap) {
-                await writeStreamEvent(PROXY_STREAM_CHUNK_PREFIX, { chunk }, PROXY_STREAM_CHUNK_END);
-                return;
-              }
-              const room = streamCap - streamed;
-              if (room <= 0) return;
-              const slice = chunk.slice(0, room);
-              streamed += slice.length;
-              await writeStreamEvent(PROXY_STREAM_CHUNK_PREFIX, { chunk: slice }, PROXY_STREAM_CHUNK_END);
-            };
             const text = String(data?.body ?? "");
             const CHUNK = 16_384;
             for (let i = 0; i < text.length; i += CHUNK) {

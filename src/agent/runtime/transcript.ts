@@ -2,6 +2,13 @@ import { BLOCK_CONTINUATION_PREFIX } from "./terminal-format.js";
 import { stripAnsi } from "./utils.js";
 
 export type ChannelTranscriptStyle = "terminal" | "telegram";
+export type TurnSignalEventType =
+  | "turn_status"
+  | "continuation"
+  | "context_pressure"
+  | "tool_batch_start"
+  | "tool_batch_end"
+  | "blocked";
 
 export function shortenReasoningPreview(text: string, maxChars = 180): string {
   const normalized = String(text || "")
@@ -202,6 +209,62 @@ export type SystemLineTranscriptEventInput = {
   text?: string;
 };
 
+export type TurnSignalTranscriptEventInput = {
+  signal?: TurnSignalEventType;
+  round?: number;
+  text?: string;
+  reason?: string;
+  toolCount?: number;
+  toolName?: string;
+};
+
+export function createTurnSignalTranscriptEvent({
+  signal = "turn_status",
+  round,
+  text,
+  reason,
+  toolCount,
+  toolName,
+}: TurnSignalTranscriptEventInput = {}) {
+  return {
+    type: "turn_signal",
+    critical: false,
+    signal,
+    round,
+    text,
+    reason,
+    toolCount,
+    toolName,
+  };
+}
+
+function formatTurnSignal(event, style: ChannelTranscriptStyle): string {
+  const signal = String(event?.signal || "turn_status");
+  const reason = String(event?.reason || "").trim();
+  const text = String(event?.text || "").trim();
+  const toolName = String(event?.toolName || "").trim();
+  const toolCount = Number(event?.toolCount || 0);
+  if (signal === "turn_status") return style === "telegram" ? text : "";
+  if (signal === "continuation") {
+    return text || `Continuing${reason ? `: ${reason}` : ""}…`;
+  }
+  if (signal === "context_pressure") {
+    return text || "Context pressure high; compacting/pruning as needed.";
+  }
+  if (signal === "tool_batch_start") {
+    if (text) return text;
+    if (toolCount > 1) return `Working: running ${toolCount} tools…`;
+    return `Working: ${toolName || "tool"}…`;
+  }
+  if (signal === "tool_batch_end") {
+    return text || "Continuing after tool results…";
+  }
+  if (signal === "blocked") {
+    return text || `Blocked${reason ? `: ${reason}` : ""}`;
+  }
+  return text;
+}
+
 export function formatTranscriptEventForChannel(
   event,
   options?: {
@@ -244,6 +307,9 @@ export function formatTranscriptEventForChannel(
   if (kind === "system_line") {
     if (style === "telegram") return "";
     return String(event.text || "").trimEnd();
+  }
+  if (kind === "turn_signal") {
+    return formatTurnSignal(event, style);
   }
   if (kind === "reasoning_preview") {
     const preview = shortenReasoningPreview(

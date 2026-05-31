@@ -13,14 +13,26 @@ function decodeProxyUpstreamBody(body: string | null, bodyEncoding?: string): Bu
   return Buffer.from(body, "utf8");
 }
 
+test("adapter streaming proxy uses direct same-origin fetch for subscription LLM URLs", async () => {
+  const src = await fs.readFile(new URL("../src/agent/adapter.ts", import.meta.url), "utf8");
+  const handlerMarker = 'if (agentOutputBuffer.startsWith(PROXY_STREAM_REQ_PREFIX))';
+  const streamIdx = src.indexOf(handlerMarker);
+  assert.ok(streamIdx >= 0, "streaming proxy handler missing");
+  const streamBlock = src.slice(streamIdx, streamIdx + 5500);
+  assert.match(streamBlock, /resolveSubscriptionLlmFetchPath/);
+  assert.match(streamBlock, /if \(subscriptionPath\)/);
+  assert.match(streamBlock, /await fetch\(subscriptionPath/);
+  assert.match(streamBlock, /upstream\.body\.getReader\(\)/);
+});
+
 test("streaming adapter proxy forward preserves bodyEncoding for /api/proxy", async () => {
   const src = await fs.readFile(new URL("../src/agent/adapter.ts", import.meta.url), "utf8");
   const handlerMarker = 'if (agentOutputBuffer.startsWith(PROXY_STREAM_REQ_PREFIX))';
   const streamIdx = src.indexOf(handlerMarker);
   assert.ok(streamIdx >= 0, "streaming proxy handler missing");
-  const streamBlock = src.slice(streamIdx, streamIdx + 3500);
+  const streamBlock = src.slice(streamIdx, streamIdx + 5500);
   assert.match(streamBlock, /bodyEncoding\?: string/);
-  assert.match(streamBlock, /bodyEncoding:\s*req\.bodyEncoding/);
+  assert.match(streamBlock, /decodeProxyStreamBody/);
 });
 
 test("proxy base64 decode preserves multipart file bytes (upload path)", () => {

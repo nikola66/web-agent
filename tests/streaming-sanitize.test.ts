@@ -13,6 +13,7 @@ import {
   extractPlainToolCommandLines,
   extractJsonToolCallPayloads,
   extractLongcatToolCallPayloads,
+  extractNamedXmlToolCallPayloads,
   extractDsmlToolCallPayloads,
   extractFunctionXmlToolCallPayloads,
   extractMarkerTools,
@@ -550,6 +551,55 @@ Outro.`;
   assert.match(parsed.visible, /Outro\./);
   assert.doesNotMatch(parsed.visible, /<function>/i);
   assert.equal(sanitizeAssistantVisibleText(raw), parsed.visible);
+});
+
+test("extractNamedXmlToolCallPayloads parses Big Pickle bare XML tool tags", () => {
+  const raw = `Let me see what we've got so far.
+
+<read_file>
+<path>projects/ciso-challenges-2026/article.md</path>
+</read_file>
+
+<read_file>
+<path>projects/ciso-challenges-2026/article.md</path>
+</read_file>`;
+  const parsed = extractNamedXmlToolCallPayloads(raw, ["read_file", "artifact_present"]);
+  assert.deepEqual(parsed.tools, [
+    { name: "read_file", arguments: { path: "projects/ciso-challenges-2026/article.md" } },
+    { name: "read_file", arguments: { path: "projects/ciso-challenges-2026/article.md" } },
+  ]);
+  assert.match(parsed.visible, /Let me see/);
+  assert.doesNotMatch(parsed.visible, /<read_file>/i);
+
+  const normalized = normalizeToolCalls(parsed.tools, ["read_file"]);
+  assert.equal(normalized.normalized.length, 1);
+  assert.equal(normalized.rejected[0]?.reason, "duplicate_call");
+});
+
+test("sanitizeAssistantVisibleText strips Big Pickle bare XML tool tags", () => {
+  const raw = `Intro.
+
+<read_file>
+<path>projects/ciso-challenges-2026/article.md</path>
+</read_file>
+
+Outro.`;
+  const sanitized = sanitizeAssistantVisibleText(raw, ["read_file"]);
+  assert.match(sanitized, /Intro\./);
+  assert.match(sanitized, /Outro\./);
+  assert.doesNotMatch(sanitized, /<read_file>/i);
+  assert.doesNotMatch(sanitized, /<path>/i);
+});
+
+test("createToolAwareStreamWriter hides bare XML read_file blocks during stream", () => {
+  const chunks: string[] = [];
+  const w = createToolAwareStreamWriter((c) => chunks.push(c));
+  w.push("Intro ");
+  w.push("<read_file><path>x.md</path>");
+  w.push("</read_file>");
+  w.push(" Outro.");
+  w.flush();
+  assert.equal(chunks.join(""), "Intro  Outro.");
 });
 
 test("createToolAwareStreamWriter hides function XML blocks during stream", () => {

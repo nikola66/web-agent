@@ -8,6 +8,8 @@ test("reasoningDisableExtras uses OpenRouter reasoning object only", async () =>
     "../dist/agent-runtime/llm/provider-config.js"
   );
   const prev = process.env.WEBAGENT_REASONING_PREVIEW;
+  const prevOpencode = process.env.WEBAGENT_OPENCODE_REASONING_PREVIEW;
+  delete process.env.WEBAGENT_OPENCODE_REASONING_PREVIEW;
   process.env.WEBAGENT_REASONING_PREVIEW = "0";
   try {
     assert.equal(reasoningPreviewEnabled(), false);
@@ -20,12 +22,14 @@ test("reasoningDisableExtras uses OpenRouter reasoning object only", async () =>
   }
   assert.equal(reasoningPreviewEnabled(), true);
   assert.deepEqual(reasoningDisableExtras("openrouter"), {});
-  assert.deepEqual(reasoningDisableExtras("openrouter", "org/big-pickle"), {
-    reasoning: { enabled: false },
-  });
+  assert.deepEqual(reasoningDisableExtras("openrouter", "org/big-pickle"), {});
+  assert.deepEqual(reasoningDisableExtras("opencode", "big-pickle"), {});
+  process.env.WEBAGENT_OPENCODE_REASONING_PREVIEW = "0";
   assert.deepEqual(reasoningDisableExtras("opencode", "big-pickle"), {
     reasoning: { enabled: false },
   });
+  if (prevOpencode === undefined) delete process.env.WEBAGENT_OPENCODE_REASONING_PREVIEW;
+  else process.env.WEBAGENT_OPENCODE_REASONING_PREVIEW = prevOpencode;
   assert.deepEqual(reasoningDisableExtras("nous"), {});
   assert.deepEqual(reasoningDisableExtras("custom"), {});
 });

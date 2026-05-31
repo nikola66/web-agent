@@ -49,8 +49,8 @@ import {
   extractLongcatToolCallPayloads,
   extractDsmlToolCallPayloads,
   extractFunctionXmlToolCallPayloads,
+  extractNamedXmlToolCallPayloads,
   extractToolCallTagPayloads,
-  liveMirrorVisibleGap,
   normalizeToolCalls,
   sanitizeAssistantVisibleText,
   streamOpenAI,
@@ -135,6 +135,8 @@ import {
   shouldContinueContentShareDeliverable,
   shouldContinueUnparsedToolMarkup,
   buildContentShareContinuationNudge,
+  buildContentShareArtifactPresentArgs,
+  buildContentShareContextPrefix,
   buildContentShareFallbackVisible,
   shouldApplyContentShareFallback,
   shouldContinueIntermediateAck,
@@ -156,11 +158,13 @@ import {
   pruneConversationForMidTurn,
 } from "./context-compression.js";
 import { errorMessage } from "./utils.js";
+import { artifactPresentTool } from "./tools/system-artifact-tools.js";
 import { WS } from "./constants.js";
 import {
   createAssistantTranscriptEvent,
   createReasoningPreviewTranscriptEvent,
   createSystemLineTranscriptEvent,
+  createTurnSignalTranscriptEvent,
   formatSkippedToolsTranscript,
   shortenReasoningPreview,
 } from "./transcript.js";
@@ -193,6 +197,7 @@ function createReasoningPreviewController(opts: {
 }) {
   let acc = "";
   let lastEmitAt = 0;
+  let pendingEmitTimer: ReturnType<typeof setTimeout> | null = null;
   let cleared = false;
   const enabled = opts.enabled !== false;
 
@@ -215,24 +220,46 @@ function createReasoningPreviewController(opts: {
 
   const scheduleEmit = () => {
     const now = Date.now();
-    if (now - lastEmitAt < REASONING_PREVIEW_THROTTLE_MS) return;
-    lastEmitAt = now;
-    void emit(acc);
+    const delay = Math.max(0, REASONING_PREVIEW_THROTTLE_MS - (now - lastEmitAt));
+    if (delay === 0) {
+      if (pendingEmitTimer) {
+        clearTimeout(pendingEmitTimer);
+        pendingEmitTimer = null;
+      }
+      lastEmitAt = now;
+      void emit(acc);
+      return;
+    }
+    if (pendingEmitTimer) return;
+    pendingEmitTimer = setTimeout(() => {
+      pendingEmitTimer = null;
+      lastEmitAt = Date.now();
+      void emit(acc);
+    }, delay);
   };
 
   return {
     onReasoningDelta(chunk: string) {
       if (!enabled || cleared || !chunk) return;
-      acc += chunk;
+      if (acc && chunk.startsWith(acc)) acc = chunk;
+      else acc += chunk;
       scheduleEmit();
     },
     clear() {
       if (cleared) return;
       cleared = true;
+      if (pendingEmitTimer) {
+        clearTimeout(pendingEmitTimer);
+        pendingEmitTimer = null;
+      }
       void emit("", true);
     },
     flush() {
       if (cleared) return;
+      if (pendingEmitTimer) {
+        clearTimeout(pendingEmitTimer);
+        pendingEmitTimer = null;
+      }
       lastEmitAt = Date.now();
       void emit(acc, true);
     },
@@ -267,6 +294,20 @@ async function logTurnStopReason(
     round: extra?.round,
     continuationRecoveriesFired: extra?.continuationRecoveriesFired,
   });
+}
+
+async function emitTurnSignal(
+  turnMeta: Record<string, unknown>,
+  input: {
+    signal?: "turn_status" | "continuation" | "context_pressure" | "tool_batch_start" | "tool_batch_end" | "blocked";
+    round?: number;
+    text?: string;
+    reason?: string;
+    toolCount?: number;
+    toolName?: string;
+  }
+): Promise<void> {
+  await emitTranscriptEvent(turnMeta, createTurnSignalTranscriptEvent(input), input).catch(() => {});
 }
 
 const REASONING_ONLY_NO_VISIBLE_MSG =
@@ -540,6 +581,10 @@ export async function agentTurn(
   const fileHandlingPrefix = !turnMeta?.textOnly
     ? buildFileHandlingContextPrefix(fileSignalBlob)
     : null;
+  const contentSharePrefix =
+    !turnMeta?.textOnly && originalUserInput
+      ? buildContentShareContextPrefix(originalUserInput)
+      : "";
   const refreshActiveToolState = async () => {
     activeToolNames = resolveInitialActiveToolNames(
       filteredPolicyNames,
@@ -767,6 +812,9 @@ export async function agentTurn(
   if (fileHandlingPrefix) {
     conv.push({ role: "user", content: fileHandlingPrefix });
   }
+  if (contentSharePrefix) {
+    conv.push({ role: "user", content: contentSharePrefix });
+  }
 
   let skillMutatingCalledInTurn = false;
   let intermediateAckContinuations = 0;
@@ -828,6 +876,11 @@ export async function agentTurn(
           estimatedPromptTokens: estTokensBefore + estimateToolSchemaTokens(streamTools),
           convCharLen: convCharsBefore,
         });
+        await emitTurnSignal(turnMeta, {
+          signal: "context_pressure",
+          round,
+          text: "Context is getting large; trimming as needed.",
+        });
       }
       if (
         !midTurnCompacted &&
@@ -844,6 +897,11 @@ export async function agentTurn(
             afterTokens: compacted.afterTokens,
             reason: compacted.reason,
           });
+          await emitTurnSignal(turnMeta, {
+            signal: "context_pressure",
+            round,
+            text: "Context compacted; continuing.",
+          });
         }
       }
       emitContextUpdate({
@@ -854,7 +912,6 @@ export async function agentTurn(
       });
       const accChunks: string[] = [];
       let streamedVisible = "";
-      let liveMirrorStarted = false;
       activeReasoningPreview = createReasoningPreviewController({
         turnMeta,
         mirrorTerminal,
@@ -864,17 +921,6 @@ export async function agentTurn(
       const streamWriter = createToolAwareStreamWriter((chunk) => {
         if (!chunk) return;
         streamedVisible += chunk;
-        if (!mirrorTerminal || quietTurn) return;
-        if (!liveMirrorStarted) {
-          liveMirrorStarted = true;
-          if (!turnHeaderPrinted) {
-            turnHeaderPrinted = true;
-            process.stdout.write(`${bold(cyan(agentName))}\n`);
-          } else if (round > 1) {
-            process.stdout.write("\n");
-          }
-        }
-        process.stdout.write(chunk);
       });
       const onDelta = (c) => {
         if (String(c || "").trim()) activeReasoningPreview?.clear();
@@ -916,13 +962,15 @@ export async function agentTurn(
       const longcatParsed = extractLongcatToolCallPayloads(markerParsed.visible);
       const toolCallTagParsed = extractToolCallTagPayloads(longcatParsed.visible);
       const functionXmlParsed = extractFunctionXmlToolCallPayloads(toolCallTagParsed.visible);
-      const dsmlParsed = extractDsmlToolCallPayloads(functionXmlParsed.visible);
+      const namedXmlParsed = extractNamedXmlToolCallPayloads(functionXmlParsed.visible, activeToolNames);
+      const dsmlParsed = extractDsmlToolCallPayloads(namedXmlParsed.visible);
       const nativeOrMarkerCount =
         nativeStreamTools.length +
         markerParsed.tools.length +
         longcatParsed.tools.length +
         toolCallTagParsed.tools.length +
         functionXmlParsed.tools.length +
+        namedXmlParsed.tools.length +
         dsmlParsed.tools.length;
       const jsonFallbackParsed =
         nativeOrMarkerCount === 0
@@ -945,6 +993,7 @@ export async function agentTurn(
         ...longcatParsed.tools,
         ...toolCallTagParsed.tools,
         ...functionXmlParsed.tools,
+        ...namedXmlParsed.tools,
         ...dsmlParsed.tools,
         ...jsonFallbackCalls,
         ...looseCallParsed.tools,
@@ -980,27 +1029,16 @@ export async function agentTurn(
       if ((visible.trim() || clarifyEmitted) && !quietTurn) {
         run.final_visible_assistant_text = visible;
         const rendered = visible.trim() ? renderMarkdownToAnsi(visible) : "";
-        let branchBelowName = false;
-        if (!turnHeaderPrinted) {
-          branchBelowName = true;
+        const branchBelowName = true;
+        if (mirrorTerminal) {
+          if (turnHeaderPrinted || round > 1) process.stdout.write("\n");
+          process.stdout.write(`${bold(cyan(agentName))}\n`);
           turnHeaderPrinted = true;
-          if (mirrorTerminal) {
-            if (round > 1) process.stdout.write("\n");
-            process.stdout.write(`${bold(cyan(agentName))}\n`);
-          }
-        } else if (mirrorTerminal && round > 1) {
-          process.stdout.write("\n");
         }
         if (rendered) {
           const block = prefixBlock(rendered, branchBelowName);
           if (mirrorTerminal) {
-            if (liveMirrorStarted) {
-              const gap = liveMirrorVisibleGap(streamedVisible, visible);
-              if (gap) process.stdout.write(gap);
-              process.stdout.write("\n\n");
-            } else {
-              process.stdout.write(`${block}\n\n`);
-            }
+            process.stdout.write(`${block}\n\n`);
           }
           await emitTranscriptEvent(
             turnMeta,
@@ -1078,6 +1116,12 @@ export async function agentTurn(
         if (allUnknown && allToolsRejectedContinuations < maxAllToolsRejected) {
           allToolsRejectedContinuations++;
           continuationRecoveriesFired++;
+          await emitTurnSignal(turnMeta, {
+            signal: "continuation",
+            round,
+            reason: "all_tools_rejected",
+            text: "Continuing with available tool names…",
+          });
           const rejectedNames = rejected.map((r) => {
             const c = r.call as { name?: string } | undefined;
             return String(c?.name || "unknown").trim();
@@ -1114,6 +1158,12 @@ export async function agentTurn(
         ) {
           intermediateAckContinuations++;
           continuationRecoveriesFired++;
+          await emitTurnSignal(turnMeta, {
+            signal: "continuation",
+            round,
+            reason: "intermediate_ack",
+            text: "Continuing after status-only reply…",
+          });
           conv.pop();
           conv.push({ role: "assistant", content: visible });
           conv.push({ role: "user", content: buildContinuationNudge("intermediate_ack") });
@@ -1129,6 +1179,12 @@ export async function agentTurn(
         ) {
           emptyAfterToolsContinuations++;
           continuationRecoveriesFired++;
+          await emitTurnSignal(turnMeta, {
+            signal: "continuation",
+            round,
+            reason: "empty_after_tools",
+            text: "Continuing after empty post-tool reply…",
+          });
           if (conv.length && (conv[conv.length - 1] as ChatTurnMsg).role === "assistant") {
             conv.pop();
           }
@@ -1163,6 +1219,12 @@ export async function agentTurn(
         if (shouldContinueEmptyResponse(visible, emptyResponseContinuations)) {
           emptyResponseContinuations++;
           continuationRecoveriesFired++;
+          await emitTurnSignal(turnMeta, {
+            signal: "continuation",
+            round,
+            reason: "empty_response",
+            text: "Continuing after empty model reply…",
+          });
           if (conv.length && (conv[conv.length - 1] as ChatTurnMsg).role === "assistant") {
             conv.pop();
           }
@@ -1244,6 +1306,12 @@ export async function agentTurn(
         if (shouldContinuePostToolStall(visible, executedToolsInTurn, postToolStallContinuations)) {
           postToolStallContinuations++;
           continuationRecoveriesFired++;
+          await emitTurnSignal(turnMeta, {
+            signal: "continuation",
+            round,
+            reason: "post_tool_stall",
+            text: "Continuing after promised post-tool step…",
+          });
           conv.push({
             role: "user",
             content: buildContinuationNudge("post_tool_stall", {
@@ -1307,6 +1375,12 @@ export async function agentTurn(
         ) {
           preToolPromiseContinuations++;
           continuationRecoveriesFired++;
+          await emitTurnSignal(turnMeta, {
+            signal: "continuation",
+            round,
+            reason: "pre_tool_promise",
+            text: "Continuing after promised tool step…",
+          });
           conv.push({
             role: "user",
             content: buildContinuationNudge("pre_tool_promise", {
@@ -1389,42 +1463,52 @@ export async function agentTurn(
             executedToolsInTurn,
             contentShareContinuations,
             visible,
-            lastToolExecutions
+            lastToolExecutions,
+            run.tool_calls
           )
         ) {
-          const fallbackVisible = buildContentShareFallbackVisible(lastToolExecutions);
-          if (fallbackVisible) {
-            visible = fallbackVisible;
-            run.final_visible_assistant_text = fallbackVisible;
-            if (conv.length && (conv[conv.length - 1] as ChatTurnMsg).role === "assistant") {
-              conv[conv.length - 1] = { role: "assistant", content: fallbackVisible };
-            }
-            if (!quietTurn && fallbackVisible.trim() && mirrorTerminal) {
-              if (!turnHeaderPrinted) {
+          const presentArgs = buildContentShareArtifactPresentArgs(lastToolExecutions);
+          if (presentArgs) {
+            try {
+              await artifactPresentTool(presentArgs, turnCtx);
+              const fallbackVisible =
+                buildContentShareFallbackVisible(lastToolExecutions) ||
+                `Presented **${presentArgs.title}** — use View or Download above.`;
+              visible = fallbackVisible;
+              run.final_visible_assistant_text = fallbackVisible;
+              if (conv.length && (conv[conv.length - 1] as ChatTurnMsg).role === "assistant") {
+                conv[conv.length - 1] = { role: "assistant", content: fallbackVisible };
+              }
+              if (!quietTurn && fallbackVisible.trim() && mirrorTerminal) {
+                if (turnHeaderPrinted || round > 1) process.stdout.write("\n");
                 process.stdout.write(`${bold(cyan(agentName))}\n`);
                 turnHeaderPrinted = true;
-              } else {
-                process.stdout.write("\n");
+                process.stdout.write(`${prefixBlock(renderMarkdownToAnsi(fallbackVisible), true)}\n\n`);
               }
-              process.stdout.write(`${prefixBlock(renderMarkdownToAnsi(fallbackVisible), false)}\n\n`);
-            }
-            await emitTranscriptEvent(
-              turnMeta,
-              createAssistantTranscriptEvent({
+              await emitTranscriptEvent(
+                turnMeta,
+                createAssistantTranscriptEvent({
+                  round,
+                  agentName,
+                  text: fallbackVisible,
+                  branchBelowName: true,
+                }),
+                { round, visiblePreview: fallbackVisible.slice(0, 200) }
+              );
+              await logDebugEvent("turn_content_share_fallback", {
                 round,
-                agentName,
-                text: fallbackVisible,
-                branchBelowName: false,
-              }),
-              { round, visiblePreview: fallbackVisible.slice(0, 200) }
-            );
-            await logDebugEvent("turn_content_share_fallback", {
-              round,
-              contentShareContinuations,
-            });
-            await logTurnStopReason("completed", { round, continuationRecoveriesFired });
-            emitTurnStopLine("completed");
-            break;
+                contentShareContinuations,
+                path: presentArgs.path ?? null,
+              });
+              await logTurnStopReason("completed", { round, continuationRecoveriesFired });
+              emitTurnStopLine("completed");
+              break;
+            } catch (err) {
+              await logDebugEvent("turn_content_share_fallback_failed", {
+                round,
+                error: errorMessage(err),
+              });
+            }
           }
         }
         let stopReason = resolveTurnStopReason(visible, executedToolsInTurn);
@@ -1452,14 +1536,11 @@ export async function agentTurn(
             }
             if (!quietTurn && visible.trim()) {
               if (mirrorTerminal) {
-                if (!turnHeaderPrinted) {
-                  process.stdout.write(`${bold(cyan(agentName))}\n`);
-                  turnHeaderPrinted = true;
-                } else {
-                  process.stdout.write("\n");
-                }
+                if (turnHeaderPrinted || round > 1) process.stdout.write("\n");
+                process.stdout.write(`${bold(cyan(agentName))}\n`);
+                turnHeaderPrinted = true;
                 const rendered = renderMarkdownToAnsi(visible);
-                process.stdout.write(`${prefixBlock(rendered, false)}\n\n`);
+                process.stdout.write(`${prefixBlock(rendered, true)}\n\n`);
               }
             }
           }
@@ -1532,6 +1613,12 @@ export async function agentTurn(
       const deferMessage = truncatedWriteDeferMessage();
 
       activeReasoningPreview?.clear();
+      await emitTurnSignal(turnMeta, {
+        signal: "tool_batch_start",
+        round,
+        toolCount: tools.length,
+        toolName: tools.length === 1 ? String(tools[0]?.name || "") : "",
+      });
 
       for (const tool of tools) {
         if (deferTruncatedWrites && deferredToolKeys.has(toolExecutionKey(tool))) {
@@ -1556,7 +1643,7 @@ export async function agentTurn(
             ? (tool.arguments as Record<string, unknown>)
             : {};
         const before = toolGuardrails.beforeCall(tool.name, args);
-        if (before.action === "block") {
+        if (before.action === "block" || before.action === "halt") {
           exec.push({
             tool: tool.name,
             error: before.message,
@@ -1569,9 +1656,17 @@ export async function agentTurn(
             code: before.code,
             count: before.count,
           });
+          await emitTurnSignal(turnMeta, {
+            signal: "blocked",
+            round,
+            reason: before.code,
+            text: `Blocked ${tool.name}: ${before.message}`,
+            toolName: tool.name,
+          });
           if (mirrorTerminal) {
             process.stdout.write(dim(`▸ tool guardrail blocked ${tool.name}: ${before.message}\n`));
           }
+          if (before.action === "halt") guardrailHalt = true;
           continue;
         }
         runnableTools.push(tool);
@@ -1707,6 +1802,14 @@ export async function agentTurn(
         resultCount: exec.length,
         errors: exec.filter((item) => item?.error).length,
       });
+      await emitTurnSignal(turnMeta, {
+        signal: "tool_batch_end",
+        round,
+        toolCount: exec.length,
+        text: exec.some((item) => item?.error)
+          ? "Continuing after tool results; at least one tool errored."
+          : "Continuing after tool results…",
+      });
       conv.push({
         role: "user",
         content: "Tool results (compact JSON):\n" + JSON.stringify(summarized),
@@ -1715,6 +1818,12 @@ export async function agentTurn(
         const reason = toolGuardrails.haltDecision?.message || "Tool loop guardrail halt";
         run.errors.push(reason);
         await logDebugEvent("tool_guardrail_halt_after_tools", { round, reason });
+        await emitTurnSignal(turnMeta, {
+          signal: "blocked",
+          round,
+          reason: "tool_guardrail",
+          text: reason,
+        });
         await emitTranscriptEvent(
           turnMeta,
           createSystemLineTranscriptEvent({ round, text: reason }),
@@ -1763,6 +1872,12 @@ export async function agentTurn(
     });
     if (round >= maxAgentRounds && !turnController.signal.aborted) {
       run.errors.push(`agent round cap reached (${maxAgentRounds})`);
+      await emitTurnSignal(turnMeta, {
+        signal: "blocked",
+        round,
+        reason: "max_rounds",
+        text: `Stopped after reaching the ${maxAgentRounds}-round cap.`,
+      });
       await logTurnStopReason(`max_rounds (${maxAgentRounds})`, {
         round,
         continuationRecoveriesFired,
@@ -1795,7 +1910,10 @@ export async function agentTurn(
             conv.push({ role: "assistant", content: graceVisible });
             const rendered = renderMarkdownToAnsi(graceVisible);
             if (rendered && mirrorTerminal) {
-              process.stdout.write(`${prefixBlock(rendered, false)}\n\n`);
+              if (turnHeaderPrinted || round > 1) process.stdout.write("\n");
+              process.stdout.write(`${bold(cyan(agentName))}\n`);
+              turnHeaderPrinted = true;
+              process.stdout.write(`${prefixBlock(rendered, true)}\n\n`);
             }
             await emitTranscriptEvent(
               turnMeta,
@@ -1803,7 +1921,7 @@ export async function agentTurn(
                 round,
                 agentName,
                 text: graceVisible,
-                branchBelowName: false,
+                branchBelowName: true,
               }),
               { round, visiblePreview: graceVisible.slice(0, 200) }
             );

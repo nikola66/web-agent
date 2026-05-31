@@ -184,6 +184,7 @@ export function buildApiCallContextPrefix(input) {
   return (
     "[HTTP API] Call `skill` (action=view) **`http-api`** and any imported skill for this API before the first request. " +
     "GET + Bearer → web_fetch `{ url, headers, response_format: \"api\" }` (never TinyFish). POST/GraphQL → web_post `{ url, body, headers }`. " +
+    "Do not move API calls into run_python to dodge URL length or proxy truncation — chunk/narrow requests or use POST bodies via web_post. " +
     "Follow the skill's discovery order (health, list metadata, schema) before guessing resource names or GraphQL root fields. " +
     "On validation errors, read `recovery_hint` and fix query shape — do not retry the same malformed call."
   );
