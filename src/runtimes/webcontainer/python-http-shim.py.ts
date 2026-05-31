@@ -42,15 +42,42 @@ def _to_bytes(val):
     except Exception:
         return str(val).encode("utf-8", errors="replace")
 
+def _py_mapping(val):
+    if val is None:
+        return {}
+    to_py = getattr(val, "to_py", None)
+    if callable(to_py):
+        py = to_py()
+        if isinstance(py, dict):
+            return {str(k): str(v) for k, v in py.items()}
+    if isinstance(val, dict):
+        return {str(k): str(v) for k, v in val.items()}
+    try:
+        return {str(k): str(v) for k, v in dict(val).items()}
+    except Exception:
+        return {}
+
+def _header_items_from_request(req):
+    try:
+        header_items = req.header_items()
+    except Exception:
+        return {}
+    to_py = getattr(header_items, "to_py", None)
+    if callable(to_py):
+        items = to_py()
+        if isinstance(items, (list, tuple)):
+            return {str(k): str(v) for k, v in items}
+    try:
+        return {str(k): str(v) for k, v in header_items}
+    except Exception:
+        return _py_mapping(header_items)
+
 def _merge_params(url, params):
     if not params:
         return url
     parsed = urlparse(str(url))
     query = dict(parse_qsl(parsed.query, keep_blank_values=True))
-    if isinstance(params, dict):
-        query.update({str(k): str(v) for k, v in params.items()})
-    else:
-        query.update(dict(params))
+    query.update(_py_mapping(params))
     return urlunparse(parsed._replace(query=urlencode(query, doseq=True)))
 
 def _bridge_call(method, url, headers=None, body=None, body_encoding=None):
@@ -152,7 +179,7 @@ def _patched_urlopen(url, data=None, timeout=None, **kwargs):
     if isinstance(url, _ur.Request):
         req_url = url.full_url
         method = url.get_method()
-        headers = dict(url.header_items())
+        headers = _header_items_from_request(url)
         if data is None and url.data is not None:
             body = url.data
         else:

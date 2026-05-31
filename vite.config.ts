@@ -269,7 +269,7 @@ function corsProxyGate(proxyEnv: Record<string, string | undefined>) {
             responseBody = responseBody.slice(0, PROXY_BODY_CAP);
             truncated = true;
           }
-          res.statusCode = upstream.status;
+          res.statusCode = 200;
           res.setHeader("content-type", "application/json");
           const responseHeaders: Record<string, string> = {};
           upstream.headers.forEach((value, key) => {

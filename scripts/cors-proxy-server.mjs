@@ -99,7 +99,7 @@ const server = http.createServer((req, res) => {
         const responseBody = binaryResponse
           ? Buffer.from(await upstream.arrayBuffer()).toString("base64")
           : (await upstream.text()).slice(0, proxyTextBodyCapForUrl(String(url ?? "")));
-        res.statusCode = upstream.status;
+        res.statusCode = 200;
         res.setHeader("content-type", "application/json");
         const responseHeaders = {};
         upstream.headers.forEach((value, key) => {

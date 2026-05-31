@@ -132,3 +132,8 @@ test("PYTHON_HTTP_SHIM converts JsProxy headers via to_py", () => {
   assert.match(PYTHON_HTTP_SHIM, /_headers_from_bridge\(getattr\(result, "headers"/);
   assert.doesNotMatch(PYTHON_HTTP_SHIM, /hdrs = dict\(getattr\(result, "headers"/);
 });
+
+test("PYTHON_HTTP_SHIM avoids dict(url.header_items()) JsProxy trap", () => {
+  assert.match(PYTHON_HTTP_SHIM, /def _header_items_from_request/);
+  assert.doesNotMatch(PYTHON_HTTP_SHIM, /dict\(url\.header_items\(\)\)/);
+});
