@@ -1,7 +1,7 @@
 import mermaid from "mermaid";
 import { useLayoutEffect, useMemo, useRef } from "react";
 import "katex/dist/katex.min.css";
-import { escapeArtifactHtml, renderArtifactMarkdown } from "./markdown-render";
+import { renderArtifactMarkdown, sanitizeArtifactHtml } from "./markdown-render";
 
 let mermaidReady = false;
 
@@ -56,20 +56,23 @@ async function hydrateMermaid(host: HTMLElement, signal?: AbortSignal) {
       const id = `mermaid-${Date.now()}-${i}`;
       const { svg } = await mermaid.render(id, code);
       if (signal?.aborted) return;
-      block.innerHTML = svg;
+      block.innerHTML = sanitizeArtifactHtml(svg);
       block.classList.add("mermaid-rendered");
     } catch (err) {
       if (signal?.aborted) return;
       block.classList.add("mermaid-error");
       const message = err instanceof Error ? err.message : String(err);
-      block.innerHTML = `<pre class="mermaid-source">${escapeArtifactHtml(`${message}\n\n${code}`)}</pre>`;
+      const pre = document.createElement("pre");
+      pre.className = "mermaid-source";
+      pre.textContent = `${message}\n\n${code}`;
+      block.replaceChildren(pre);
     }
   }
 }
 
 export function MarkdownArtifactPreview({ text, mermaidOnly = false }: { text: string; mermaidOnly?: boolean }) {
   const previewRef = useRef<HTMLElement | null>(null);
-  const rendered = useMemo(() => renderArtifactMarkdown(text, mermaidOnly), [text, mermaidOnly]);
+  const rendered = useMemo(() => sanitizeArtifactHtml(renderArtifactMarkdown(text, mermaidOnly)), [text, mermaidOnly]);
 
   useLayoutEffect(() => {
     const host = previewRef.current;

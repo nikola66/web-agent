@@ -53,7 +53,10 @@ export function DocxArtifactPreview({ buffer }: { buffer: ArrayBuffer }) {
       } catch (err) {
         if (cancelled) return;
         const message = err instanceof Error ? err.message : String(err);
-        host.innerHTML = `<p class="text-sm text-text-muted">${message}</p>`;
+        const p = document.createElement("p");
+        p.className = "text-sm text-text-muted";
+        p.textContent = message;
+        host.replaceChildren(p);
       }
     })();
 
@@ -92,7 +95,10 @@ export function PptxArtifactPreview({ buffer }: { buffer: ArrayBuffer }) {
       } catch (err) {
         if (cancelled) return;
         const message = err instanceof Error ? err.message : String(err);
-        host.innerHTML = `<p class="text-sm text-text-muted">${message}</p>`;
+        const p = document.createElement("p");
+        p.className = "text-sm text-text-muted";
+        p.textContent = message;
+        host.replaceChildren(p);
       }
     })();
 

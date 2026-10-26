@@ -1,4 +1,5 @@
 import MarkdownIt from "markdown-it";
+import DOMPurify from "dompurify";
 import { katex } from "@mdit/plugin-katex";
 import { mark as markPlugin } from "@mdit/plugin-mark";
 import hljs from "highlight.js/lib/core";
@@ -301,7 +302,6 @@ const md = new MarkdownIt({ html: false, linkify: true, breaks: true, typographe
 
 md.enable(["table"]);
 
-const defaultFence = md.renderer.rules.fence?.bind(md.renderer.rules);
 md.renderer.rules.fence = (tokens, idx, options, env, self) => {
   const token = tokens[idx];
   const info = token.info || "";
@@ -324,6 +324,11 @@ export function renderArtifactMarkdown(text: string, mermaidOnly = false): strin
   return md.render(text);
 }
 
-export function escapeArtifactHtml(text: string): string {
-  return md.utils.escapeHtml(text);
+export function sanitizeArtifactHtml(html: string): string {
+  return DOMPurify.sanitize(html, {
+    ADD_ATTR: ["target"],
+    // Mermaid uses foreignObject for HTML labels; its contents still need sanitization.
+    ADD_TAGS: ["foreignObject"],
+    HTML_INTEGRATION_POINTS: { foreignobject: true },
+  });
 }
